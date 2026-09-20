@@ -1380,6 +1380,42 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::BinConcat { grain, left, right } => {
                 curios_core::Intrinsic::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
+            Intrinsic::BinReplicate { grain, count, atom } => {
+                curios_core::Intrinsic::bin_replicate(*grain, self.term(count)?, self.term(atom)?)
+            }
+            Intrinsic::BinAnd {
+                grain,
+                left,
+                right,
+                same_length,
+            } => curios_core::Intrinsic::bin_and(
+                *grain,
+                self.term(left)?,
+                self.term(right)?,
+                self.term(same_length)?,
+            ),
+            Intrinsic::BinOr {
+                grain,
+                left,
+                right,
+                same_length,
+            } => curios_core::Intrinsic::bin_or(
+                *grain,
+                self.term(left)?,
+                self.term(right)?,
+                self.term(same_length)?,
+            ),
+            Intrinsic::BinXor {
+                grain,
+                left,
+                right,
+                same_length,
+            } => curios_core::Intrinsic::bin_xor(
+                *grain,
+                self.term(left)?,
+                self.term(right)?,
+                self.term(same_length)?,
+            ),
             Intrinsic::ListType(inner) => curios_core::Intrinsic::list_type(self.term(inner)?),
             Intrinsic::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
             Intrinsic::ListLen {

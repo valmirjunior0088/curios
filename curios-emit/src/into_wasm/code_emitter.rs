@@ -859,6 +859,46 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower a packed append with the immediate split. A base inside its grain's envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
+    /// Force both operands and hand their payloads, with the run's own length, to the shared combiner.
+    ///
+    /// **The forcing is here rather than inside the helper**, which is what lets one grain-free helper serve both grains: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. The length comes off the left operand because a payload's extent is not the run's at the bit grain, where `ceil(len/8)` bytes hold `len` bits.
+    fn emit_bin_pointwise(
+        &mut self,
+        grain: Grain,
+        left: &'a EmissionValueName,
+        right: &'a EmissionValueName,
+        combine: curios_wasm::FuncName,
+    ) {
+        let force = match grain {
+            Grain::X => self.context.table().bytes_force_func(),
+            Grain::B => self.context.table().bits_force_func(),
+        };
+        let norm = match grain {
+            Grain::X => self.context.table().bytes_norm_func(),
+            Grain::B => self.context.table().bits_norm_func(),
+        };
+        let rope = self.context.table().bin_rope();
+
+        let left_instrs = self.context.load_value_instrs(left, LoadAs::Bin(grain));
+        let right_instrs = self.context.load_value_instrs(right, LoadAs::Bin(grain));
+        let length_instrs = self.context.load_value_instrs(left, LoadAs::Bin(grain));
+
+        self.emit_instrs(left_instrs);
+        self.emit_instr(curios_wasm::Instr::Call {
+            func_name: force.clone(),
+        });
+        self.emit_instrs(right_instrs);
+        self.emit_instr(curios_wasm::Instr::Call { func_name: force });
+        self.emit_instrs(length_instrs);
+        self.emit_instr(curios_wasm::Instr::StructGet {
+            type_name: rope.base.clone(),
+            field_name: rope.len_field.clone(),
+        });
+        self.emit_instr(curios_wasm::Instr::Call { func_name: combine });
+        // Back to canonical form. Every other packed producer norms — `BinConcat` and `BinSlice` through their own lowering, `BinChunk` by building the immediate outright — so a short run left as a rope is a shape nothing else in the program hands out, and the equality fast path is entitled to have assumed it away.
+        self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
+    }
+
     fn emit_bin_append(
         &mut self,
         grain: Grain,
@@ -1719,6 +1759,49 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 };
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::Bin(grain), &rope, norm);
+            }
+            curios_cont::Intrinsic::BinReplicate(grain) => {
+                let replicate = match grain {
+                    Grain::X => self.context.table().bytes_replicate_func(),
+                    Grain::B => self.context.table().bits_replicate_func(),
+                };
+                let norm = match grain {
+                    Grain::X => self.context.table().bytes_norm_func(),
+                    Grain::B => self.context.table().bits_norm_func(),
+                };
+                let count = self.context.load_value_instrs(&args[0], LoadAs::Nat);
+                let atom = self.context.load_value_instrs(&args[1], LoadAs::Nat);
+                self.emit_instrs(count);
+                self.emit_instrs(atom);
+                self.emit_instr(curios_wasm::Instr::Call {
+                    func_name: replicate,
+                });
+                // A fill short enough to be an immediate has to come back as one, for `emit_bin_pointwise`'s reason.
+                self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            curios_cont::Intrinsic::BinAnd(grain) => {
+                let combine = self.context.table().bin_and_func();
+                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            curios_cont::Intrinsic::BinOr(grain) => {
+                let combine = self.context.table().bin_or_func();
+                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            curios_cont::Intrinsic::BinXor(grain) => {
+                let combine = self.context.table().bin_xor_func();
+                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
             }
             curios_cont::Intrinsic::BinChunk(grain, arity) => {
                 let rope = self.context.table().bin_rope();

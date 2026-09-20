@@ -210,6 +210,16 @@ impl Generator {
             Self::Bit(bit) => Some(run.append_bit(bit)),
         }
     }
+
+    /// `count` copies of this generator, as a run of its own.
+    ///
+    /// The fill partner of [`Generator::appended_to`], and total where that one can refuse: an append has to land a byte on a byte boundary, while a fill decides its own length and starts from zero. Placed here for the same reason the append is — the carrier a generator reads into is the grain's seam, and both directions of it belong in one place.
+    pub(super) fn replicated(self, count: usize) -> PackedBin {
+        match self {
+            Self::Byte(byte) => PackedBin::replicate(Grain::X, byte, count),
+            Self::Bit(bit) => PackedBin::replicate(Grain::B, u8::from(bit), count),
+        }
+    }
 }
 
 impl FreeMonoid {

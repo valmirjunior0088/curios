@@ -595,6 +595,19 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
             vec![name("i"), applied(name("len"), vec![name("b")])],
         ),
     );
+    // `len(a) == len(b)`, the one bound a pointwise operation has, and through the sibling `len` for the reason stated above: a caller guards with the spelling available to them.
+    //
+    // Stated rather than extended away. Truncating to the shorter and padding to the longer are both total and they disagree — a padded generator is absorbing for `and` where it is transparent for `or` — so nothing about the structure picks one, and an operation whose domain the structure does not close states it instead.
+    let same_length = decided(
+        syntax,
+        applied(
+            sys_op(&["sys", "Nat", "eql"]),
+            vec![
+                applied(name("len"), vec![name("a")]),
+                applied(name("len"), vec![name("b")]),
+            ],
+        ),
+    );
     vec![
         documented(
             &["How many it holds."],
@@ -665,6 +678,75 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                     start: name("s"),
                     length: name("l"),
                     within: name("within"),
+                }),
+            ),
+        ),
+        documented(
+            &["`count` copies of `x`."],
+            pub_fn(
+                "replicate",
+                vec![("count", nat()), ("x", atom.clone())],
+                type_.clone(),
+                intrinsic(Intrinsic::BinReplicate {
+                    grain,
+                    count: name("count"),
+                    atom: name("x"),
+                }),
+            ),
+        ),
+        documented(
+            &[
+                "The conjunction of `a` and `b` element by element, under the evidence that they are the same length.",
+            ],
+            pub_fn_marked(
+                "and",
+                vec![
+                    (Plicity::Explicit, "a", type_.clone()),
+                    (Plicity::Explicit, "b", type_.clone()),
+                    (Plicity::Implicit, "same", same_length.clone()),
+                ],
+                type_.clone(),
+                intrinsic(Intrinsic::BinAnd {
+                    grain,
+                    left: name("a"),
+                    right: name("b"),
+                    same_length: name("same"),
+                }),
+            ),
+        ),
+        documented(
+            &["The disjunction, under the same evidence."],
+            pub_fn_marked(
+                "or",
+                vec![
+                    (Plicity::Explicit, "a", type_.clone()),
+                    (Plicity::Explicit, "b", type_.clone()),
+                    (Plicity::Implicit, "same", same_length.clone()),
+                ],
+                type_.clone(),
+                intrinsic(Intrinsic::BinOr {
+                    grain,
+                    left: name("a"),
+                    right: name("b"),
+                    same_length: name("same"),
+                }),
+            ),
+        ),
+        documented(
+            &["The difference, under the same evidence."],
+            pub_fn_marked(
+                "xor",
+                vec![
+                    (Plicity::Explicit, "a", type_.clone()),
+                    (Plicity::Explicit, "b", type_.clone()),
+                    (Plicity::Implicit, "same", same_length),
+                ],
+                type_.clone(),
+                intrinsic(Intrinsic::BinXor {
+                    grain,
+                    left: name("a"),
+                    right: name("b"),
+                    same_length: name("same"),
                 }),
             ),
         ),

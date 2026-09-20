@@ -273,6 +273,12 @@ pub(crate) struct Table<'a> {
     list_read: OnceCell<curios_wasm::FuncName>,
     bytes_eql: OnceCell<curios_wasm::FuncName>,
     bits_eql: OnceCell<curios_wasm::FuncName>,
+    // The pointwise trio takes forced payloads, so one of each serves both grains.
+    bin_and: OnceCell<curios_wasm::FuncName>,
+    bin_or: OnceCell<curios_wasm::FuncName>,
+    bin_xor: OnceCell<curios_wasm::FuncName>,
+    bytes_replicate: OnceCell<curios_wasm::FuncName>,
+    bits_replicate: OnceCell<curios_wasm::FuncName>,
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
@@ -347,6 +353,11 @@ impl<'a> Table<'a> {
             list_read: OnceCell::new(),
             bytes_eql: OnceCell::new(),
             bits_eql: OnceCell::new(),
+            bin_and: OnceCell::new(),
+            bin_or: OnceCell::new(),
+            bin_xor: OnceCell::new(),
+            bytes_replicate: OnceCell::new(),
+            bits_replicate: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             row_types: module
@@ -837,6 +848,63 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bits_eql_used(&self) -> bool {
         self.bits_eql.get().is_some()
+    }
+
+    /// `$bin/and (ref $payload, ref $payload, i32) -> (ref $rope/bin)`: two forced payloads combined byte for byte, sealed at the logical length the caller supplies.
+    ///
+    /// Grain-free, unlike the `eql` and `replicate` pairs either side of it: the operands arrive forced, and a walk over two byte arrays is the same walk whichever generators packed them.
+    pub(crate) fn bin_and_func(&self) -> curios_wasm::FuncName {
+        self.bin_and
+            .get_or_init(|| curios_wasm::FuncName::from("bin/and"))
+            .clone()
+    }
+
+    pub(crate) fn bin_and_used(&self) -> bool {
+        self.bin_and.get().is_some()
+    }
+
+    /// The disjunction, as [`bin_and_func`](Self::bin_and_func).
+    pub(crate) fn bin_or_func(&self) -> curios_wasm::FuncName {
+        self.bin_or
+            .get_or_init(|| curios_wasm::FuncName::from("bin/or"))
+            .clone()
+    }
+
+    pub(crate) fn bin_or_used(&self) -> bool {
+        self.bin_or.get().is_some()
+    }
+
+    /// The difference, as [`bin_and_func`](Self::bin_and_func).
+    pub(crate) fn bin_xor_func(&self) -> curios_wasm::FuncName {
+        self.bin_xor
+            .get_or_init(|| curios_wasm::FuncName::from("bin/xor"))
+            .clone()
+    }
+
+    pub(crate) fn bin_xor_used(&self) -> bool {
+        self.bin_xor.get().is_some()
+    }
+
+    /// `$bytes/replicate (i32 count, i32 atom) -> (ref $rope/bin)`: `count` copies of one byte, as one flat leaf.
+    pub(crate) fn bytes_replicate_func(&self) -> curios_wasm::FuncName {
+        self.bytes_replicate
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/replicate"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_replicate_used(&self) -> bool {
+        self.bytes_replicate.get().is_some()
+    }
+
+    /// `$bits/replicate (i32 count, i32 atom) -> (ref $rope/bin)`: the bit grain's fill, which masks the padding its all-ones byte would otherwise leave set.
+    pub(crate) fn bits_replicate_func(&self) -> curios_wasm::FuncName {
+        self.bits_replicate
+            .get_or_init(|| curios_wasm::FuncName::from("bits/replicate"))
+            .clone()
+    }
+
+    pub(crate) fn bits_replicate_used(&self) -> bool {
+        self.bits_replicate.get().is_some()
     }
 
     /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.

@@ -873,6 +873,65 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             vec![],
             vec![bin, atom],
         ),
+        Intrinsic::BinReplicate { grain, count, atom } => print_intrinsic_call(
+            format!(
+                "{}/replicate",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            vec![],
+            vec![count, atom],
+        ),
+        Intrinsic::BinAnd {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_intrinsic_call(
+            format!(
+                "{}/and",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            vec![],
+            vec![left, right],
+        ),
+        Intrinsic::BinOr {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_intrinsic_call(
+            format!(
+                "{}/or",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            vec![],
+            vec![left, right],
+        ),
+        Intrinsic::BinXor {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_intrinsic_call(
+            format!(
+                "{}/xor",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            vec![],
+            vec![left, right],
+        ),
         Intrinsic::BinConcat { grain, left, right } => print_intrinsic_call(
             format!(
                 "{}/concat",

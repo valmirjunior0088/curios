@@ -153,6 +153,29 @@ pub enum Intrinsic {
         left: Term,
         right: Term,
     },
+    BinReplicate {
+        grain: Grain,
+        count: Term,
+        atom: Term,
+    },
+    BinAnd {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
+    BinOr {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
+    BinXor {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
     ListType(Term),
     List(Vec<ListEntry>),
     ListLen {

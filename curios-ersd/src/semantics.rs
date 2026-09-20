@@ -248,15 +248,16 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a sequence operation. Indexing may trap out of bounds; slicing may trap and allocates a view; append, concat, and build allocate; length and equality are total.
+    /// The behavior of a sequence operation. Indexing may trap out of bounds; slicing may trap and allocates a view; append, concat, build, fill, and the pointwise combinations allocate; length and equality are total.
+    ///
+    /// The pointwise rows do not trap. Their one bound is that the operands share a length, and that is stated in the type and discharged before erasure — nothing survives to this stage that could fail it, so treating them as fallible would keep a dead-result elimination from removing one whose result nothing reads.
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
         use SequenceOp::*;
         match operation {
             BinGet(_) | ListGet => LocalBehavior::trap(),
             BinSlice(_) | ListSlice => LocalBehavior::trap().with_alloc(Allocation::Immutable),
-            BinAppend(_) | BinConcat(_) | ListAppend | ListConcat | ListBuild => {
-                LocalBehavior::alloc(Allocation::Immutable)
-            }
+            BinAppend(_) | BinConcat(_) | BinReplicate(_) | BinAnd(_) | BinOr(_) | BinXor(_)
+            | ListAppend | ListConcat | ListBuild => LocalBehavior::alloc(Allocation::Immutable),
             BinLen(_) | ListLen | BinEql(_) => LocalBehavior::pure(),
         }
     }
@@ -505,6 +506,31 @@ impl Semantics {
                             .collect::<Option<Vec<_>>>()?,
                     ),
                 ),
+                // Split by grain for [`SequenceOp::BinAppend`]'s reason: the generator is a `Byte` constant at one and a `Bool` at the other, and only the grain says which to read.
+                BinReplicate(Grain::X) => Constant::Bin(
+                    Grain::X,
+                    PackedBin::replicate(Grain::X, byte(1)?, nat(0)?.to_usize()?),
+                ),
+                BinReplicate(Grain::B) => Constant::Bin(
+                    Grain::B,
+                    PackedBin::replicate(Grain::B, u8::from(bool_(1)?), nat(0)?.to_usize()?),
+                ),
+                // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
+                BinAnd(grain) => {
+                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
+                    (left.bit_length() == right.bit_length())
+                        .then(|| Constant::Bin(grain, left.and(right)))?
+                }
+                BinOr(grain) => {
+                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
+                    (left.bit_length() == right.bit_length())
+                        .then(|| Constant::Bin(grain, left.or(right)))?
+                }
+                BinXor(grain) => {
+                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
+                    (left.bit_length() == right.bit_length())
+                        .then(|| Constant::Bin(grain, left.xor(right)))?
+                }
                 ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => return None,
             }))
         };

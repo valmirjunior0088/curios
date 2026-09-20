@@ -144,6 +144,14 @@ pub enum Intrinsic {
     BinRest(Grain),
     BinAppend(Grain),
     BinConcat(Grain, usize),
+    /// `(count, element) -> bin`: one flat leaf of `count` copies of `element`. The size is an operand's value rather than an operand's extent, which is what separates it from every other construction here.
+    BinReplicate(Grain),
+    /// `(a, b) -> bin`: the element-wise conjunction of two binaries the type has already held to one length. Total — the bound is discharged above erasure and nothing here can fail it.
+    BinAnd(Grain),
+    /// `(a, b) -> bin`: the element-wise disjunction, as [`Intrinsic::BinAnd`].
+    BinOr(Grain),
+    /// `(a, b) -> bin`: the element-wise difference, as [`Intrinsic::BinAnd`].
+    BinXor(Grain),
     /// `(element…) -> bin`: one flat leaf holding exactly these elements at the given grain — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count in grain units; the byte grain stores one element per payload byte, the bit grain packs eight.
     BinChunk(Grain, usize),
     ListLen,
@@ -202,6 +210,10 @@ impl Intrinsic {
                 Repr::Bin(*grain)
             }
             (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), _) => Repr::Nat,
+            // Both operands of a pointwise combination are ropes, which is what separates it from every other sequence row here — there is no position among them.
+            (BinAnd(grain) | BinOr(grain) | BinXor(grain), _) => Repr::Bin(*grain),
+            // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` grain as an append's does.
+            (BinReplicate(_), _) => Repr::Nat,
             (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
             (ListGet | ListSlice | ListRest, _) => Repr::Nat,
             // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
@@ -264,7 +276,11 @@ impl Intrinsic {
             | BinRest(grain)
             | BinAppend(grain)
             | BinConcat(grain, _)
-            | BinChunk(grain, _) => Repr::Bin(*grain),
+            | BinChunk(grain, _)
+            | BinReplicate(grain)
+            | BinAnd(grain)
+            | BinOr(grain)
+            | BinXor(grain) => Repr::Bin(*grain),
             FltToLeBytes => Repr::Bin(Grain::X),
             ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
                 Repr::List
@@ -361,6 +377,10 @@ impl Intrinsic {
             | Self::ListConcat(_)
             | Self::ListSettle
             | Self::ListFlat(_)
+            | Self::BinReplicate(_)
+            | Self::BinAnd(_)
+            | Self::BinOr(_)
+            | Self::BinXor(_)
             | Self::FltToLeBytes => IntrinsicEffect::Allocates,
 
             Self::NatEql

@@ -186,6 +186,35 @@ pub enum Intrinsic {
         grain: Grain,
         operands: Vec<Term>,
     },
+    /// `count` copies of one generator — the only way to build a run of a length a program computes without one node per element.
+    BinReplicate {
+        grain: Grain,
+        count: Term,
+        atom: Term,
+    },
+    /// `same_length` proves `len(left) == len(right)`, which is the one bound a pointwise operation has.
+    ///
+    /// Stated rather than extended, because no extension is forced: truncating to the shorter and padding to the longer are both total, and they disagree — a padded bit is absorbing for `and` where it is transparent for `or`, so the structure picks neither and a choice would be the author's. That is the test `documentation/design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md` sets, and the same one that put `NatToByte`'s bound in its type rather than masking to eight bits.
+    BinAnd {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
+    /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
+    BinOr {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
+    /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
+    BinXor {
+        grain: Grain,
+        left: Term,
+        right: Term,
+        same_length: Term,
+    },
     ListType(Term),
     // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
     List {
@@ -399,6 +428,64 @@ impl Intrinsic {
             grain,
             bin: bin.into(),
             element: byte.into(),
+        }
+    }
+
+    /// A `BinReplicate` node from a term-shaped count and generator.
+    pub fn bin_replicate<C, A>(grain: Grain, count: C, atom: A) -> Self
+    where
+        C: Into<Term>,
+        A: Into<Term>,
+    {
+        Self::BinReplicate {
+            grain,
+            count: count.into(),
+            atom: atom.into(),
+        }
+    }
+
+    /// A `BinAnd` node from two term-shaped runs and the proof their lengths agree.
+    pub fn bin_and<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    where
+        L: Into<Term>,
+        R: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::BinAnd {
+            grain,
+            left: left.into(),
+            right: right.into(),
+            same_length: same_length.into(),
+        }
+    }
+
+    /// A `BinOr` node, as [`Intrinsic::bin_and`].
+    pub fn bin_or<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    where
+        L: Into<Term>,
+        R: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::BinOr {
+            grain,
+            left: left.into(),
+            right: right.into(),
+            same_length: same_length.into(),
+        }
+    }
+
+    /// A `BinXor` node, as [`Intrinsic::bin_and`].
+    pub fn bin_xor<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    where
+        L: Into<Term>,
+        R: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::BinXor {
+            grain,
+            left: left.into(),
+            right: right.into(),
+            same_length: same_length.into(),
         }
     }
 
@@ -683,6 +770,11 @@ impl Intrinsic {
                 bin: a,
                 element: b,
             }
+            | Intrinsic::BinReplicate {
+                grain: _,
+                count: a,
+                atom: b,
+            }
             | Intrinsic::ListLen {
                 element: a,
                 list: b,
@@ -782,6 +874,24 @@ impl Intrinsic {
                 bin: a,
                 index: b,
                 in_range: p,
+            }
+            | Intrinsic::BinAnd {
+                grain: _,
+                left: a,
+                right: b,
+                same_length: p,
+            }
+            | Intrinsic::BinOr {
+                grain: _,
+                left: a,
+                right: b,
+                same_length: p,
+            }
+            | Intrinsic::BinXor {
+                grain: _,
+                left: a,
+                right: b,
+                same_length: p,
             } => {
                 visit(a);
                 visit(b);
@@ -1070,6 +1180,46 @@ impl Intrinsic {
             Intrinsic::BinConcat { grain, operands } => Intrinsic::BinConcat {
                 grain: *grain,
                 operands: operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+            },
+            Intrinsic::BinReplicate { grain, count, atom } => {
+                traverse_binary(count, atom, visit, |count, atom| Intrinsic::BinReplicate {
+                    grain: *grain,
+                    count,
+                    atom,
+                })
+            }
+            Intrinsic::BinAnd {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinAnd {
+                grain: *grain,
+                left: visit.visit_subterm(left),
+                right: visit.visit_subterm(right),
+                same_length: visit.visit_subterm(same_length),
+            },
+            Intrinsic::BinOr {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinOr {
+                grain: *grain,
+                left: visit.visit_subterm(left),
+                right: visit.visit_subterm(right),
+                same_length: visit.visit_subterm(same_length),
+            },
+            Intrinsic::BinXor {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinXor {
+                grain: *grain,
+                left: visit.visit_subterm(left),
+                right: visit.visit_subterm(right),
+                same_length: visit.visit_subterm(same_length),
             },
             Intrinsic::ListType(elem) => Intrinsic::ListType(visit.visit_subterm(elem)),
             Intrinsic::List {

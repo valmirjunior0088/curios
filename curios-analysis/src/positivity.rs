@@ -818,6 +818,10 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::BinSlice { .. }
             | Intrinsic::BinAppend { .. }
             | Intrinsic::BinConcat { .. }
+            | Intrinsic::BinReplicate { .. }
+            | Intrinsic::BinAnd { .. }
+            | Intrinsic::BinOr { .. }
+            | Intrinsic::BinXor { .. }
             | Intrinsic::List { .. }
             | Intrinsic::ListLen { .. }
             | Intrinsic::ListGet { .. }

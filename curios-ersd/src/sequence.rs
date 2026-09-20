@@ -20,6 +20,14 @@ pub enum SequenceOp {
     BinAppend(Grain),
     /// `(bins…) -> bin`: concatenate any number of binaries.
     BinConcat(Grain),
+    /// `(count, element) -> bin`: `count` copies of one element.
+    BinReplicate(Grain),
+    /// `(a, b) -> bin`: the element-wise conjunction of two binaries of one length.
+    BinAnd(Grain),
+    /// `(a, b) -> bin`: the element-wise disjunction, as [`SequenceOp::BinAnd`].
+    BinOr(Grain),
+    /// `(a, b) -> bin`: the element-wise difference, as [`SequenceOp::BinAnd`].
+    BinXor(Grain),
     /// `(elements…) -> list`: build a list from any number of elements.
     ListBuild,
     /// `(list) -> Nat`: the element count.
@@ -51,6 +59,10 @@ impl SequenceOp {
             Self::BinEql(_)
             | Self::BinGet(_)
             | Self::BinAppend(_)
+            | Self::BinReplicate(_)
+            | Self::BinAnd(_)
+            | Self::BinOr(_)
+            | Self::BinXor(_)
             | Self::ListGet
             | Self::ListAppend => SequenceArity::Exactly(2),
             Self::BinSlice(_) | Self::ListSlice => SequenceArity::Exactly(3),

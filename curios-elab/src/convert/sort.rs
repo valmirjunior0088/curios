@@ -111,12 +111,16 @@ impl Sort {
                 //
                 // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_intrinsic` reads the parameter's, and nothing catches the disagreement until the fixed prelude's kernel recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other intrinsic match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
                 Intrinsic::Bin(..)
+                | Intrinsic::BinAnd { .. }
                 | Intrinsic::BinAppend { .. }
                 | Intrinsic::BinConcat { .. }
                 | Intrinsic::BinEql(..)
                 | Intrinsic::BinGet { .. }
                 | Intrinsic::BinLen(..)
+                | Intrinsic::BinOr { .. }
+                | Intrinsic::BinReplicate { .. }
                 | Intrinsic::BinSlice { .. }
+                | Intrinsic::BinXor { .. }
                 | Intrinsic::Bool(..)
                 | Intrinsic::BoolAnd(..)
                 | Intrinsic::BoolEql(..)

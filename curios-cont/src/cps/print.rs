@@ -736,6 +736,10 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::BinAppend(grain) => return format!("{}/append", grain_carrier(*grain)),
         Intrinsic::BinConcat(grain, _) => return format!("{}/concat", grain_carrier(*grain)),
         Intrinsic::BinChunk(grain, _) => return format!("{}/chunk", grain_carrier(*grain)),
+        Intrinsic::BinReplicate(grain) => return format!("{}/replicate", grain_carrier(*grain)),
+        Intrinsic::BinAnd(grain) => return format!("{}/and", grain_carrier(*grain)),
+        Intrinsic::BinOr(grain) => return format!("{}/or", grain_carrier(*grain)),
+        Intrinsic::BinXor(grain) => return format!("{}/xor", grain_carrier(*grain)),
         // Reached only through `Printer::intrinsic`'s projection arms with the wrong operand count, which a verified module does not produce.
         Intrinsic::RowGet(row, index) => return format!("Row/get({row}, {index})"),
         Intrinsic::TupleGet(index) => return format!("Tuple/get({index})"),

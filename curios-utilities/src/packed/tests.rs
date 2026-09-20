@@ -284,3 +284,67 @@ fn the_byte_grain_orders_as_the_language_does() {
     assert!(model(vec![2]) > model(vec![1, 9]));
     assert!(model(vec![]) < model(vec![0]));
 }
+
+/// The bit grain's fill masks its own padding, and it is the only constructor here that has to.
+///
+/// An all-ones byte carries eight set bits whether or not the length claims them, so `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it denotes — the failure this masks away, and the reason the pointwise operations above it need no mask of their own.
+#[test]
+fn a_replicated_fill_leaves_no_padding_set() {
+    for count in 0..=20 {
+        for atom in [0u8, 1] {
+            let filled = PackedBin::replicate(Grain::B, atom, count);
+            let model = PackedBin::from_bits((0..count).map(|_| atom != 0));
+
+            assert_eq!(filled, model, "a fill of {atom} at length {count}");
+            assert_eq!(hash(&filled), hash(&model));
+            assert_eq!(filled.len(Grain::B), count);
+        }
+    }
+
+    for count in 0..=6 {
+        let filled = PackedBin::replicate(Grain::X, 0xA5, count);
+        assert_eq!(filled, PackedBin::from_bytes(vec![0xA5; count]));
+        assert_eq!(filled.len(Grain::X), count);
+    }
+}
+
+/// Pointwise combination agrees with the bit model at every length across a byte boundary and every pair of operands, including the lengths whose last byte is partial — where a dirty padding bit would be reported by both equality and the hash.
+#[test]
+fn pointwise_operations_agree_with_the_bit_model() {
+    let bits = |length: usize, mask: usize| {
+        PackedBin::from_bits((0..length).map(move |index| mask & (1 << index) != 0))
+    };
+
+    for length in 0..=8 {
+        for left in 0..(1usize << length) {
+            for right in 0..(1usize << length) {
+                let (l, r) = (bits(length, left), bits(length, right));
+
+                assert_eq!(l.and(&r), bits(length, left & right));
+                assert_eq!(l.or(&r), bits(length, left | right));
+                assert_eq!(l.xor(&r), bits(length, left ^ right));
+                assert_eq!(hash(&l.xor(&r)), hash(&bits(length, left ^ right)));
+            }
+        }
+    }
+}
+
+/// The two arms of the normalization meet: an operand read out of a misaligned window answers what the same bits answer packed from zero, which is what lets `/std`'s `not` be an `xor` against a fill.
+#[test]
+fn a_misaligned_operand_combines_as_its_packed_twin_does() {
+    for length in 0usize..=10 {
+        for offset in 0usize..=9 {
+            let framed = PackedBin::from_bits(
+                (0..offset + length + 3).map(|index: usize| index.is_multiple_of(3)),
+            );
+            let window = framed.window(offset, length).unwrap();
+            let packed = PackedBin::from_bits((0..length).map(|i| (i + offset).is_multiple_of(3)));
+            let ones = PackedBin::replicate(Grain::B, 1, length);
+
+            assert_eq!(window, packed);
+            assert_eq!(window.xor(&ones), packed.xor(&ones));
+            assert_eq!(window.and(&ones), packed);
+            assert_eq!(window.or(&ones), ones);
+        }
+    }
+}

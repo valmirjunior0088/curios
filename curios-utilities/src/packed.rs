@@ -62,6 +62,31 @@ impl PackedBin {
         }
     }
 
+    /// `count` copies of one generator — a byte at `X`, a bit at `B`, where `atom` is `0` or `1`.
+    ///
+    /// **The one place a fill has to mask.** Every other constructor here writes padding as zero because it starts from a zeroed buffer and sets only the bits it owns; an all-ones bit fill is the exception, since the byte it repeats carries eight set bits whether or not the length claims them. Left alone, `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it is, because [`PackedBin::cmp`] and [`PackedBin::hash`] read the stored bytes and trust the padding to be zero.
+    pub fn replicate(grain: Grain, atom: u8, count: usize) -> Self {
+        match grain {
+            Grain::X => Self::from_bytes(vec![atom; count]),
+            Grain::B => {
+                let mut bytes = vec![if atom == 0 { 0x00 } else { 0xFF }; count.div_ceil(8)];
+
+                if atom != 0
+                    && !count.is_multiple_of(8)
+                    && let Some(last) = bytes.last_mut()
+                {
+                    *last = (1u8 << (count % 8)) - 1;
+                }
+
+                Self {
+                    bytes: bytes.into(),
+                    bit_offset: 0,
+                    bit_length: count,
+                }
+            }
+        }
+    }
+
     pub fn window(&self, bit_offset: usize, bit_length: usize) -> Option<Self> {
         (bit_offset <= self.bit_length && bit_length <= self.bit_length - bit_offset).then(|| {
             Self {
@@ -170,6 +195,45 @@ impl PackedBin {
             bytes: bytes.into(),
             bit_offset: 0,
             bit_length: self.bit_length + 1,
+        }
+    }
+
+    /// The pointwise conjunction of two runs of one length.
+    pub fn and(&self, other: &Self) -> Self {
+        self.pointwise(other, |left, right| left & right)
+    }
+
+    /// The pointwise disjunction.
+    pub fn or(&self, other: &Self) -> Self {
+        self.pointwise(other, |left, right| left | right)
+    }
+
+    /// The pointwise difference.
+    pub fn xor(&self, other: &Self) -> Self {
+        self.pointwise(other, |left, right| left ^ right)
+    }
+
+    /// Two runs combined generator-wise, one stored byte at a time.
+    ///
+    /// **The padding needs no mask, which is what keeps this a zip.** Both operands normalize through [`PackedBin::to_packed_bytes`], whose per-bit arm zeroes a partial trailing byte and whose aligned arm has no partial byte to leave dirty — so every padding bit enters as zero, and `&`, `|` and `^` each take `(0, 0)` to `0`. The invariant [`PackedBin::cmp`] rests on therefore survives by construction, the way [`PackedBin::append_bit`] already trusts it to. [`PackedBin::replicate`] is where a fill has to mask instead, and says so.
+    ///
+    /// Equal lengths are the caller's to establish rather than this function's to accommodate: `/sys` states the bound in the type and every reduction reaches here through it, so a mismatch is a broken invariant, not an input. Asserted for [`PackedBin::len`]'s reason — a pointwise result over two lengths is not a near miss but a run that is neither operand's, and it should say so where it breaks rather than downstream of a wrong length.
+    fn pointwise(&self, other: &Self, combine: impl Fn(u8, u8) -> u8) -> Self {
+        assert_eq!(
+            self.bit_length, other.bit_length,
+            "a pointwise operation needs two runs of one length"
+        );
+
+        let (left, right) = (self.to_packed_bytes(), other.to_packed_bytes());
+
+        Self {
+            bytes: left
+                .iter()
+                .zip(right.iter())
+                .map(|(left, right)| combine(*left, *right))
+                .collect(),
+            bit_offset: 0,
+            bit_length: self.bit_length,
         }
     }
 

@@ -272,6 +272,31 @@ impl Intrinsic {
                     .collect(),
                 bin_type(*grain),
             ),
+            // Count first, then the generator, as `/std/List/replicate` reads. No bound: every count names a run, and the length of the one it names is what `BinLen` reduces over this node.
+            BinReplicate { grain, .. } => sig(
+                vec![Operand::At(nat_type()), Operand::At(grain_element(*grain))],
+                bin_type(*grain),
+            ),
+            // The three pointwise rows are one rule at three operators. See [`Intrinsic::BinAnd`] for why the equal length is stated rather than extended away.
+            BinAnd {
+                grain, left, right, ..
+            }
+            | BinOr {
+                grain, left, right, ..
+            }
+            | BinXor {
+                grain, left, right, ..
+            } => sig(
+                vec![
+                    Operand::At(bin_type(*grain)),
+                    Operand::At(bin_type(*grain)),
+                    Operand::At(holds(NatEql(
+                        bin_len(*grain, left.clone()),
+                        bin_len(*grain, right.clone()),
+                    ))),
+                ],
+                bin_type(*grain),
+            ),
 
             // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, the case that used to be refused for having no element to read a type from.
             List { element, items } => sig(

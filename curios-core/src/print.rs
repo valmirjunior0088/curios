@@ -904,6 +904,58 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             bin_concat_entries(grain, operands, frame, &mut entries);
             print_packed(grain, entries)
         }
+        // One arm apiece rather than one per grain, as `BinConcat` above already is: these four are the same rule at two element types, and the grain decides nothing here but which carrier's name to spell. The bound is dropped like every other proof operand — it is not what the program wrote.
+        Intrinsic::BinReplicate { grain, count, atom } => print_call(
+            match grain {
+                Grain::X => "Bytes/replicate",
+                Grain::B => "Bits/replicate",
+            },
+            vec![],
+            vec![count, atom],
+            frame,
+        ),
+        Intrinsic::BinAnd {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_call(
+            match grain {
+                Grain::X => "Bytes/and",
+                Grain::B => "Bits/and",
+            },
+            vec![],
+            vec![left, right],
+            frame,
+        ),
+        Intrinsic::BinOr {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_call(
+            match grain {
+                Grain::X => "Bytes/or",
+                Grain::B => "Bits/or",
+            },
+            vec![],
+            vec![left, right],
+            frame,
+        ),
+        Intrinsic::BinXor {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => print_call(
+            match grain {
+                Grain::X => "Bytes/xor",
+                Grain::B => "Bits/xor",
+            },
+            vec![],
+            vec![left, right],
+            frame,
+        ),
         Intrinsic::ListType(elem) => print_former("List", elem, frame),
         Intrinsic::List {
             element: _,

@@ -365,6 +365,45 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
+        Intrinsic::BinReplicate { grain, count, atom } => lowering.sequence(
+            context,
+            curios_ersd::SequenceOp::BinReplicate(*grain),
+            &[(count, nat_type()), (atom, grain_element_type(*grain))],
+            hint,
+        ),
+        Intrinsic::BinAnd {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => lowering.sequence(
+            context,
+            curios_ersd::SequenceOp::BinAnd(*grain),
+            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
+            hint,
+        ),
+        Intrinsic::BinOr {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => lowering.sequence(
+            context,
+            curios_ersd::SequenceOp::BinOr(*grain),
+            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
+            hint,
+        ),
+        Intrinsic::BinXor {
+            grain,
+            left,
+            right,
+            same_length: _,
+        } => lowering.sequence(
+            context,
+            curios_ersd::SequenceOp::BinXor(*grain),
+            &[(left, bin_type(*grain)), (right, bin_type(*grain))],
+            hint,
+        ),
         Intrinsic::BinConcat { grain, operands } => {
             let pairs = operands
                 .iter()

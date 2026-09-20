@@ -247,6 +247,42 @@ pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     Some(spelling)
 }
 
+/// The three pointwise rows fold by one rule: two literal runs of one length combine in the packed representation, and anything else keeps the node it was written as.
+///
+/// **Two literals of different lengths decline to fold rather than trapping.** The bound in the type is what forbids the pair, and the checker is what enforces it; a reducer that answered here would be deciding a proposition it may not construct — the defect `Intrinsic::signature`'s module documentation records the bound fields as existing to remove — and one that panicked would turn an ill-typed term into a crash instead of a report. Declining costs reductions and never an answer, which is `FreeMonoid::single_generator`'s trade at a different seam.
+fn reduce_bin_pointwise(
+    reducer: &mut impl Reducer,
+    grain: Grain,
+    left: &Term,
+    right: &Term,
+    same_length: &Term,
+    combine: impl Fn(&PackedBin, &PackedBin) -> PackedBin,
+    rebuild: impl FnOnce(Grain, Term, Term, Term) -> Intrinsic,
+) -> Result<Subterm, ReduceError> {
+    let left = reducer.reduce_forced(left.clone())?;
+    let right = reducer.reduce_forced(right.clone())?;
+    let same_length = reducer.reduce(same_length.clone())?;
+
+    if let (
+        Subterm::Intrinsic(Intrinsic::Bin(found_left, run_left)),
+        Subterm::Intrinsic(Intrinsic::Bin(found_right, run_right)),
+    ) = (&*left, &*right)
+        && *found_left == grain
+        && *found_right == grain
+        && run_left.bit_length() == run_right.bit_length()
+    {
+        // Three payloads: each operand normalizes into a buffer of its own, and the combined run collects into a third.
+        reducer.spend(packed_bound(grain, run_left.bit_length() as u64).saturating_mul(3))?;
+
+        return Ok(Subterm::Intrinsic(Intrinsic::Bin(
+            grain,
+            combine(run_left, run_right),
+        )));
+    }
+
+    Ok(Subterm::Intrinsic(rebuild(grain, left, right, same_length)))
+}
+
 pub fn reduce_intrinsic(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -900,6 +936,16 @@ pub fn reduce_intrinsic(
             if let Some(total) = FreeMonoid::Bin(grain).measure(&bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
+            // `len(replicate(count, x)) = count`, which the measure above answers only once the count is a literal. It has to hold symbolically too, because a fill is how a program builds a run as long as another one: `/std`'s `not` is an `xor` against a fill of its operand's length, and the equal-length bound that guards it has nothing to reduce to without this.
+            if let Subterm::Intrinsic(Intrinsic::BinReplicate {
+                grain: found,
+                count,
+                ..
+            }) = &*bin
+                && *found == grain
+            {
+                return Ok(Term::unwrap_or_clone(count.clone()));
+            }
             let shape = bin_shape(reducer, grain, bin)?;
 
             reduce_homomorphism(
@@ -1255,6 +1301,72 @@ pub fn reduce_intrinsic(
                 },
             )
         }
+        Intrinsic::BinReplicate { grain, count, atom } => {
+            let grain = *grain;
+            let count = reducer.reduce_forced(count.clone())?;
+            let atom = reducer.reduce_forced(atom.clone())?;
+
+            if let Some(n) = as_index(&count)
+                && let Some(generator) = Generator::read(grain, &atom)
+            {
+                // The payload the fill materializes, charged before it exists. This is the one construction here whose size an *operand names* rather than an operand carrying it, so a count the program computed is exactly what has to be priced — the budget is the whole of what stands between a fill and the machine.
+                reducer.spend(packed_bound(
+                    grain,
+                    (n as u64).saturating_mul(grain.bits() as u64),
+                ))?;
+
+                return Ok(Subterm::Intrinsic(Intrinsic::Bin(
+                    grain,
+                    generator.replicated(n),
+                )));
+            }
+
+            Ok(Subterm::Intrinsic(Intrinsic::bin_replicate(
+                grain, count, atom,
+            )))
+        }
+        Intrinsic::BinAnd {
+            grain,
+            left,
+            right,
+            same_length,
+        } => reduce_bin_pointwise(
+            reducer,
+            *grain,
+            left,
+            right,
+            same_length,
+            PackedBin::and,
+            Intrinsic::bin_and,
+        ),
+        Intrinsic::BinOr {
+            grain,
+            left,
+            right,
+            same_length,
+        } => reduce_bin_pointwise(
+            reducer,
+            *grain,
+            left,
+            right,
+            same_length,
+            PackedBin::or,
+            Intrinsic::bin_or,
+        ),
+        Intrinsic::BinXor {
+            grain,
+            left,
+            right,
+            same_length,
+        } => reduce_bin_pointwise(
+            reducer,
+            *grain,
+            left,
+            right,
+            same_length,
+            PackedBin::xor,
+            Intrinsic::bin_xor,
+        ),
         Intrinsic::ListType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::list_type(elem)))

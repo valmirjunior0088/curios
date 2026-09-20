@@ -1,4 +1,4 @@
-pub use /sys/Bits/{let Bits, get, len, eql, slice};
+pub use /sys/Bits/{let Bits, get, len, eql, slice, replicate, and, or, xor};
 use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell};
 use /std/ops/{Eql};
 

@@ -802,6 +802,26 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_bits_eql_func(self.table.bits_eql_func(), self.table.bits_read_func());
         }
 
+        if self.table.bin_and_used() {
+            ropes.emit_pointwise_func(self.table.bin_and_func(), curios_wasm::Instr::I32And);
+        }
+
+        if self.table.bin_or_used() {
+            ropes.emit_pointwise_func(self.table.bin_or_func(), curios_wasm::Instr::I32Or);
+        }
+
+        if self.table.bin_xor_used() {
+            ropes.emit_pointwise_func(self.table.bin_xor_func(), curios_wasm::Instr::I32Xor);
+        }
+
+        if self.table.bytes_replicate_used() {
+            ropes.emit_replicate_func(Grain::X, self.table.bytes_replicate_func());
+        }
+
+        if self.table.bits_replicate_used() {
+            ropes.emit_replicate_func(Grain::B, self.table.bits_replicate_func());
+        }
+
         if self.table.list_map_used() {
             ropes.emit_map_func(self.table.list_map_func(), self.table.list_force_func());
         }
