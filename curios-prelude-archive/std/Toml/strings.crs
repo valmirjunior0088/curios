@@ -55,9 +55,6 @@ let escape: Parse(Bytes) =
 let crlf: Parse(Option({Byte, Byte})) =
     Parse/optional(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)));
 
-let quotes(quote: Byte, count: Nat) -> Bytes =
-    match count | 0 => x[] | _ + 1; ih => x[..ih, quote] end;
-
 let basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next
@@ -161,8 +158,8 @@ let ml_basic_body(acc: Bytes) -> Parse(Bytes) =
             let q = Bytes/len(run);
             choose
             | q >= 6 => Parse/fail("too many quotes")
-            | q >= 3 => Parse/pure(x[..acc, ..quotes(b, q - 3)])
-            | _ => ml_basic_body(x[..acc, ..quotes(b, q)])
+            | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
+            | _ => ml_basic_body(x[..acc, ..Bytes/replicate(q, b)])
             end
         | n == 0x5C =>
             let _ = Parse/any_byte!;
@@ -214,8 +211,8 @@ let ml_literal_body(acc: Bytes) -> Parse(Bytes) =
             let q = Bytes/len(run);
             choose
             | q >= 6 => Parse/fail("too many quotes")
-            | q >= 3 => Parse/pure(x[..acc, ..quotes(b, q - 3)])
-            | _ => ml_literal_body(x[..acc, ..quotes(b, q)])
+            | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
+            | _ => ml_literal_body(x[..acc, ..Bytes/replicate(q, b)])
             end
         | n == 0xA =>
             let _ = Parse/any_byte!;

@@ -12,14 +12,11 @@ pub concept Hash(T: Type): pub Type {
 
 pub use Hash/*;
 
-let zeros(k: Nat) -> Bytes =
-    match k | 0 => x[] | _ + 1; ih => x[..ih, 0x0] end;
-
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---
 --- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
 pub let padded(b: Bytes, width: Nat) -> Bytes =
-    Bytes/flatten([b, zeros(width - Bytes/len(b))]);
+    Bytes/flatten([b, Bytes/replicate(width - Bytes/len(b), 0x0)]);
 
 --- `b` behind its four-byte length.
 ---
