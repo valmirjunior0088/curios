@@ -735,6 +735,7 @@ dependencies = [
  "curios-utilities",
  "serde",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

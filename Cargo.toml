@@ -77,7 +77,11 @@ curios-wonder = { path = "curios-wonder" }
 curios-document = { path = "curios-document" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
-clap = { version = "4.6.1", features = ["derive"] }
-askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
+# The one pair that stays, and the exception is exactly as wide as its reason. These are two
+# package names taken by two different members — `curios-js` and `xtask` — whose versions must move
+# together, because the CLI support crate generates the glue for the runtime crate and any skew
+# breaks the bindings. A per-crate pin cannot say "these two match"; a shared row is the only thing
+# that can. Every other third-party dependency names its own pin in the one crate that owns it, as
+# `documentation/design/toolchain/one-crate-is-the-authority-for-one-external-concern.md` decides.
 wasm-bindgen = { version = "0.2.126" }
 wasm-bindgen-cli-support = { version = "0.2.126" }

@@ -8,9 +8,12 @@ description = "Curios packages: the manifest, the governance walk, the dependenc
 [lints]
 workspace = true
 
-# The workspace's only TOML dependency, on the pattern `curios-archive` sets for rkyv: one crate
-# owns the format, its pin and its error shape, so nothing else can pick a second one. `/std`'s
-# TOML codec is a guest library — it runs in the compiled program — and cannot serve the driver.
+# The authority for a Curios manifest's format, on the pattern `curios-archive` sets for rkyv: one
+# crate owns the format, its pin and its error shape, so nothing else can pick a second one. `toml`
+# reads a manifest and `toml_edit` writes one back preserving every byte it did not set — the read
+# and the write halves of one concern, which is why they sit together rather than a crate apart.
+# `/std`'s TOML codec is a guest library — it runs in the compiled program — and cannot serve the
+# driver; xtask's own `toml_edit` answers for `Cargo.toml`, which is not this format's business.
 [dependencies]
 curios-utilities = { workspace = true }
 curios-text = { workspace = true }
@@ -20,6 +23,7 @@ toml = { version = "0.9.12", default-features = false, features = [
     "serde",
     "std",
 ] }
+toml_edit = { version = "0.25.15" }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
