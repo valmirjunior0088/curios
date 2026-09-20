@@ -6,6 +6,17 @@ use /std/ops/{Eql};
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
 
+--- Everything from `k` on, under the evidence that `k` is within the length.
+pub let drop(b: Bits, k: Nat, @ok: Nat/Le(k, len(b))) -> Bits =
+    slice(
+        b,
+        k,
+        len(b) - k,
+        @Eq/subst(
+            (x) => Nat/Le(x, len(b)),
+            Eq/sym(Nat/Le/add_sub_cancel(k, len(b), ok)),
+            Nat/Le/refl(len(b))));
+
 --- The concatenation, in order.
 pub let flatten(parts: List(Bits)) -> Bits =
     List/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
