@@ -322,9 +322,14 @@ fn accept_module(
     let delivered = FileHash::of_bytes(&bytes);
 
     if delivered != acquisition.hash {
+        // The same two conditions `Foreign::bytes` states, with the likely one inverted: bytes that arrived from elsewhere changed without you, where bytes you build change because you built them.
         return Err(format!(
-            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  a module that changed at a fixed URL is not a stale pin; re-pin it only if you know why it changed",
-            acquisition.name, acquisition.package, acquisition.url, acquisition.hash
+            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `curios add foreign {} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
+            acquisition.name,
+            acquisition.package,
+            acquisition.url,
+            acquisition.hash,
+            acquisition.name
         ));
     }
 
@@ -397,9 +402,14 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
     let delivered = TreeHash::of(scratch)?;
 
     if &delivered != acquisition.hash() {
+        // The two conditions the module refusals state, with the discriminator a *tree* has and a file does not: what the row pins decides whether the delivery could have moved at all.
         return Err(format!(
-            "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}",
-            acquisition.name, acquisition.url, acquisition.snapshot.rev, acquisition.snapshot.hash
+            "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: this row pins a branch or a tag and it has moved — then `curios add dependency {} --refresh`\n  pay close attention if: this row pins a commit object, which cannot move — a tree that changed under one means the history it came from was rewritten",
+            acquisition.name,
+            acquisition.url,
+            acquisition.snapshot.rev,
+            acquisition.snapshot.hash,
+            acquisition.name
         ));
     }
 

@@ -454,11 +454,13 @@ impl Foreign {
 
         let delivered = FileHash::of_bytes(&bytes);
         if delivered != self.hash {
+            // The two conditions rather than one instruction: a re-pin is the ordinary answer here and the alarming one, and which it is depends on something only the reader knows.
             return Err(format!(
-                "the foreign module {:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}",
+                "the foreign module {:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios add foreign {} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
                 self.name,
                 path.display(),
-                self.hash
+                self.hash,
+                self.name
             ));
         }
 
