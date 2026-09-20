@@ -23,7 +23,7 @@
 mod tests;
 
 use {
-    crate::TreeHash,
+    crate::{FileHash, TreeHash},
     curios_utilities::{Fingerprint, Mount, Qualifier},
     std::path::PathBuf,
 };
@@ -73,6 +73,17 @@ impl Store {
         let (scheme, digest) = hash.split();
 
         self.shared.join("sources").join(scheme).join(digest)
+    }
+
+    /// Where a fetched foreign module is placed, keyed by the hash it was accepted against.
+    ///
+    /// Beside `sources` rather than within it, and for the reason the two are different kinds: a source is a tree a package *is*, a foreign module is one file a package *names*. Both are content-keyed and both live in the shared half, so one machine fetches a module once however many projects reach for it — which is what makes a module too large to commit affordable to depend on.
+    ///
+    /// A module the package carries has no entry here at all: it is already in the delivered tree, and the tree hash its consumer pinned covers it.
+    pub fn foreign(&self, hash: &FileHash) -> PathBuf {
+        let (scheme, digest) = hash.split();
+
+        self.shared.join("foreign").join(scheme).join(digest)
     }
 
     /// Where a judged unit is filed, under the address its mounts, its predecessors and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.

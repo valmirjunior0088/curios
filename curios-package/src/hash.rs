@@ -1,18 +1,73 @@
-//! The criterion a delivered source tree is accepted against, and the key the store files it under.
+//! The criteria a delivery is accepted against, and the keys the store files them under: [`TreeHash`] for a source tree, [`FileHash`] for one file beside it.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    curios_utilities::Fingerprint,
+    curios_utilities::{Fingerprint, digest},
     std::{ffi::OsStr, fmt, fs, path::Path},
 };
 
-/// The scheme this compiler computes and verifies.
-const SCHEME: &str = "c1:";
+/// The scheme a delivered source tree is accepted against.
+const TREE_SCHEME: &str = "c1:";
+
+/// The scheme one delivered file is accepted against.
+const FILE_SCHEME: &str = "f1:";
 
 /// The digits a SHA-256 digest spells in hex.
 const DIGITS: usize = 64;
+
+/// The digest `spelling` states under `scheme`, or why it states none — the shape both schemes share, so neither can drift from the other about what a well-formed hash looks like.
+fn parse_under(spelling: &str, scheme: &str) -> Result<String, String> {
+    let Some(digest) = spelling.strip_prefix(scheme) else {
+        return Err(format!(
+            "{spelling:?} names no hash scheme this compiler knows; the scheme is `{scheme}`"
+        ));
+    };
+
+    // Lowercase is part of the spelling rather than a normalization, because the hash is a store key: two spellings of one digest would be two directories.
+    match digest.len() == DIGITS
+        && digest
+            .chars()
+            .all(|digit| matches!(digit, '0'..='9' | 'a'..='f'))
+    {
+        true => Ok(spelling.to_string()),
+        false => Err(format!(
+            "{spelling:?} is no `{scheme}` hash: the scheme takes {DIGITS} lowercase hex digits"
+        )),
+    }
+}
+
+/// A hash over one delivered file — a foreign module a `[[foreign]]` row names by `url` — doing the two jobs [`TreeHash`] does for a tree: the criterion the delivery is accepted against, and the key the shared store files it under.
+///
+/// **`f1:` is plain SHA-256 over the file's bytes, and deliberately nothing more.** A tree hash has to frame its parts because a tree is many files and two of them could otherwise share a spelling; one file has no parts to separate. Leaving it unframed is what lets a publisher compute the digest with `sha256sum` and a consumer read the same string back — which matters, because unlike a `rev` this is a number somebody writes into a manifest by hand or reads out of a release's checksum file.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileHash(String);
+
+impl FileHash {
+    /// The hash `spelling` states, or why it states none.
+    pub fn parse(spelling: &str) -> Result<Self, String> {
+        parse_under(spelling, FILE_SCHEME).map(Self)
+    }
+
+    /// The hash of `bytes`, as a delivery is checked against.
+    pub fn of_bytes(bytes: &[u8]) -> Self {
+        Self(format!("{FILE_SCHEME}{}", digest(bytes)))
+    }
+
+    /// The scheme and the digest, apart — the store files a file under its scheme as a directory of its own, as it does a tree.
+    pub fn split(&self) -> (&str, &str) {
+        self.0
+            .split_once(':')
+            .expect("a well-formed hash carries its scheme")
+    }
+}
+
+impl fmt::Display for FileHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
 
 /// A hash over a delivered source tree, doing two jobs at once: the criterion a delivery is accepted against, and the key the shared content-addressed store files it under, uniformly across source kinds.
 ///
@@ -25,23 +80,7 @@ pub struct TreeHash(String);
 impl TreeHash {
     /// The hash `spelling` states, or why it states none.
     pub fn parse(spelling: &str) -> Result<Self, String> {
-        let Some(digest) = spelling.strip_prefix(SCHEME) else {
-            return Err(format!(
-                "{spelling:?} names no hash scheme this compiler knows; the scheme is `{SCHEME}`"
-            ));
-        };
-
-        // Lowercase is part of the spelling rather than a normalization, because the hash is a store key: two spellings of one digest would be two directories.
-        match digest.len() == DIGITS
-            && digest
-                .chars()
-                .all(|digit| matches!(digit, '0'..='9' | 'a'..='f'))
-        {
-            true => Ok(Self(spelling.to_string())),
-            false => Err(format!(
-                "{spelling:?} is no `{SCHEME}` hash: the scheme takes {DIGITS} lowercase hex digits"
-            )),
-        }
+        parse_under(spelling, TREE_SCHEME).map(Self)
     }
 
     /// The scheme and the digest, apart.
@@ -71,7 +110,7 @@ impl TreeHash {
             fingerprint.feed(contents);
         }
 
-        Ok(Self(format!("{SCHEME}{}", fingerprint.hex())))
+        Ok(Self(format!("{TREE_SCHEME}{}", fingerprint.hex())))
     }
 }
 

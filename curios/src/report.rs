@@ -30,12 +30,14 @@ use {
 
 /// What a status line is about.
 ///
-/// Three namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's is an identifier its manifest chose, and a file's is whatever was typed or wherever it landed. Rendering all three through one type is what keeps a print site from spelling a slash it did not derive.
+/// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
 pub(crate) enum Subject {
     /// A unit, by the prefix it mounts.
     Mounted(Qualifier),
     /// A declared executable, by the name its manifest row gives it.
     Executable(String),
+    /// A declared foreign module, by the name its manifest row gives it. Never a prefix: nothing in Curios source refers to it, since a `foreign` declaration is reached by its own qualified name rather than through whatever implements it.
+    Module(String),
     /// A file, as it was written on the command line or as it landed on disk.
     File(PathBuf),
     /// The program on standard input, which was asked for as `-` and is reported as what that means: `↳ Compiling -` reads as a line the compiler failed to finish writing.
@@ -53,7 +55,7 @@ impl fmt::Display for Subject {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Mounted(prefix) => formatter.write_str(&prefix.join()),
-            Self::Executable(name) => formatter.write_str(name),
+            Self::Executable(name) | Self::Module(name) => formatter.write_str(name),
             Self::File(path) => write!(formatter, "{}", path.display()),
             Self::Stdin => formatter.write_str(STDIN_LABEL),
         }

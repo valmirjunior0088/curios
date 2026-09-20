@@ -279,8 +279,13 @@ fn dispatch() -> Result<(), Failure> {
             let entire = contract.admit_entire(target, manifest, &here()?)?;
 
             // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
-            for acquisition in curate(&entire.governing)? {
+            let curated = curate(&entire.governing)?;
+            for acquisition in curated.packages {
                 fact(Heading::Fetched, Subject::package(&acquisition.name));
+            }
+            // After the packages, in the order they were brought in: a module is named by a manifest a tree had to arrive for.
+            for acquisition in curated.modules {
+                fact(Heading::Fetched, Subject::Module(acquisition.name));
             }
         }
         Mode::Format { targets, check, .. } => {

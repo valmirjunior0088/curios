@@ -159,6 +159,8 @@ curios curate
 
 `curate` materializes what the manifests reference, and it is the only part of the toolchain that reaches the network — the compiler itself never fetches. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
+**It reaches the network through programs already on the machine**, for the reason acceptance is by hash: any transport may deliver the bytes, so the one already installed is the right one rather than a client vendored into the compiler. A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
+
 ## `new`
 
 ```sh
@@ -258,6 +260,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
+| `[[foreign]]` | one row per WebAssembly module implementing this package's [`foreign` declarations](syntax.md#foreign-declarations) |
 
 ```toml
 name = "hello"
@@ -272,6 +275,24 @@ path = "tools/serve.crs"  # unless the row says otherwise
 ```
 
 An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
+
+A `[[foreign]]` row names a module and says which of the package's `foreign` declarations each of its exports answers:
+
+```toml
+[[foreign]]
+name = "sha2"                    # a handle for `curios add`; no program refers to it
+path = "foreign/libsha2.wasm"    # or `url`, never both
+hash = "f1:9c3a…"                # either way
+
+[foreign.exports]
+SHA256_Digest = "/crypto/digest/sha256"
+```
+
+`path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
+
+`f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
+
+`[foreign.exports]` maps each export of that module to the declaration it answers, by fully qualified name. It is total: every `foreign` a compilation holds is named by exactly one entry across every row in the package graph, and a declaration nothing claims is refused naming it. Export names are local to their module, so two rows may export the same name; the declaration paths are what must not collide.
 
 | Umbrella key | Is |
 | --- | --- |
@@ -360,13 +381,14 @@ The program's own standard input is spent on reading the source, so `/std/read()
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest, in six entries each named for what it holds:
+Everything generated lands under `.curios/`, beside the governing manifest, in seven entries each named for what it holds:
 
 | Entry | Holds | Where |
 | --- | --- | --- |
 | `executables/<package>/<name>` | what `compile` emits | beside the project |
 | `documentation/<package>/` | what `document` emits | beside the project |
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
+| `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
 | `verdicts/<slot>` | judged units, one slot per unit | shared |
 | `payloads/<slot>` | precompiled payloads, one slot per executable | shared |
 | `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |

@@ -380,6 +380,85 @@ fn a_marker_in_the_catalog_is_refused() {
     assert!(refusal.contains("names a marker source"), "{refusal}");
 }
 
+/// The two deliveries a `[[foreign]]` row states, and the table naming which declaration each export answers.
+#[test]
+fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
+    let Manifest::Package(package) = parse(
+        r#"
+            name = "crypto"
+
+            [[foreign]]
+            name = "sha2"
+            path = "foreign/libsha2.wasm"
+            hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+            [foreign.exports]
+            SHA256_Digest = "/crypto/digest/sha256"
+
+            [[foreign]]
+            name = "blake3"
+            url = "https://example.com/libblake3.wasm"
+            hash = "f1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+        "#,
+    ) else {
+        panic!("a package");
+    };
+
+    assert_eq!(
+        package.foreign[0].module,
+        Module::Filed(PathBuf::from("foreign/libsha2.wasm"))
+    );
+    assert_eq!(
+        package.foreign[0]
+            .exports
+            .get("SHA256_Digest")
+            .map(String::as_str),
+        Some("/crypto/digest/sha256")
+    );
+    assert_eq!(
+        package.foreign[1].module,
+        Module::Fetched("https://example.com/libblake3.wasm".to_string())
+    );
+}
+
+/// Every wrong combination of the delivery fields, each refused by name rather than by whichever shape was tried second.
+#[test]
+fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
+    const PIN: &str =
+        "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
+
+    for (row, expected) in [
+        (
+            format!("path = \"m.wasm\"\nurl = \"https://e.com/m.wasm\"\n{PIN}"),
+            "never both",
+        ),
+        (PIN.to_string(), "names no module"),
+        ("".to_string(), "names no module"),
+        // Stated for a carried module too: the tree holding it need not be pinned, so this is the delivery the hash is load-bearing for.
+        ("path = \"m.wasm\"".to_string(), "states no `hash`"),
+        ("url = \"https://e.com/m.wasm\"".to_string(), "states no `hash`"),
+        (
+            format!("path = \"../outside.wasm\"\n{PIN}"),
+            "no plain relative path",
+        ),
+        (
+            format!("url = \"-oProxyCommand=x\"\n{PIN}"),
+            "would read it as an option",
+        ),
+        (
+            "url = \"https://e.com/m.wasm\"\nhash = \"c1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"".to_string(),
+            "names no hash scheme",
+        ),
+    ] {
+        let row = row.as_str();
+        let refusal = refuse(&format!(
+            "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n{row}\n"
+        ));
+
+        assert!(refusal.contains(expected), "{row:?} reported {refusal}");
+    }
+}
+
 /// There is no privilege field, and a manifest cannot invent one.
 #[test]
 fn an_unknown_key_is_refused() {

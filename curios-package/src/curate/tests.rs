@@ -136,7 +136,7 @@ fn a_fetchable_catalog_row_is_acquired() {
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let wanted = acquisitions(&governing).unwrap();
+    let (wanted, _) = acquisitions(&governing).unwrap();
 
     assert_eq!(wanted.len(), 1, "{:?}", wanted.len());
     let acquired = wanted.iter().next().unwrap();
@@ -170,7 +170,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let wanted = acquisitions(&governing).unwrap();
+    let (wanted, _) = acquisitions(&governing).unwrap();
 
     // The catalog row itself fetches nothing, but the walk descended into it and found what it depends on.
     assert_eq!(wanted.len(), 1, "{wanted:?}");
@@ -379,7 +379,7 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     let governing = Governing::of(&root.join("app")).unwrap();
     let fetched = curate(&governing).expect("a snapshot both mirrors serve");
 
-    assert_eq!(fetched.len(), 1, "{fetched:?}");
+    assert_eq!(fetched.packages.len(), 1, "{fetched:?}");
     assert!(
         governing
             .store()
@@ -387,4 +387,58 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
             .join("lib.crs")
             .is_file()
     );
+}
+
+/// A fetched module matching its pin is placed under it, keyed by the digest alone so two packages naming one module share the entry.
+///
+/// Delivered over `file://`, which is a transport like any other — the point of accepting by hash is that it does not matter which one carried the bytes, and it keeps this test offline.
+///
+/// It does mean this exercises `curl` specifically: `wget` speaks no `file://`, so on a machine with only the fallback installed this fails where the product would not. That is a property of the scheme a test can reach without a network, not of the fetch.
+#[test]
+fn a_fetched_module_matching_its_pin_is_placed() {
+    let root = tree("curate-module", &[("curios.toml", "name = \"app\"\n")]);
+    let module = root.join("libsha2.wasm");
+    fs::write(&module, b"\0asm\x01\0\0\0").unwrap();
+
+    let hash = FileHash::of_bytes(&fs::read(&module).unwrap());
+    let acquisition = ModuleAcquisition {
+        package: "crypto".to_string(),
+        name: "sha2".to_string(),
+        url: format!("file://{}", module.display()),
+        hash: hash.clone(),
+    };
+
+    let store = Store::at(root.to_path_buf());
+    fetch_module(&store, &acquisition).expect("a delivery matching its pin");
+
+    assert_eq!(fs::read(store.foreign(&hash)).unwrap(), b"\0asm\x01\0\0\0");
+}
+
+/// A fetched module that is not what it was pinned to is refused stating both digests, and nothing is filed — the store never holds bytes under a key they do not have.
+#[test]
+fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
+    let root = tree(
+        "curate-module-refuse",
+        &[("curios.toml", "name = \"app\"\n")],
+    );
+    let module = root.join("libsha2.wasm");
+    fs::write(&module, b"\0asm\x01\0\0\0").unwrap();
+
+    let pinned = FileHash::parse(&format!("f1:{}", "a".repeat(64))).unwrap();
+    let acquisition = ModuleAcquisition {
+        package: "crypto".to_string(),
+        name: "sha2".to_string(),
+        url: format!("file://{}", module.display()),
+        hash: pinned.clone(),
+    };
+
+    let store = Store::at(root.to_path_buf());
+    let refusal = fetch_module(&store, &acquisition).expect_err("a delivery failing its pin");
+
+    assert!(refusal.contains("is not what it is pinned to"), "{refusal}");
+    assert!(
+        refusal.contains(&FileHash::of_bytes(b"\0asm\x01\0\0\0").to_string()),
+        "the refusal states what arrived: {refusal}"
+    );
+    assert!(!store.foreign(&pinned).exists(), "nothing was filed");
 }
