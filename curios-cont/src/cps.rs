@@ -146,6 +146,8 @@ pub enum Intrinsic {
     BinConcat(Grain, usize),
     /// `(count, element) -> bin`: one flat leaf of `count` copies of `element`. The size is an operand's value rather than an operand's extent, which is what separates it from every other construction here.
     BinReplicate(Grain),
+    /// `(bin) -> bin`: the run read at the other grain, eight bits to the byte. The [`Grain`] is the operand's, so the result is the one it is not — the only row here whose result grain differs from the one it names.
+    BinReinterp(Grain),
     /// `(a, b) -> bin`: the element-wise conjunction of two binaries the type has already held to one length. Total — the bound is discharged above erasure and nothing here can fail it.
     BinAnd(Grain),
     /// `(a, b) -> bin`: the element-wise disjunction, as [`Intrinsic::BinAnd`].
@@ -214,6 +216,7 @@ impl Intrinsic {
             (BinAnd(grain) | BinOr(grain) | BinXor(grain), _) => Repr::Bin(*grain),
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` grain as an append's does.
             (BinReplicate(_), _) => Repr::Nat,
+            (BinReinterp(grain), _) => Repr::Bin(*grain),
             (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
             (ListGet | ListSlice | ListRest, _) => Repr::Nat,
             // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
@@ -281,6 +284,8 @@ impl Intrinsic {
             | BinAnd(grain)
             | BinOr(grain)
             | BinXor(grain) => Repr::Bin(*grain),
+            // The one row whose result grain is not the one it names: the grain is the operand's, and reading it at the other is the whole operation.
+            BinReinterp(grain) => Repr::Bin(grain.other()),
             FltToLeBytes => Repr::Bin(Grain::X),
             ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
                 Repr::List
@@ -319,6 +324,7 @@ impl Intrinsic {
             | Self::FltOfLeBytes
             | Self::FltToInt
             | Self::BinLen(_)
+            | Self::BinReinterp(_)
             | Self::ListLen
             | Self::TupleGet(_)
             | Self::RowGet(..)
@@ -378,6 +384,7 @@ impl Intrinsic {
             | Self::ListSettle
             | Self::ListFlat(_)
             | Self::BinReplicate(_)
+            | Self::BinReinterp(_)
             | Self::BinAnd(_)
             | Self::BinOr(_)
             | Self::BinXor(_)

@@ -767,7 +767,7 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             Ok(Value::List(ListWindow::new(elements)))
         }
         BinLen(_) | BinGet(_) | BinSlice(_) | BinAppend(_) | BinConcat(_) | BinEql(_)
-        | BinReplicate(_) | BinAnd(_) | BinOr(_) | BinXor(_) => {
+        | BinReplicate(_) | BinReinterp(_) | BinAnd(_) | BinOr(_) | BinXor(_) => {
             unreachable!("packed-binary operations fold through the semantic contract")
         }
     }

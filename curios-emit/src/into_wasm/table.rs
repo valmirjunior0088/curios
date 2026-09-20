@@ -279,6 +279,8 @@ pub(crate) struct Table<'a> {
     bin_xor: OnceCell<curios_wasm::FuncName>,
     bytes_replicate: OnceCell<curios_wasm::FuncName>,
     bits_replicate: OnceCell<curios_wasm::FuncName>,
+    bytes_to_bits: OnceCell<curios_wasm::FuncName>,
+    bits_to_bytes: OnceCell<curios_wasm::FuncName>,
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
@@ -358,6 +360,8 @@ impl<'a> Table<'a> {
             bin_xor: OnceCell::new(),
             bytes_replicate: OnceCell::new(),
             bits_replicate: OnceCell::new(),
+            bytes_to_bits: OnceCell::new(),
+            bits_to_bytes: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             row_types: module
@@ -905,6 +909,28 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bits_replicate_used(&self) -> bool {
         self.bits_replicate.get().is_some()
+    }
+
+    /// `$bytes/to_bits (ref $rope/bin) -> (ref $rope/bin)`: the same payload resealed at eight times the length, which is what a byte run is as bits.
+    pub(crate) fn bytes_to_bits_func(&self) -> curios_wasm::FuncName {
+        self.bytes_to_bits
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/to_bits"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_to_bits_used(&self) -> bool {
+        self.bytes_to_bits.get().is_some()
+    }
+
+    /// `$bits/to_bytes (ref $rope/bin) -> (ref $rope/bin)`: the reverse, exact because the caller proved the run holds whole bytes.
+    pub(crate) fn bits_to_bytes_func(&self) -> curios_wasm::FuncName {
+        self.bits_to_bytes
+            .get_or_init(|| curios_wasm::FuncName::from("bits/to_bytes"))
+            .clone()
+    }
+
+    pub(crate) fn bits_to_bytes_used(&self) -> bool {
+        self.bits_to_bytes.get().is_some()
     }
 
     /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.

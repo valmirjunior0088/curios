@@ -22,6 +22,8 @@ pub enum SequenceOp {
     BinConcat(Grain),
     /// `(count, element) -> bin`: `count` copies of one element.
     BinReplicate(Grain),
+    /// `(bin) -> bin`: the run read at the other grain, eight bits to the byte. The [`Grain`] is the operand's, so the result is the one it is not.
+    BinReinterp(Grain),
     /// `(a, b) -> bin`: the element-wise conjunction of two binaries of one length.
     BinAnd(Grain),
     /// `(a, b) -> bin`: the element-wise disjunction, as [`SequenceOp::BinAnd`].
@@ -55,7 +57,7 @@ impl SequenceOp {
     /// The operand contract of this operation.
     pub fn arity(self) -> SequenceArity {
         match self {
-            Self::BinLen(_) | Self::ListLen => SequenceArity::Exactly(1),
+            Self::BinLen(_) | Self::BinReinterp(_) | Self::ListLen => SequenceArity::Exactly(1),
             Self::BinEql(_)
             | Self::BinGet(_)
             | Self::BinAppend(_)

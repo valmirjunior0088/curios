@@ -1383,6 +1383,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::BinReplicate { grain, count, atom } => {
                 curios_core::Intrinsic::bin_replicate(*grain, self.term(count)?, self.term(atom)?)
             }
+            Intrinsic::BinReinterp {
+                grain,
+                bin,
+                aligned,
+            } => curios_core::Intrinsic::bin_reinterp(*grain, self.term(bin)?, self.term(aligned)?),
             Intrinsic::BinAnd {
                 grain,
                 left,

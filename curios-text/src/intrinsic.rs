@@ -158,6 +158,11 @@ pub enum Intrinsic {
         count: Term,
         atom: Term,
     },
+    BinReinterp {
+        grain: Grain,
+        bin: Term,
+        aligned: Term,
+    },
     BinAnd {
         grain: Grain,
         left: Term,

@@ -779,6 +779,57 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
+/// The one operation a packed carrier does not share with its twin: its own run read at the other grain.
+///
+/// **Declared per module rather than in [`bin_ops`]**, which is the rule that holds at *both* grains and would stop being that with a direction inside it. One intrinsic underneath, two names above — the grain names the operand, so each carrier declares the reading *out* of itself.
+///
+/// The bound rides one position either way and decides per grain, as the intrinsic's own row does: at the byte grain there is nothing to prove, because eight bits are a byte and no count of bytes leaves a remainder. At the bit grain it is the whole of what makes the reading possible, and it is spelled through the sibling `len` for the reason `in_range` is — a caller guards with the spelling available to them.
+///
+/// **The round trip needs no guard, at any run.** `to_bytes(to_bits(b))` discharges for a wholly symbolic `b`, through three laws already in the grid rather than anything stated here: the length of a reinterpretation reduces to a shift, a shift by a literal count normalises to a product with that coefficient, and `nat_euclid_split` reads the coefficient and answers the remainder for every value the symbolic factor can take. It is the same reading that makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`, which is what `Bytes/of_nat` is built on.
+fn regrain_op(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
+    let (operation, prose, bound) = match grain {
+        Grain::X => (
+            "to_bits",
+            "The same run read as bits, eight to the byte and least significant first.",
+            decided(syntax, intrinsic(Intrinsic::Bool(true))),
+        ),
+        Grain::B => (
+            "to_bytes",
+            "The same run read as bytes, under the evidence that it holds a whole number of them.",
+            decided(
+                syntax,
+                applied(
+                    sys_op(&["sys", "Nat", "eql"]),
+                    vec![
+                        applied(
+                            sys_op(&["sys", "Nat", "rem"]),
+                            vec![applied(name("len"), vec![name("b")]), nat_lit(8)],
+                        ),
+                        nat_lit(0),
+                    ],
+                ),
+            ),
+        ),
+    };
+
+    vec![documented(
+        &[prose],
+        pub_fn_marked(
+            operation,
+            vec![
+                (Plicity::Explicit, "b", bin(grain)),
+                (Plicity::Implicit, "whole", bound),
+            ],
+            bin(grain.other()),
+            intrinsic(Intrinsic::BinReinterp {
+                grain,
+                bin: name("b"),
+                aligned: name("whole"),
+            }),
+        ),
+    )]
+}
+
 fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
@@ -1201,13 +1252,21 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             "Bits",
             &["A packed run of bits, written `b[…]`."],
             pub_let("Bits", type_(), bin(Grain::B)),
-            items(bin_ops(Grain::B, syntax)),
+            [
+                items(bin_ops(Grain::B, syntax)),
+                items(regrain_op(Grain::B, syntax)),
+            ]
+            .concat(),
         ),
         SysModule::packed(
             "Bytes",
             &["A packed run of bytes, written `x[…]`."],
             pub_let("Bytes", type_(), bin(Grain::X)),
-            items(bin_ops(Grain::X, syntax)),
+            [
+                items(bin_ops(Grain::X, syntax)),
+                items(regrain_op(Grain::X, syntax)),
+            ]
+            .concat(),
         ),
         // The propositions `/sys`'s own operations state their preconditions in sit beside the decision they reflect: `Holds` is written beside every bound in the roster, and `True` and `False` are what it reduces to.
         SysModule::carrier(

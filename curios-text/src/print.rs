@@ -873,6 +873,18 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             vec![],
             vec![bin, atom],
         ),
+        Intrinsic::BinReinterp {
+            grain,
+            bin,
+            aligned: _,
+        } => print_intrinsic_call(
+            match grain {
+                Grain::B => "Bits/to_bytes".to_string(),
+                Grain::X => "Bytes/to_bits".to_string(),
+            },
+            vec![],
+            vec![bin],
+        ),
         Intrinsic::BinReplicate { grain, count, atom } => print_intrinsic_call(
             format!(
                 "{}/replicate",

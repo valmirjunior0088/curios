@@ -256,8 +256,10 @@ impl Semantics {
         match operation {
             BinGet(_) | ListGet => LocalBehavior::trap(),
             BinSlice(_) | ListSlice => LocalBehavior::trap().with_alloc(Allocation::Immutable),
-            BinAppend(_) | BinConcat(_) | BinReplicate(_) | BinAnd(_) | BinOr(_) | BinXor(_)
-            | ListAppend | ListConcat | ListBuild => LocalBehavior::alloc(Allocation::Immutable),
+            BinAppend(_) | BinConcat(_) | BinReplicate(_) | BinReinterp(_) | BinAnd(_)
+            | BinOr(_) | BinXor(_) | ListAppend | ListConcat | ListBuild => {
+                LocalBehavior::alloc(Allocation::Immutable)
+            }
             BinLen(_) | ListLen | BinEql(_) => LocalBehavior::pure(),
         }
     }
@@ -530,6 +532,19 @@ impl Semantics {
                     let (left, right) = (bin(0, grain)?, bin(1, grain)?);
                     (left.bit_length() == right.bit_length())
                         .then(|| Constant::Bin(grain, left.xor(right)))?
+                }
+                // One condition at both grains: a byte run's bit length is eight times its count and always passes, while a bit run's is exactly what the bound states. A window holding whole bytes at an offset that is not one is repacked rather than shared.
+                BinReinterp(grain) => {
+                    let run = bin(0, grain)?;
+                    run.bit_length().is_multiple_of(8).then(|| {
+                        Constant::Bin(
+                            grain.other(),
+                            match run.is_x_aligned() {
+                                true => run.clone(),
+                                false => PackedBin::from_bytes(run.to_packed_bytes()),
+                            },
+                        )
+                    })?
                 }
                 ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => return None,
             }))

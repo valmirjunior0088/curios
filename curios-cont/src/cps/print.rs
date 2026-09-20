@@ -737,6 +737,12 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::BinConcat(grain, _) => return format!("{}/concat", grain_carrier(*grain)),
         Intrinsic::BinChunk(grain, _) => return format!("{}/chunk", grain_carrier(*grain)),
         Intrinsic::BinReplicate(grain) => return format!("{}/replicate", grain_carrier(*grain)),
+        Intrinsic::BinReinterp(grain) => {
+            return match grain {
+                Grain::X => "Bytes/to_bits".to_string(),
+                Grain::B => "Bits/to_bytes".to_string(),
+            };
+        }
         Intrinsic::BinAnd(grain) => return format!("{}/and", grain_carrier(*grain)),
         Intrinsic::BinOr(grain) => return format!("{}/or", grain_carrier(*grain)),
         Intrinsic::BinXor(grain) => return format!("{}/xor", grain_carrier(*grain)),

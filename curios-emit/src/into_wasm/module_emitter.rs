@@ -822,6 +822,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_replicate_func(Grain::B, self.table.bits_replicate_func());
         }
 
+        if self.table.bytes_to_bits_used() {
+            ropes.emit_reinterp_func(
+                Grain::X,
+                self.table.bytes_to_bits_func(),
+                self.table.bytes_force_func(),
+            );
+        }
+
+        if self.table.bits_to_bytes_used() {
+            ropes.emit_reinterp_func(
+                Grain::B,
+                self.table.bits_to_bytes_func(),
+                self.table.bits_force_func(),
+            );
+        }
+
         if self.table.list_map_used() {
             ropes.emit_map_func(self.table.list_map_func(), self.table.list_force_func());
         }

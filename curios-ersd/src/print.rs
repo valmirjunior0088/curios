@@ -936,6 +936,14 @@ fn sequence_name(operation: SequenceOp) -> String {
         SequenceOp::BinAppend(grain) => (grain_carrier(grain), "append"),
         SequenceOp::BinConcat(grain) => (grain_carrier(grain), "concat"),
         SequenceOp::BinReplicate(grain) => (grain_carrier(grain), "replicate"),
+        // The grain names the operand, so the spelling is the direction it is read out of.
+        SequenceOp::BinReinterp(grain) => (
+            grain_carrier(grain),
+            match grain {
+                Grain::X => "to_bits",
+                Grain::B => "to_bytes",
+            },
+        ),
         SequenceOp::BinAnd(grain) => (grain_carrier(grain), "and"),
         SequenceOp::BinOr(grain) => (grain_carrier(grain), "or"),
         SequenceOp::BinXor(grain) => (grain_carrier(grain), "xor"),

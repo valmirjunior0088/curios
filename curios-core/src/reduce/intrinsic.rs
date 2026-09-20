@@ -946,6 +946,27 @@ pub fn reduce_intrinsic(
             {
                 return Ok(Term::unwrap_or_clone(count.clone()));
             }
+            // `len(to_bits(b)) = 8 · len(b)` and `len(to_bytes(b)) = len(b) / 8`, which the measure above answers only once the run is literal. Both have to hold symbolically, and the bit-to-byte direction sharpest of all: its own bound is stated over exactly this length, so a run that reached it through a conversion could never discharge one without this.
+            //
+            // Spelled as shifts rather than a product and a quotient so that neither needs a proof operand — a quotient would want its divisor's, and a reducer that emitted one would be doing the thing the bound fields exist to stop.
+            if let Subterm::Intrinsic(Intrinsic::BinReinterp {
+                grain: source,
+                bin: inner,
+                ..
+            }) = &*bin
+                && source.other() == grain
+            {
+                // Reduced rather than merely built: the operand's own length is what carries the answer, and a `Bin/len` handed back unreduced is a node nothing downstream re-enters — the bound reading this would find a shift over a stuck measure instead of the count it needs.
+                let measured =
+                    reducer.reduce(Term::intrinsic(Intrinsic::bin_len(*source, inner.clone())))?;
+                let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+                let scaled = Term::intrinsic(match source {
+                    Grain::X => Intrinsic::NatShl(measured, three),
+                    Grain::B => Intrinsic::NatShr(measured, three),
+                });
+
+                return Ok(Term::unwrap_or_clone(reducer.reduce(scaled)?));
+            }
             let shape = bin_shape(reducer, grain, bin)?;
 
             reduce_homomorphism(
@@ -1323,6 +1344,38 @@ pub fn reduce_intrinsic(
 
             Ok(Subterm::Intrinsic(Intrinsic::bin_replicate(
                 grain, count, atom,
+            )))
+        }
+        Intrinsic::BinReinterp {
+            grain,
+            bin,
+            aligned,
+        } => {
+            let grain = *grain;
+            let bin = reducer.reduce_forced(bin.clone())?;
+            let aligned = reducer.reduce(aligned.clone())?;
+
+            // One condition serves both directions: a byte run's bit length is eight times its count and so always passes, while a bit run's is exactly what the bound at `B` states. A run that fails it declines to fold rather than answering, for `reduce_bin_pointwise`'s reason — the bound is the checker's to enforce, and there is no byte to answer with besides.
+            if let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &*bin
+                && *found == grain
+                && run.bit_length().is_multiple_of(8)
+            {
+                let (regrained, cost) = match run.is_x_aligned() {
+                    // Nothing moves: the payload is shared and only the grain its length is read in changes.
+                    true => (run.clone(), Cost::NOTHING),
+                    // A window holding whole bytes at an offset that is not one has the right count of bits and the wrong place to share them from, so this one is repacked rather than retagged.
+                    false => (
+                        PackedBin::from_bytes(run.to_packed_bytes()),
+                        packed_bound(Grain::X, run.bit_length() as u64),
+                    ),
+                };
+                reducer.spend(cost)?;
+
+                return Ok(Subterm::Intrinsic(Intrinsic::Bin(grain.other(), regrained)));
+            }
+
+            Ok(Subterm::Intrinsic(Intrinsic::bin_reinterp(
+                grain, bin, aligned,
             )))
         }
         Intrinsic::BinAnd {

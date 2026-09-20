@@ -1760,6 +1760,28 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::Bin(grain), &rope, norm);
             }
+            curios_cont::Intrinsic::BinReinterp(grain) => {
+                // The norm is the *result*'s, not the operand's: a run that crosses grains lands at a different length, and whether it fits an immediate is a question about where it lands.
+                let (reinterp, norm) = match grain {
+                    Grain::X => (
+                        self.context.table().bytes_to_bits_func(),
+                        self.context.table().bits_norm_func(),
+                    ),
+                    Grain::B => (
+                        self.context.table().bits_to_bytes_func(),
+                        self.context.table().bytes_norm_func(),
+                    ),
+                };
+                let operand = self.context.load_value_instrs(&args[0], LoadAs::Bin(grain));
+                self.emit_instrs(operand);
+                self.emit_instr(curios_wasm::Instr::Call {
+                    func_name: reinterp,
+                });
+                self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             curios_cont::Intrinsic::BinReplicate(grain) => {
                 let replicate = match grain {
                     Grain::X => self.context.table().bytes_replicate_func(),

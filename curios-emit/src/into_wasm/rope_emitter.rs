@@ -1264,6 +1264,67 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$bytes/to_bits` / `$bits/to_bytes (ref $rope/bin) -> (ref $rope/bin)`: one run resealed at the other grain.
+    ///
+    /// **The payload crosses untouched and the length does not.** Eight bits are a byte in the stored bytes either way, so there is nothing to repack — but a rope carries its length in the grain's *own* units at every node, so the one number that has to change is the one the leaf is sealed at: eight times going to bits, an eighth going back. That is the whole of the conversion, and the whole of why it is not the identity.
+    ///
+    /// The force is what makes it one number rather than a walk. A node tree holds a length per node, and rescaling each would be a rewrite of the spine; flattening first leaves exactly one to scale. The alignment the bit-to-byte direction needs is the caller's, proved above erasure and gone by here.
+    pub(crate) fn emit_reinterp_func(
+        &mut self,
+        grain: Grain,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let rope = self.table.bin_rope();
+
+        let r = curios_wasm::LocalName::from("r");
+        let out = curios_wasm::LocalName::from("out");
+        let len = curios_wasm::LocalName::from("len");
+
+        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        let locals = vec![
+            (out.clone(), concrete_val(rope.payload.clone(), true)),
+            (len.clone(), i32_val),
+        ];
+
+        let mut instrs = vec![get(&r), field_get(&rope.base, &rope.len_field)];
+        instrs.extend(match grain {
+            // Bytes to bits: eight of the target's units to each of the source's.
+            Grain::X => [
+                curios_wasm::Instr::I32Const { value: 3 },
+                curios_wasm::Instr::I32Shl,
+            ],
+            // Bits to bytes: the reverse, exact because the caller proved the run holds whole bytes.
+            Grain::B => [
+                curios_wasm::Instr::I32Const { value: 3 },
+                curios_wasm::Instr::I32ShrU,
+            ],
+        });
+        instrs.extend([
+            set(&len),
+            get(&r),
+            curios_wasm::Instr::Call {
+                func_name: force_func,
+            },
+            set(&out),
+            curios_wasm::Instr::I32Const { value: 0 },
+            get(&len),
+            get(&out),
+            curios_wasm::Instr::RefAsNonNull,
+            curios_wasm::Instr::StructNew {
+                type_name: rope.leaf.clone(),
+            },
+        ]);
+
+        self.add_helper(
+            func_name,
+            vec![(r, concrete_val(rope.base.clone(), false))],
+            concrete_val(rope.base, false),
+            locals,
+            instrs,
+        );
+    }
+
     /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bin)`: `count` copies of one generator, as one flat leaf.
     ///
     /// **Split by grain where the pointwise emitter is not**, for the one difference that survives to the payload: a byte grain fills every slot with the generator and is finished, while a bit grain fills with all-ones and then has to *unset* the bits past the length. That is the mask [`PackedBin::replicate`] carries and the only place a fill needs one — `cmp` and `hash` read the stored bytes and trust the padding to be zero, so an all-ones tail would leave a run comparing unequal to itself packed any other way.

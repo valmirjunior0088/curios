@@ -21,6 +21,14 @@ impl Grain {
             Self::X => 8,
         }
     }
+
+    /// The grain a run is read at when it is read at the one it is not. Two variants, so the opposite is a fact rather than a choice — which is what lets one reinterpretation row name its operand's grain and leave the result's derived.
+    pub const fn other(self) -> Self {
+        match self {
+            Self::B => Self::X,
+            Self::X => Self::B,
+        }
+    }
 }
 
 /// An immutable logical bit window over shared packed bytes.

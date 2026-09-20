@@ -1,4 +1,4 @@
-//! The packed carriers' bitwise vocabulary: the `/sys` fill and pointwise combinations, the `/std` shifts and rotations derived over them, at both grains and at a length that is not a whole number of bytes.
+//! The packed carriers' shared vocabulary: the `/sys` fill, pointwise combinations and grain reinterpretation, the `/std` shifts and rotations derived over them, at both grains and at a length that is not a whole number of bytes.
 
 use super::test_support::folded_matches_runtime;
 
@@ -85,6 +85,36 @@ fn the_derived_shifts_and_rotations_agree_between_the_folder_and_the_backend() {
             b"clean".to_vec(),
             b"15".to_vec(),
             b"3".to_vec(),
+        ]
+    );
+}
+
+/// Reading one run at the other grain, in both directions and across the three shapes the fold distinguishes.
+///
+/// **The window row is the one that earns its place.** Sixteen bits starting at bit four hold a whole number of bytes at an offset that is not one — the only shape whose payload cannot be shared, so it is the only one that reaches the repack arm. Every other row here takes the retag.
+///
+/// The bound is not tested from this side: a run that is not a whole number of bytes does not elaborate at all, so its refusal is a compile-time fact rather than a row.
+#[test]
+fn reading_a_run_at_the_other_grain_agrees_between_the_folder_and_the_backend() {
+    let outputs = folded_matches_runtime(&[
+        "/std/Show/show(/std/Bytes/to_bits(x[Nat/to_byte(Nat/and(5 + n, 255))]))",
+        "Nat/to_str(/std/Bits/len(/std/Bytes/to_bits(x[1, 2, Nat/to_byte(Nat/and(3 + n, 255))])))",
+        // Round trip: the byte that went in comes back.
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bits/to_bytes(/std/Bytes/to_bits(x[Nat/to_byte(Nat/and(7 + n, 255)), 9])), 0), 0)))",
+        // The repack arm: a byte-sized window at a bit offset that is not byte-aligned.
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bits/to_bytes(/std/Bits/slice(/std/Bytes/to_bits(x[Nat/to_byte(Nat/and(255 + n, 255)), 0, 170]), 4, 16)), 0), 0)))",
+        // The empty run crosses in both directions.
+        "Nat/to_str(Bytes/len(/std/Bits/to_bytes(/std/Bytes/to_bits(x[]))))",
+    ]);
+
+    assert_eq!(
+        outputs,
+        [
+            b"10100000".to_vec(),
+            b"24".to_vec(),
+            b"7".to_vec(),
+            b"15".to_vec(),
+            b"0".to_vec(),
         ]
     );
 }

@@ -365,6 +365,16 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
+        Intrinsic::BinReinterp {
+            grain,
+            bin,
+            aligned: _,
+        } => lowering.sequence(
+            context,
+            curios_ersd::SequenceOp::BinReinterp(*grain),
+            &[(bin, bin_type(*grain))],
+            hint,
+        ),
         Intrinsic::BinReplicate { grain, count, atom } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinReplicate(*grain),

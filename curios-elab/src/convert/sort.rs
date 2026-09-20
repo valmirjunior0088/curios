@@ -118,6 +118,7 @@ impl Sort {
                 | Intrinsic::BinGet { .. }
                 | Intrinsic::BinLen(..)
                 | Intrinsic::BinOr { .. }
+                | Intrinsic::BinReinterp { .. }
                 | Intrinsic::BinReplicate { .. }
                 | Intrinsic::BinSlice { .. }
                 | Intrinsic::BinXor { .. }

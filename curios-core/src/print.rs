@@ -905,6 +905,20 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             print_packed(grain, entries)
         }
         // One arm apiece rather than one per grain, as `BinConcat` above already is: these four are the same rule at two element types, and the grain decides nothing here but which carrier's name to spell. The bound is dropped like every other proof operand — it is not what the program wrote.
+        // The grain names the operand, so the spelling is the direction it is read *out* of.
+        Intrinsic::BinReinterp {
+            grain,
+            bin,
+            aligned: _,
+        } => print_call(
+            match grain {
+                Grain::X => "Bytes/to_bits",
+                Grain::B => "Bits/to_bytes",
+            },
+            vec![],
+            vec![bin],
+            frame,
+        ),
         Intrinsic::BinReplicate { grain, count, atom } => print_call(
             match grain {
                 Grain::X => "Bytes/replicate",
