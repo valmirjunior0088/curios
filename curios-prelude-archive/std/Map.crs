@@ -36,6 +36,29 @@ satisfy Key(Nat) {
     injective = Bytes/of_nat_injective,
 }
 
+-- The byte an encoding put at index zero, read back. Total rather than bounded, because congruence needs one function of the whole value and a bound stated over an arbitrary `Bytes` has nothing to discharge it.
+let byte_of(z: Bytes) -> Byte =
+    Option/unwrap_or(Bytes/try_get(z, 0), 0);
+
+--- The one byte itself, which reading index zero takes back.
+satisfy Key(Byte) {
+    injective(_, _, same) = Eq/cong(byte_of, same),
+}
+
+-- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
+let bool_of(z: Bytes) -> Bool =
+    Bytes/eql(z, x[0x1]);
+
+-- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
+let bool_round(b: Bool) -> Eq(bool_of(Hash/hash(b)), b) =
+    match b | true => Eq/refl() | false => Eq/refl() end;
+
+--- One byte per value, distinct.
+satisfy Key(Bool) {
+    injective(a, b, same) =
+        Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
+}
+
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;

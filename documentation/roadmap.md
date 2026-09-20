@@ -275,7 +275,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, deferred to a consumer
-  - [x] `Key(Nat)`, over the minimal least-significant-first encoding `/std/Hash` already gave it
+  - [x] `Key(Nat)`, `Key(Byte)` and `Key(Bool)`, over the encodings `/std/Hash` already gave them
   - [ ] The `Ord`-keyed tree, deferred to a consumer
 
 ## Tooling & Ecosystem

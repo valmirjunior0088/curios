@@ -86,8 +86,10 @@ satisfy Hash(Int) {
 }
 
 --- The one byte itself.
+---
+--- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.
 satisfy Hash(Byte) {
-    hash(b) = padded(Bytes/of_nat(Byte/to_nat(b)), 1),
+    hash(b) = x[b],
 }
 
 satisfy Hash(Bool) {
