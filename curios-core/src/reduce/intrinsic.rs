@@ -857,6 +857,11 @@ pub fn reduce_intrinsic(
         Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
 
+            // Inversion of the constructor, and *only* this way round. `Flt/to_le_bytes` answers the one canonical NaN, so decoding what it wrote is the float it was given; decoding first and re-encoding is not the identity, because a NaN payload the bytes carried comes back canonicalised. The pair is bit-preserving in the direction that starts from a float and in no other.
+            if let Subterm::Intrinsic(Intrinsic::FltToLeBytes(flt)) = &*bin {
+                return reducer.reduce(flt.clone()).map(Term::unwrap_or_clone);
+            }
+
             let folded = match &*bin {
                 Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => packed
                     .to_bytes()
@@ -874,12 +879,21 @@ pub fn reduce_intrinsic(
             }))
         }
         // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bin` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
-        Intrinsic::NatToInt(inner) => reduce_nat_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Int(Integer::from(v.to_natural()?))),
-            Intrinsic::NatToInt,
-        ),
+        Intrinsic::NatToInt(inner) => {
+            let inner = reducer.reduce_forced(inner.clone())?;
+
+            // Inversion of the constructor, as `ByteToNat`'s arm states for its own pair: `Int/to_nat` demands `0 <= int`, so the natural it builds *is* that number and widening it back is the number again. Without it a bound established in `Int` is erased by the round trip, which is what `/std/Map`'s `Key(Int)` has to reconstruct an operand across.
+            if let Subterm::Intrinsic(Intrinsic::IntToNat { int, .. }) = &*inner {
+                return reducer.reduce(int.clone()).map(Term::unwrap_or_clone);
+            }
+
+            Ok(Subterm::Intrinsic(
+                match inner.as_nat().and_then(|v| v.to_natural()) {
+                    Some(value) => Intrinsic::Int(Integer::from(value)),
+                    None => Intrinsic::NatToInt(inner),
+                },
+            ))
+        }
         // Into `Flt` the conversions are total and take no proof: rounding to nearest is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, and a magnitude past the largest finite value answers the infinity of its sign.
         Intrinsic::NatToFlt(inner) => reduce_nat_unary(
             reducer,
@@ -891,6 +905,12 @@ pub fn reduce_intrinsic(
         Intrinsic::IntToNat { int, non_neg } => {
             let span = int.span();
             let int = reducer.reduce_forced(int.clone())?;
+
+            // The other half of the inversion: ℕ embeds in ℤ, so a natural widened to `Int` is non-negative and narrows back to itself whatever proof the narrowing was handed.
+            if let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &*int {
+                return reducer.reduce(nat.clone()).map(Term::unwrap_or_clone);
+            }
+
             match int.as_int() {
                 Some(value) => match value.to_natural() {
                     Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
@@ -1354,6 +1374,17 @@ pub fn reduce_intrinsic(
             let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
             let aligned = reducer.reduce(aligned.clone())?;
+
+            // Reading a run at the other grain and back is the run: regrouping moves no bit, and the alignment the inner reinterpretation demanded is what makes the composite well formed at all. Both directions hold, because each is the other's inverse — unlike the float pair above, where only one side starts from a canonical value.
+            if let Subterm::Intrinsic(Intrinsic::BinReinterp {
+                grain: inner_grain,
+                bin: inner,
+                ..
+            }) = &*bin
+                && inner_grain.other() == grain
+            {
+                return reducer.reduce(inner.clone()).map(Term::unwrap_or_clone);
+            }
 
             // One condition serves both directions: a byte run's bit length is eight times its count and so always passes, while a bit run's is exactly what the bound at `B` states. A run that fails it declines to fold rather than answering, for `reduce_bin_pointwise`'s reason — the bound is the checker's to enforce, and there is no byte to answer with besides.
             if let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &*bin
