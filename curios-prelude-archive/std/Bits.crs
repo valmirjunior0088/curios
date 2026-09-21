@@ -65,8 +65,7 @@ pub let flatten(parts: List(Bits)) -> Bits =
 
 --- Left to right with `f(bit, acc)`.
 pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
-    let go(z: Bits, acc: A) -> A =
-        match z | b[] => acc | b[h, ..t] => go(t, f(h, acc)) end;
+    let go(z: Bits, acc: A) -> A = match z | b[] => acc | b[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
 -- The two halves of a cons, as total functions so congruence can take one apart.

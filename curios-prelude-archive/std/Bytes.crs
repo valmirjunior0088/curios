@@ -84,6 +84,28 @@ let tail(z: Bytes) -> Bytes =
 let head(z: Bytes) -> Byte =
     Option/unwrap_or(try_get(z, 0), 0);
 
+--- A cons is injective in its head.
+---
+--- Read through the total projection above — the byte-grain twin of `/std/Bits`'s own pair, and what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
+pub let cons_inj_head(
+    @k1: Byte,
+    @p1: Bytes,
+    @k2: Byte,
+    @p2: Bytes,
+    e: Eq(x[k1, ..p1], x[k2, ..p2]),
+) -> Eq(k1, k2) =
+    match e: (s, t, _) => Eq(head(s), head(t)) | refl(@_) => Eq/refl() end;
+
+--- A cons is injective in its tail.
+pub let cons_inj_tail(
+    @k1: Byte,
+    @p1: Bytes,
+    @k2: Byte,
+    @p2: Bytes,
+    e: Eq(x[k1, ..p1], x[k2, ..p2]),
+) -> Eq(p1, p2) =
+    match e: (s, t, _) => Eq(tail(s), tail(t)) | refl(@_) => Eq/refl() end;
+
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
 let no_empty(k: Byte, p: Bytes, e: Eq(x[], x[k, ..p])) -> Bool/False =
     Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(len, e), Bool/True/qed());
@@ -202,8 +224,7 @@ pub let flatten(parts: List(Bytes)) -> Bytes =
 
 --- Left to right with `f(byte, acc)`.
 pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
-    let go(z: Bytes, acc: A) -> A =
-        match z | x[] => acc | x[h, ..t] => go(t, f(h, acc)) end;
+    let go(z: Bytes, acc: A) -> A = match z | x[] => acc | x[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
 --- The index of the first byte `pred` accepts, or `none`.

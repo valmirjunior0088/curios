@@ -60,12 +60,14 @@ satisfy Hash(Bytes) {
 ---
 --- **Not the packed form, and that is the whole difficulty.** Packing is not injective on its own: `b[1]` and `b[1, 0]` are one byte each and the same byte, since a run's padding is zeroed, so a dense encoding would have to carry the length beside the bytes and `Bits/to_bytes` would have to be reached past the alignment it demands. A byte per bit carries the length in its own extent — the encoding is as long as the run — and needs neither. The width is paid once here and not in what a key holds, `Hash/of` digesting the result to eight bytes.
 ---
+--- **Eightfold is a held position, not a settled one.** It is what a reading with no consumers should cost the library to state, and a dense encoding is available the moment one arrives: the length beside the packed bytes, with `/std/Map`'s `Key(Bits)` reproved over the pair rather than over the extent. Until then the cheap encoding would buy nothing and owe a second proof, so the width stands.
+---
 --- Spelled as the structural fold rather than through `Bits/fold`, which threads an accumulator: `/std/Map`'s `Key(Bits)` inverts this by induction, and the `; ih` form is what makes `hash(b[h, ..t])` reduce to `x[<h>, ..hash(t)]` at all. Through the accumulating fold the two sides differ in what they start from, and relating them costs a distribution lemma for nothing.
 satisfy Hash(Bits) {
     hash(b) =
         match b
         | b[] => x[]
-        | b[h, ..t]; ih => x[match h | true => 0x1 | false => 0x0 end, ..ih]
+        | b[h, .._]; ih => x[match h | true => 0x1 | false => 0x0 end, ..ih]
         end,
 }
 

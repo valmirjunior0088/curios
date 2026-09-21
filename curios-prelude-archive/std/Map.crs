@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell};
+use /std/{Bytes, Bits, Byte, Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell};
 use /std/ops/{Eql};
 
 induct Node(V: Type): Type
@@ -57,6 +57,53 @@ let bool_round(b: Bool) -> Eq(bool_of(Hash/hash(b)), b) =
 satisfy Key(Bool) {
     injective(a, b, same) =
         Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
+}
+
+-- The byte one bit encodes as, named so a run's head and its encoding's head cannot be confused for each other.
+let byte_of_bit(h: Bool) -> Byte =
+    match h | true => 0x1 | false => 0x0 end;
+
+-- The bit a one-byte encoding stands for, read back. Total, so congruence can take an encoding apart.
+let bit_of(k: Byte) -> Bool =
+    Byte/eql(k, 0x1);
+
+-- One bit's byte round-trips through it, which is the head half of the induction below.
+let bit_round(h: Bool) -> Eq(bit_of(byte_of_bit(h)), h) =
+    match h | true => Eq/refl() | false => Eq/refl() end;
+
+-- An encoding of no bits is no encoding of a cons: the lengths differ, and zero against a successor is refuted by the comparison deciding it.
+let no_empty(k: Byte, r: Bytes, e: Eq(x[], x[k, ..r])) -> Bool/False =
+    Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(Bytes/len, e), Bool/True/qed());
+
+-- Distinct bit runs encode distinctly.
+--
+-- Structural induction on the left run, carrying the claim for every right run: `Hash(Bits)` states its encoding through the packed eliminator, so `hash(b[h, ..t])` *is* `x[<h>, ..hash(t)]`, and the two sides come apart with `/std/Bytes`'s cons injections. A run against a run of another length is refuted on the encoding's own length, which the byte-per-bit reading makes the run's.
+let bits_injective(a: Bits, b: Bits, same: Eq(Hash/hash(a), Hash/hash(b))) -> Eq(a, b) =
+    let go(x: Bits) -> (y: Bits, e: Eq(Hash/hash(x), Hash/hash(y))) -> Eq(x, y) =
+        match x: (m) => (y: Bits, e: Eq(Hash/hash(m), Hash/hash(y))) -> Eq(m, y)
+        | b[] =>
+            (y, e) =>
+                match y
+                | b[] => Eq/refl()
+                | b[k, ..r] => match no_empty(byte_of_bit(k), Hash/hash(r), e) end
+                end
+        | b[h, ..t]; ih =>
+            (y, e) =>
+                match y
+                | b[] => match no_empty(byte_of_bit(h), Hash/hash(t), Eq/sym(e)) end
+                | b[k, ..r] =>
+                    Bits/cong_cons2(
+                        Eq/trans(
+                            Eq/sym(bit_round(h)),
+                            Eq/trans(Eq/cong(bit_of, Bytes/cons_inj_head(e)), bit_round(k))),
+                        ih(r, Bytes/cons_inj_tail(e)))
+                end
+        end;
+    go(a)(b, same);
+
+--- One byte per bit, so a run's length is its encoding's and no two runs share one.
+satisfy Key(Bits) {
+    injective = bits_injective,
 }
 
 let bit(k: Bytes, j: Nat) -> Nat =
