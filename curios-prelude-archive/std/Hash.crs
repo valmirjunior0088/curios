@@ -3,8 +3,6 @@ use /std/{Nat, Byte, Bytes, Bits, Bool, Str, List, Option, Int, Flt};
 --- How a value encodes to the bytes that identify it.
 ---
 --- The encoding is a value's identity and is *determined*: one value encodes to one byte string, in any program, from the value and the carrier's documented reading alone — which is what `/std/Map`'s `Key` adds injectivity to, and what makes two runs of the same program agree.
----
---- Determined is not frozen. The reading belongs to the carrier, and an encoding follows it where it moves, so a byte string written down keeps its meaning for exactly as long as that reading does. A program needing a wire format to outlive a toolchain writes its own rather than borrowing this one, which is the trade this concept makes deliberately: it exists to identify a value inside a program, not to speak to one outside it. A declared type derives its witness with `satisfy Hash(T);`.
 pub concept Hash(T: Type): pub Type {
     --- The encoding.
     hash(T) -> Bytes,
