@@ -6,7 +6,7 @@
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
-[Playground](https://valmirjunior0088.github.io/curios/playground) · [Documentation](https://valmirjunior0088.github.io/curios/docs/curios/index.html) · [Language reference](documentation/syntax.md) · [Usage](documentation/usage.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/roadmap.md)
+[Playground](https://valmirjunior0088.github.io/curios/playground) · [Rust docs](https://valmirjunior0088.github.io/curios/docs/rust/curios/index.html) · [`/std` docs](https://valmirjunior0088.github.io/curios/docs/std/index.html) · [Language reference](documentation/syntax.md) · [Usage](documentation/usage.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/roadmap.md)
 
 [![Build](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml/badge.svg)](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml)
 [![Release](https://img.shields.io/github/v/release/valmirjunior0088/curios)](https://github.com/valmirjunior0088/curios/releases)
@@ -40,7 +40,7 @@ let single: Vec(Nat, 1) = empty;
 ```
 
 ```text
-while elaborating /single:
+while elaborating /vector/single:
 type mismatch
   inferred: Vec(Nat, 0)
   expected: Vec(Nat, 1)
@@ -55,12 +55,17 @@ type mismatch
 ## What you get
 
 - Dependent function and tuple types, indexed inductive families, and pattern matching that works out exhaustiveness for you
+- Definitional equality that decides the carriers' algebra — `Vec(T, n + m)` and `Vec(T, m + n)` are one type, with no lemma, tactic or solver in sight
+- Preconditions where another language would trap — `/` asks for a positive divisor, `List/get` for an index below the length, each discharged by a guard's own decision with no proof named
 - A cumulative universe hierarchy, with levels inferred rather than written by hand
 - A proof-irrelevant `Prop`, so proofs weigh nothing at runtime
 - Erased arguments — type-level information that guides checking and then vanishes from the output
 - Concepts and witnesses for ad-hoc polymorphism
+- Packed `Bits` and `Bytes` as primitive carriers, level with each other across a full bitwise vocabulary — `not`, `shl`, `shr`, `rotl` and `rotr` at both grains
 - A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
+- Foreign declarations answered by a WebAssembly module the manifest names and pins by hash, folded into the executable by `curios compile`
+- Editor support over `curios wonder server` — a tree-sitter grammar, with Zed and VS Code extensions
 
 ## Try it
 
