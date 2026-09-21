@@ -15,6 +15,7 @@ pub struct Map(V: Type): Type {
 --- How a key type encodes to the byte string that identifies it, with the proof that distinct keys encode distinctly.
 ---
 --- The encoding is `/std/Hash`'s by the edge rather than by convention: there is no second field to disagree with it, so a type has one identity as bytes by construction. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
+--- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
 pub concept Key(K: Type): pub Type {
     use Hash(K),
     --- Distinct keys encode distinctly.
