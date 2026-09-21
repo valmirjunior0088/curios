@@ -19,7 +19,7 @@ struct Carrier {
 /// The last goal of every program the goal test states: trivially closed by `refl`, so its candidate line is evidence that the search still had budget when the refused rows before it were answered.
 const SENTINEL: &str = "Eq(0, 0)";
 
-const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Eq, Io};";
+const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Flt, Eq, Io};";
 
 const CARRIERS: &[Carrier] = &[
     Carrier {
@@ -265,6 +265,17 @@ const CARRIERS: &[Carrier] = &[
         refused: &["Eq(i * 2 == j * 2 + 2, false)"],
     },
     Carrier {
+        name: "Int against Nat",
+        binders: "n: Nat, i: Int, p: Int/NonNeg(Nat/to_int(n)), q: Int/NonNeg(i)",
+        held: &[
+            // The transparency pair, as `Byte against Nat` states its own: `Int/to_nat` states `0 <= int`, so each conversion reduces back through the other, and a widened natural narrows back whatever proof it was handed.
+            "Eq(Int/to_nat(Nat/to_int(n), @p), n)",
+            "Eq(Nat/to_int(Int/to_nat(i, @q)), i)",
+        ],
+        // A candidate: a widened natural is never negative, but the comparison reads no floor off `Nat/to_int` as the oracle reads a ceiling off `Byte/to_nat`, so the first row above owes a proof its own reduction never consults.
+        refused: &["Eq(Nat/to_int(n) >= +0, true)"],
+    },
+    Carrier {
         name: "Bool",
         binders: "b: Bool, c: Bool, d: Bool, x: Nat, y: Nat, p: (Nat) -> Bool",
         held: &[
@@ -434,8 +445,18 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x[..bs, 1] == x[], false)",
             "Eq(x[..bs, k] == bs, false)",
             "Eq(x[..bs, ..cs, 1] == bs, false)",
+            // A fill of a successor count is its generator consed onto the shorter fill, which is how two fills meet without either being unrolled; its length is its count, and a positive fill is not the empty one.
+            "Eq(Bytes/replicate(l + 1, k), x[k, ..Bytes/replicate(l, k)])",
+            "Eq(Bytes/len(Bytes/replicate(l, k)), l)",
+            "Eq(Bytes/replicate(l + 1, k) == x[], false)",
         ],
-        refused: &[],
+        refused: &[
+            // Controls, and neither is a law: a count carrying no floor may be zero, where the fill is empty. The first is the peel's side of that line and the second the equality fold's.
+            "Eq(Bytes/replicate(l, k), x[k, ..Bytes/replicate(l - 1, k)])",
+            "Eq(Bytes/replicate(l, k) == x[], false)",
+            // A candidate: a fill of a successor count ends in its generator as surely as it begins with one, but the peel emits only the leading one.
+            "Eq(Bytes/replicate(l + 1, k), x[..Bytes/replicate(l, k), k])",
+        ],
     },
     Carrier {
         name: "Bits, the free monoid",
@@ -470,8 +491,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq(b[..ts, v] == b[], false)",
             "Eq(b[..ts, 1] == b[], false)",
             "Eq(b[..ts, v] == ts, false)",
+            "Eq(Bits/replicate(l + 1, v), b[v, ..Bits/replicate(l, v)])",
+            "Eq(Bits/len(Bits/replicate(l, v)), l)",
+            "Eq(Bits/replicate(l + 1, v) == b[], false)",
         ],
-        refused: &[],
+        refused: &[
+            // The byte group's controls and candidate.
+            "Eq(Bits/replicate(l, v), b[v, ..Bits/replicate(l - 1, v)])",
+            "Eq(Bits/replicate(l, v) == b[], false)",
+            "Eq(Bits/replicate(l + 1, v), b[..Bits/replicate(l, v), v])",
+        ],
     },
     Carrier {
         name: "List, through a window",
@@ -517,6 +546,30 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s + 1, @next))",
             "Eq(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(us, s, @other))",
         ],
+    },
+    Carrier {
+        name: "Bits against Bytes",
+        binders: "bs: Bytes, ts: Bits, a: Bool/Holds(Nat/eql(Nat/rem(Bits/len(ts), 8), 0))",
+        held: &[
+            // Regrouping moves no bit, so each reinterpretation reduces back through the other, in both orders.
+            "Eq(Bits/to_bytes(Bytes/to_bits(bs)), bs)",
+            "Eq(Bytes/to_bits(Bits/to_bytes(ts, @a)), ts)",
+            // A reinterpretation's length is a shift of its operand's. A left shift by a literal count is a coefficient the Euclidean split reads, which is what discharges the byte-first trip's alignment bound above with no proof beside it; a right shift joins no division, so the other length stays one.
+            "Eq(Bits/len(Bytes/to_bits(bs)), 8 * Bytes/len(bs))",
+            "Eq(Bytes/len(Bits/to_bytes(ts, @a)), Nat/shr(Bits/len(ts), 3))",
+        ],
+        refused: &[],
+    },
+    Carrier {
+        name: "Flt against Bytes",
+        binders: "f: Flt, b: Bytes, e: Bool/Holds(Nat/eql(Bytes/len(b), 8))",
+        held: &[
+            // Decoding what `to_le_bytes` wrote is the float it was given. The decoding owes an eight-byte bound, discharged by the length the second row states.
+            "Eq(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
+            "Eq(Bytes/len(Flt/to_le_bytes(f)), 8)",
+        ],
+        // The control, and not a law: decoding first and encoding back canonicalises a NaN payload the bytes carried, so the pair inverts only from the float's side.
+        refused: &["Eq(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
     },
     Carrier {
         name: "Char, over Nat",
