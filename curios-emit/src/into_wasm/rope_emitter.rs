@@ -1340,7 +1340,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
     /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bin)`: `count` copies of one generator, as one flat leaf.
     ///
-    /// **Split by grain where the pointwise emitter is not**, for the one difference that survives to the payload: a byte grain fills every slot with the generator and is finished, while a bit grain fills with all-ones and then has to *unset* the bits past the length. That is the mask [`PackedBin::replicate`] carries and the only place a fill needs one — `cmp` and `hash` read the stored bytes and trust the padding to be zero, so an all-ones tail would leave a run comparing unequal to itself packed any other way.
+    /// **Split by grain where the pointwise emitter is not**, for the one difference that survives to the payload: a byte grain fills every slot with the generator and is finished, while a bit grain fills with all-ones and then has to *unset* the bits past the length. That is the mask `PackedBin::replicate` carries and the only place a fill needs one — `cmp` and `hash` read the stored bytes and trust the padding to be zero, so an all-ones tail would leave a run comparing unequal to itself packed any other way.
     ///
     /// No loop either way. `array.new` is the fill, and the bit grain's partial tail is one store after it: `fill & ((1 << (count & 7)) - 1)`, which needs no second branch on the generator because a clear fill masks to zero regardless. The fill itself is `0 - atom` rather than a select, which is all-ones for the set bit and zero for the clear one, and the payload packs to `i8` so the store keeps the low byte.
     pub(crate) fn emit_replicate_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
