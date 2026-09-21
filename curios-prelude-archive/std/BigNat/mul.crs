@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, Bits, Eq};
-use /std/BigNat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw,
-    eq, is_trimmed, is_trimmed_of_canonical, maj3, of_bits, of_nat, of_trimmed_bits, trim,
+use /std/BigNat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw, eq,
+    is_trimmed, is_trimmed_of_canonical, maj3, of_bits, of_nat, of_trimmed_bits, trim,
     trim_is_trimmed, trim_of_trimmed, xor3, add};
 
 --- The product of two words, untrimmed.
@@ -17,10 +17,7 @@ pub let mul(a: BigNat, b: BigNat) -> BigNat =
 
 -- `k` zero bits ahead of a word's own — the fill `pow2` prepends, built as one run rather than `k` of them. Zero stays zero: a fill ahead of no bits is redundant high zeros, which is not a trimmed word.
 let spread(k: Nat, bits: Bits) -> Bits =
-    match bits
-    | b[] => b[]
-    | b[_, .._] => b[..Bits/replicate(k, false), ..bits]
-    end;
+    match bits | b[] => b[] | b[_, .._] => b[..Bits/replicate(k, false), ..bits] end;
 
 -- No places is the word itself.
 let spread_zero(bits: Bits) -> Eq(spread(0, bits), bits) =
@@ -465,10 +462,7 @@ pub let pow2_add(
     k: Nat,
 ) -> Eq(pow2(add(a, b), k), add(pow2(a, k), pow2(b, k))) =
     match k
-    | 0 =>
-        Eq/trans(
-            pow2_zero(add(a, b)),
-            cong_add(Eq/sym(pow2_zero(a)), Eq/sym(pow2_zero(b))))
+    | 0 => Eq/trans(pow2_zero(add(a, b)), cong_add(Eq/sym(pow2_zero(a)), Eq/sym(pow2_zero(b))))
     | pred + 1; ih =>
         Eq/trans(
             pow2_succ(add(a, b), pred),
@@ -482,10 +476,7 @@ pub let pow2_add(
 --- `pow2` of a product moves onto the left factor.
 pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(pow2(a, k), b)) =
     match k
-    | 0 =>
-        Eq/trans(
-            pow2_zero(mul(a, b)),
-            Eq/cong((x) => mul(x, b), Eq/sym(pow2_zero(a))))
+    | 0 => Eq/trans(pow2_zero(mul(a, b)), Eq/cong((x) => mul(x, b), Eq/sym(pow2_zero(a))))
     | pred + 1; ih =>
         Eq/trans(
             pow2_succ(mul(a, b), pred),

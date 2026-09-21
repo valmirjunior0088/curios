@@ -422,7 +422,8 @@ satisfy Spell(Flt) {
                 | none() => raw
                 end;
             let pointed = match Str/index_of(unsigned, '.') | some(_) => true | none() => false end;
-            let exponented = match Str/index_of(unsigned, 'e') | some(_) => true | none() => false end;
+            let exponented =
+                match Str/index_of(unsigned, 'e') | some(_) => true | none() => false end;
             match pointed || exponented | true => unsigned | false => Str/concat(unsigned, ".0") end
         end,
 }

@@ -307,10 +307,7 @@ pub let find(s: Str, pred: (Char) -> Bool) -> Option(Char) =
             match found
             | some(_) => found
             | none() =>
-                match pred(codepoint)
-                | true => Option/some(codepoint)
-                | false => Option/none()
-                end
+                match pred(codepoint) | true => Option/some(codepoint) | false => Option/none() end
             end);
 
 --- Whether `target` occurs in `s`.

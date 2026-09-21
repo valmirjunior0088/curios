@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Bits, Eq};
-use /std/Bits/{cong_cons2, cons_inj_head, cons_inj_tail, nonempty};
+use /std/Bits/{nonempty};
 use /std/Bool/{false_neq_true};
 
 --- Whether `bits` has no redundant high zero bit.

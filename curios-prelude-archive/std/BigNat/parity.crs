@@ -18,7 +18,4 @@ pub let div2(a: BigNat) -> BigNat =
 ---
 --- A shift at least as wide as the word is the guard's other arm rather than a saturating subtraction — every bit is gone, and what a `BigNat` denotes with no bits is zero.
 pub let shr(a: BigNat, k: Nat) -> BigNat =
-    match Nat/le(k, Bits/len(a.bits))
-    | true => of_bits(Bits/drop(a.bits, k))
-    | false => zero
-    end;
+    match Nat/le(k, Bits/len(a.bits)) | true => of_bits(Bits/drop(a.bits, k)) | false => zero end;
