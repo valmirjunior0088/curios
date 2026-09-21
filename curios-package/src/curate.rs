@@ -150,7 +150,7 @@ struct Reachable {
 
 /// Every `[[foreign]]` row the governing package's graph declares, with the package that declared it and the directory a carried module's path is relative to.
 ///
-/// One walk with the fetch's, for the reason [`acquisitions`] gives: resolution is where a directory comes from, and a second traversal could resolve a row differently.
+/// One walk with the fetch's, for the reason `acquisitions` gives: resolution is where a directory comes from, and a second traversal could resolve a row differently.
 pub fn declared_modules(governing: &Governing) -> Result<Vec<(String, PathBuf, Foreign)>, String> {
     Ok(acquisitions(governing)?.rows)
 }
