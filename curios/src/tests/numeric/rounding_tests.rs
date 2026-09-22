@@ -172,3 +172,74 @@ fn every_direction_executes_as_the_model_rounds() {
             .join("\n")
     );
 }
+
+/// Magnitudes for the exact rounding: small and odd, either side of the significand's width, a tie at it, and one past 64 bits.
+const MAGNITUDES: [&str; 7] = [
+    "1",
+    "3",
+    "9007199254740991",
+    "9007199254740993",
+    "18014398509481987",
+    "36893488147419103233",
+    "0",
+];
+
+/// Exponents from below the subnormal floor through the grid and the normal range to past the overflow threshold.
+const EXPONENTS: [i32; 11] = [
+    -1200, -1127, -1075, -1074, -1023, -60, 0, 60, 969, 971, 1000,
+];
+
+/// `Flt/rounded/of_dyadic` — the Curios rounding every `/std` operation in the exact layer goes through — executed against the model's single rounding, every direction, both signs, over the grid above. The magnitude gains a runtime zero, so the rounding runs in the emitted program rather than folding.
+#[test]
+fn the_exact_rounding_executes_as_the_model_rounds() {
+    let magnitudes = MAGNITUDES.join(", ");
+    let exponents = EXPONENTS.map(|e| format!("{e:+}")).join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Nat, Int, Flt, Bytes, List, Io}};
+        use /std/Flt/{{Rounding, rounded}};
+        let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
+        let magnitudes: List(Int) = List/map([{magnitudes}], (m) => Nat/to_int(m) + zero);
+        let exponents: List(Int) = [{exponents}];
+        let direction(r: Rounding) -> List(Flt) =
+            List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
+                rounded/of_dyadic(r, m, e),
+                rounded/of_dyadic(r, Int/sub(+0, m), e),
+            ]));
+        let results = List/concat_map([
+            Rounding/ties_to_even(),
+            Rounding/ties_to_away(),
+            Rounding/toward_zero(),
+            Rounding/toward_positive(),
+            Rounding/toward_negative(),
+        ], direction);
+        let _ = Io/write(Io/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes)))!;
+        Io/pure(())
+        "#
+    );
+
+    let mut expected = Vec::new();
+    for rounding in Rounding::ALL {
+        for m in MAGNITUDES {
+            let magnitude = Natural::parse_bytes(m.as_bytes(), 10).expect("a numeral");
+            for e in EXPONENTS {
+                for negative in [false, true] {
+                    // `Int/sub(+0, m)` is `+0` for a zero magnitude, which keeps no sign; the rounding of an exact zero is `+0.0`.
+                    let negative = negative && !magnitude.is_zero();
+                    let value = Floating::of_dyadic(negative, &magnitude, e, rounding);
+                    expected.push(value.to_bits());
+                }
+            }
+        }
+    }
+
+    let actual = run(&source)
+        .chunks(8)
+        .map(|chunk| u64::from_le_bytes(chunk.try_into().expect("eight bytes")))
+        .collect::<Vec<_>>();
+
+    assert_eq!(actual.len(), expected.len(), "one result per case");
+    for (index, (a, e)) in actual.iter().zip(&expected).enumerate() {
+        assert_eq!(a, e, "case {index}: executed {a:#018x}, model {e:#018x}");
+    }
+}

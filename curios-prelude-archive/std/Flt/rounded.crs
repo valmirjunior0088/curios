@@ -1,5 +1,5 @@
 use /std/{Flt, Nat, Int};
-use /std/Flt/{Rounding};
+use /std/Flt/{Rounding, exact};
 
 --- `a + b`, in the direction `r` names.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Flt =
@@ -90,3 +90,7 @@ pub let to_integral(r: Rounding, a: Flt) -> Flt =
     | toward_positive() => /sys/Flt/ceil(a)
     | toward_negative() => /sys/Flt/floor(a)
     end;
+
+--- `m · 2^e`, rounded once in the direction `r` names: the rounding every operation in this module performs, stated over the exact value rather than over operands. An exact zero is `+0.0`.
+pub let of_dyadic(r: Rounding, m: Int, e: Int) -> Flt =
+    exact/round(r, m < +0, Int/abs(m), e, false);

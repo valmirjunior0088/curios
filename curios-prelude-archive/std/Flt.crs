@@ -9,6 +9,9 @@ pub use Rounding/{let Rounding};
 
 --- The operations that round, each in the direction its first argument names.
 pub mod rounded;
+
+--- The exact layer every rounding in this library goes through.
+mod exact;
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -236,66 +239,12 @@ let decimal_value(s: Str) -> Option(Nat) =
             | false => Option/none()
             end);
 
---- `base` to the `n`, by squaring. Linear repetition would cost up to 1074 multiplications per call at this format's exponent range, and each step here is exact: every power of two below the overflow threshold is representable, so no intermediate rounds.
-let pow_by_squaring(base: Flt, n: Nat) -> Flt =
-    match n == 0
-    | true => +1.0
-    | false =>
-        let half = pow_by_squaring(base, n / 2);
-        let square = half * half;
-        match n % 2 == 1 | true => square * base | false => square end
-    end;
-
---- Two to the `e`. A negative exponent halves rather than taking a reciprocal, because `1.0 / two_pow(1074)` divides by an infinity and answers zero.
-let two_pow(e: Int) -> Flt =
-    let mag = Int/abs(e);
-    match e >= +0 | true => pow_by_squaring(+2.0, mag) | false => pow_by_squaring(+0.5, mag) end;
-
---- How many bits spell `n`: none for zero, and one past its highest set bit otherwise.
-let bit_len(n: Nat) -> Nat =
-    match n | 0 => 0 | _ => Nat/log2(n) + 1 end;
-
-let round_bits(q: Nat, shift: Nat, sticky: Bool) -> Nat =
-    let kept = Nat/shr(q, shift);
-    let dropped = q - Nat/shl(kept, shift);
-    let half = pow2(shift - 1);
-    let up =
-        choose
-        | dropped > half => true
-        | dropped < half => false
-        | sticky => true
-        | _ => Bool/not(Nat/is_even(kept))
-        end;
-    match up | true => kept + 1 | false => kept end;
-
---- The float a significand of at most 55 bits and a binary exponent round to. A kept significand has at most 53 bits, so `Nat/to_flt` converts it exactly and the scale by a power of two is exact until it overflows.
-let assemble(q: Nat, sticky: Bool, s: Int) -> Flt =
-    choose
-    | s > +1023 => pos_inf
-    | s < -1022 =>
-        let shift = Int/abs(+0 - (s + +1020));
-        match shift >= 56
-        | true => +0.0
-        | false => Nat/to_flt(round_bits(q, shift, sticky)) * two_pow(-1074)
-        end
-    | _ =>
-        let mant = round_bits(q, 2, sticky);
-        match mant == pow2(53)
-        | true =>
-            match s == +1023
-            | true => pos_inf
-            | false => Nat/to_flt(pow2(52)) * two_pow(s - +51)
-            end
-        | false => Nat/to_flt(mant) * two_pow(s - +52)
-        end
-    end;
-
 --- The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
 pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
     let magnitude =
         choose
         | d == 0 => +0.0
-        | e >= +0 && (bit_len(d) >= 1025 || e >= +309) => pos_inf
+        | e >= +0 && (exact/bit_len(d) >= 1025 || e >= +309) => pos_inf
         | e < +0 && Nat/to_int(digits) + e <= -324 => +0.0
         | _ =>
             let (n0, d0) =
@@ -303,7 +252,7 @@ pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
                 | true => (d * Nat/pow(10, Int/abs(e)), 1)
                 | false => (d, Nat/pow(10, Int/abs(e)))
                 end;
-            let sh = Nat/to_int(54 + bit_len(d0)) - Nat/to_int(bit_len(n0));
+            let sh = Nat/to_int(54 + exact/bit_len(d0)) - Nat/to_int(exact/bit_len(n0));
             let (n1, d1) =
                 match sh >= +0: (_) => {Nat, Nat}
                 | true => (Nat/shl(n0, Int/abs(sh)), d0)
@@ -315,9 +264,9 @@ pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
                 | true => (Nat/shl(n1, 1), sh + +1)
                 | false => (n1, sh)
                 end;
-            -- `n2` lies in `[top, 2 · top)`, so its quotient by `d1` has exactly 55 bits: 53 kept, a guard, and one more, with the remainder the sticky part.
+            -- `n2` lies in `[top, 2 · top)`, so its quotient by `d1` has exactly 55 bits, `q · 2^-sh2` with the remainder the sticky part: the exact layer rounds it once.
             let (q, rest) = div_mod(n2, d1);
-            assemble(q, rest != 0, +54 - sh2)
+            exact/round(Rounding/ties_to_even(), false, q, +0 - sh2, rest != 0)
         end;
     match negative | true => neg(magnitude) | false => magnitude end;
 

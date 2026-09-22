@@ -66,7 +66,7 @@ pub let max(a: Nat, b: Nat) -> Nat =
 
 --- `base` to the power `exp`.
 ---
---- By squaring, so the cost is the exponent's bit width rather than the exponent: the spine this replaced multiplied `exp` times, which is the same defect `/std/Flt`'s own `pow_by_squaring` was written to avoid and the argument its comment already states.
+--- By squaring, so the cost is the exponent's bit width rather than the exponent: the spine this replaced multiplied `exp` times.
 pub let pow(base: Nat, exp: Nat) -> Nat =
     match exp == 0
     | true => 1

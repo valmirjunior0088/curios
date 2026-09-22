@@ -63,14 +63,7 @@ Verified by normalizing zero, both signs and long powers of two; by the structur
 
 Nothing rounds, and `of_flt(x)` is `of_flt_bytes(Flt/to_le_bytes(x))`.
 
-**Correctly rounded, to binary64.** `Rat/to_flt_bytes : Rat -> Bytes` computes the unbiased exponent from the mantissa's bit length and the exponent, then:
-
-- a normal-range value keeps its leading 53 bits, forms a guard bit and a sticky bit from the rest, rounds to nearest with ties to even, carries into the exponent, and rechecks overflow;
-- a subnormal-range value rounds on the `2⁻¹⁰⁷⁴` grid instead of keeping 53 bits;
-- a magnitude at or past `2¹⁰²⁴ - 2⁹⁷⁰`, halfway from the largest finite value `2¹⁰²⁴ - 2⁹⁷¹` to `2¹⁰²⁴`, rounds to the signed infinity;
-- a nonzero value that rounds to zero keeps its sign in the emitted pattern.
-
-`to_flt(x)` is `Flt/of_le_bytes(to_flt_bytes(x))`, with `EightBytes` discharged by the length `to_flt_bytes` states of its result. The helpers — bit length, leading bits, guard and sticky — are `Nat` computations; the ones with value beyond this boundary go to `nat-laws-spec.md`, and the rounding policy stays here. `Nat`'s `/` and `%` are available to them as certified operations through `div_mod`, where the plan this replaces had to avoid them.
+**Correctly rounded, to binary64.** `Rat/to_flt(r: Flt/Rounding, x: Rat) -> Flt` is `Flt/rounded/of_dyadic(r, m, e)` of `x`'s canonical mantissa and exponent: `/std/Flt`'s exact layer owns the one rounding in the library, with the subnormal grid, the carry into the exponent, the overflow each direction sends where it sends it, and the sign of a nonzero value that rounds to zero. Writing a second rounding here is exactly what that layer exists to prevent, so this stage adds none. `to_flt_bytes(r, x)` is `Flt/to_le_bytes(to_flt(r, x))`, and the default direction is `ties_to_even`.
 
 Verified against a correctly rounded IEEE 754 reference over a generated corpus, with every format boundary pinned: normals, subnormals, both zeros, the normal/subnormal edge, the overflow boundary, exact halves and significand carry.
 
@@ -85,16 +78,17 @@ Each operation's law is proved in three steps: the value equation on raw aligned
 
 ## Stage 4 — quotient narrowing
 
-`Rat/ratio_to_flt_bytes : Rat -> Rat -> Bytes` rounds the exact quotient of two values once, straight to binary64, without building an interior rational. Scale the numerator's magnitude by the power of two that leaves the quotient at least 54 significant bits, and take one certified `div_mod` against the denominator's: the quotient's leading 53 bits are the significand and the next is the guard bit, any bits past it and a nonzero remainder make the sticky bit, and the exponents and the scale fix the binary exponent. The packing and rounding policy is stage 2's, shared rather than restated. The sign and zero table is fixed first: `0/0` is the NaN, a nonzero value over zero the signed infinity, zero over a nonzero value the signed zero the sign rule gives, and everything else rounds to nearest, ties to even.
+`Rat/ratio_to_flt_bytes : Rat -> Rat -> Bytes` rounds the exact quotient of two values once, straight to binary64, without building an interior rational. Scale the numerator's magnitude by the power of two that leaves the quotient at least 54 significant bits, and take one certified `div_mod` against the denominator's: the quotient's leading 53 bits are the significand and the next is the guard bit, any bits past it and a nonzero remainder make the sticky bit, and the exponents and the scale fix the binary exponent. The rounding is stage 2's `Flt/rounded/of_dyadic`, shared rather than restated: a nonzero remainder becomes one more low bit, `of_dyadic(r, 2q + 1, e - 1)`, which with at least 54 quotient bits lies below every rounding point and so decides every direction exactly as a sticky bit would. The sign and zero table is fixed first: `0/0` is the NaN, a nonzero value over zero the signed infinity, zero over a nonzero value the signed zero the sign rule gives, and everything else rounds in the direction asked for.
 
 Verified against an exact rational reference over generated numerators, denominators, exponents and signs, with the zero, infinity, subnormal, overflow, underflow, halfway and carry cases pinned and very unequal exponents exercised.
 
 ## Stage 5 — the boundary proofs
 
-Stated over `Bytes` and `Rat`; the `Flt` model itself is trusted code, not a Curios proof, and is where these stop.
+Stated over `Rat` and `/std/Flt`'s exact layer. The rounding these conversions go through, `Flt/rounded/of_dyadic`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model, and what ties the two together is [`flt-laws-spec.md`](flt-laws-spec.md)'s reflected model.
 
 - **Round trip**: `of_flt_bytes(b) = some(x)` with `b` not the negative-zero pattern gives `to_flt_bytes(x) = b`; `-0.0` widens to canonical zero and canonical zero narrows to `+0.0`.
-- **Nearest value**: for `x` narrowing to a finite `r`, no finite binary64 `y` is nearer — `abs(r - x) ≤ abs(y - x)` — under the overflow premise `abs(x) < 2¹⁰²⁴ - 2⁹⁷⁰`; ties choose the even significand; the half-ulp corollary in the normal range, its absolute-grid form for subnormals, carry into the next exponent and the signed zero follow.
+- **The directions**: for `x` narrowing to a finite `r` toward negative, `r ≤ x` and no finite binary64 lies in `(r, x]`; toward positive and toward zero by symmetry.
+- **Nearest value**: for `x` narrowing to a finite `r` to nearest, no finite binary64 `y` is nearer — `abs(r - x) ≤ abs(y - x)` — under the overflow premise `abs(x) < 2¹⁰²⁴ - 2⁹⁷⁰`; ties choose the even significand; the half-ulp corollary in the normal range, its absolute-grid form for subnormals, carry into the next exponent and the signed zero follow.
 - **Quotients**: `ratio_to_flt_bytes` is the correctly rounded quotient for a nonzero denominator, stated with cleared denominators so no interior quotient is built, and the `div_mod` step's quotient and remainder imply stage 2's rounding decision.
 
 The proof library isolates the field interpretation, the grid spacing and adjacent representable values, the guard and sticky characterization of below-, at- and above-half remainders, carry, the overflow threshold, and the cleared-denominator comparison. A proof that needs to open the representation beyond the executable-correctness lemmas strengthens those lemmas instead.
@@ -106,6 +100,6 @@ Laws about native `Flt` arithmetic; interior division or a `Div(Rat)` witness; d
 ## Completion criteria
 
 - Every `Rat` is canonical by construction, and the exact operations, equality and comparison agree with the dyadic values they denote.
-- Every finite binary64 converts exactly, and every `Rat` converts to binary64 by round-to-nearest-even, both proved.
+- Every finite binary64 converts exactly, and every `Rat` converts to binary64 through `Flt/rounded/of_dyadic` in every direction, both proved.
 - The public surface leaves no dyadic-only theorem that would block the general phase.
 - Before this specification is deleted, the representation, the canonical invariant, the contracts, the rounding policy and the theorem surface are recorded in `/std/Rat`'s documentation, signatures and tests, the roadmap entry is a checked summary, [the general phase](rat-general-spec.md) refers to the landed API, and no reference to this filename remains.

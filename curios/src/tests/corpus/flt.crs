@@ -1,5 +1,6 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
 use /std/{Flt, Ordering, List, Str, Option, Eq, Test};
+use /std/Flt/{Rounding, rounded};
 
 -- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
 let _renders_in_a_type: Eq(Flt/to_str(0.1), "+0.1") = Eq/refl();
@@ -8,6 +9,62 @@ let _orders_the_zeros_in_a_type: Eq(Flt/ord(-0.0, +0.0), Ordering/lt()) = Eq/ref
 let _orders_nan_after_infinity_in_a_type: Eq(Flt/ord(Flt/nan, Flt/pos_inf), Ordering/gt()) =
     Eq/refl();
 let _reads_infinity_in_a_type: Eq(Flt/of_str("-Infinity"), Option/some(Flt/neg_inf)) = Eq/refl();
+
+-- Every direction folds in a type, and each operation rounds its exact result exactly as `of_dyadic` rounds that result written out: `0.1 + 0.2` is `21617278211378382 · 2^-56`, `0.1 · 0.1` is `m² · 2^-112` for the tenth's significand `m`, `(1/3) · 3` is `18014398509481983 · 2^-54`, and `0.1 · 10 - 1` is `4 · 2^-56` exactly, which only a fused operation sees.
+let _sum_rounds_its_exact_value_ties_to_even: Eq(rounded/add(Rounding/ties_to_even(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_even(), +21617278211378382, -56)) =
+    Eq/refl();
+let _product_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_even(), +51922968585348282049912486326436, -112)) =
+    Eq/refl();
+let _third_times_three_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_even(), +18014398509481983, -54)) =
+    Eq/refl();
+let _fma_rounds_its_exact_value_ties_to_even: Eq(rounded/fma(Rounding/ties_to_even(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_even(), +4, -56)) =
+    Eq/refl();
+let _sum_rounds_its_exact_value_ties_to_away: Eq(rounded/add(Rounding/ties_to_away(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_away(), +21617278211378382, -56)) =
+    Eq/refl();
+let _product_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_away(), +51922968585348282049912486326436, -112)) =
+    Eq/refl();
+let _third_times_three_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_away(), +18014398509481983, -54)) =
+    Eq/refl();
+let _fma_rounds_its_exact_value_ties_to_away: Eq(rounded/fma(Rounding/ties_to_away(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_away(), +4, -56)) =
+    Eq/refl();
+let _sum_rounds_its_exact_value_toward_zero: Eq(rounded/add(Rounding/toward_zero(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_zero(), +21617278211378382, -56)) =
+    Eq/refl();
+let _product_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_zero(), +51922968585348282049912486326436, -112)) =
+    Eq/refl();
+let _third_times_three_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_zero(), +18014398509481983, -54)) =
+    Eq/refl();
+let _fma_rounds_its_exact_value_toward_zero: Eq(rounded/fma(Rounding/toward_zero(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_zero(), +4, -56)) =
+    Eq/refl();
+let _sum_rounds_its_exact_value_toward_positive: Eq(rounded/add(Rounding/toward_positive(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_positive(), +21617278211378382, -56)) =
+    Eq/refl();
+let _product_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_positive(), +51922968585348282049912486326436, -112)) =
+    Eq/refl();
+let _third_times_three_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_positive(), +18014398509481983, -54)) =
+    Eq/refl();
+let _fma_rounds_its_exact_value_toward_positive: Eq(rounded/fma(Rounding/toward_positive(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_positive(), +4, -56)) =
+    Eq/refl();
+let _sum_rounds_its_exact_value_toward_negative: Eq(rounded/add(Rounding/toward_negative(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_negative(), +21617278211378382, -56)) =
+    Eq/refl();
+let _product_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_negative(), +51922968585348282049912486326436, -112)) =
+    Eq/refl();
+let _third_times_three_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_negative(), +18014398509481983, -54)) =
+    Eq/refl();
+let _fma_rounds_its_exact_value_toward_negative: Eq(rounded/fma(Rounding/toward_negative(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_negative(), +4, -56)) =
+    Eq/refl();
+
+-- The directions part where the exact value falls between two floats, and meet where it doesn't.
+let _a_third_below_and_above: Eq(Flt/lt(rounded/div(Rounding/toward_negative(), 1.0, 3.0), rounded/div(Rounding/toward_positive(), 1.0, 3.0)), true) =
+    Eq/refl();
+let _an_exact_quotient_is_every_direction_s: Eq(rounded/div(Rounding/toward_negative(), 1.0, 4.0), rounded/div(Rounding/toward_positive(), 1.0, 4.0)) =
+    Eq/refl();
+let _a_tie_to_even_and_away: Eq(rounded/to_integral(Rounding/ties_to_away(), 2.5), 3.0) = Eq/refl();
+let _a_tie_to_even: Eq(rounded/to_integral(Rounding/ties_to_even(), 2.5), 2.0) = Eq/refl();
+let _half_the_least_subnormal_rounds_by_direction: Eq(rounded/of_dyadic(Rounding/toward_positive(), +1, -1075), Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])) =
+    Eq/refl();
+let _an_overflow_toward_zero_stops_at_the_largest: Eq(rounded/of_dyadic(Rounding/toward_zero(), +1, +1024), Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F])) =
+    Eq/refl();
+let _an_exact_cancellation_is_negative_toward_negative: Eq(Flt/to_str(rounded/sub(Rounding/toward_negative(), 1.0, 1.0)), "-0") =
+    Eq/refl();
 
 let spelled(values: List(Flt)) -> List(Str) =
     List/map(values, Flt/to_str);

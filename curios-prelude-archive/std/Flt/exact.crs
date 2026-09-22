@@ -1,0 +1,86 @@
+use /std/{Flt, Nat, Int, Bool};
+use /std/Flt/{Rounding};
+
+let pow2(k: Nat) -> Nat =
+    Nat/shl(1, k);
+
+--- How many bits spell `n`: none for zero, one past the highest set bit otherwise.
+pub let bit_len(n: Nat) -> Nat =
+    match n | 0 => 0 | _ => Nat/log2(n) + 1 end;
+
+--- The float a 64-bit pattern spells, eight bytes least significant first.
+let of_bits(n: Nat) -> Flt =
+    let at = (i: Nat) => Nat/to_byte(Nat/shr(n, 8 * i) % 256);
+    Flt/of_le_bytes(x[at(0), at(1), at(2), at(3), at(4), at(5), at(6), at(7)]);
+
+--- Whether a significand that lost bits steps up to the next one: `above` says the lost part is past half a unit, `tie` that it is exactly half, `odd` that the kept significand is odd, `inexact` that anything was lost.
+let rounds_up(r: Rounding, negative: Bool, above: Bool, tie: Bool, odd: Bool, inexact: Bool) -> Bool =
+    match r
+    | ties_to_even() => above || (tie && odd)
+    | ties_to_away() => above || tie
+    | toward_zero() => false
+    | toward_positive() => inexact && Bool/not(negative)
+    | toward_negative() => inexact && negative
+    end;
+
+--- Whether a result past the largest finite value becomes the infinity of its sign rather than that value (§7.4): always when rounding to nearest, when directed only toward the infinity of its own sign.
+let overflows_to_infinity(r: Rounding, negative: Bool) -> Bool =
+    match r
+    | toward_zero() => false
+    | toward_positive() => Bool/not(negative)
+    | toward_negative() => negative
+    | _ => true
+    end;
+
+let sign_bit(negative: Bool) -> Nat =
+    match negative | true => pow2(63) | false => 0 end;
+
+--- The float a significand under `2^53` and its exponent encode: a subnormal when the hidden bit is clear, which leaves the exponent at the grid; otherwise the biased field, past the largest of which an overflow answers what `r` sends it to.
+let encode(r: Rounding, negative: Bool, m: Nat, e: Int) -> Flt =
+    let field = e + +1075;
+    choose
+    | m < pow2(52) => of_bits(sign_bit(negative) + m)
+    | field >= +2047 =>
+        match overflows_to_infinity(r, negative)
+        | true => of_bits(sign_bit(negative) + 0x7FF0000000000000)
+        | false => of_bits(sign_bit(negative) + 0x7FEFFFFFFFFFFFFF)
+        end
+    | _ => of_bits(sign_bit(negative) + Nat/shl(Int/abs(field), 52) + (m - pow2(52)))
+    end;
+
+--- The float `(-1)^negative · (m + ε) · 2^e` rounds to in `r`, `ε` in `(0, 1)` when `sticky` and zero when not — `curios_num::Floating`'s `round`, line for line, so the rounding a type reasons about is the one every primitive folds by.
+pub let round(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
+    let width = Nat/to_int(bit_len(m));
+    let grid = -1074 - e;
+    choose
+    | m == 0 && Bool/not(sticky) => of_bits(sign_bit(negative))
+    -- The whole value, a residue included, lies under half the least subnormal.
+    | grid > width =>
+        match rounds_up(r, negative, false, false, false, true)
+        | true => of_bits(sign_bit(negative) + 1)
+        | false => of_bits(sign_bit(negative))
+        end
+    | _ =>
+        let shift = Int/max(width - +53, grid);
+        match shift <= +0
+        -- Nothing dropped: normalize left until the significand is full or the exponent reaches the grid.
+        | true =>
+            let left = Int/abs(Int/min(+0 - shift, e + +1074));
+            encode(r, negative, Nat/shl(m, left), e - Nat/to_int(left))
+        | false =>
+            let s = Int/abs(shift);
+            let kept = Nat/shr(m, s);
+            let dropped = m - Nat/shl(kept, s);
+            let half = pow2(s - 1);
+            let above = dropped > half || (dropped == half && sticky);
+            let tie = dropped == half && Bool/not(sticky);
+            let inexact = sticky || dropped != 0;
+            let up = rounds_up(r, negative, above, tie, Bool/not(Nat/is_even(kept)), inexact);
+            let stepped = match up | true => kept + 1 | false => kept end;
+            -- Rounding up can carry out of the significand, one bit wider.
+            match stepped == pow2(53)
+            | true => encode(r, negative, pow2(52), e + shift + +1)
+            | false => encode(r, negative, stepped, e + shift)
+            end
+        end
+    end;
