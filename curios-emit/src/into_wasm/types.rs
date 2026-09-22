@@ -176,16 +176,23 @@ pub fn rope_view_sub_type(
     }
 }
 
-/// `$words` — `array (mut i32)`: a boxed `Nat` or `Int`'s magnitude in 32-bit limbs, least significant first, and the flat payload a list of scalars crosses the host boundary as, one word per element. Mutable because a helper fills the array it allocates in place; no helper ever writes one it was handed.
+/// `$words` — `array (mut i32)`: a boxed `Nat` or `Int`'s magnitude in 32-bit limbs, least significant first, and the flat payload a list of `Bool` crosses the host boundary as, one word per element. Mutable because a helper fills the array it allocates in place; no helper ever writes one it was handed.
 pub fn words_sub_type() -> curios_wasm::SubType {
+    number_array_sub_type(curios_wasm::NumType::I32)
+}
+
+/// `$longs` — `array (mut i64)`: the flat payload a list of `Nat` or `Int` crosses the host boundary as, one element per value, each as wide as a lone one crosses. Mutable for the reason `$words` is.
+pub fn longs_sub_type() -> curios_wasm::SubType {
+    number_array_sub_type(curios_wasm::NumType::I64)
+}
+
+fn number_array_sub_type(num_type: curios_wasm::NumType) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
         comp_type: curios_wasm::CompType::Array(curios_wasm::ArrayType {
             field_type: curios_wasm::FieldType {
-                storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
-                    curios_wasm::NumType::I32,
-                )),
+                storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(num_type)),
                 mutability: curios_wasm::Mutability::Var,
             },
         }),

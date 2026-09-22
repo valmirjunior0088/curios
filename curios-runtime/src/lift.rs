@@ -4,7 +4,7 @@ use {
     wasmtime::{Caller, Val},
 };
 
-/// Decoding one host-import argument list out of wasmtime `Val`s — the inbound half of the FFI boundary (`Lower` is the outbound half). `ForeignBindings::define` and the `sys`-tier glue compose each trampoline from `Li::lift`/`Lo::lower`, so a host implementation is written against plain Rust types (`u32`, `Vec<u8>`, [`Handle`], tuples) and never touches a `Val`.
+/// Decoding one host-import argument list out of wasmtime `Val`s — the inbound half of the FFI boundary (`Lower` is the outbound half). `ForeignBindings::define` and the `sys`-tier glue compose each trampoline from `Li::lift`/`Lo::lower`, so a host implementation is written against plain Rust types (`u64`, `Vec<u8>`, [`Handle`], tuples) and never touches a `Val`.
 pub trait Lift: Sized {
     /// Decode `Self` from the import's incoming `params`, reading any GC arrays through `caller`. Contract: every single-value impl consumes exactly `params[0]` — the alignment the tuple impls rely on to re-slice per component.
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error>;
@@ -26,7 +26,7 @@ impl Lift for Handle {
 /// `file_open`'s mode lifts from its `/std/File` `Mode` tag. An out-of-range tag is a codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(match params[0].unwrap_i32() as u32 {
+        Ok(match params[0].unwrap_i64().cast_unsigned() {
             open_mode::READ => Mode::Read,
             open_mode::WRITE => Mode::Write,
             open_mode::APPEND => Mode::Append,
@@ -44,15 +44,24 @@ impl Lift for u8 {
     }
 }
 
+/// A `Bool` arrives as its word, `0` or `1`.
 impl Lift for u32 {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(params[0].unwrap_i32() as u32)
+        Ok(params[0].unwrap_i32().cast_unsigned())
     }
 }
 
-impl Lift for i32 {
+/// A `Nat` arrives as the `i64` the guest narrowed it to, read unsigned.
+impl Lift for u64 {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(params[0].unwrap_i32())
+        Ok(params[0].unwrap_i64().cast_unsigned())
+    }
+}
+
+/// An `Int` arrives as the `i64` the guest narrowed it to.
+impl Lift for i64 {
+    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(params[0].unwrap_i64())
     }
 }
 
@@ -81,8 +90,8 @@ lift_tuple!(A 0, B 1, C 2, D 3, E 4);
 lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
 lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
 
-/// Read a list of scalars: the guest's `$words` array, one word per element, each already narrowed by the guest to what the wire carries.
-fn lift_words(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<i32>, wasmtime::Error> {
+/// Read a list of scalars: the guest's flat array, one element per slot, each already narrowed by the guest to what the wire carries — `$longs` for a `Nat` or `Int`, `$words` for a `Bool`.
+fn lift_scalars(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<Val>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
         return Err(wasmtime::Error::msg("expected non-null anyref"));
     };
@@ -94,37 +103,36 @@ fn lift_words(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<i32>, wasm
     let len = array_ref.len(&*caller)?;
 
     (0..len)
-        .map(|index| {
-            array_ref
-                .get(&mut *caller, index)
-                .map(|value| value.unwrap_i32())
-        })
+        .map(|index| array_ref.get(&mut *caller, index))
         .collect()
 }
 
-/// `List(Nat)`: each word read unsigned, as a `Nat` argument is.
-impl Lift for Vec<u32> {
+/// `List(Nat)`: each element read unsigned, as a `Nat` argument is.
+impl Lift for Vec<u64> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(lift_words(caller, &params[0])?
+        Ok(lift_scalars(caller, &params[0])?
             .into_iter()
-            .map(i32::cast_unsigned)
+            .map(|value| value.unwrap_i64().cast_unsigned())
             .collect())
     }
 }
 
-/// `List(Int)`: each word as the `Int` it is.
-impl Lift for Vec<i32> {
+/// `List(Int)`: each element as the `Int` it is.
+impl Lift for Vec<i64> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        lift_words(caller, &params[0])
+        Ok(lift_scalars(caller, &params[0])?
+            .into_iter()
+            .map(|value| value.unwrap_i64())
+            .collect())
     }
 }
 
 /// `List(Bool)`: each word as `false` for `0` and `true` otherwise.
 impl Lift for Vec<bool> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(lift_words(caller, &params[0])?
+        Ok(lift_scalars(caller, &params[0])?
             .into_iter()
-            .map(|word| word != 0)
+            .map(|value| value.unwrap_i32() != 0)
             .collect())
     }
 }

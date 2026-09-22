@@ -6,10 +6,10 @@
 pub(crate) fn refusal_message(class: curios_cont::Panic) -> &'static str {
     match class {
         curios_cont::Panic::NatWire => {
-            "a Nat argument to a host function is past what the wire carries: a Nat crosses to the host below 2^31, and inside the program it is unbounded"
+            "a Nat argument to a host function is past what the wire carries: a Nat crosses to the host below 2^64, and inside the program it is unbounded"
         }
         curios_cont::Panic::IntWire => {
-            "an Int argument to a host function is outside what the wire carries: an Int crosses to the host between -2^31 and 2^31 - 1, and inside the program it is unbounded"
+            "an Int argument to a host function is outside what the wire carries: an Int crosses to the host between -2^63 and 2^63 - 1, and inside the program it is unbounded"
         }
         curios_cont::Panic::OutOfBounds => {
             "a read reached past the end of a Bits, Bytes or List value"

@@ -228,7 +228,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn dns_lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
+    fn dns_lookup(&self, host: &[u8], port: u64) -> (Status, Handle) {
         let host = String::from_utf8_lossy(host).into_owned();
         let address = format!("{host}:{port}");
 
@@ -461,13 +461,14 @@ impl HostOps for OsHost {
         Status::Ok
     }
 
-    fn socket_listen(&self, io: Handle, backlog: u32) -> Status {
+    fn socket_listen(&self, io: Handle, backlog: u64) -> Status {
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
             None => return Status::NotFound,
         };
 
-        match socket.listen(backlog as i32) {
+        // The kernel clamps the depth to `somaxconn`, so one past what `listen(2)` takes asks for the same queue.
+        match socket.listen(i32::try_from(backlog).unwrap_or(i32::MAX)) {
             Ok(()) => {
                 self.table
                     .lock()
@@ -498,7 +499,7 @@ impl HostOps for OsHost {
         self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
     }
 
-    fn handle_poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
+    fn handle_poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i64) -> Vec<Poll> {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
@@ -548,13 +549,9 @@ impl HostOps for OsHost {
         }
 
         // `Int` timeout, poll(2)-style: negative waits forever (no `Timespec`), otherwise a millisecond deadline (`0` returns immediately).
-        let timeout = (timeout_ms >= 0).then(|| {
-            let ms = i64::from(timeout_ms);
-
-            Timespec {
-                tv_sec: ms / 1000,
-                tv_nsec: ((ms % 1000) * 1_000_000) as _,
-            }
+        let timeout = (timeout_ms >= 0).then(|| Timespec {
+            tv_sec: timeout_ms / 1000,
+            tv_nsec: ((timeout_ms % 1000) * 1_000_000) as _,
         });
 
         // A failed poll (e.g. `EINTR`) reports no readiness; the scheduler re-polls. On success, scatter each revents back to its input slot.
@@ -578,7 +575,7 @@ impl HostOps for OsHost {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn handle_read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
+    fn handle_read(&self, io: Handle, count: u64) -> (Status, Vec<u8>) {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
@@ -626,25 +623,25 @@ impl HostOps for OsHost {
         read_outcome(result, buffer)
     }
 
-    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
+    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u64) {
         // The blocking std streams write the whole buffer or fail; report the full length on success so callers see the write completed.
         match io {
             Handle::Stdout => {
                 return match stdout().write_all(bytes) {
-                    Ok(()) => (Status::Ok, bytes.len() as u32),
+                    Ok(()) => (Status::Ok, bytes.len() as u64),
                     Err(error) => (status_from_error(error), 0),
                 };
             }
             Handle::Stderr => {
                 return match stderr().write_all(bytes) {
-                    Ok(()) => (Status::Ok, bytes.len() as u32),
+                    Ok(()) => (Status::Ok, bytes.len() as u64),
                     Err(error) => (status_from_error(error), 0),
                 };
             }
             // POSIX semantics: stdin is plain fd 0, so the write succeeds when the process was handed a read-write descriptor (a terminal) and reports `EBADF` when it was opened read-only.
             Handle::Stdin => {
                 return match rustix::io::write(stdin(), bytes) {
-                    Ok(written) => (Status::Ok, written as u32),
+                    Ok(written) => (Status::Ok, written as u64),
                     Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
                 };
             }
@@ -659,19 +656,19 @@ impl HostOps for OsHost {
             // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `handle_close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
             Some(OsResource::ClientTls(tls)) => {
                 return match tls.write(bytes) {
-                    Ok(written) => (Status::Ok, written as u32),
+                    Ok(written) => (Status::Ok, written as u64),
                     Err(error) => (tls_status(error), 0),
                 };
             }
             Some(OsResource::ServerTls(tls)) => {
                 return match tls.write(bytes) {
-                    Ok(written) => (Status::Ok, written as u32),
+                    Ok(written) => (Status::Ok, written as u64),
                     Err(error) => (tls_status(error), 0),
                 };
             }
             Some(OsResource::Descriptor(fd)) => {
                 return match rustix::io::write(&*fd, bytes) {
-                    Ok(written) => (Status::Ok, written as u32),
+                    Ok(written) => (Status::Ok, written as u64),
                     Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
                 };
             }
@@ -680,12 +677,12 @@ impl HostOps for OsHost {
 
         // A single non-blocking `write`: the kernel takes a prefix and reports its length. We return that count rather than looping (`write_all`), because a loop that hits `WouldBlock` mid-buffer would lose the count of what already went out and the caller would resend it.
         match stream.write(bytes) {
-            Ok(written) => (Status::Ok, written as u32),
+            Ok(written) => (Status::Ok, written as u64),
             Err(error) => (status_from_error(error), 0),
         }
     }
 
-    fn clock_wall(&self) -> (u32, u32, u32) {
+    fn clock_wall(&self) -> (u64, u64, u64) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
@@ -693,19 +690,19 @@ impl HostOps for OsHost {
         let secs = now.as_secs();
 
         (
-            (secs / 1_000_000_000) as u32,
-            (secs % 1_000_000_000) as u32,
-            now.subsec_nanos(),
+            secs / 1_000_000_000,
+            secs % 1_000_000_000,
+            u64::from(now.subsec_nanos()),
         )
     }
 
-    fn clock_mono(&self) -> (u32, u32) {
+    fn clock_mono(&self) -> (u64, u64) {
         let elapsed = self.start.elapsed();
 
-        (elapsed.as_secs() as u32, elapsed.subsec_nanos())
+        (elapsed.as_secs(), u64::from(elapsed.subsec_nanos()))
     }
 
-    fn rand_bytes(&self, count: u32) -> Vec<u8> {
+    fn rand_bytes(&self, count: u64) -> Vec<u8> {
         let mut buffer = vec![0u8; count as usize];
         getrandom::fill(&mut buffer).expect("OS randomness unavailable");
 
@@ -761,7 +758,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn tty_size(&self, io: Handle) -> (Status, u32, u32) {
+    fn tty_size(&self, io: Handle) -> (Status, u64, u64) {
         match self.with_fd(&io, |fd| tcgetwinsize(fd)) {
             None => (Status::NotFound, 0, 0),
             Some(Ok(size)) => (Status::Ok, size.ws_col.into(), size.ws_row.into()),
@@ -772,11 +769,11 @@ impl HostOps for OsHost {
     fn serial_open(
         &self,
         path: &[u8],
-        baud: u32,
-        data_bits: u32,
-        parity: u32,
-        stop_bits: u32,
-        flow: u32,
+        baud: u64,
+        data_bits: u64,
+        parity: u64,
+        stop_bits: u64,
+        flow: u64,
     ) -> (Status, Handle) {
         // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
         let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
@@ -802,7 +799,7 @@ impl HostOps for OsHost {
                 | ControlModes::CSTOPB
                 | ControlModes::CRTSCTS;
             termios.control_modes |= frame | ControlModes::CLOCAL | ControlModes::CREAD;
-            termios.set_speed(baud)?;
+            termios.set_speed(u32::try_from(baud).map_err(|_| Errno::INVAL)?)?;
 
             tcsetattr(&fd, OptionalActions::Now, &termios)?;
 
@@ -818,7 +815,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn serial_control(&self, io: Handle, op: u32, on: u32) -> Status {
+    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Status {
         let outcome = self.with_fd(&io, |fd| match op {
             serial_op::DTR => set_modem_lines(fd, TIOCM_DTR, on != 0),
             serial_op::RTS => set_modem_lines(fd, TIOCM_RTS, on != 0),
@@ -833,7 +830,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
+    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64, u64, u64) {
         let path = OsStr::from_bytes(path);
 
         let metadata = match fs::metadata(path) {
@@ -864,7 +861,7 @@ impl HostOps for OsHost {
             .map(|since_epoch| {
                 let (hi, lo) = split_billions(since_epoch.as_secs());
 
-                (hi, lo, since_epoch.subsec_nanos())
+                (hi, lo, u64::from(since_epoch.subsec_nanos()))
             })
             .unwrap_or((0, 0, 0));
 
@@ -928,9 +925,9 @@ impl HostOps for OsHost {
         argv: &[Vec<u8>],
         cwd: &[u8],
         env: &[Vec<u8>],
-        stdin: u32,
-        stdout: u32,
-        stderr: u32,
+        stdin: u64,
+        stdout: u64,
+        stderr: u64,
     ) -> (Status, Handle) {
         match os_child::spawn(argv, cwd, env, (stdin, stdout, stderr)) {
             Ok(Spawned {
@@ -961,7 +958,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn proc_stream(&self, child: Handle, which: u32) -> (Status, Handle) {
+    fn proc_stream(&self, child: Handle, which: u64) -> (Status, Handle) {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
                 Some(handle) => (Status::Ok, handle.clone()),
@@ -971,7 +968,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn proc_wait(&self, child: Handle) -> (Status, u32, u32) {
+    fn proc_wait(&self, child: Handle) -> (Status, u64, u64) {
         // Reached once `handle_poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does.
         let mut table = self.table.lock().unwrap();
 
@@ -984,7 +981,7 @@ impl HostOps for OsHost {
             Some(exit) => {
                 table.remove(&child);
 
-                (Status::Ok, exit.code, exit.signal)
+                (Status::Ok, u64::from(exit.code), u64::from(exit.signal))
             }
             None => (Status::WouldBlock, 0, 0),
         }
@@ -1090,11 +1087,8 @@ fn outcome(result: std::io::Result<()>) -> Status {
 }
 
 /// A count split base-10⁹ into two limbs that each fit an i31, the way `clock_wall` splits its seconds.
-fn split_billions(count: u64) -> (u32, u32) {
-    (
-        (count / 1_000_000_000) as u32,
-        (count % 1_000_000_000) as u32,
-    )
+fn split_billions(count: u64) -> (u64, u64) {
+    (count / 1_000_000_000, count % 1_000_000_000)
 }
 
 /// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `handle_read` serves, the raw ones included.

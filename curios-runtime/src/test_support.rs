@@ -15,7 +15,7 @@ use {
 
 /// One wasm value crossing into or out of a guest call, opaque by construction.
 ///
-/// A test builds these from `i32`s and reads them back the same way, but it may also hold one it cannot interpret — a GC reference the guest minted — and pass it into a later call. That is the whole reason this is a type rather than an `i32`.
+/// A test builds these from `i32`s and `i64`s and reads them back the same way, but it may also hold one it cannot interpret — a GC reference the guest minted — and pass it into a later call. That is the whole reason this is a type rather than an `i32`.
 #[derive(Debug, Clone, Copy)]
 pub struct GuestValue(Val);
 
@@ -24,10 +24,22 @@ impl GuestValue {
         Self(Val::I32(value))
     }
 
+    pub fn from_i64(value: i64) -> Self {
+        Self(Val::I64(value))
+    }
+
     /// The value as an `i32`, or `None` if the guest returned something else. Never panics: a wrong shape is a fact about the module under test, which is a thing to assert on rather than abort over.
     pub fn to_i32(self) -> Option<i32> {
         match self.0 {
             Val::I32(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// The value as an `i64`, or `None` if the guest returned something else, as [`to_i32`](Self::to_i32) answers.
+    pub fn to_i64(self) -> Option<i64> {
+        match self.0 {
+            Val::I64(value) => Some(value),
             _ => None,
         }
     }

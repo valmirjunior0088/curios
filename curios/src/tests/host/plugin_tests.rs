@@ -14,9 +14,14 @@ use {
     std::collections::BTreeMap,
 };
 
-/// `i32`, the carrier every raw-ABI scalar and every `(ptr, len)` half crosses as.
+/// `i32`, the carrier a `(ptr, len)` half and the allocator's size cross as.
 fn i32_type() -> ValType {
     ValType::Num(NumType::I32)
+}
+
+/// `i64`, the carrier a `Nat` or `Int` crosses to a plugin as.
+fn i64_type() -> ValType {
+    ValType::Num(NumType::I64)
 }
 
 /// A final function type with the given signature, which is how every export below is declared.
@@ -91,9 +96,9 @@ fn plugin() -> Vec<u8> {
     export(
         &mut module,
         "double",
-        vec![i32_type()],
-        vec![i32_type()],
-        vec![local(0), Instr::I32Const { value: 2 }, Instr::I32Mul],
+        vec![i64_type()],
+        vec![i64_type()],
+        vec![local(0), Instr::I64Const { value: 2 }, Instr::I64Mul],
     );
 
     // A byte string crossing: the `(ptr, len)` pair handed straight back, which is what proves the write and the read back agree on where the bytes are.
@@ -141,7 +146,7 @@ fn run_against(source: &str, exports: &[(&str, &str)]) -> Result<u8, String> {
     run_wasm(&module, system, bindings)
 }
 
-/// A scalar reaching a plugin and coming back, which is the whole path with no memory in it: the guest unboxes its i31, the plugin doubles a raw `i32`, and the host boxes the answer.
+/// A scalar reaching a plugin and coming back, which is the whole path with no memory in it: the guest unboxes its i31, the plugin doubles a raw `i64`, and the guest boxes the answer.
 #[test]
 fn a_scalar_crosses_to_a_plugin_and_back() {
     let code = run_against(

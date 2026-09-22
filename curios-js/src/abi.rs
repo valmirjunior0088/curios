@@ -7,7 +7,19 @@ use {
     wasm_bindgen::JsValue,
 };
 
-fn constants(entries: &[(&str, u32)]) -> Object {
+/// A code table of `BigInt`s: each code is a `Nat`, which crosses as an `i64`, and JavaScript reads and writes an `i64` as a `BigInt` — so a status the harness hands back must be one.
+fn codes(entries: &[(&str, u64)]) -> Object {
+    let object = Object::new();
+
+    for (key, value) in entries {
+        set(&object, key, &JsValue::from(*value));
+    }
+
+    object
+}
+
+/// The stdio handle tokens as plain numbers: a handle crosses as its token's bytes, which the harness decodes into a number.
+fn tokens(entries: &[(&str, u32)]) -> Object {
     let object = Object::new();
 
     for (key, value) in entries {
@@ -17,13 +29,13 @@ fn constants(entries: &[(&str, u32)]) -> Object {
     object
 }
 
-/// The numeric wire codes as a JS object: the `status`/`file_kind`/`stdio_mode`/`stdio` code tables.
+/// The numeric wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, and the `stdio` tokens as numbers.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
     set(
         &object,
         "status",
-        &constants(&[
+        &codes(&[
             ("OK", status::OK),
             ("EOF", status::EOF),
             ("NOT_FOUND", status::NOT_FOUND),
@@ -40,7 +52,7 @@ pub(crate) fn abi() -> Object {
     set(
         &object,
         "file_kind",
-        &constants(&[
+        &codes(&[
             ("FILE", file_kind::FILE),
             ("DIRECTORY", file_kind::DIRECTORY),
             ("SYMLINK", file_kind::SYMLINK),
@@ -50,7 +62,7 @@ pub(crate) fn abi() -> Object {
     set(
         &object,
         "stdio_mode",
-        &constants(&[
+        &codes(&[
             ("INHERIT", stdio_mode::INHERIT),
             ("PIPE", stdio_mode::PIPE),
             ("NULL", stdio_mode::NULL),
@@ -59,7 +71,7 @@ pub(crate) fn abi() -> Object {
     set(
         &object,
         "stdio",
-        &constants(&[
+        &tokens(&[
             ("STDIN", stdio::STDIN),
             ("STDOUT", stdio::STDOUT),
             ("STDERR", stdio::STDERR),

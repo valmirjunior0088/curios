@@ -3,29 +3,29 @@
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Io/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
     /// The op succeeded — the reply's payload fields are meaningful only under this code.
-    pub const OK: u32 = 0;
+    pub const OK: u64 = 0;
     /// A `handle_read` reached the end of the stream and returned no bytes. Terminal but not a fault — the guest's stream consumers stop on it rather than erroring.
-    pub const EOF: u32 = 1;
+    pub const EOF: u64 = 1;
     /// The named thing does not exist: a `file_open` path, a `proc_env` variable, or a `dns_resolve` that yielded no addresses (mapped at that call site, since the OS reports it errno-less).
-    pub const NOT_FOUND: u32 = 2;
+    pub const NOT_FOUND: u64 = 2;
     /// The OS denied access to the path or socket op (`ErrorKind::PermissionDenied`).
-    pub const PERMISSION_DENIED: u32 = 3;
+    pub const PERMISSION_DENIED: u64 = 3;
     /// The target the op would create already exists (`ErrorKind::AlreadyExists`).
-    pub const ALREADY_EXISTS: u32 = 4;
+    pub const ALREADY_EXISTS: u64 = 4;
     /// A `socket_connect` was actively refused — no listener at the target address.
-    pub const CONNECTION_REFUSED: u32 = 5;
+    pub const CONNECTION_REFUSED: u64 = 5;
     /// A non-blocking op could not make progress right now. Retriable by design: `/std`'s task scheduler matches on it to reschedule the read/write instead of surfacing a failure.
-    pub const WOULD_BLOCK: u32 = 6;
+    pub const WOULD_BLOCK: u64 = 6;
     /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
-    pub const TLS_ERROR: u32 = 7;
+    pub const TLS_ERROR: u64 = 7;
     /// A `dir/remove` on a directory that still has entries (`ErrorKind::DirectoryNotEmpty`). Named, with the two below, because a program removing a directory has to tell them apart portably and the browser has no errno to pass through.
-    pub const NOT_EMPTY: u32 = 8;
+    pub const NOT_EMPTY: u64 = 8;
     /// A file operation applied to a directory (`ErrorKind::IsADirectory`).
-    pub const IS_DIRECTORY: u32 = 9;
+    pub const IS_DIRECTORY: u64 = 9;
     /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
-    pub const NOT_DIRECTORY: u32 = 10;
+    pub const NOT_DIRECTORY: u64 = 10;
     /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `Io/Error/of` subtracts it back out.
-    pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
+    pub const OTHER_BASE: u64 = NOT_DIRECTORY + 1;
 }
 
 /// `handle_poll` interest/readiness flags — a bitmask of one byte, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
@@ -43,61 +43,61 @@ pub mod event {
 /// `file_open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.
 pub mod open_mode {
     /// Open an existing file read-only.
-    pub const READ: u32 = 0;
+    pub const READ: u64 = 0;
     /// Open for writing: created if absent, truncated if present.
-    pub const WRITE: u32 = 1;
+    pub const WRITE: u64 = 1;
     /// Open for appending: created if absent, every write lands at the end.
-    pub const APPEND: u32 = 2;
+    pub const APPEND: u64 = 2;
 }
 
 /// What `file/stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `file_stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
 pub mod file_kind {
     /// A regular file.
-    pub const FILE: u32 = 0;
+    pub const FILE: u64 = 0;
     /// A directory.
-    pub const DIRECTORY: u32 = 1;
+    pub const DIRECTORY: u64 = 1;
     /// A symbolic link whose target is missing — the one case following the link finds nothing to report.
-    pub const SYMLINK: u32 = 2;
+    pub const SYMLINK: u64 = 2;
     /// Anything else: a device, a socket, a pipe.
-    pub const OTHER: u32 = 3;
+    pub const OTHER: u64 = 3;
 }
 
 /// How `proc/spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/proc/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
 pub mod stdio_mode {
     /// The child shares the parent's stream.
-    pub const INHERIT: u32 = 0;
+    pub const INHERIT: u64 = 0;
     /// The stream is a pipe the parent holds the other end of, as a handle.
-    pub const PIPE: u32 = 1;
+    pub const PIPE: u64 = 1;
     /// The stream is attached to the null device.
-    pub const NULL: u32 = 2;
+    pub const NULL: u64 = 2;
 }
 
 /// The parity `serial/open` frames a character with, mirrored by `/sys/serial_parity` and the guest's `/std/Serial/Parity`. Mark and space parity are deliberately absent: the one modern design that pruned by usage, Web Serial, ships exactly these three.
 pub mod serial_parity {
     /// No parity bit.
-    pub const NONE: u32 = 0;
+    pub const NONE: u64 = 0;
     /// A parity bit making the count of one bits even.
-    pub const EVEN: u32 = 1;
+    pub const EVEN: u64 = 1;
     /// A parity bit making the count of one bits odd.
-    pub const ODD: u32 = 2;
+    pub const ODD: u64 = 2;
 }
 
 /// How `serial/open` paces the wire, mirrored by `/sys/serial_flow` and the guest's `/std/Serial/Flow`. Software (XON/XOFF) flow control is deliberately absent, as it is from Web Serial.
 pub mod serial_flow {
     /// No flow control.
-    pub const NONE: u32 = 0;
+    pub const NONE: u64 = 0;
     /// Hardware flow control over RTS and CTS.
-    pub const HARDWARE: u32 = 1;
+    pub const HARDWARE: u64 = 1;
 }
 
 /// What `serial/control` does to a port, mirrored by `/sys/serial_op`. The two output lines a program drives to reset a board or enter its bootloader, and the one buffer it drops afterwards.
 pub mod serial_op {
     /// Set the Data Terminal Ready line to the given level.
-    pub const DTR: u32 = 0;
+    pub const DTR: u64 = 0;
     /// Set the Request To Send line to the given level.
-    pub const RTS: u32 = 1;
+    pub const RTS: u64 = 1;
     /// Drop what the device sent and the program has not read.
-    pub const DISCARD_INPUT: u32 = 2;
+    pub const DISCARD_INPUT: u64 = 2;
 }
 
 /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.

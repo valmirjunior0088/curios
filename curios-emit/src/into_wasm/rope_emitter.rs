@@ -8,7 +8,7 @@
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
 //! - `$list/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
 //!
-//! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back. A list of scalars crosses as `$words`, one word per element: `$list/<leaf>/to_words` narrows each element on the way out and `$list/<leaf>/of_words` boxes each on the way back, so a host never builds or reads a guest box.
+//! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back. A list of scalars crosses flat, one element per value — `$longs` for a `Nat` or `Int`, `$words` for a `Bool`: `$list/<leaf>/to_<payload>` narrows each element on the way out and `$list/<leaf>/of_<payload>` boxes each on the way back, so a host never builds or reads a guest box.
 
 mod force_walk;
 use force_walk::*;
@@ -1945,14 +1945,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<leaf>/to_words (ref $rope/list) -> (ref $words)`: a list of scalars as a host reads it, one word per element. The list is forced to its elements and each is narrowed as a host argument of its type is — a `Nat` or `Int` read off its i31, or handed to its wire helper, which refuses one past the wire — and a `Bool` is its word.
-    pub(crate) fn emit_words_force_func(
+    /// `$list/<leaf>/to_<payload> (ref $rope/list) -> (ref $<payload>)`: a list of scalars as a host reads it, one flat element per value. The list is forced to its elements and each is narrowed as a host argument of its type is — a `Nat` or `Int` into `$longs`, read off its i31 and widened or handed to its wire helper, which refuses one past the wire — and a `Bool` into `$words`, as its word.
+    pub(crate) fn emit_scalars_force_func(
         &mut self,
         leaf: WireLeaf,
         func_name: curios_wasm::FuncName,
     ) {
         let rope = self.table.list_rope();
-        let words = self.table.big().words;
+        let payload = self.table.scalars_type(leaf);
         let r = curios_wasm::LocalName::from("r");
         let elems = curios_wasm::LocalName::from("elems");
         let out = curios_wasm::LocalName::from("out");
@@ -1975,14 +1975,19 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         ref_type: Table::int_type(false),
                     },
                     either(
-                        curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                        vec![get(&x), i31(), curios_wasm::Instr::I31GetS],
+                        curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+                        vec![
+                            get(&x),
+                            i31(),
+                            curios_wasm::Instr::I31GetS,
+                            curios_wasm::Instr::I64ExtendI32S,
+                        ],
                         vec![get(&x), call(&wire)],
                     ),
                 ]
             }
             WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
-                unreachable!("a list of `{leaf:?}` crosses as its payloads, never as words")
+                unreachable!("a list of `{leaf:?}` crosses as its payloads, never as scalars")
             }
         };
 
@@ -1999,7 +2004,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         .into_iter()
         .chain(narrow)
         .chain([curios_wasm::Instr::ArraySet {
-            type_name: words.clone(),
+            type_name: payload.clone(),
         }])
         .collect();
 
@@ -2010,7 +2015,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&elems),
             curios_wasm::Instr::ArrayLen,
             curios_wasm::Instr::ArrayNewDefault {
-                type_name: words.clone(),
+                type_name: payload.clone(),
             },
             set(&out),
         ]
@@ -2022,10 +2027,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         self.add_helper(
             func_name,
             vec![(r, concrete_val(rope.base.clone(), false))],
-            concrete_val(words.clone(), false),
+            concrete_val(payload.clone(), false),
             vec![
                 (elems, concrete_val(rope.payload.clone(), true)),
-                (out, concrete_val(words, true)),
+                (out, concrete_val(payload, true)),
                 (i, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
                 (x, Table::top_type(true)),
             ],
@@ -2033,14 +2038,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<leaf>/of_words (ref $words) -> (ref $rope/list)`: a host's list of scalars back as a list, each word boxed as a scalar result is (`Table::box_word_instrs`) into a fresh payload the list's own embed places in a leaf.
-    pub(crate) fn emit_words_embed_func(
+    /// `$list/<leaf>/of_<payload> (ref $<payload>) -> (ref $rope/list)`: a host's list of scalars back as a list, each element boxed as a scalar result is (`Table::box_word_instrs`) into a fresh payload the list's own embed places in a leaf.
+    pub(crate) fn emit_scalars_embed_func(
         &mut self,
         leaf: WireLeaf,
         func_name: curios_wasm::FuncName,
     ) {
         let rope = self.table.list_rope();
-        let words = self.table.big().words;
+        let payload = self.table.scalars_type(leaf);
         let w = curios_wasm::LocalName::from("w");
         let elems = curios_wasm::LocalName::from("elems");
         let i = curios_wasm::LocalName::from("i");
@@ -2051,7 +2056,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&w),
             get(&i),
             curios_wasm::Instr::ArrayGet {
-                type_name: words.clone(),
+                type_name: payload.clone(),
             },
         ]
         .into_iter()
@@ -2080,7 +2085,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            vec![(w, concrete_val(words, false))],
+            vec![(w, concrete_val(payload, false))],
             concrete_val(rope.base.clone(), false),
             vec![
                 (elems, concrete_val(rope.payload.clone(), true)),

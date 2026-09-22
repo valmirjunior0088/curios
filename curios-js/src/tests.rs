@@ -50,6 +50,10 @@ fn accessors_are_exported_with_their_shapes() {
         ("list_get", 2, 1),
         ("list_new", 1, 1),
         ("list_set", 3, 0),
+        ("longs_len", 1, 1),
+        ("longs_get", 2, 1),
+        ("longs_new", 1, 1),
+        ("longs_set", 3, 0),
         ("words_len", 1, 1),
         ("words_get", 2, 1),
         ("words_new", 1, 1),
@@ -130,7 +134,34 @@ fn list_accessors_roundtrip_an_element() {
     assert_eq!(i32_of(call(&mut bridge, "bytes_len", &[element])), 3);
 }
 
-/// A list of scalars built through the bridge holds the numbers set in it, whole: a word past the i31 and a negative one come back as they went in — the shape a `List(Nat)` or `List(Int)` result is built in, which the guest boxes after the call.
+/// A list of `Nat` or `Int` built through the bridge holds the numbers set in it, whole: one past the 32-bit word and a negative one come back as they went in — the shape a `List(Nat)` or `List(Int)` result is built in, which the guest boxes after the call.
+#[test]
+fn longs_accessors_roundtrip_a_number_past_the_word() {
+    let mut bridge = bridge();
+
+    let longs = call(&mut bridge, "longs_new", &[GuestValue::from_i32(2)]);
+    assert_eq!(i32_of(call(&mut bridge, "longs_len", &[longs])), 2);
+
+    for (index, long) in [(0, 1 << 40), (1, -7)] {
+        call_void(
+            &mut bridge,
+            "longs_set",
+            &[
+                longs,
+                GuestValue::from_i32(index),
+                GuestValue::from_i64(long),
+            ],
+        );
+        let read = call(
+            &mut bridge,
+            "longs_get",
+            &[longs, GuestValue::from_i32(index)],
+        );
+        assert_eq!(read.to_i64(), Some(long));
+    }
+}
+
+/// A list of `Bool` built through the bridge holds the words set in it — the shape a `List(Bool)` result is built in.
 #[test]
 fn words_accessors_roundtrip_a_word() {
     let mut bridge = bridge();
@@ -138,7 +169,7 @@ fn words_accessors_roundtrip_a_word() {
     let words = call(&mut bridge, "words_new", &[GuestValue::from_i32(2)]);
     assert_eq!(i32_of(call(&mut bridge, "words_len", &[words])), 2);
 
-    for (index, word) in [(0, 1 << 30), (1, -7)] {
+    for (index, word) in [(0, 1), (1, 0)] {
         call_void(
             &mut bridge,
             "words_set",

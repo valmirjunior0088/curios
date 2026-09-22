@@ -64,7 +64,7 @@ pub(crate) struct Spawned {
 }
 
 /// One standard stream's wiring from its [`stdio_mode`] tag; an unknown tag inherits, the harmless reading.
-fn wiring(tag: u32) -> Stdio {
+fn wiring(tag: u64) -> Stdio {
     match tag {
         stdio_mode::PIPE => Stdio::piped(),
         stdio_mode::NULL => Stdio::null(),
@@ -77,7 +77,7 @@ pub(crate) fn spawn(
     argv: &[Vec<u8>],
     cwd: &[u8],
     env: &[Vec<u8>],
-    (stdin, stdout, stderr): (u32, u32, u32),
+    (stdin, stdout, stderr): (u64, u64, u64),
 ) -> std::io::Result<Spawned> {
     let Some((program, args)) = argv.split_first() else {
         return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));

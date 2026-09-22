@@ -25,7 +25,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 
 /// The six-outcome package: every rung the report can print, declared in the library, beside an executable with no tests of its own.
 ///
-/// **The trapping row needs a narrowing that still refuses, and a value the folder cannot see.** It was `Test/assert(Nat/shl(1, 40) == 0)` while the erased carriers were `u32`, and then the same shift tainted so the i31 envelope trapped on it at run time. `Nat` is unbounded at run time now, so the shift computes and the only narrowing left that refuses is the host wire's: the row hands `2⁴⁰` to `rand/bytes`, whose count crosses as an `i32`, and the refusal fires before the host is called. The operand is tainted by an unset environment variable the way `numeric::test_support::table` taints its rows, since a closed computation never traps (`numeric::unbounded_tests::a_closed_computation_folds_at_the_theory_s_width`); an unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
+/// **The trapping row needs a narrowing that still refuses, and a value the folder cannot see.** It was `Test/assert(Nat/shl(1, 40) == 0)` while the erased carriers were `u32`, and then the same shift tainted so the i31 envelope trapped on it at run time. `Nat` is unbounded at run time now, so the shift computes and the only narrowing left that refuses is the host wire's: the row hands `2⁷⁰` to `rand/bytes`, whose count crosses as an `i64`, and the refusal fires before the host is called. The operand is tainted by an unset environment variable the way `numeric::test_support::table` taints its rows, since a closed computation never traps (`numeric::unbounded_tests::a_closed_computation_folds_at_the_theory_s_width`); an unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
 fn project(name: &str) -> Temporary {
     let root = temporary(name);
     write(
@@ -50,7 +50,7 @@ test equality_fails =
     Test/equal(double(2), 5);
 
 test overflow_traps =
-    Test/perform(() => let v = /std/proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)));
+    Test/perform(() => let v = /std/proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)));
 
 test exits_seven =
     Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));
@@ -123,7 +123,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "/app/addition_passes: passed\n",
             "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
             "/app/overflow_traps: trapped\n",
-            "    Test/perform(() => let v = /std/proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
+            "    Test/perform(() => let v = /std/proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
             "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
             "3 passed, 1 failed, 1 trapped, 1 exited\n",

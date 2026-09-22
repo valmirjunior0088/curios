@@ -1,7 +1,7 @@
-//! The wire-ABI bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as — over the `$elems` array a list of references crosses as, and over the `$words` array a list of scalars crosses as, one word per element. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings and lists through its exports. It declares the compiler's own payload shapes (`curios_emit::bytes_sub_type`, `curios_emit::elems_sub_type`, `curios_emit::words_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
+//! The wire-ABI bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as — over the `$elems` array a list of references crosses as, and over the `$longs` and `$words` arrays a list of scalars crosses as, one `i64` per `Nat` or `Int` and one word per `Bool`. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings and lists through its exports. It declares the compiler's own payload shapes (`curios_emit::bytes_sub_type`, `curios_emit::elems_sub_type`, `curios_emit::longs_sub_type`, `curios_emit::words_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
 use {
-    curios_emit::{bytes_sub_type, elems_sub_type, words_sub_type},
+    curios_emit::{bytes_sub_type, elems_sub_type, longs_sub_type, words_sub_type},
     curios_wasm::{
         AbsHeapType, AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType,
         HeapType, Instr, LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType,
@@ -79,7 +79,7 @@ fn func_type(
     }
 }
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type with its four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set`), the canonical `elems` list type with its four (`list_len`, `list_get`, `list_new`, `list_set`), the canonical `words` type a list of scalars crosses as with its four (`words_len`, `words_get`, `words_new`, `words_set`) — each body its parameters' `local.get`s followed by its ops — and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type with its four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set`), the canonical `elems` list type with its four (`list_len`, `list_get`, `list_new`, `list_set`), the canonical `longs` type a list of `Nat` or `Int` crosses as with its four (`longs_len`, `longs_get`, `longs_new`, `longs_set`), the canonical `words` type a list of `Bool` crosses as with its four (`words_len`, `words_get`, `words_new`, `words_set`) — each body its parameters' `local.get`s followed by its ops — and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
@@ -108,7 +108,18 @@ pub(crate) fn bridge_module() -> Module {
         heap_type: HeapType::Concrete(elems.clone()),
     });
 
-    // The list-of-scalars payload: one `(mut i32)` word per element, matching the codegen's `$words` and the native adapter's `words_array_type`. The guest narrows and boxes each element, so JS reads and writes plain numbers.
+    // The list-of-`Nat`-or-`Int` payload: one `(mut i64)` per element, matching the codegen's `$longs` and the native adapter's `longs_array_type`. The guest narrows and boxes each element, so JS reads and writes plain `BigInt`s.
+    let longs = TypeName::from("longs");
+
+    module.add_type(longs.clone(), longs_sub_type());
+
+    let longs_ref = ValType::Ref(RefType {
+        is_nullable: false,
+        heap_type: HeapType::Concrete(longs.clone()),
+    });
+    let i64_val = ValType::Num(NumType::I64);
+
+    // The list-of-`Bool` payload: one `(mut i32)` word per element, matching the codegen's `$words` and the native adapter's `words_array_type`.
     let words = TypeName::from("words");
 
     module.add_type(words.clone(), words_sub_type());
@@ -118,7 +129,7 @@ pub(crate) fn bridge_module() -> Module {
         heap_type: HeapType::Concrete(words.clone()),
     });
 
-    let accessors: [Accessor; 12] = [
+    let accessors: [Accessor; 16] = [
         (
             "bytes_len",
             vec![("b", bytes_ref.clone())],
@@ -185,6 +196,40 @@ pub(crate) fn bridge_module() -> Module {
             vec![],
             vec![Instr::ArraySet {
                 type_name: elems.clone(),
+            }],
+        ),
+        (
+            "longs_len",
+            vec![("l", longs_ref.clone())],
+            vec![i32_val.clone()],
+            vec![Instr::ArrayLen],
+        ),
+        (
+            "longs_get",
+            vec![("l", longs_ref.clone()), ("i", i32_val.clone())],
+            vec![i64_val.clone()],
+            vec![Instr::ArrayGet {
+                type_name: longs.clone(),
+            }],
+        ),
+        (
+            "longs_new",
+            vec![("n", i32_val.clone())],
+            vec![longs_ref.clone()],
+            vec![Instr::ArrayNewDefault {
+                type_name: longs.clone(),
+            }],
+        ),
+        (
+            "longs_set",
+            vec![
+                ("l", longs_ref.clone()),
+                ("i", i32_val.clone()),
+                ("v", i64_val.clone()),
+            ],
+            vec![],
+            vec![Instr::ArraySet {
+                type_name: longs.clone(),
             }],
         ),
         (

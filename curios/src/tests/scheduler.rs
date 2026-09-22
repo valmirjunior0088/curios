@@ -7,7 +7,7 @@ use {
 
 /// A host whose monotonic clock climbs one second per reading, so a sleeper's deadline is passed by the scripted ramp rather than by waiting.
 fn ticking() -> (MockHost, curios_runtime::MockIo) {
-    MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build()
+    MockHost::builder().mono((0..40u64).map(|s| (s, 0))).build()
 }
 
 // A response scripted in two chunks reaches the reader only through the park-poll-resume path: the first read spends chunk one, the second answers would-block and parks the fiber on the socket, `poll` arms chunk two and wakes it, and the drain runs on to the end. A host that is always ready never takes that path, which is why the chunked script exists.

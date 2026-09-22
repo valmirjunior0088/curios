@@ -3,8 +3,9 @@ use {
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
         ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type, cell_sub_type,
-        elems_sub_type, flt_sub_type, refusal_data_name, refusal_message, rope_base_sub_type,
-        rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type, words_sub_type,
+        elems_sub_type, flt_sub_type, longs_sub_type, refusal_data_name, refusal_message,
+        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
+        words_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_num::{Binary, Grain},
@@ -208,6 +209,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             big.big,
             big_sub_type(big.sign_field, big.limbs_field, big.words),
         );
+    }
+
+    /// The flat payload a list of `Nat` or `Int` crosses the host boundary as.
+    fn emit_longs_type(&mut self) {
+        self.module
+            .add_type(self.table.longs_type(), longs_sub_type());
     }
 
     fn emit_cell_type(&mut self) {
@@ -749,12 +756,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
         // First, since each calls the list's own force or embed, which the checks below then find marked.
-        for leaf in self.table.words_forces() {
-            ropes.emit_words_force_func(leaf, self.table.words_force_func(leaf));
+        for leaf in self.table.scalars_forces() {
+            ropes.emit_scalars_force_func(leaf, self.table.scalars_force_func(leaf));
         }
 
-        for leaf in self.table.words_embeds() {
-            ropes.emit_words_embed_func(leaf, self.table.words_embed_func(leaf));
+        for leaf in self.table.scalars_embeds() {
+            ropes.emit_scalars_embed_func(leaf, self.table.scalars_embed_func(leaf));
         }
 
         if self.table.list_bytes_force_used() {
@@ -936,6 +943,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_big_types();
+        self.emit_longs_type();
         self.emit_bin_rope_types();
         self.emit_list_rope_types();
         self.emit_cell_type();

@@ -16,13 +16,24 @@ use {
     std::{fs, path::Path, process::Command},
 };
 
-/// `i32`, the carrier every raw-ABI scalar crosses as.
+/// `i32`, the carrier the allocator's size and offset cross as.
 fn i32_type() -> ValType {
     ValType::Num(NumType::I32)
 }
 
+/// `i64`, the carrier a `Nat` crosses to a plugin as.
+fn i64_type() -> ValType {
+    ValType::Num(NumType::I64)
+}
+
 /// One export: its name, its signature, and its whole body.
-fn export(module: &mut Module, name: &str, inputs: Vec<ValType>, body: Vec<Instr>) {
+fn export(
+    module: &mut Module,
+    name: &str,
+    inputs: Vec<ValType>,
+    outputs: Vec<ValType>,
+    body: Vec<Instr>,
+) {
     let type_name = TypeName::from(name);
     let func_name = FuncName::from(name);
 
@@ -33,7 +44,7 @@ fn export(module: &mut Module, name: &str, inputs: Vec<ValType>, body: Vec<Instr
             super_types: vec![],
             comp_type: CompType::Func(FuncType {
                 inputs: ResultType::from(inputs.clone()),
-                outputs: ResultType::from(vec![i32_type()]),
+                outputs: ResultType::from(outputs),
             }),
         },
     );
@@ -71,6 +82,7 @@ fn plugin() -> Vec<u8> {
         &mut module,
         "alloc",
         vec![i32_type()],
+        vec![i32_type()],
         vec![Instr::I32Const { value: 0 }],
     );
 
@@ -78,13 +90,14 @@ fn plugin() -> Vec<u8> {
     export(
         &mut module,
         "double",
-        vec![i32_type()],
+        vec![i64_type()],
+        vec![i64_type()],
         vec![
             Instr::LocalGet {
                 local_name: LocalName::from("a0"),
             },
-            Instr::I32Const { value: 2 },
-            Instr::I32Mul,
+            Instr::I64Const { value: 2 },
+            Instr::I64Mul,
         ],
     );
 

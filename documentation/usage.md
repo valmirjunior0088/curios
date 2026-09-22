@@ -102,7 +102,7 @@ curios run scratch.crs           # a file
 
 Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`. It is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why `run`'s own flags go before the target.
 
-A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` past its carrier and where larger values live, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
+A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument past what a host function's wire carries, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
 
 A running program's own exit code passes through untouched.
 

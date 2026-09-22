@@ -24,7 +24,7 @@ const EBUSY: u32 = 16;
 const EINVAL: u32 = 22;
 
 /// One serial open as the scripted host records it: the path and `[baud, data_bits, parity, stop_bits, flow]`.
-type SerialOpen = (Vec<u8>, [u32; 5]);
+type SerialOpen = (Vec<u8>, [u64; 5]);
 
 /// The path above `path` — the bytes before its last `/` — or `None` for a bare name.
 fn parent_of(path: &[u8]) -> Option<&[u8]> {
@@ -155,7 +155,7 @@ impl MockFileSystem {
     }
 
     /// `file_stat`: the kind tag and the size of what is at `path`.
-    fn stat(&self, path: &[u8]) -> Option<(u32, usize)> {
+    fn stat(&self, path: &[u8]) -> Option<(u64, usize)> {
         let disk = self.inner.lock().unwrap();
 
         match disk.files.get(path) {
@@ -277,7 +277,7 @@ impl Chunked {
     }
 
     /// Serve up to `count` bytes of the front chunk: `Eof` once no chunk is left, `WouldBlock` while the next chunk is not yet due, and the chunk's tail otherwise, disarming the stream when the chunk is spent. An empty chunk is skipped rather than served as a zero-byte read.
-    fn read(&mut self, count: u32) -> (Status, Vec<u8>) {
+    fn read(&mut self, count: u64) -> (Status, Vec<u8>) {
         while self.chunks.front().is_some_and(|chunk| chunk.is_empty()) {
             self.chunks.pop_front();
         }
@@ -290,7 +290,9 @@ impl Chunked {
             return (Status::WouldBlock, vec![]);
         }
 
-        let stop = front.len().min(self.position + count as usize);
+        let stop = front
+            .len()
+            .min(self.position.saturating_add(count as usize));
         let bytes = front[self.position..stop].to_vec();
         self.position = stop;
 
@@ -328,15 +330,15 @@ struct MockServer {
 struct MockChildScript {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
-    code: u32,
-    signal: u32,
+    code: u64,
+    signal: u64,
 }
 
 /// A live scripted child: exited the moment it was spawned, its handle ready and its exit waiting for `proc_wait`, its piped streams filed and handed out through `proc_stream`.
 struct MockChild {
     program: Vec<u8>,
-    code: u32,
-    signal: u32,
+    code: u64,
+    signal: u64,
     streams: [Handle; 3],
 }
 
@@ -392,9 +394,9 @@ pub struct MockHost {
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
-    clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
+    clock_wall_seq: Mutex<VecDeque<(u64, u64, u64)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
-    clock_mono_seq: Mutex<VecDeque<(u32, u32)>>,
+    clock_mono_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Deterministic xorshift64 state backing `rand_bytes`.
     rng: Mutex<u64>,
     /// Scripted process arguments served by `proc_args`.
@@ -404,7 +406,7 @@ pub struct MockHost {
     /// Every mode `tty_raw` was asked for, in order. Shared with [`MockIo::raw_modes`], so a test can see that a bracket switched raw mode on and back off.
     raw_modes: Arc<Mutex<Vec<bool>>>,
     /// The scripted terminal size `tty_size` answers; `None` is a host with no terminal, which answers `ENOTTY` as the native host does.
-    tty_size: Option<(u32, u32)>,
+    tty_size: Option<(u64, u64)>,
     /// The scripted working directory `proc_cwd` answers.
     cwd: Vec<u8>,
     /// Scripted children by program name: what `proc_spawn` finds.
@@ -416,7 +418,7 @@ pub struct MockHost {
     /// Every serial open that reached a scripted device, in order: its path and `[baud, data_bits, parity, stop_bits, flow]`. Shared with [`MockIo::serial_opens`].
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
     /// Every control applied to an open serial port, in order: the op tag and the level. Shared with [`MockIo::serial_controls`].
-    serial_controls: Arc<Mutex<Vec<(u32, bool)>>>,
+    serial_controls: Arc<Mutex<Vec<(u64, bool)>>>,
     /// What the program wrote to each serial port, by path. Shared with [`MockIo::serial_written`].
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
@@ -461,7 +463,7 @@ impl HostOps for MockHost {
         )
     }
 
-    fn dns_lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
+    fn dns_lookup(&self, host: &[u8], port: u64) -> (Status, Handle) {
         // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle `handle_poll` reports ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
@@ -592,7 +594,7 @@ impl HostOps for MockHost {
         }
     }
 
-    fn socket_listen(&self, io: Handle, _backlog: u32) -> Status {
+    fn socket_listen(&self, io: Handle, _backlog: u64) -> Status {
         let mut table = self.table.lock().unwrap();
 
         match table.get(&io) {
@@ -638,7 +640,7 @@ impl HostOps for MockHost {
         Status::Ok
     }
 
-    fn handle_poll(&self, handles: &[Handle], events: &[Poll], _: i32) -> Vec<Poll> {
+    fn handle_poll(&self, handles: &[Handle], events: &[Poll], _: i64) -> Vec<Poll> {
         // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports nothing. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
@@ -690,7 +692,7 @@ impl HostOps for MockHost {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn handle_read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
+    fn handle_read(&self, io: Handle, count: u64) -> (Status, Vec<u8>) {
         match &io {
             // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, `Eof` once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
             Handle::Stdin => return self.input.lock().unwrap().read(count),
@@ -723,9 +725,9 @@ impl HostOps for MockHost {
         }
     }
 
-    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
+    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u64) {
         // The in-memory sink always takes the whole buffer in one go, so a successful write reports the full length and never `WouldBlock`.
-        let full = bytes.len() as u32;
+        let full = bytes.len() as u64;
 
         match &io {
             Handle::Stdout | Handle::Stderr => {
@@ -778,7 +780,7 @@ impl HostOps for MockHost {
         }
     }
 
-    fn clock_wall(&self) -> (u32, u32, u32) {
+    fn clock_wall(&self) -> (u64, u64, u64) {
         self.clock_wall_seq
             .lock()
             .unwrap()
@@ -786,7 +788,7 @@ impl HostOps for MockHost {
             .unwrap_or((0, 0, 0))
     }
 
-    fn clock_mono(&self) -> (u32, u32) {
+    fn clock_mono(&self) -> (u64, u64) {
         self.clock_mono_seq
             .lock()
             .unwrap()
@@ -794,7 +796,7 @@ impl HostOps for MockHost {
             .unwrap_or((0, 0))
     }
 
-    fn rand_bytes(&self, count: u32) -> Vec<u8> {
+    fn rand_bytes(&self, count: u64) -> Vec<u8> {
         let mut state = self.rng.lock().unwrap();
         let mut output = Vec::with_capacity(count as usize);
 
@@ -833,7 +835,7 @@ impl HostOps for MockHost {
         }
     }
 
-    fn tty_size(&self, _io: Handle) -> (Status, u32, u32) {
+    fn tty_size(&self, _io: Handle) -> (Status, u64, u64) {
         match self.tty_size {
             Some((cols, rows)) => (Status::Ok, cols, rows),
             None => (Status::Other(ENOTTY), 0, 0),
@@ -843,11 +845,11 @@ impl HostOps for MockHost {
     fn serial_open(
         &self,
         path: &[u8],
-        baud: u32,
-        data_bits: u32,
-        parity: u32,
-        stop_bits: u32,
-        flow: u32,
+        baud: u64,
+        data_bits: u64,
+        parity: u64,
+        stop_bits: u64,
+        flow: u64,
     ) -> (Status, Handle) {
         // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
         if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
@@ -872,7 +874,7 @@ impl HostOps for MockHost {
         )
     }
 
-    fn serial_control(&self, io: Handle, op: u32, on: u32) -> Status {
+    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Status {
         let mut table = self.table.lock().unwrap();
 
         let port = match table.get_mut(&io) {
@@ -893,7 +895,7 @@ impl HostOps for MockHost {
         Status::Ok
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
+    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64, u64, u64) {
         // The scripted disk keeps no timestamps, so a modification time is the epoch.
         match self.files.stat(path) {
             Some((kind, size)) => {
@@ -902,8 +904,8 @@ impl HostOps for MockHost {
                 (
                     Status::Ok,
                     kind,
-                    (size / 1_000_000_000) as u32,
-                    (size % 1_000_000_000) as u32,
+                    size / 1_000_000_000,
+                    size % 1_000_000_000,
                     0,
                     0,
                     0,
@@ -942,9 +944,9 @@ impl HostOps for MockHost {
         argv: &[Vec<u8>],
         _cwd: &[u8],
         _env: &[Vec<u8>],
-        stdin: u32,
-        stdout: u32,
-        stderr: u32,
+        stdin: u64,
+        stdout: u64,
+        stderr: u64,
     ) -> (Status, Handle) {
         // An unscripted program is one the host cannot find, as an unknown path is to `file_open`; the script is keyed by `argv[0]`.
         let Some(script) = argv
@@ -957,7 +959,7 @@ impl HostOps for MockHost {
         let program = &argv[0];
 
         // Each stream is filed only where the guest asked for a pipe; the scripted child has already written everything it ever will.
-        let piped = |mode: u32, bytes: Vec<u8>| match mode == stdio_mode::PIPE {
+        let piped = |mode: u64, bytes: Vec<u8>| match mode == stdio_mode::PIPE {
             true => self.mint(MockResource::Piped(Chunked::new(vec![bytes]))),
             false => Handle::none(),
         };
@@ -980,7 +982,7 @@ impl HostOps for MockHost {
         (Status::Ok, child)
     }
 
-    fn proc_stream(&self, child: Handle, which: u32) -> (Status, Handle) {
+    fn proc_stream(&self, child: Handle, which: u64) -> (Status, Handle) {
         match self.table.lock().unwrap().get(&child) {
             Some(MockResource::Child(running)) => match running.streams.get(which as usize) {
                 Some(handle) => (Status::Ok, handle.clone()),
@@ -990,7 +992,7 @@ impl HostOps for MockHost {
         }
     }
 
-    fn proc_wait(&self, child: Handle) -> (Status, u32, u32) {
+    fn proc_wait(&self, child: Handle) -> (Status, u64, u64) {
         match self.table.lock().unwrap().remove(&child) {
             Some(MockResource::Child(ended)) => (Status::Ok, ended.code, ended.signal),
             _ => (Status::NotFound, 0, 0),
@@ -1010,12 +1012,12 @@ impl HostOps for MockHost {
 }
 
 /// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shape of a file read, which is always ready; a stream reads through [`Chunked`] instead.
-fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec<u8>) {
+fn serve_from(contents: &[u8], position: &mut usize, count: u64) -> (Status, Vec<u8>) {
     if *position >= contents.len() {
         return (Status::Eof, vec![]);
     }
 
-    let stop = contents.len().min(*position + count as usize);
+    let stop = contents.len().min(position.saturating_add(count as usize));
     let bytes = contents[*position..stop].to_vec();
     *position = stop;
 
@@ -1031,7 +1033,7 @@ pub struct MockIo {
     raw_modes: Arc<Mutex<Vec<bool>>>,
     kills: Arc<Mutex<Vec<Vec<u8>>>>,
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
-    serial_controls: Arc<Mutex<Vec<(u32, bool)>>>,
+    serial_controls: Arc<Mutex<Vec<(u64, bool)>>>,
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
 
@@ -1067,12 +1069,12 @@ impl MockIo {
     }
 
     /// Every serial port the guest opened, in order: its path and `[baud, data_bits, parity, stop_bits, flow]`.
-    pub fn serial_opens(&self) -> Vec<(Vec<u8>, [u32; 5])> {
+    pub fn serial_opens(&self) -> Vec<(Vec<u8>, [u64; 5])> {
         self.serial_opens.lock().unwrap().clone()
     }
 
     /// Every control the guest applied to an open serial port, in order: the [`serial_op`] tag and the level.
-    pub fn serial_controls(&self) -> Vec<(u32, bool)> {
+    pub fn serial_controls(&self) -> Vec<(u64, bool)> {
         self.serial_controls.lock().unwrap().clone()
     }
 
@@ -1096,11 +1098,11 @@ pub struct MockHostBuilder {
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     inbound: VecDeque<Vec<Vec<u8>>>,
     connect_pending: bool,
-    clock_wall_seq: VecDeque<(u32, u32, u32)>,
-    clock_mono_seq: VecDeque<(u32, u32)>,
+    clock_wall_seq: VecDeque<(u64, u64, u64)>,
+    clock_mono_seq: VecDeque<(u64, u64)>,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
-    tty_size: Option<(u32, u32)>,
+    tty_size: Option<(u64, u64)>,
     dirs: BTreeSet<Vec<u8>>,
     cwd: Option<Vec<u8>>,
     children: HashMap<Vec<u8>, MockChildScript>,
@@ -1114,7 +1116,7 @@ impl MockHostBuilder {
         P: AsRef<[u8]>,
         O: AsRef<[u8]>,
         E: AsRef<[u8]>,
-        I: IntoIterator<Item = (P, O, E, u32, u32)>,
+        I: IntoIterator<Item = (P, O, E, u64, u64)>,
     {
         self.children.extend(children.into_iter().map(
             |(program, stdout, stderr, code, signal)| {
@@ -1149,7 +1151,7 @@ impl MockHostBuilder {
     }
 
     /// Give the host a terminal of `cols` by `rows`: `tty_size` answers it and `tty_raw` records its switches. Without one, both rows answer `ENOTTY`.
-    pub fn tty_size(mut self, cols: u32, rows: u32) -> Self {
+    pub fn tty_size(mut self, cols: u64, rows: u64) -> Self {
         self.tty_size = Some((cols, rows));
 
         self
@@ -1264,14 +1266,14 @@ impl MockHostBuilder {
     }
 
     /// Script the wall-clock readings served by `clock_wall`, in order. When the script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
-    pub fn wall<I: IntoIterator<Item = (u32, u32, u32)>>(mut self, readings: I) -> Self {
+    pub fn wall<I: IntoIterator<Item = (u64, u64, u64)>>(mut self, readings: I) -> Self {
         self.clock_wall_seq.extend(readings);
 
         self
     }
 
     /// Script the monotonic readings served by `clock_mono`, in order.
-    pub fn mono<I: IntoIterator<Item = (u32, u32)>>(mut self, readings: I) -> Self {
+    pub fn mono<I: IntoIterator<Item = (u64, u64)>>(mut self, readings: I) -> Self {
         self.clock_mono_seq.extend(readings);
 
         self

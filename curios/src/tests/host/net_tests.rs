@@ -268,7 +268,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("/double", |x: u32| x * 2);
+    bindings.define("/double", |x: u64| x * 2);
 
     let (system, io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
@@ -313,7 +313,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
 
 /// An `Flt` that is *not* the last result, which is the shape a position restriction would have forbidden.
 ///
-/// Each result lands in a parameter held at its own carrier — the float in an `f64` register, the status as the i31 the host minted — so where the float sits in the tuple costs nothing and needs no stack juggling. This is the test that stops the withdrawal rule in `represent.rs` from being widened back.
+/// Each result lands in a parameter held at its own carrier — the float in an `f64` register, the status as the guest boxed it — so where the float sits in the tuple costs nothing and needs no stack juggling. This is the test that stops the withdrawal rule in `represent.rs` from being widened back.
 #[test]
 fn a_foreign_flt_may_stand_before_another_result() {
     let source = r#"
@@ -335,7 +335,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("/probe", |n: u32| (f64::from(n) * 2.0, n + 4));
+    bindings.define("/probe", |n: u64| (n as f64 * 2.0, n + 4));
 
     let (system, _io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
@@ -380,17 +380,17 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
     assert_eq!(code, 5, "both runs came back as they went in");
 }
 
-/// A list of scalars crosses one word per element, narrowed on the way out and boxed on the way back as a lone scalar is, so the host reads and answers plain numbers: a `Nat` the host doubles past `2³¹` comes back whole, an `Int` crosses zero both ways, and a `Bool` list keeps its order.
+/// A list of scalars crosses one flat element per value, narrowed on the way out and boxed on the way back as a lone scalar is, so the host reads and answers plain numbers: a `Nat` the host doubles past `2⁶³` comes back whole, an `Int` past the 32-bit word crosses zero both ways, and a `Bool` list keeps its order.
 #[test]
-fn a_list_of_scalars_crosses_as_words_in_both_directions() {
+fn a_list_of_scalars_crosses_flat_in_both_directions() {
     let source = r#"
         foreign nats : (List(Nat)) -> List(Nat);
         foreign ints : (List(Int)) -> List(Int);
         foreign flags : (List(Bool)) -> List(Bool);
-        let n = nats([1, 2000000000])!;
-        let i = ints([-5, +7])!;
+        let n = nats([1, 6000000000000000000])!;
+        let i = ints([-5, +7, -3000000000])!;
         let f = flags([true, false])!;
-        let matched = n == [2, 4000000000] && i == [+5, -7] && f == [false, true];
+        let matched = n == [2, 12000000000000000000] && i == [+5, -7, +3000000000] && f == [false, true];
         let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
         /std/Io/pure(())
         "#
@@ -406,11 +406,11 @@ fn a_list_of_scalars_crosses_as_words_in_both_directions() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("/nats", |xs: Vec<u32>| {
-        xs.into_iter().map(|x| x * 2).collect::<Vec<u32>>()
+    bindings.define("/nats", |xs: Vec<u64>| {
+        xs.into_iter().map(|x| x * 2).collect::<Vec<u64>>()
     });
-    bindings.define("/ints", |xs: Vec<i32>| {
-        xs.into_iter().map(|x| -x).collect::<Vec<i32>>()
+    bindings.define("/ints", |xs: Vec<i64>| {
+        xs.into_iter().map(|x| -x).collect::<Vec<i64>>()
     });
     bindings.define("/flags", |xs: Vec<bool>| {
         xs.into_iter().rev().collect::<Vec<bool>>()
@@ -429,7 +429,7 @@ fn a_list_element_past_the_wire_is_refused() {
         use /std/{Nat, Bytes, Option, Io};
         foreign nats : (List(Nat)) -> List(Nat);
         let v = /std/proc/env("CURIOS_UNSET_LIST")!;
-        let _ = nats([1, Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[]))])!;
+        let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()
@@ -444,7 +444,7 @@ fn a_list_element_past_the_wire_is_refused() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("/nats", |xs: Vec<u32>| xs);
+    bindings.define("/nats", |xs: Vec<u64>| xs);
 
     let (system, _io) = MockHost::builder().build();
     let refusal =

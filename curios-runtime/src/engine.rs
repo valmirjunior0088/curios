@@ -1,7 +1,7 @@
 use {
     super::{
         Handle, HostOps, Lift, Lower, Mode, Poll,
-        lower::{anyref_array_type, i8_array_type, words_array_type},
+        lower::{anyref_array_type, i8_array_type, longs_array_type, words_array_type},
     },
     curios_abi::{
         ENTRY, EXIT, ForeignFunction, ForeignStore, Namespace, PANIC, WireLeaf, WireType, host_ops,
@@ -52,7 +52,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i32`, and `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of scalars the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
+/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i64` for a `Nat` or `Int`, `i32` for a `Bool`, `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of `Nat` or `Int` the `i64` longs array, a list of `Bool` the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`longs_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bytes_ref = ValType::Ref(RefType::new(
         false,
@@ -62,16 +62,22 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
         false,
         HeapType::ConcreteArray(anyref_array_type(engine)),
     ));
+    let longs_ref = ValType::Ref(RefType::new(
+        false,
+        HeapType::ConcreteArray(longs_array_type(engine)),
+    ));
     let words_ref = ValType::Ref(RefType::new(
         false,
         HeapType::ConcreteArray(words_array_type(engine)),
     ));
     // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know a layout curios-emit defines.
     let val_type = |wire_type: &WireType| match wire_type {
-        WireType::Nat | WireType::Bool | WireType::Int => ValType::I32,
+        WireType::Nat | WireType::Int => ValType::I64,
+        WireType::Bool => ValType::I32,
         WireType::Flt => ValType::F64,
         WireType::Bytes | WireType::Bits | WireType::Handle => bytes_ref.clone(),
-        WireType::List(WireLeaf::Nat | WireLeaf::Int | WireLeaf::Bool) => words_ref.clone(),
+        WireType::List(WireLeaf::Nat | WireLeaf::Int) => longs_ref.clone(),
+        WireType::List(WireLeaf::Bool) => words_ref.clone(),
         WireType::List(_) => list_ref.clone(),
     };
 
@@ -189,10 +195,10 @@ impl ForeignBindings {
 }
 
 /// `proc_spawn`'s lifted operands — `argv`, `cwd`, `env` and the three stdio-wiring tags — a row wide enough to deserve a name.
-type SpawnOperands = (Vec<Vec<u8>>, Vec<u8>, Vec<Vec<u8>>, u32, u32, u32);
+type SpawnOperands = (Vec<Vec<u8>>, Vec<u8>, Vec<Vec<u8>>, u64, u64, u64);
 
 /// `serial_open`'s lifted operands — the path, the speed, and the four frame settings — the other row wide enough to deserve one.
-type SerialOpenOperands = (Vec<u8>, u32, u32, u32, u32, u32);
+type SerialOpenOperands = (Vec<u8>, u64, u64, u64, u64, u64);
 
 /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method. The store and the trait are generated from one authored list in `curios-abi`, and these hand-written bindings are cross-checked against both — each `define` name must be a real store row (asserted), and each method call must match the trait (compiler-checked) — so the three stay in agreement without a fourth independent spelling.
 fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
@@ -201,7 +207,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("handle_read", {
         let host = host.clone();
 
-        move |(handle, count): (Handle, u32)| host.handle_read(handle, count)
+        move |(handle, count): (Handle, u64)| host.handle_read(handle, count)
     });
 
     impls.define("handle_write", {
@@ -249,7 +255,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("socket_listen", {
         let host = host.clone();
 
-        move |(handle, backlog): (Handle, u32)| host.socket_listen(handle, backlog)
+        move |(handle, backlog): (Handle, u64)| host.socket_listen(handle, backlog)
     });
 
     impls.define("socket_accept", {
@@ -261,7 +267,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("dns_lookup", {
         let host = host.clone();
 
-        move |(name, port): (Vec<u8>, u32)| host.dns_lookup(&name, port)
+        move |(name, port): (Vec<u8>, u64)| host.dns_lookup(&name, port)
     });
 
     impls.define("dns_resolve", {
@@ -291,7 +297,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("handle_poll", {
         let host = host.clone();
 
-        move |(handles, events, timeout): (Vec<Handle>, Vec<Poll>, i32)| {
+        move |(handles, events, timeout): (Vec<Handle>, Vec<Poll>, i64)| {
             host.handle_poll(&handles, &events, timeout)
         }
     });
@@ -317,7 +323,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("rand_bytes", {
         let host = host.clone();
 
-        move |count: u32| host.rand_bytes(count)
+        move |count: u64| host.rand_bytes(count)
     });
 
     impls.define("proc_args", {
@@ -355,7 +361,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("serial_control", {
         let host = host.clone();
 
-        move |(handle, op, on): (Handle, u32, u32)| host.serial_control(handle, op, on)
+        move |(handle, op, on): (Handle, u64, u32)| host.serial_control(handle, op, on)
     });
 
     impls.define("file_stat", {
@@ -411,7 +417,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls.define("proc_stream", {
         let host = host.clone();
 
-        move |(child, which): (Handle, u32)| host.proc_stream(child, which)
+        move |(child, which): (Handle, u64)| host.proc_stream(child, which)
     });
 
     impls.define("proc_wait", {

@@ -12,10 +12,10 @@ use {
 
 /// The control-mode bits a serial frame sets, or `None` for a setting `serial/open` refuses: 7 or 8 data bits, a [`serial_parity`] tag, 1 or 2 stop bits, and a [`serial_flow`] tag. Both hosts ask it, so a frame the native host refuses is one the scripted host refuses too.
 pub(crate) fn serial_frame(
-    data_bits: u32,
-    parity: u32,
-    stop_bits: u32,
-    flow: u32,
+    data_bits: u64,
+    parity: u64,
+    stop_bits: u64,
+    flow: u64,
 ) -> Option<ControlModes> {
     let size = match data_bits {
         7 => ControlModes::CS7,

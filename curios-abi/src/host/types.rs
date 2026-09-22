@@ -144,7 +144,7 @@ pub enum Status {
 
 impl Status {
     /// The wire code the guest decodes. The named statuses have fixed tags; `Other(errno)` lowers as [`OTHER_BASE`](status::OTHER_BASE) plus its carried errno, keeping the errno lane disjoint from the named tags.
-    pub fn code(self) -> u32 {
+    pub fn code(self) -> u64 {
         match self {
             Status::Ok => status::OK,
             Status::Eof => status::EOF,
@@ -157,7 +157,7 @@ impl Status {
             Status::NotEmpty => status::NOT_EMPTY,
             Status::IsDirectory => status::IS_DIRECTORY,
             Status::NotDirectory => status::NOT_DIRECTORY,
-            Status::Other(errno) => status::OTHER_BASE + errno,
+            Status::Other(errno) => status::OTHER_BASE + u64::from(errno),
         }
     }
 }

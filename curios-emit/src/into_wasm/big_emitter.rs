@@ -68,14 +68,16 @@ pub(crate) enum BigHelper {
     OfF64,
     /// `(anyref) -> i32`: a boxed value as a machine word — exact below `2³² - 1`, saturating there.
     Word,
-    /// `(anyref) -> i32`: a boxed `Nat` narrowed to the host wire, refusing one at or past `2³¹`.
+    /// `(anyref) -> i64`: a boxed `Nat` narrowed to the host wire, refusing one at or past `2⁶⁴`.
     NatWire,
-    /// `(anyref) -> i32`: a boxed `Int` narrowed to the host wire, refusing one outside `[-2³¹, 2³¹)`.
+    /// `(anyref) -> i64`: a boxed `Int` narrowed to the host wire, refusing one outside `[-2⁶³, 2⁶³)`.
     IntWire,
     /// `(ref null $big, i32 width) -> (ref $words)`: the two's complement of the value in `width` limbs.
     Twos,
-    /// `(i64) -> (ref any)`: a machine integer in the runtime form.
+    /// `(i64) -> (ref any)`: a machine integer read signed, in the runtime form.
     OfI64,
+    /// `(i64) -> (ref any)`: a machine integer read unsigned, in the runtime form.
+    OfU64,
     /// `(anyref) -> (ref $big)`: a value in the boxed shape, an i31 widened into a fresh one.
     Widen,
     /// `(i32 sign, ref null $words) -> (ref any)`: the canonical value with this sign and magnitude — an i31 when it fits, a trimmed boxed magnitude otherwise, and zero never negative.
@@ -98,7 +100,7 @@ pub(crate) enum BigHelper {
 
 impl BigHelper {
     /// Every helper, callers before callees: the order the module emitter visits them in, so that a helper is looked at only after every body that could call it has been built.
-    pub(crate) const ALL: [BigHelper; 25] = [
+    pub(crate) const ALL: [BigHelper; 26] = [
         BigHelper::NatSub,
         BigHelper::Add,
         BigHelper::Mul,
@@ -115,6 +117,7 @@ impl BigHelper {
         BigHelper::IntWire,
         BigHelper::Twos,
         BigHelper::OfI64,
+        BigHelper::OfU64,
         BigHelper::Widen,
         BigHelper::Norm,
         BigHelper::MagDivRem,
@@ -152,6 +155,7 @@ impl BigHelper {
             BigHelper::IntWire => "int/wire",
             BigHelper::Twos => "big/twos",
             BigHelper::OfI64 => "big/of_i64",
+            BigHelper::OfU64 => "big/of_u64",
             BigHelper::Widen => "big/widen",
             BigHelper::Norm => "big/norm",
             BigHelper::MagDivRem => "mag/divrem",
@@ -307,6 +311,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             BigHelper::IntWire => self.emit_int_wire(),
             BigHelper::Twos => self.emit_big_twos(),
             BigHelper::OfI64 => self.emit_big_of_i64(),
+            BigHelper::OfU64 => self.emit_big_of_u64(),
             BigHelper::Widen => self.emit_big_widen(),
             BigHelper::Norm => self.emit_big_norm(),
             BigHelper::MagDivRem => self.emit_mag_divrem(),
@@ -451,6 +456,52 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             curios_wasm::Instr::StructNew {
                 type_name: self.big.big.clone(),
             },
+        ]
+    }
+
+    /// A magnitude of one or two limbs as the `u64` its bits fill, which is every magnitude the host wire carries.
+    fn magnitude64(&self, limbs: &curios_wasm::LocalName) -> Vec<curios_wasm::Instr> {
+        wasm![
+            self.limb64(limbs, vec![i32_const(0)]),
+            len(limbs),
+            i32_const(2),
+            curios_wasm::Instr::I32Eq,
+            either(
+                i64_type(),
+                wasm![
+                    self.limb64(limbs, vec![i32_const(1)]),
+                    i64_const(32),
+                    curios_wasm::Instr::I64Shl,
+                ],
+                vec![i64_const(0)],
+            ),
+            curios_wasm::Instr::I64Or,
+        ]
+    }
+
+    /// The limbs of the nonzero `u64` magnitude in `m`: one when its high half is clear, two otherwise, the high half passing through `high`.
+    fn limbs64(
+        &self,
+        m: &curios_wasm::LocalName,
+        high: &curios_wasm::LocalName,
+    ) -> Vec<curios_wasm::Instr> {
+        wasm![
+            get(m),
+            i64_const(32),
+            curios_wasm::Instr::I64ShrU,
+            curios_wasm::Instr::I32WrapI64,
+            tee(high),
+            curios_wasm::Instr::I32Eqz,
+            either(
+                self.words_result(),
+                vec![get(m), curios_wasm::Instr::I32WrapI64, self.fixed_limbs(1)],
+                vec![
+                    get(m),
+                    curios_wasm::Instr::I32WrapI64,
+                    get(high),
+                    self.fixed_limbs(2),
+                ],
+            ),
         ]
     }
 
@@ -1173,7 +1224,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         self.add_helper(BigHelper::Word, scope, i32_type(), instrs);
     }
 
-    /// `nat/wire`: the host reads a `Nat` argument as a non-negative `i32`, so a boxed one crosses when it is one limb below `2³¹` and refuses otherwise.
+    /// `nat/wire`: the host reads a `Nat` argument as an `i64` read unsigned, so a boxed one crosses when it is at most two limbs, below `2⁶⁴`, and refuses otherwise.
     fn emit_nat_wire(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
@@ -1190,29 +1241,25 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     self.sign(&b),
                     curios_wasm::Instr::I32Eqz,
                     len(&m),
-                    i32_const(1),
-                    curios_wasm::Instr::I32Eq,
-                    curios_wasm::Instr::I32And,
-                    self.limb(&m, vec![i32_const(0)]),
-                    i32_const(i32::MIN),
-                    curios_wasm::Instr::I32LtU,
+                    i32_const(2),
+                    curios_wasm::Instr::I32LeU,
                     curios_wasm::Instr::I32And,
                 ],
-                self.limb(&m, vec![i32_const(0)]),
+                self.magnitude64(&m),
             ),
             self.table.refuse_instrs(curios_cont::Panic::NatWire),
         ];
 
-        self.add_helper(BigHelper::NatWire, scope, i32_type(), instrs);
+        self.add_helper(BigHelper::NatWire, scope, i64_type(), instrs);
     }
 
-    /// `int/wire`: the host reads an `Int` argument as an `i32`, so a boxed one crosses when it is one limb inside `[-2³¹, 2³¹)` and refuses otherwise.
+    /// `int/wire`: the host reads an `Int` argument as an `i64`, so a boxed one crosses when it is at most two limbs inside `[-2⁶³, 2⁶³)` and refuses otherwise. The negation wraps at `2⁶³`, whose negative is exactly `i64::MIN`.
     fn emit_int_wire(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
         let b = scope.local("b", self.big_type());
         let m = scope.local("m", self.words_type());
-        let v = scope.local("v", i32_type());
+        let v = scope.local("v", i64_type());
         let instrs = wasm![
             get(&x),
             cast(&self.big.big),
@@ -1220,18 +1267,18 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             self.magnitude(&b),
             set(&m),
             len(&m),
-            i32_const(1),
-            curios_wasm::Instr::I32Eq,
+            i32_const(2),
+            curios_wasm::Instr::I32LeU,
             when(wasm![
-                self.limb(&m, vec![i32_const(0)]),
+                self.magnitude64(&m),
                 set(&v),
                 return_if(
                     wasm![
                         self.sign(&b),
                         curios_wasm::Instr::I32Eqz,
                         get(&v),
-                        i32_const(i32::MIN),
-                        curios_wasm::Instr::I32LtU,
+                        i64_const(0),
+                        curios_wasm::Instr::I64GeS,
                         curios_wasm::Instr::I32And,
                     ],
                     vec![get(&v)],
@@ -1240,17 +1287,17 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     wasm![
                         self.sign(&b),
                         get(&v),
-                        i32_const(i32::MIN),
-                        curios_wasm::Instr::I32LeU,
+                        i64_const(i64::MIN),
+                        curios_wasm::Instr::I64LeU,
                         curios_wasm::Instr::I32And,
                     ],
-                    vec![i32_const(0), get(&v), curios_wasm::Instr::I32Sub],
+                    vec![i64_const(0), get(&v), curios_wasm::Instr::I64Sub],
                 ),
             ]),
             self.table.refuse_instrs(curios_cont::Panic::IntWire),
         ];
 
-        self.add_helper(BigHelper::IntWire, scope, i32_type(), instrs);
+        self.add_helper(BigHelper::IntWire, scope, i64_type(), instrs);
     }
 
     /// `big/of_i64`: an i31 when the value sign-extends from bit 30, and otherwise a boxed magnitude of one or two limbs. The negation wraps at `i64::MIN`, whose magnitude read unsigned is exactly `2⁶³`.
@@ -1288,31 +1335,30 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             get(&negative),
             curios_wasm::Instr::Select { val_types: vec![] },
             set(&m),
-            get(&m),
-            i64_const(32),
-            curios_wasm::Instr::I64ShrU,
-            curios_wasm::Instr::I32WrapI64,
-            set(&high),
-            self.boxed(
-                vec![get(&negative)],
-                vec![
-                    get(&high),
-                    curios_wasm::Instr::I32Eqz,
-                    either(
-                        self.words_result(),
-                        vec![get(&m), curios_wasm::Instr::I32WrapI64, self.fixed_limbs(1)],
-                        vec![
-                            get(&m),
-                            curios_wasm::Instr::I32WrapI64,
-                            get(&high),
-                            self.fixed_limbs(2),
-                        ],
-                    ),
-                ],
-            ),
+            self.boxed(vec![get(&negative)], self.limbs64(&m, &high)),
         ];
 
         self.add_helper(BigHelper::OfI64, scope, Table::top_type(false), instrs);
+    }
+
+    /// `big/of_u64`: an i31 when the value is below `2³⁰`, and otherwise a non-negative boxed magnitude of one or two limbs.
+    fn emit_big_of_u64(&mut self) {
+        let mut scope = Scope::default();
+        let v = scope.param("v", i64_type());
+        let high = scope.local("high", i32_type());
+        let instrs = wasm![
+            return_if(
+                vec![get(&v), i64_const(1 << 30), curios_wasm::Instr::I64LtU],
+                vec![
+                    get(&v),
+                    curios_wasm::Instr::I32WrapI64,
+                    curios_wasm::Instr::RefI31,
+                ],
+            ),
+            self.boxed(vec![i32_const(0)], self.limbs64(&v, &high)),
+        ];
+
+        self.add_helper(BigHelper::OfU64, scope, Table::top_type(false), instrs);
     }
 
     /// `big/widen`: a boxed value is already the shape; an i31 becomes one — zero with no limbs, so a magnitude comparison and a sign test both read it right.

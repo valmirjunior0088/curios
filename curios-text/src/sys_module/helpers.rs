@@ -62,7 +62,7 @@ pub(super) fn byte_lit(n: u8) -> Term {
 }
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow` and `serial_op`) into the `/sys` code modules.
-pub(super) fn nat_lit(n: u32) -> Term {
+pub(super) fn nat_lit(n: u64) -> Term {
     match n {
         0 => intrinsic(Intrinsic::Nat(Nat::Zero)),
         n => intrinsic(Intrinsic::Nat(Nat::Succ(

@@ -225,13 +225,13 @@ macro_rules! trait_param_of {
         Handle
     };
     (Nat) => {
-        u32
+        u64
     };
     (Bool) => {
         u32
     };
     (Int) => {
-        i32
+        i64
     };
     (Bytes) => {
         &[u8]
@@ -253,7 +253,7 @@ macro_rules! trait_param_of {
 /// One slot kind → the Rust type it produces as a [`HostOps`] method result.
 macro_rules! trait_result_of {
     (Handle) => { Handle };
-    (Nat) => { u32 };
+    (Nat) => { u64 };
     (Bytes) => { Vec<u8> };
     (Status) => { Status };
     (ListBytes) => { Vec<Vec<u8>> };

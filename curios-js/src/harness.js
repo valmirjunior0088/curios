@@ -1,5 +1,7 @@
 // The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the `sys.*` import keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite. Only the numeric status/stdio codes arrive via `config`, built Rust-side from curios-abi (see src/abi.rs).
 //
+// A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` already are. A `Bool` and the exit code cross as plain numbers.
+//
 // The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED.
 
 /** Thrown by the `exit` import to unwind the wasm stack with an exit code. */
@@ -89,10 +91,10 @@ export async function run(config) {
       case config.stdio.STDIN:
         throw new Error("write to stdin");
       default:
-        return [config.status.PERMISSION_DENIED, 0];
+        return [config.status.PERMISSION_DENIED, 0n];
     }
 
-    return [config.status.OK, bytes.length];
+    return [config.status.OK, BigInt(bytes.length)];
   };
 
   const deniedHandle = () => [config.status.PERMISSION_DENIED, emptyBytes()];
@@ -156,9 +158,9 @@ export async function run(config) {
 
       // The runtime splits the 64-bit seconds base-10⁹ into two Nat limbs.
       return [
-        Math.floor(secs / 1_000_000_000),
-        secs % 1_000_000_000,
-        (millis % 1000) * 1_000_000,
+        BigInt(Math.floor(secs / 1_000_000_000)),
+        BigInt(secs % 1_000_000_000),
+        BigInt((millis % 1000) * 1_000_000),
       ];
     },
     clock_mono: () => {
@@ -166,15 +168,15 @@ export async function run(config) {
 
       // Floor, not round: a fractional millisecond just below 1000 would otherwise round the nanos limb up to exactly 10⁹, which the seconds limb owns.
       return [
-        Math.floor(millis / 1000),
-        Math.floor((millis % 1000) * 1_000_000),
+        BigInt(Math.floor(millis / 1000)),
+        BigInt(Math.floor((millis % 1000) * 1_000_000)),
       ];
     },
     rand_bytes: (count) => {
-      const bytes = new Uint8Array(count);
+      const bytes = new Uint8Array(Number(count));
 
       // Web Crypto caps one `getRandomValues` at 65536 bytes (a `QuotaExceededError` past it), so a larger request is filled a slice at a time; the native host has no such ceiling, and `rand/bytes` promises none.
-      for (let offset = 0; offset < count; offset += 65536) {
+      for (let offset = 0; offset < bytes.length; offset += 65536) {
         crypto.getRandomValues(bytes.subarray(offset, offset + 65536));
       }
 
@@ -184,12 +186,12 @@ export async function run(config) {
     proc_env: () => [config.status.NOT_FOUND, emptyBytes()],
     // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.
     tty_raw: denied,
-    tty_size: () => [config.status.PERMISSION_DENIED, 0, 0],
+    tty_size: () => [config.status.PERMISSION_DENIED, 0n, 0n],
     // No serial devices either: Web Serial asks the user to pick a port, which no row can do, so opening one is denied as `file_open` is.
     serial_open: deniedHandle,
     serial_control: denied,
     // No filesystem either: every filesystem row is denied as `file_open` is. `dir_list` would answer a `List(Bytes)`, and `dns_resolve` and `proc_args` likewise, which nothing in the playground can fill — so they trap by name rather than returning an empty list a program would read as a fact.
-    file_stat: () => [config.status.PERMISSION_DENIED, 0, 0, 0, 0, 0, 0],
+    file_stat: () => [config.status.PERMISSION_DENIED, 0n, 0n, 0n, 0n, 0n, 0n],
     file_remove: denied,
     file_rename: denied,
     dir_list: unsupported("dir_list"),
@@ -199,7 +201,7 @@ export async function run(config) {
     // WASI has no process creation and neither does the playground.
     proc_spawn: deniedHandle,
     proc_stream: deniedHandle,
-    proc_wait: () => [config.status.PERMISSION_DENIED, 0, 0],
+    proc_wait: () => [config.status.PERMISSION_DENIED, 0n, 0n],
     proc_kill: denied,
     exit: (code) => {
       throw new ExitSignal(code);

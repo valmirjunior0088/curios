@@ -248,6 +248,7 @@ pub(crate) struct Table<'a> {
     flt_type: curios_wasm::TypeName,
     big_type: curios_wasm::TypeName,
     words_type: curios_wasm::TypeName,
+    longs_type: curios_wasm::TypeName,
     bin_rope_type: curios_wasm::TypeName,
     list_rope_type: curios_wasm::TypeName,
     bytes_type: curios_wasm::TypeName,
@@ -279,10 +280,10 @@ pub(crate) struct Table<'a> {
     bits_box: OnceCell<curios_wasm::FuncName>,
     bits_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
-    /// The scalar leaves whose list crosses to a host, each through `$list/<leaf>/to_words`.
-    words_forces: RefCell<Vec<WireLeaf>>,
-    /// The scalar leaves whose list a host answers, each through `$list/<leaf>/of_words`.
-    words_embeds: RefCell<Vec<WireLeaf>>,
+    /// The scalar leaves whose list crosses to a host, each through `$list/<leaf>/to_<payload>`.
+    scalars_forces: RefCell<Vec<WireLeaf>>,
+    /// The scalar leaves whose list a host answers, each through `$list/<leaf>/of_<payload>`.
+    scalars_embeds: RefCell<Vec<WireLeaf>>,
     list_bytes_embed: OnceCell<curios_wasm::FuncName>,
     list_bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
@@ -343,6 +344,7 @@ impl<'a> Table<'a> {
             flt_type: curios_wasm::TypeName::from("flt"),
             big_type: curios_wasm::TypeName::from("big"),
             words_type: curios_wasm::TypeName::from("words"),
+            longs_type: curios_wasm::TypeName::from("longs"),
             bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
             list_rope_type: curios_wasm::TypeName::from("rope/list"),
             bytes_type: curios_wasm::TypeName::from("bytes"),
@@ -371,8 +373,8 @@ impl<'a> Table<'a> {
             bits_box: OnceCell::new(),
             bits_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
-            words_forces: RefCell::new(Vec::new()),
-            words_embeds: RefCell::new(Vec::new()),
+            scalars_forces: RefCell::new(Vec::new()),
+            scalars_embeds: RefCell::new(Vec::new()),
             list_bytes_embed: OnceCell::new(),
             list_bits_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
@@ -569,21 +571,20 @@ impl<'a> Table<'a> {
         self.list_rope_type.clone()
     }
 
-    /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: the integral scalars as a raw `i32`, `Flt` as a raw `f64`, references as their concrete non-nullable heap type (a handle is its `Bytes` token).
+    /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: a `Nat` or `Int` as a raw `i64`, a `Bool` as a raw `i32`, `Flt` as a raw `f64`, references as their concrete non-nullable heap type (a handle is its `Bytes` token).
     ///
     /// **A scalar crosses as the number it is, both ways.** Going out, the call site narrows a `Nat` or `Int` through `LoadAs::WireNat`/`LoadAs::WireInt`, refusing past the wire, reads a `Bool` as its word and an `Flt` out of its box. Coming back, the guest boxes what the host answered (`Context::host_instrs`), because every box is a layout this crate defines: an `Flt`'s `$flt` struct, and a `Nat` or `Int` past the i31 the boxed magnitude. A host that minted either would be a second crate needing that layout, and one that could mint only the i31 would have to refuse a result past it.
     pub(crate) fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
-            WireType::Nat | WireType::Bool | WireType::Int => {
-                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
-            }
+            WireType::Nat | WireType::Int => curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+            WireType::Bool => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             WireType::Bytes | WireType::Bits | WireType::Handle => {
                 concrete_val(self.bytes_type(), false)
             }
-            // A list of scalars is one word per element, narrowed and boxed by the guest as a scalar is; a list of references is their flat payloads.
-            WireType::List(WireLeaf::Nat | WireLeaf::Int | WireLeaf::Bool) => {
-                concrete_val(self.words_type.clone(), false)
+            // A list of scalars is one flat element per value, narrowed and boxed by the guest as a scalar is; a list of references is their flat payloads.
+            WireType::List(leaf @ (WireLeaf::Nat | WireLeaf::Int | WireLeaf::Bool)) => {
+                concrete_val(self.scalars_type(*leaf), false)
             }
             WireType::List(_) => concrete_val(self.elems_type(), false),
         }
@@ -591,6 +592,22 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_type(&self) -> curios_wasm::TypeName {
         self.bytes_type.clone()
+    }
+
+    /// `$longs`, the flat payload a list of `Nat` or `Int` crosses the host boundary as.
+    pub(crate) fn longs_type(&self) -> curios_wasm::TypeName {
+        self.longs_type.clone()
+    }
+
+    /// The flat payload a list of the scalar `leaf` crosses the host boundary as: `$longs` for a `Nat` or `Int`, whose elements cross as a lone one does, and `$words` for a `Bool`.
+    pub(crate) fn scalars_type(&self, leaf: WireLeaf) -> curios_wasm::TypeName {
+        match leaf {
+            WireLeaf::Nat | WireLeaf::Int => self.longs_type.clone(),
+            WireLeaf::Bool => self.words_type.clone(),
+            WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
+                panic!("a list of `{leaf:?}` crosses as its payloads, never as scalars")
+            }
+        }
     }
 
     pub(crate) fn elems_type(&self) -> curios_wasm::TypeName {
@@ -849,38 +866,44 @@ impl<'a> Table<'a> {
         self.list_embed.get().is_some()
     }
 
-    /// `$list/<leaf>/to_words`, the helper a list of `leaf` crosses to a host through, marked for emission by this first use.
-    pub(crate) fn words_force_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
-        record_leaf(&self.words_forces, leaf);
-        curios_wasm::FuncName::from(format!("list/{}/to_words", scalar_leaf_name(leaf)))
+    /// `$list/<leaf>/to_<payload>`, the helper a list of `leaf` crosses to a host through, marked for emission by this first use.
+    pub(crate) fn scalars_force_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
+        record_leaf(&self.scalars_forces, leaf);
+        curios_wasm::FuncName::from(format!(
+            "list/{}/to_{}",
+            scalar_leaf_name(leaf),
+            self.scalars_type(leaf)
+        ))
     }
 
-    /// The leaves whose `to_words` helper the emitted code referenced.
-    pub(crate) fn words_forces(&self) -> Vec<WireLeaf> {
-        self.words_forces.borrow().clone()
+    /// The leaves whose `to_<payload>` helper the emitted code referenced.
+    pub(crate) fn scalars_forces(&self) -> Vec<WireLeaf> {
+        self.scalars_forces.borrow().clone()
     }
 
-    /// `$list/<leaf>/of_words`, the helper a host's list of `leaf` comes back through, marked for emission by this first use.
-    pub(crate) fn words_embed_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
-        record_leaf(&self.words_embeds, leaf);
-        curios_wasm::FuncName::from(format!("list/{}/of_words", scalar_leaf_name(leaf)))
+    /// `$list/<leaf>/of_<payload>`, the helper a host's list of `leaf` comes back through, marked for emission by this first use.
+    pub(crate) fn scalars_embed_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
+        record_leaf(&self.scalars_embeds, leaf);
+        curios_wasm::FuncName::from(format!(
+            "list/{}/of_{}",
+            scalar_leaf_name(leaf),
+            self.scalars_type(leaf)
+        ))
     }
 
-    /// The leaves whose `of_words` helper the emitted code referenced.
-    pub(crate) fn words_embeds(&self) -> Vec<WireLeaf> {
-        self.words_embeds.borrow().clone()
+    /// The leaves whose `of_<payload>` helper the emitted code referenced.
+    pub(crate) fn scalars_embeds(&self) -> Vec<WireLeaf> {
+        self.scalars_embeds.borrow().clone()
     }
 
-    /// Box one raw scalar the host answered, alone or as a list's element: a `Nat` read unsigned and an `Int` signed, each widened and handed to `big/of_i64`, which answers the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cont` offers that parameter at its carrier.
+    /// Box one raw scalar the host answered, alone or as a list's element: a `Nat`'s `i64` read unsigned through `big/of_u64` and an `Int`'s read signed through `big/of_i64`, each answering the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cont` offers that parameter at its carrier.
     pub(crate) fn box_word_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
-        let widen = match wire_type {
-            WireType::Nat => curios_wasm::Instr::I64ExtendI32U,
-            WireType::Int => curios_wasm::Instr::I64ExtendI32S,
-            WireType::Bool => return vec![curios_wasm::Instr::RefI31],
-            _ => return vec![],
-        };
-
-        vec![widen, call(&self.big_func(BigHelper::OfI64))]
+        match wire_type {
+            WireType::Nat => vec![call(&self.big_func(BigHelper::OfU64))],
+            WireType::Int => vec![call(&self.big_func(BigHelper::OfI64))],
+            WireType::Bool => vec![curios_wasm::Instr::RefI31],
+            _ => vec![],
+        }
     }
 
     /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed a `List(Bytes)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
@@ -1265,7 +1288,7 @@ fn scalar_leaf_name(leaf: WireLeaf) -> &'static str {
         WireLeaf::Int => "int",
         WireLeaf::Bool => "bool",
         WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
-            panic!("a list of `{leaf:?}` crosses as its payloads, never as words")
+            panic!("a list of `{leaf:?}` crosses as its payloads, never as scalars")
         }
     }
 }

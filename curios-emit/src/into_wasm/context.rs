@@ -308,7 +308,7 @@ impl<'a, 'b> Context<'a, 'b> {
         producer.into_iter().chain(read).collect()
     }
 
-    /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine word: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating for a position, refusing for the host wire. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
+    /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine integer: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating to a word for a position, refusing past the host wire's `i64`. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
     ///
     /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` made two, with the common case on the straight line. A block cannot consume a value from outside itself, which is what put the producer in here rather than a scratch local every narrowing in a function wrote.
     ///
@@ -324,6 +324,14 @@ impl<'a, 'b> Context<'a, 'b> {
             is_nullable: true,
             heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
         };
+        // A position takes a word, and the host wire the `i64` both wire helpers answer, which an i31 reaches sign-extended.
+        let (width, widen) = match boxed {
+            BigHelper::Word => (curios_wasm::NumType::I32, None),
+            _ => (
+                curios_wasm::NumType::I64,
+                Some(curios_wasm::Instr::I64ExtendI32S),
+            ),
+        };
         let small_path = [
             curios_wasm::Instr::BrOnCastFail {
                 label_name: large.clone(),
@@ -331,16 +339,16 @@ impl<'a, 'b> Context<'a, 'b> {
                 target_type: Table::int_type(false),
             },
             curios_wasm::Instr::I31GetS,
-            curios_wasm::Instr::Br {
-                label_name: narrowed.clone(),
-            },
-        ];
+        ]
+        .into_iter()
+        .chain(widen)
+        .chain([curios_wasm::Instr::Br {
+            label_name: narrowed.clone(),
+        }]);
 
         vec![curios_wasm::Instr::Block {
             label_name: narrowed,
-            block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(
-                curios_wasm::NumType::I32,
-            )),
+            block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(width)),
             instructions: vec![
                 curios_wasm::Instr::Block {
                     label_name: large,
@@ -364,9 +372,14 @@ impl<'a, 'b> Context<'a, 'b> {
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
-            // A word is below `2³⁰`, so it is already its narrowing to any position and either wire.
-            (curios_cont::Repr::Nat, LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt)
-            | (curios_cont::Repr::Flt, LoadAs::Flt) => producer,
+            // A word is below `2³⁰`, so it is already its narrowing to any position, and to either wire once widened.
+            (curios_cont::Repr::Nat, LoadAs::Nat) | (curios_cont::Repr::Flt, LoadAs::Flt) => {
+                producer
+            }
+            (curios_cont::Repr::Nat, LoadAs::WireNat | LoadAs::WireInt) => producer
+                .into_iter()
+                .chain([curios_wasm::Instr::I64ExtendI32U])
+                .collect(),
             _ => self.load_as_instrs(
                 producer
                     .into_iter()
@@ -783,7 +796,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$words` for a list of scalars, each element narrowed as a lone argument is.
+    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
@@ -794,7 +807,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
                 WireLeaf::Bits => self.table().list_bits_force_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
-                    self.table().words_force_func(*leaf)
+                    self.table().scalars_force_func(*leaf)
                 }
             },
         };
@@ -802,7 +815,7 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`, and out of `$words` for a list of scalars, each word boxed as a lone result is. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
+    /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`, and out of `$longs` or `$words` for a list of scalars, each element boxed as a lone result is. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
     fn wire_embed_instrs(&self, reference: WireReference) -> Vec<curios_wasm::Instr> {
         let embed = match reference {
             WireReference::Bytes | WireReference::Handle => {
@@ -829,7 +842,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Bits => self.table().list_bits_embed_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
-                    self.table().words_embed_func(leaf)
+                    self.table().scalars_embed_func(leaf)
                 }
             },
         };
@@ -982,24 +995,18 @@ pub(crate) enum LoadAs {
     ConcreteOrNull(curios_wasm::TypeName),
     /// A machine word: a `Bool`, a byte, a tag, or a `Nat` narrowed where a position, a count or a key is asked for — exact below `2³² - 1`, saturating there.
     Nat,
-    /// A `Nat` narrowed to the host wire's `i32`, refusing one at or past `2³¹`.
+    /// A `Nat` narrowed to the host wire's `i64`, read unsigned, refusing one at or past `2⁶⁴`.
     WireNat,
-    /// An `Int` narrowed to the host wire's `i32`, refusing one outside `[-2³¹, 2³¹)`.
+    /// An `Int` narrowed to the host wire's `i64`, refusing one outside `[-2⁶³, 2⁶³)`.
     WireInt,
     Flt,
     Bin(Grain),
     List,
 }
 
-/// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
+/// The zero of one row slot: the register zero for a scalar carrier, and a null for every reference, a declared heap type or the uniform one.
 ///
-/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
-/// The zero of `carrier`, or the boxed zero when the destination holds a reference.
-///
-/// This is what a filler is materialised as, and the reason it is a function of the *destination* rather than of the filler: a slot's carrier is settled by the representation analysis from the uses of the parameter it feeds, long after the pass that placed the filler. The arms mirror [`Table::local_type`] exactly, including the reference carriers that analysis never answers — a local declared at the top reference type takes the boxed zero, whichever way it got there.
-/// The zero of one row slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
-///
-/// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
+/// A reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of a declared heap type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
 pub(crate) fn slot_zero_instrs(slot: curios_cont::Slot) -> Vec<curios_wasm::Instr> {
     match slot {
         curios_cont::Slot::Tag | curios_cont::Slot::Nat => {
@@ -1035,6 +1042,9 @@ pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr>
     }
 }
 
+/// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
+///
+/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
 pub(crate) fn box_instr(repr: &curios_cont::Repr, table: &Table) -> Option<curios_wasm::Instr> {
     match repr {
         curios_cont::Repr::Nat => Some(curios_wasm::Instr::RefI31),
