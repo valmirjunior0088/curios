@@ -432,11 +432,13 @@ impl Semantics {
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
                 // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
                 NatToByte => Constant::Byte(u8::try_from(nat(0)?.to_u32()?).ok()?),
-                FltToLeBytes => Constant::Bin(
-                    Grain::X,
-                    Binary::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),
-                ),
-                FltOfLeBytes => return Some(flt_of_le_bytes(bin_x(0)?)),
+                FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
+                FltOfLeBytes => {
+                    return Some(scalar_result(
+                        Floating::of_le_bytes(bin_x(0)?),
+                        Constant::Flt,
+                    ));
+                }
             }))
         };
         fold_outcome(compute())
@@ -571,15 +573,6 @@ fn scalar_result<T>(
         Ok(value) => Ok(wrap(value)),
         Err(ScalarTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
         Err(ScalarTrap::ConversionRange) => Err(TrapKind::ConversionRange),
+        Err(ScalarTrap::Malformed) => Err(TrapKind::MalformedInput),
     }
-}
-
-/// Decode a little-endian binary64, trapping unless exactly eight bytes.
-fn flt_of_le_bytes(value: &Binary) -> Result<Constant, TrapKind> {
-    value
-        .to_bytes()
-        .as_deref()
-        .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-        .map(|le_bytes| Constant::Flt(Floating::from_bits(u64::from_le_bytes(le_bytes))))
-        .ok_or(TrapKind::MalformedInput)
 }

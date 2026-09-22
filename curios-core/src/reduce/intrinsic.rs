@@ -939,12 +939,7 @@ pub fn reduce_intrinsic(
         Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| {
-                Some(Intrinsic::Bin(
-                    Grain::X,
-                    Binary::from_bytes(v.to_bits().to_le_bytes().to_vec()),
-                ))
-            },
+            |v| Some(Intrinsic::Bin(Grain::X, v.to_le_bytes())),
             Intrinsic::FltToLeBytes,
         ),
         Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
@@ -956,10 +951,9 @@ pub fn reduce_intrinsic(
             }
 
             let folded = match &*bin {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => packed
-                    .to_bytes()
-                    .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-                    .map(|bytes| Intrinsic::Flt(Floating::from_bits(u64::from_le_bytes(bytes)))),
+                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => {
+                    Floating::of_le_bytes(packed).ok().map(Intrinsic::Flt)
+                }
                 _ => None,
             };
 

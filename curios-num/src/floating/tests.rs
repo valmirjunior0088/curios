@@ -364,3 +364,34 @@ fn an_exhaustive_low_mantissa_sweep_agrees_with_the_host() {
         fields * MANTISSA_CORNERS.len() as u64 * (1 << 16) * 2
     );
 }
+
+/// A float's bytes are the host's `to_le_bytes`, and the decode is the host's `from_le_bytes`, over the corners and a NaN; a binary of any width but eight bytes has no host counterpart and is refused, the precondition's own statement, which only an unsound proof reaches.
+#[test]
+fn a_float_crosses_into_its_bytes_as_the_host_writes_them() {
+    for value in [
+        1.0,
+        -0.0,
+        f64::MIN_POSITIVE,
+        f64::MAX,
+        f64::INFINITY,
+        f64::NAN,
+    ] {
+        let bytes = Floating::from_f64(value).to_le_bytes();
+
+        assert_eq!(
+            bytes.to_bytes().as_deref(),
+            Some(&value.to_le_bytes()[..]),
+            "{value}"
+        );
+        assert_eq!(
+            Floating::of_le_bytes(&bytes).map(Floating::to_bits),
+            Ok(f64::from_le_bytes(value.to_le_bytes()).to_bits()),
+            "{value}"
+        );
+    }
+
+    assert_eq!(
+        Floating::of_le_bytes(&Binary::from_bytes(vec![0; 7])),
+        Err(ScalarTrap::Malformed)
+    );
+}

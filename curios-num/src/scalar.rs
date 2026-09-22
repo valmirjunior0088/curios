@@ -21,6 +21,8 @@ pub enum ScalarTrap {
     DivisionByZero,
     /// A conversion with nothing to answer: an `Int` no natural equals, or a float outside the domain its precondition states — a NaN, an infinity, or a negative where a natural is asked for.
     ConversionRange,
+    /// A decode of a binary that is not the encoding's width: [`Floating::of_le_bytes`] of anything but eight whole bytes.
+    Malformed,
 }
 
 /// Whether a result of `bits` fits the caller's `allowance`, in bits.

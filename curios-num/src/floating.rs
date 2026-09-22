@@ -2,7 +2,7 @@
 mod tests;
 
 use {
-    crate::{Integer, Natural},
+    crate::{Binary, Integer, Natural, ScalarTrap},
     std::{
         cmp::Ordering,
         fmt,
@@ -161,6 +161,20 @@ impl Floating {
     /// The stored bit pattern — the identity `Eq` and `Hash` are derived over, for a caller keying on it.
     pub fn to_bits(self) -> u64 {
         self.bits
+    }
+
+    /// `Flt/to_le_bytes`: the eight bytes of the bit pattern, least significant first — the byte order every folder must agree on, which is why it is spelled once here.
+    pub fn to_le_bytes(self) -> Binary {
+        Binary::from_bytes(self.bits.to_le_bytes().to_vec())
+    }
+
+    /// `Flt/of_le_bytes`: the float eight little-endian bytes spell. Its precondition states the eight, so anything else is [`ScalarTrap::Malformed`].
+    pub fn of_le_bytes(value: &Binary) -> Result<Self, ScalarTrap> {
+        value
+            .to_bytes()
+            .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+            .map(|bytes| Self::from_bits(u64::from_le_bytes(bytes)))
+            .ok_or(ScalarTrap::Malformed)
     }
 
     /// The one NaN.
