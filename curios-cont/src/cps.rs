@@ -22,15 +22,15 @@ pub const ENVELOPE_BITS: i32 = 31;
 ///
 /// Stated here beside the width because two readers ask it — the emitter, which spells a small constant as an i31 and any other as a boxed magnitude, and the representation analysis, which lets only a small literal ride a machine word.
 pub fn nat_is_small(value: &Natural) -> bool {
-    value
-        .to_u32()
+    u32::try_from(value)
+        .ok()
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == 0)
 }
 
 /// Whether `value` is an `Int` the i31 holds: in range exactly when the bit below the sign agrees with it.
 pub fn int_is_small(value: &Integer) -> bool {
-    value
-        .to_i32()
+    i32::try_from(value)
+        .ok()
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
 }
 

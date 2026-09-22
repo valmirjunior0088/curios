@@ -85,7 +85,7 @@ fn agrees(label: &str, case: impl Fn() -> String, expected: f64, actual: Floatin
 
 fn check_unary(value: f64) {
     let case = || format!("{:#018x}", value.to_bits());
-    let subject = Floating::from_f64(value);
+    let subject = Floating::from(value);
 
     agrees("neg", case, -value, -subject);
     agrees("abs", case, value.abs(), subject.abs());
@@ -98,7 +98,8 @@ fn check_unary(value: f64) {
 
 fn check_binary(left: f64, right: f64) {
     let case = || format!("{:#018x}, {:#018x}", left.to_bits(), right.to_bits());
-    let (a, b) = (Floating::from_f64(left), Floating::from_f64(right));
+    let a = Floating::from(left);
+    let b = Floating::from(right);
 
     agrees("add", case, left + right, a + b);
     agrees("sub", case, left - right, a - b);
@@ -225,26 +226,26 @@ fn a_conversion_agrees_with_the_host() {
 
     // The narrowings answer the exact integer part on their domain and refuse outside it. `to_natural(3.0e9)` is exact and unbounded, as the running program holds it.
     assert_eq!(
-        Floating::from_f64(3.0e9)
+        Floating::from(3.0e9)
             .to_natural()
             .map(|value| value.to_string()),
         Ok("3000000000".to_string()),
     );
-    assert_eq!(Floating::from_f64(-0.0).to_natural(), Ok(Natural::zero()));
+    assert_eq!(Floating::from(-0.0).to_natural(), Ok(Natural::zero()));
     assert_eq!(
-        Floating::from_f64(-0.5).to_natural(),
+        Floating::from(-0.5).to_natural(),
         Err(ScalarTrap::ConversionRange)
     );
     assert_eq!(
-        Floating::from_f64(f64::NAN).to_natural(),
+        Floating::from(f64::NAN).to_natural(),
         Err(ScalarTrap::ConversionRange)
     );
     assert_eq!(
-        Floating::from_f64(f64::INFINITY).to_integer(),
+        Floating::from(f64::INFINITY).to_integer(),
         Err(ScalarTrap::ConversionRange)
     );
     assert_eq!(
-        Floating::from_f64(-2.5)
+        Floating::from(-2.5)
             .to_integer()
             .map(|value| value.to_string()),
         Ok("-2".to_string()),
@@ -385,7 +386,7 @@ fn a_float_crosses_into_its_bytes_as_the_host_writes_them() {
         f64::INFINITY,
         f64::NAN,
     ] {
-        let bytes = Floating::from_f64(value).to_le_bytes();
+        let bytes = Floating::from(value).to_le_bytes();
 
         assert_eq!(
             bytes.to_bytes().as_deref(),

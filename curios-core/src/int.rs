@@ -8,7 +8,7 @@
 
 use {
     super::{Cost, Intrinsic, Nat, Recombination, ReduceError, Reducer, Subterm, Term},
-    curios_num::Integer,
+    curios_num::{Integer, Natural},
     curios_utilities::recurse,
     std::collections::HashMap,
 };
@@ -298,10 +298,10 @@ pub fn int_of_nat(nat: &Term) -> Term {
 /// The inverse of [`int_of_nat`] on its image, rebuilt in `Nat`'s normal form. Two readers: `Int/to_nat`, whose inversion arm is the one-atom case of this, and the comparison, which decides a pair of such terms by comparing their preimages — ℕ → ℤ preserves and reflects order.
 pub fn int_preimage(term: &Term) -> Option<Term> {
     let (constant, summands) = int_terms(term);
-    let floor = constant.to_natural().ok()?;
+    let floor = Natural::try_from(&constant).ok()?;
     let mut preimages = Vec::new();
     for (coefficient, factors) in int_linear(summands) {
-        let coefficient = coefficient.to_natural().ok()?;
+        let coefficient = Natural::try_from(&coefficient).ok()?;
         let mut product = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
         for factor in &factors {
             let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &**factor else {

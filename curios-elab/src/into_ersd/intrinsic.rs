@@ -14,8 +14,8 @@ use {
 ///
 /// The one narrowing left at this boundary. A `Nat` *value* is unbounded from here down — the erased carriers hold whatever the theory computed and only materialization refuses — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
 pub(super) fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
-    value
-        .to_u32()
+    u32::try_from(value)
+        .ok()
         .ok_or_else(|| Error::nat_case_key_overflow(value.clone()))
 }
 

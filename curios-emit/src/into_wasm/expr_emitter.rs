@@ -63,7 +63,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             EmissionData::Nat(value) => match curios_cont::nat_is_small(value) {
                 true => self.emit_instrs([
                     curios_wasm::Instr::I32Const {
-                        value: value.to_u32().expect("a small `Nat` is a word") as i32,
+                        value: u32::try_from(value).expect("a small `Nat` is a word") as i32,
                     },
                     curios_wasm::Instr::RefI31,
                 ]),
@@ -72,11 +72,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             EmissionData::Int(value) => match curios_cont::int_is_small(value) {
                 true => self.emit_instrs([
                     curios_wasm::Instr::I32Const {
-                        value: value.to_i32().expect("a small `Int` is a word"),
+                        value: i32::try_from(value).expect("a small `Int` is a word"),
                     },
                     curios_wasm::Instr::RefI31,
                 ]),
-                false => self.emit_big(value_name, value.to_natural().is_err(), &value.magnitude()),
+                false => self.emit_big(
+                    value_name,
+                    Natural::try_from(value).is_err(),
+                    &value.magnitude(),
+                ),
             },
             &EmissionData::Flt(value) => self.emit_instrs([
                 curios_wasm::Instr::F64Const { value },
@@ -238,8 +242,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_pure(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match (self.context.table().raw_carrier(value_name), value) {
             (Some(_), EmissionData::Nat(value)) => self.emit_instr(curios_wasm::Instr::I32Const {
-                value: value
-                    .to_u32()
+                value: u32::try_from(value)
+                    .ok()
                     .filter(|_| curios_cont::nat_is_small(value))
                     .expect("a register-held `Nat` literal is small") as i32,
             }),

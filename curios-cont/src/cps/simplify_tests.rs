@@ -231,7 +231,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             body: forwarding_body,
         },
     );
-    let nan = Atom::Literal(Literal::Flt(Floating::from_f64(f64::NAN)));
+    let nan = Atom::Literal(Literal::Flt(Floating::from(f64::NAN)));
     let call = module.add_node(Node::ApplyCont(Edge {
         target: forwarding,
         args: vec![nan.clone()],
@@ -493,14 +493,14 @@ fn identity_folds_leave_traps_and_flt_untouched() {
             Intrinsic::FltAdd,
             vec![
                 Atom::Value(x),
-                Atom::Literal(Literal::Flt(Floating::from_f64(0.0))),
+                Atom::Literal(Literal::Flt(Floating::from(0.0))),
             ],
         ),
         (
             Intrinsic::FltMul,
             vec![
                 Atom::Value(x),
-                Atom::Literal(Literal::Flt(Floating::from_f64(1.0))),
+                Atom::Literal(Literal::Flt(Floating::from(1.0))),
             ],
         ),
     ];

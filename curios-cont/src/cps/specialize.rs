@@ -411,7 +411,7 @@ pub(super) fn tagged_tuple_values(
             _ => continue,
         };
         if let Some(Atom::Literal(Literal::Nat(tag))) = fields.first()
-            && let Some(tag) = tag.to_u32()
+            && let Some(tag) = u32::try_from(tag).ok()
         {
             result.insert(*value, (tag, fields.clone(), row));
         }

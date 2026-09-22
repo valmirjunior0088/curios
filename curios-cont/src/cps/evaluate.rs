@@ -82,7 +82,7 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         )),
         Intrinsic::IntShr => Some(Literal::Int(int(0)? >> nat(1)?)),
         Intrinsic::IntEqz => bool_(int(0)?.is_zero()),
-        Intrinsic::IntToNat => Some(Literal::Nat(int(0)?.to_natural().ok()?)),
+        Intrinsic::IntToNat => Some(Literal::Nat(Natural::try_from(int(0)?).ok()?)),
         Intrinsic::IntToFlt => flt_(Floating::of_integer(int(0)?)),
         Intrinsic::FltAdd => flt_(flt(0)? + flt(1)?),
         Intrinsic::FltSub => flt_(flt(0)? - flt(1)?),

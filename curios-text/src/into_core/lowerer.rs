@@ -1040,7 +1040,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }),
             ) => match sign.is_marked() {
                 true => None,
-                false => magnitude.to_u8().filter(|bit| *bit <= 1),
+                false => u8::try_from(magnitude).ok().filter(|bit| *bit <= 1),
             },
             (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
             (
@@ -1050,7 +1050,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }),
             ) => match sign.is_marked() {
                 true => None,
-                false => magnitude.to_u8(),
+                false => u8::try_from(magnitude).ok(),
             },
             // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
             (Grain::X, Subterm::Syn(Syn::Char(character))) => u8::try_from(*character as u32).ok(),

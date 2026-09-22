@@ -318,12 +318,15 @@ pub(super) fn then_coefficient(
     let Some(count) = count.as_nat() else {
         return Ok(result);
     };
-    let (Some(amount), Some(exponent)) = (count.to_u64(), count.to_natural()) else {
+    let Some(exponent) = count.as_literal() else {
+        return Ok(result);
+    };
+    let Ok(amount) = u64::try_from(exponent) else {
         return Ok(result);
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
 
-    match Natural::one().shl_within(&exponent, u64::MAX) {
+    match Natural::one().shl_within(exponent, u64::MAX) {
         Some(coefficient) => Ok(Term::unwrap_or_clone(
             reducer.reduce_forced(product(coefficient, value.clone()))?,
         )),
@@ -350,7 +353,7 @@ pub(super) fn then_power(
     if Nat::is_zero(&inner) || (floor.is_zero() && *value == one) {
         return Ok(result);
     }
-    let Some(amount) = floor.to_u64() else {
+    let Some(amount) = u64::try_from(&floor).ok() else {
         return Ok(result);
     };
     reducer.spend(shift_bound(1, Some(amount)))?;

@@ -136,6 +136,20 @@ fn round(negative: bool, magnitude: &Natural, exponent: i32, sticky: bool) -> Fl
     }
 }
 
+/// Capture an `f64`'s bit pattern, canonicalizing a NaN — the one NaN is the model's definition of binary64, not a loss inside it. Not a semantics: this is how a test's oracle and the two infinities `/sys` spells as range bounds hand a value in, and the conversion back is how a printer reads one out. A literal never enters here — the lexer builds it through [`Floating::of_decimal`], so what it means is the model's and not the compiling host's.
+impl From<f64> for Floating {
+    fn from(v: f64) -> Self {
+        Self::from_bits(v.to_bits())
+    }
+}
+
+/// The bit pattern as the host's `f64`.
+impl From<Floating> for f64 {
+    fn from(v: Floating) -> Self {
+        f64::from_bits(v.bits)
+    }
+}
+
 impl Floating {
     /// Adopt `bits`, canonicalizing every NaN pattern to the one NaN — the invariant the whole type rests on, and what makes `of_le_bytes` of any NaN pattern the NaN.
     pub fn from_bits(bits: u64) -> Self {
@@ -146,15 +160,6 @@ impl Floating {
             true => Self { bits: NAN_BITS },
             false => Self { bits },
         }
-    }
-
-    /// Capture `v`'s bit pattern, canonicalizing a NaN. Not a semantics: this is how a test's oracle and the two infinities `/sys` spells as range bounds hand a value in, and [`Floating::to_f64`] is how a printer reads one out. A literal never enters here — the lexer builds it through [`Floating::of_decimal`], so what it means is the model's and not the compiling host's.
-    pub fn from_f64(v: f64) -> Self {
-        Self::from_bits(v.to_bits())
-    }
-
-    pub fn to_f64(self) -> f64 {
-        f64::from_bits(self.bits)
     }
 
     /// The stored bit pattern — the identity `Eq` and `Hash` are derived over, for a caller keying on it.
@@ -215,7 +220,7 @@ impl Floating {
 
     /// Pack a finite value whose `magnitude` is either full-width (a normal) or sits at [`MIN_EXPONENT`] (a subnormal), answering the infinity of the sign past the largest finite value.
     fn encode(negative: bool, magnitude: &Natural, exponent: i32) -> Self {
-        let Some(magnitude) = magnitude.to_u64() else {
+        let Some(magnitude) = u64::try_from(magnitude).ok() else {
             return Self::infinite(negative);
         };
 
@@ -517,7 +522,7 @@ impl Floating {
 
     /// [`Floating::of_natural`]'s signed twin.
     pub fn of_integer(value: &Integer) -> Self {
-        match value.to_natural() {
+        match Natural::try_from(value) {
             Ok(magnitude) => round(false, &magnitude, 0, false),
             Err(_) => round(true, &value.magnitude(), 0, false),
         }
@@ -804,7 +809,7 @@ impl Neg for Floating {
 /// The host's `Debug` float format rather than its `Display`: it keeps a large magnitude short (`1e300`) and a negative zero signed (`-0.0`). Not a semantics — the surface `Flt/to_str` is `/std`'s own renderer — but what a dump and a report show for a constant.
 impl fmt::Display for Floating {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.to_f64())
+        write!(f, "{:?}", f64::from(*self))
     }
 }
 

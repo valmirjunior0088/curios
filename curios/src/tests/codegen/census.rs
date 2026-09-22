@@ -423,7 +423,7 @@ impl<'m> Census<'m> {
                     // A tagged constructor is a `Variant` since family keying, and it is exactly the shape this census counts as a tuple site — the tag still sits at slot 0.
                     if let ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms) = value {
                         let tag = match atoms.first() {
-                            Some(Atom::Literal(Literal::Nat(tag))) => tag.to_u32(),
+                            Some(Atom::Literal(Literal::Nat(tag))) => u32::try_from(tag).ok(),
                             _ => None,
                         };
                         self.tuple_sites.insert(

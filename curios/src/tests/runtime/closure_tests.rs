@@ -147,7 +147,7 @@ fn folds_constant_arg_through_let_function() {
             node,
             curios_cont::Node::Exit {
                 value: Some(curios_cont::Atom::Literal(curios_cont::Literal::Nat(folded)))
-            } if folded.to_u32() == Some(4)
+            } if u32::try_from(folded).ok() == Some(4)
         )),
         "expected the folded 4 to reach the exit, got:\n{optimized}",
     );

@@ -46,7 +46,7 @@ pub(super) fn int(value: i32) -> curios_cont::Atom {
 }
 
 pub(super) fn flt(value: f64) -> curios_cont::Atom {
-    curios_cont::Atom::Literal(curios_cont::Literal::Flt(Floating::from_f64(value)))
+    curios_cont::Atom::Literal(curios_cont::Literal::Flt(Floating::from(value)))
 }
 
 /// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.

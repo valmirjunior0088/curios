@@ -477,7 +477,7 @@ fn print_atom(atom: Atom) -> Printer {
 }
 
 fn print_flt(flt: Floating) -> Printer {
-    let mut string = format!("{:+}", flt.to_f64());
+    let mut string = format!("{:+}", f64::from(flt));
 
     // string always starts with '+' or '-'; work on the digits after the sign
     let after_sign = &string[1..];

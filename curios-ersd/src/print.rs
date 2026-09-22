@@ -978,7 +978,7 @@ fn render_constant(constant: &Constant) -> String {
         Constant::Nat(value) => format!("{value}"),
         Constant::Int(value) => format!("{value}:int"),
         Constant::Flt(value) => {
-            let float = value.to_f64();
+            let float = f64::from(*value);
             if float.is_finite() {
                 format!("{float:?}:flt")
             } else {

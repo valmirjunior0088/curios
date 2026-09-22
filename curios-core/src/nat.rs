@@ -46,11 +46,11 @@ impl Nat {
     ///
     /// A `u64` rather than a `usize` because a charge may not differ between the native and wasm32 targets, and `usize` differs; [`Natural::to_u64`] carries the argument.
     pub(crate) fn to_u64(&self) -> Option<u64> {
-        self.as_literal()?.to_u64()
+        u64::try_from(self.as_literal()?).ok()
     }
 
     /// The stored magnitude of a closed literal, borrowed. `None` for zero — which carries no magnitude to borrow — and for a symbolic successor floor.
-    fn as_literal(&self) -> Option<&Natural> {
+    pub(crate) fn as_literal(&self) -> Option<&Natural> {
         match self {
             Nat::Zero => None,
             Nat::Succ(spine, inner) => match inner.as_ref() {

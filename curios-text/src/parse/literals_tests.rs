@@ -16,17 +16,15 @@ fn integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, Sign::Negative));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
-            -42.0
-        ))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(-42.0))))
     );
 }
 
@@ -54,27 +52,21 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^1024 − 2^970`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f64>`, not from arithmetic done in prose.
     assert_eq!(
         "1.7e308".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
-            1.7e308
-        ))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(1.7e308))))
     );
     assert_eq!(
         "1.7976931348623157e308".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
-            f64::MAX
-        ))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(f64::MAX))))
     );
     assert!("1.7976931348623159e308".parse::<Term>().is_err());
     // A subnormal narrows on the `2^-1074` grid rather than flushing to zero, and one below half that grid step rounds away.
     assert_eq!(
         "5.0e-324".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
-            5.0e-324
-        ))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(5.0e-324))))
     );
     assert_eq!(
         "1.0e-324".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(0.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(0.0))))
     );
 }
 

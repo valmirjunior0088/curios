@@ -292,7 +292,7 @@ fn cont_operations(module: &curios_cont::Module) -> Vec<String> {
 fn reads_nat(module: &curios_cont::Module, value: u32) -> bool {
     module.nodes().iter().flatten().any(|node| {
         curios_cont::atoms(node).into_iter().any(|atom| {
-            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if literal.to_u32() == Some(value))
+            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
         })
     })
 }

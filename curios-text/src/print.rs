@@ -714,7 +714,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Int/shr", vec![], vec![left, right])
         }
         Intrinsic::FltType => pure("Flt"),
-        Intrinsic::Flt(value) => print_flt(value.to_f64()),
+        Intrinsic::Flt(value) => print_flt(f64::from(value)),
         Intrinsic::FltAdd(left, right) => {
             print_intrinsic_call("Flt/add", vec![], vec![left, right])
         }

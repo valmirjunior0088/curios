@@ -179,8 +179,8 @@ pub(super) fn simplify_nodes(module: &mut Module) -> bool {
                 cases,
                 default,
             } => {
-                if let Some(edge) = tag
-                    .to_u32()
+                if let Some(edge) = u32::try_from(&*tag)
+                    .ok()
                     .and_then(|tag| cases.get(&tag))
                     .or(default.as_ref())
                     .cloned()

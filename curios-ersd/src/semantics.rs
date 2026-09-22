@@ -422,13 +422,13 @@ impl Semantics {
 
                 NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
                 NatToFlt => Constant::Flt(Floating::of_natural(nat(0)?)),
-                IntToNat => return Some(scalar_result(int(0)?.to_natural(), Constant::Nat)),
+                IntToNat => return Some(scalar_result(Natural::try_from(int(0)?), Constant::Nat)),
                 IntToFlt => Constant::Flt(Floating::of_integer(int(0)?)),
                 FltToNat => return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat)),
                 FltToInt => return Some(scalar_result(flt(0)?.to_integer(), Constant::Int)),
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
                 // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
-                NatToByte => Constant::Byte(u8::try_from(nat(0)?.to_u32()?).ok()?),
+                NatToByte => Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?),
                 FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
                 FltOfLeBytes => {
                     return Some(scalar_result(
@@ -467,21 +467,26 @@ impl Semantics {
                 BinLen(grain) => Constant::Nat(Natural::from(bin(0, grain)?.len(grain))),
                 BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
                 BinGet(Grain::X) => {
-                    return Some(match bin(0, Grain::X)?.byte(nat(1)?.to_usize()?) {
-                        Some(byte) => Ok(Constant::Byte(byte)),
-                        None => Err(TrapKind::IndexOutOfBounds),
-                    });
+                    return Some(
+                        match bin(0, Grain::X)?.byte(usize::try_from(nat(1)?).ok()?) {
+                            Some(byte) => Ok(Constant::Byte(byte)),
+                            None => Err(TrapKind::IndexOutOfBounds),
+                        },
+                    );
                 }
                 BinGet(Grain::B) => {
-                    return Some(match bin(0, Grain::B)?.bit(nat(1)?.to_usize()?) {
-                        Some(bit) => Ok(Constant::Bool(bit)),
-                        None => Err(TrapKind::IndexOutOfBounds),
-                    });
+                    return Some(
+                        match bin(0, Grain::B)?.bit(usize::try_from(nat(1)?).ok()?) {
+                            Some(bit) => Ok(Constant::Bool(bit)),
+                            None => Err(TrapKind::IndexOutOfBounds),
+                        },
+                    );
                 }
                 // A window is `(start, length)`; the packed view takes a half-open range, so the end is computed here and an end past `usize` is the out-of-bounds it would have been anyway.
                 BinSlice(grain) => {
                     let value = bin(0, grain)?;
-                    let (start, count) = (nat(1)?.to_usize()?, nat(2)?.to_usize()?);
+                    let start = usize::try_from(nat(1)?).ok()?;
+                    let count = usize::try_from(nat(2)?).ok()?;
                     return Some(
                         match start
                             .checked_add(count)
@@ -509,11 +514,15 @@ impl Semantics {
                 // Split by grain for [`SequenceOp::BinAppend`]'s reason: the generator is a `Byte` constant at one and a `Bool` at the other, and only the grain says which to read.
                 BinReplicate(Grain::X) => Constant::Bin(
                     Grain::X,
-                    Binary::replicate(Grain::X, byte(1)?, nat(0)?.to_usize()?),
+                    Binary::replicate(Grain::X, byte(1)?, usize::try_from(nat(0)?).ok()?),
                 ),
                 BinReplicate(Grain::B) => Constant::Bin(
                     Grain::B,
-                    Binary::replicate(Grain::B, u8::from(bool_(1)?), nat(0)?.to_usize()?),
+                    Binary::replicate(
+                        Grain::B,
+                        u8::from(bool_(1)?),
+                        usize::try_from(nat(0)?).ok()?,
+                    ),
                 ),
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
                 BinAnd(grain) => {

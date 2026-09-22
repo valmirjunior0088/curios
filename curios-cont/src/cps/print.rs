@@ -759,7 +759,7 @@ fn render_literal(literal: &Literal) -> String {
         Literal::Nat(value) => format!("{value}"),
         Literal::Int(value) => format!("{value}:int"),
         Literal::Flt(value) => {
-            let float = value.to_f64();
+            let float = f64::from(*value);
             if float.is_finite() {
                 format!("{float:?}:flt")
             } else {

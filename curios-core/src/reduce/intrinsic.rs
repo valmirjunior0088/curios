@@ -441,7 +441,10 @@ pub fn reduce_intrinsic(
             let span = nat.span();
             match nat.as_nat().map(|value| value.to_natural()) {
                 Some(Some(value)) => {
-                    match value.to_u32().and_then(|value| u8::try_from(value).ok()) {
+                    match u32::try_from(&value)
+                        .ok()
+                        .and_then(|value| u8::try_from(value).ok())
+                    {
                         Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
                         None => Err(ReduceError::NatToByteAbove { value, span }),
                     }
@@ -1000,7 +1003,7 @@ pub fn reduce_intrinsic(
             }
 
             match int.as_int() {
-                Some(value) => match value.to_natural() {
+                Some(value) => match Natural::try_from(&value) {
                     Ok(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
                     Err(_) => Err(ReduceError::IntToNatNegative { value, span }),
                 },

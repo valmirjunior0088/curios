@@ -10,7 +10,8 @@ use {
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`List` `get`/`slice` bounds.
 pub(super) fn as_index(term: &Term) -> Option<usize> {
-    term.as_nat().and_then(|n| n.to_natural()?.to_usize())
+    term.as_nat()
+        .and_then(|n| usize::try_from(&n.to_natural()?).ok())
 }
 
 /// Whether a `Bool` binary fold reads its right operand under a stuck left. `&&` and `||` leave it as written; `==`, `!=` and `xor` reduce it; see [`reduce_bool_binary`] for why each side of that line is where it is.
@@ -60,7 +61,7 @@ pub(super) fn reduce_int_shift(
 
     let folded = match (left.as_int(), right.as_nat().and_then(|n| n.to_natural())) {
         (Some(value), Some(amount)) => {
-            reducer.spend(cost(value.bits(), amount.to_u64()))?;
+            reducer.spend(cost(value.bits(), u64::try_from(&amount).ok()))?;
 
             fold(value, amount).map(Intrinsic::Int)
         }

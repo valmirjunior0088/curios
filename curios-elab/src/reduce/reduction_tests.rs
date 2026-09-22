@@ -449,11 +449,7 @@ fn int_eql_returns_true_or_false_bool() {
 fn flt_folds_through_the_model() {
     let mut context = context();
 
-    let flt = |value: f64| {
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
-            value,
-        ))))
-    };
+    let flt = |value: f64| Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(value))));
 
     // Two literals fold by calling the model, so the answer is a value rather than a normal form standing in for one.
     assert_eq!(

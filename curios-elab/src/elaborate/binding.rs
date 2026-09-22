@@ -248,7 +248,7 @@ pub(super) fn elaborate_num_lit(
                 (Intrinsic::Nat(Nat::new(magnitude.clone())), nat_type)
             }
             Subterm::Intrinsic(Intrinsic::ByteType) if !sign.is_negative() => {
-                let Some(value) = magnitude.to_u8() else {
+                let Some(value) = u8::try_from(magnitude).ok() else {
                     return Err(Error::ByteLiteralOutOfRange {
                         value: magnitude.to_string(),
                     });
@@ -257,7 +257,7 @@ pub(super) fn elaborate_num_lit(
             }
             // A bit is a `Bool` in this language — `Bits` is the packed carrier of `Bool` — so `0` and `1` realize where a `Bool` is expected, which is what lets a packed literal's constant atoms stay ordinary numerals.
             Subterm::Intrinsic(Intrinsic::BoolType) if !sign.is_negative() => {
-                let value = match magnitude.to_u8() {
+                let value = match u8::try_from(magnitude).ok() {
                     Some(0) => false,
                     Some(1) => true,
                     _ => {

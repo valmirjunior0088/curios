@@ -736,7 +736,7 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         _ => Err(Bail::Unsupported),
     };
     let index = |position: usize| match operands.get(position) {
-        Some(Value::Nat(value)) => value.to_usize().ok_or(Bail::Unsupported),
+        Some(Value::Nat(value)) => usize::try_from(value).ok().ok_or(Bail::Unsupported),
         _ => Err(Bail::Unsupported),
     };
     match operation {

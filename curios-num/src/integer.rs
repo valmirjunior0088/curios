@@ -1,5 +1,5 @@
 use {
-    crate::{Natural, ScalarTrap, within},
+    crate::{Natural, OutOfRange, ScalarTrap, within},
     num_bigint::{BigInt, Sign},
     num_traits::{ToPrimitive, Zero},
     std::{
@@ -17,24 +17,12 @@ pub struct Integer {
 }
 
 impl Integer {
-    pub fn to_i32(&self) -> Option<i32> {
-        self.value.to_i32()
-    }
-
     /// How many bits the magnitude occupies, ignoring the sign — [`Natural::bits`], for the signed carrier.
     pub fn bits(&self) -> u64 {
         self.value.bits()
     }
 
-    /// The same number as a [`Natural`], refusing a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
-    pub fn to_natural(&self) -> Result<Natural, ScalarTrap> {
-        self.value
-            .to_biguint()
-            .map(Natural::new)
-            .ok_or(ScalarTrap::ConversionRange)
-    }
-
-    /// The absolute value as a [`Natural`] — total where [`Integer::to_natural`] is not, for a reader that asks what divides a number and not which side of zero it is on.
+    /// The absolute value as a [`Natural`] — total where the narrowing to a [`Natural`] is not, for a reader that asks what divides a number and not which side of zero it is on.
     pub fn magnitude(&self) -> Natural {
         Natural::new(self.value.magnitude().clone())
     }
@@ -52,7 +40,7 @@ impl Integer {
             return Some(Self::from(0u32));
         }
 
-        let amount = shift.to_u64()?;
+        let amount = u64::try_from(shift).ok()?;
 
         match within(self.bits().checked_add(amount), allowance) {
             true => Some(Self {
@@ -153,7 +141,7 @@ impl Shr<&Natural> for &Integer {
     type Output = Integer;
 
     fn shr(self, amount: &Natural) -> Integer {
-        match amount.to_u64() {
+        match u64::try_from(amount).ok() {
             Some(amount) if amount < self.bits() => Integer {
                 value: &self.value >> amount,
             },
@@ -192,6 +180,28 @@ from_primitive!(
 );
 
 /// Widening a natural is total and exact — ℕ ⊂ ℤ — and is the inverse of [`Integer::to_natural`] on every value that one accepts.
+/// The machine narrowing: the value as an `i32`, when it fits.
+impl TryFrom<&Integer> for i32 {
+    type Error = OutOfRange;
+
+    fn try_from(value: &Integer) -> Result<Self, OutOfRange> {
+        value.value.to_i32().ok_or(OutOfRange)
+    }
+}
+
+/// `Int/to_nat`: the same number as a [`Natural`], refusing a negative, which no natural equals — a language conversion with a trap, so its error is [`ScalarTrap::ConversionRange`] rather than [`OutOfRange`]. [`From<Natural>`](Integer::from) is the total inverse. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
+impl TryFrom<&Integer> for Natural {
+    type Error = ScalarTrap;
+
+    fn try_from(value: &Integer) -> Result<Self, ScalarTrap> {
+        value
+            .value
+            .to_biguint()
+            .map(Natural::new)
+            .ok_or(ScalarTrap::ConversionRange)
+    }
+}
+
 impl From<Natural> for Integer {
     fn from(value: Natural) -> Self {
         Self {

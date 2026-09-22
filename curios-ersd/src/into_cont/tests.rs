@@ -56,7 +56,7 @@ fn intrinsics(module: &curios_cont::Module) -> Vec<curios_cont::Intrinsic> {
 fn has_nat_operand(module: &curios_cont::Module, value: u32) -> bool {
     module.nodes().iter().flatten().any(|node| {
         curios_cont::atoms(node).into_iter().any(|atom| {
-            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if literal.to_u32() == Some(value))
+            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
         })
     })
 }

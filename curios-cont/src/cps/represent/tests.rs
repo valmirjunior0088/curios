@@ -232,7 +232,7 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
         op: Intrinsic::FltAdd,
         args: vec![
             Atom::Value(shared),
-            Atom::Literal(Literal::Flt(Floating::from_f64(1.0))),
+            Atom::Literal(Literal::Flt(Floating::from(1.0))),
         ],
         next: done,
     });

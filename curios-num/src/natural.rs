@@ -50,25 +50,6 @@ impl Natural {
         self.value.is_one()
     }
 
-    pub fn to_u8(&self) -> Option<u8> {
-        self.value.to_u8()
-    }
-
-    pub fn to_u32(&self) -> Option<u32> {
-        self.value.to_u32()
-    }
-
-    /// The magnitude as a `u64`, when it fits.
-    ///
-    /// Beside [`Natural::to_usize`] rather than instead of it, and the difference is not cosmetic: `usize` is 32 bits on wasm32 and 64 natively, so a question answered through it can be answered differently on the two targets. A reduction *charge* may not be, so a charge computed from a magnitude reads it through this.
-    pub fn to_u64(&self) -> Option<u64> {
-        self.value.to_u64()
-    }
-
-    pub fn to_usize(&self) -> Option<usize> {
-        self.value.to_usize()
-    }
-
     /// How many bits the magnitude occupies — zero for zero, `floor(log2(n)) + 1` otherwise.
     ///
     /// The size a reduction charges for a result *before* building it. Bits rather than limbs because a limb is a property of this target's `num-bigint` build and a bit is a property of the number, and the budget has to price a program the same on wasm32 as it does natively.
@@ -139,7 +120,7 @@ impl Natural {
             return Some(Self::zero());
         }
 
-        let amount = shift.to_u64()?;
+        let amount = u64::try_from(shift).ok()?;
 
         match within(self.bits().checked_add(amount), allowance) {
             true => Some(Self {
@@ -174,6 +155,29 @@ impl Natural {
         &self.value
     }
 }
+
+/// A number a narrower type cannot hold: what a narrowing out of [`Natural`] or [`Integer`](crate::Integer) answers when the value does not fit, as `TryFrom` between primitives answers `TryFromIntError`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutOfRange;
+
+/// The machine narrowings: the magnitude as a primitive, when it fits.
+///
+/// `u64` stands beside `usize` rather than being replaced by it, and the difference is not cosmetic: `usize` is 32 bits on wasm32 and 64 natively, so a question answered through it can be answered differently on the two targets. A reduction *charge* may not be, so a charge computed from a magnitude reads it through `u64`.
+macro_rules! narrow_natural {
+    ($($target:ty => $read:ident),+ $(,)?) => {
+        $(
+            impl TryFrom<&Natural> for $target {
+                type Error = OutOfRange;
+
+                fn try_from(value: &Natural) -> Result<Self, OutOfRange> {
+                    value.value.$read().ok_or(OutOfRange)
+                }
+            }
+        )+
+    };
+}
+
+narrow_natural!(u8 => to_u8, u32 => to_u32, u64 => to_u64, usize => to_usize);
 
 impl AddAssign for Natural {
     fn add_assign(&mut self, other: Self) {
@@ -252,7 +256,7 @@ impl Shr<&Natural> for &Natural {
     type Output = Natural;
 
     fn shr(self, amount: &Natural) -> Natural {
-        match amount.to_u64() {
+        match u64::try_from(amount).ok() {
             Some(amount) if amount < self.bits() => Natural {
                 value: &self.value >> amount,
             },

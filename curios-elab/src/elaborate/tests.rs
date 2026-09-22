@@ -474,10 +474,7 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     // A magnitude inside the finite range still resolves at `Flt`.
     let small = Term::num_lit(Natural::from(42u32), curios_utilities::Sign::Unmarked);
     let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
-    assert_eq!(
-        term,
-        Term::intrinsic(Intrinsic::Flt(Floating::from_f64(42.0)))
-    );
+    assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Floating::from(42.0))));
 }
 
 #[test]
