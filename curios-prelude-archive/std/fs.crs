@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
+use /std/{Nat, Bool, List, Path, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -43,9 +43,9 @@ pub struct Metadata: pub Type {
     mtime: Timestamp,
 }
 
---- The size as one number, or `none` past the carrier.
-pub let size_nat(m: Metadata) -> Option(Nat) =
-    match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
+--- The size in bytes as one number.
+pub let size(m: Metadata) -> Nat =
+    m.size.hi * 1000000000 + m.size.lo;
 
 let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;

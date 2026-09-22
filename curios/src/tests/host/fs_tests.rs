@@ -44,7 +44,7 @@ fn a_seeded_tree_is_inspected_listed_and_refused_removal_while_full() {
             let listed = Str/join(",", List/map(names, (n: Path) => Show/show(n)));
             let rm = Try/run(fs/remove_dir(Path/of_str("data")))!;
             let m = fs/stat(Path/of_str("data/a.txt"))!;
-            let size = Str/flatten([Show/show(m.kind), " ", Show/show(fs/size_nat(m))]);
+            let size = Str/flatten([Show/show(m.kind), " ", Show/show(fs/size(m))]);
             Try/pure(Str/join(" ", [Bool/to_str(a), Bool/to_str(b), Bool/to_str(c), Bool/to_str(d), listed, show_unit(rm), size]))
         "#,
     );
@@ -53,7 +53,7 @@ fn a_seeded_tree_is_inspected_listed_and_refused_removal_while_full() {
     run_text(&source, host).expect("expected result");
     assert_eq!(
         io.output(),
-        b"true true true false a.txt,sub not_empty file some(3)"
+        b"true true true false a.txt,sub not_empty file 3"
     );
 }
 
