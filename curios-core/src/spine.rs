@@ -3,7 +3,10 @@
 //! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_terms`].
 
 use {
-    super::{Intrinsic, Nat, Subterm, Term, int_cancel_common, int_shaped},
+    super::{
+        Intrinsic, Nat, Subterm, Term, int_cancel_common, int_monomial, int_shaped,
+        project_erased_universes,
+    },
     curios_utilities::{Grain, PackedBin},
     std::collections::VecDeque,
 };
@@ -80,6 +83,55 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
         true => Peel::Equal,
         false => Peel::Stuck,
     })
+}
+
+/// Two monomials of one carrier — two `Nat` products or two `Int` products — with their factors paired by identity before anything reads them in order: one coefficient and one multiset of factors is `Equal`, and one factor left on each side is `Continue` over that pair. `None` for anything else, so the caller's shape congruence decides as it did.
+///
+/// **A monomial's factor order is a hash, and a hash is not a value.** The product fold sorts factors by their structural hash, which is canonical only while every factor is what it will stay: an unsolved metavariable hashes as itself and not as the term it is solved to, and so does a factor convertible to another without being identical. The shape congruence compared factors in that order, so `c · ?d · k` against `d · c · k` paired `c` with `d` and refused, where cancellation leaves `?d` against `d` and solves it — and whether the positions happened to line up could turn on a comment line elsewhere in the file. Summands have had exactly this pairing, by cancellation, all along; this is the product's.
+///
+/// **Conversion's alone, never inversion's.** Here `Continue` is a sufficient condition — equal residuals make equal monomials — and that is all a conversion reads it as. Inversion would read it as an equation to *deduce*, and `x · f = x · g` does not give `f = g` at `x = 0`, so this peel is not in [`peel_intrinsic`] and both converters ask for it by name.
+pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    let (left_factors, right_factors) = match (left, right) {
+        (Intrinsic::NatMul(..), Intrinsic::NatMul(..)) => {
+            let (left_coefficient, left_factors) = Nat::monomial(&Term::intrinsic(left.clone()));
+            let (right_coefficient, right_factors) = Nat::monomial(&Term::intrinsic(right.clone()));
+            if left_coefficient != right_coefficient {
+                return None;
+            }
+            (left_factors, right_factors)
+        }
+        (Intrinsic::IntMul(..), Intrinsic::IntMul(..)) => {
+            let (left_coefficient, left_factors) = int_monomial(&Term::intrinsic(left.clone()));
+            let (right_coefficient, right_factors) = int_monomial(&Term::intrinsic(right.clone()));
+            if left_coefficient != right_coefficient {
+                return None;
+            }
+            (left_factors, right_factors)
+        }
+        _ => return None,
+    };
+
+    let key = project_erased_universes::<Term>;
+    let mut unmatched = right_factors;
+    let mut residual = Vec::new();
+    for factor in left_factors {
+        let wanted = key(&factor);
+        match unmatched
+            .iter()
+            .position(|candidate| key(candidate) == wanted)
+        {
+            Some(position) => {
+                unmatched.swap_remove(position);
+            }
+            None => residual.push(factor),
+        }
+    }
+
+    match (residual.as_slice(), unmatched.as_slice()) {
+        ([], []) => Some(Peel::Equal),
+        ([left], [right]) => Some(Peel::Continue(left.clone(), right.clone())),
+        _ => None,
+    }
 }
 
 fn decide(equal: bool) -> Peel {

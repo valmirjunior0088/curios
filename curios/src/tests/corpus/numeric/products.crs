@@ -1,0 +1,46 @@
+-- A constructor parameter solved through a product whose factor order is a hash. `intro`'s `d` is still a metavariable when its field is checked, so the field's type holds `(k * c) * ?d`, and the product fold orders factors by structural hash — which a metavariable takes from its own counter-assigned identity, not from the `d` it will be solved to. The congruence once compared two monomials factor by factor in that order, so each copy below was accepted or refused by where its `?d` happened to sort: the same text refused four copies in eight. Pairing factors by identity leaves `?d` against `d` in every copy.
+use /std/{Nat, Eq};
+
+induct _Div(d: Nat, n: Nat): pub Prop
+| intro(k: Nat, e: Eq(n, k * d))
+end
+
+let _scale_0(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_1(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_2(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_3(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_4(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_5(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_6(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let _scale_7(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
+    match p
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;

@@ -10,7 +10,7 @@ use {
     curios_core::{
         Intrinsic, Nat, Operand, Peel, Subterm, Term, Var, Visit, align_comparisons, decide_bool,
         int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool, peel_int_pair,
-        peel_list, peel_nat_pair, peel_position, peel_symmetric,
+        peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
 };
 
@@ -91,7 +91,8 @@ pub(super) fn convert_intrinsic(
     };
     let (this, that) = (&this, &that);
     // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off, `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves, and two stuck `get`s are one element when they read one position of one root, however many windows either reads it through. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
-    if let Some(peel) = peel_nat_pair(this, that)
+    if let Some(peel) = peel_monomial(this, that)
+        .or_else(|| peel_nat_pair(this, that))
         .or_else(|| peel_int_pair(this, that))
         .or_else(|| peel_bin(this, that))
         .or_else(|| peel_list(this, that))

@@ -1,6 +1,8 @@
 -- The arithmetic every peer ships beyond the operators — powers, divisors, logarithms, roots, parity and the `Int` extrema — and the `Flt` narrowings that answer their partiality with an `Option`.
 use /std/{Nat, Int, Bool, Flt, Option, Test};
 
+mod products;
+
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
         [

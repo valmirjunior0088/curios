@@ -612,3 +612,56 @@ fn peel_bin_declines_a_fill_whose_count_is_not_a_successor() {
         "a fill that might be empty exposes no generator to clash on"
     );
 }
+
+fn mul(left: Term, right: Term) -> Term {
+    Term::intrinsic(Intrinsic::nat_mul(left, right))
+}
+
+fn as_monomial(term: Term) -> Intrinsic {
+    match &*term {
+        Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
+        _ => unreachable!("a product is an intrinsic"),
+    }
+}
+
+// Two monomials pair their factors by identity, not by position: `c · m · k` against `d · c · k` leaves `m` against `d` whichever order the hashes put the factors in — the pair a metavariable standing where `m` stands is solved from.
+#[test]
+fn peel_monomial_pairs_factors_by_identity_not_by_position() {
+    let (c, d, k, m) = (sym(0, "c"), sym(1, "d"), sym(2, "k"), sym(3, "m"));
+    let expected = as_monomial(mul(mul(c.clone(), m.clone()), k.clone()));
+    let actual = as_monomial(mul(mul(d.clone(), c.clone()), k.clone()));
+
+    assert!(matches!(
+        peel_monomial(&expected, &actual),
+        Some(Peel::Continue(left, right)) if left == m && right == d
+    ));
+}
+
+// One multiset of factors under one coefficient is one monomial, however it is nested or ordered.
+#[test]
+fn peel_monomial_decides_a_reordered_product_equal() {
+    let (c, d, k) = (sym(0, "c"), sym(1, "d"), sym(2, "k"));
+    let one = as_monomial(mul(mul(c.clone(), d.clone()), k.clone()));
+    let other = as_monomial(mul(k.clone(), mul(d.clone(), c.clone())));
+
+    assert!(matches!(peel_monomial(&one, &other), Some(Peel::Equal)));
+}
+
+// The controls: two factors left on each side have no forced pairing, and two coefficients are two monomials unless a factor is zero — so both decline to the caller's congruence rather than deciding anything, and neither ever clashes.
+#[test]
+fn peel_monomial_declines_where_no_pairing_is_forced() {
+    let (c, d, k, m) = (sym(0, "c"), sym(1, "d"), sym(2, "k"), sym(3, "m"));
+    let two = as_monomial(mul(c.clone(), d.clone()));
+    let other_two = as_monomial(mul(k.clone(), m.clone()));
+    assert!(peel_monomial(&two, &other_two).is_none());
+
+    let doubled = as_monomial(mul(
+        Term::intrinsic(Intrinsic::Nat(Nat::new(2u32))),
+        c.clone(),
+    ));
+    let tripled = as_monomial(mul(
+        Term::intrinsic(Intrinsic::Nat(Nat::new(3u32))),
+        c.clone(),
+    ));
+    assert!(peel_monomial(&doubled, &tripled).is_none());
+}
