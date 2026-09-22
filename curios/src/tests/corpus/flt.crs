@@ -1,0 +1,63 @@
+-- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
+use /std/{Flt, Ordering, List, Str, Option, Eq, Test};
+
+-- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
+let _renders_in_a_type: Eq(Flt/to_str(0.1), "+0.1") = Eq/refl();
+let _renders_a_large_value_in_a_type: Eq(Flt/to_str(1.0e300), Flt/to_str(1.0e300)) = Eq/refl();
+let _orders_the_zeros_in_a_type: Eq(Flt/ord(-0.0, +0.0), Ordering/lt()) = Eq/refl();
+let _orders_nan_after_infinity_in_a_type: Eq(Flt/ord(Flt/nan, Flt/pos_inf), Ordering/gt()) =
+    Eq/refl();
+let _reads_infinity_in_a_type: Eq(Flt/of_str("-Infinity"), Option/some(Flt/neg_inf)) = Eq/refl();
+
+let spelled(values: List(Flt)) -> List(Str) =
+    List/map(values, Flt/to_str);
+
+let read(text: Str) -> Str =
+    match Flt/of_str(text) | some(value) => Flt/to_str(value) | none() => "none" end;
+
+-- `ord` is IEEE's `totalOrder`: the zeros apart, `-0` first, and a NaN past `+inf` rather than unordered.
+test ord_is_the_ieee_total_order =
+    Test/equal(
+        [
+            Flt/ord(-0.0, +0.0),
+            Flt/ord(+0.0, -0.0),
+            Flt/ord(Flt/nan, Flt/nan),
+            Flt/ord(Flt/nan, Flt/pos_inf),
+            Flt/ord(Flt/neg_inf, Flt/nan),
+            Flt/ord(1.0, 2.0),
+            Flt/ord(2.0, 2.0)],
+        [
+            Ordering/lt(),
+            Ordering/gt(),
+            Ordering/eq(),
+            Ordering/gt(),
+            Ordering/lt(),
+            Ordering/lt(),
+            Ordering/eq()]);
+
+-- A sort through `Ord(Flt)` places a NaN and the two zeros the same way whatever order they arrive in, which an order that answered `gt` for a NaN on both sides could not.
+test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
+    Test/all([
+        Test/equal(
+            spelled(List/sort([1.0, Flt/nan, 0.5, -0.0, +0.0])),
+            ["-0", "+0", "+0.5", "+1", "NaN"]),
+        Test/equal(
+            spelled(List/sort([Flt/nan, +0.0, 1.0, -0.0, 0.5])),
+            ["-0", "+0", "+0.5", "+1", "NaN"]),
+        Test/equal(
+            spelled(List/sort([0.5, -0.0, Flt/nan, 1.0, +0.0])),
+            ["-0", "+0", "+0.5", "+1", "NaN"])]);
+
+-- `of_str` reads every spelling `to_str` writes, the infinities and the NaN among them, in any case and with an optional sign.
+test of_str_reads_back_what_to_str_writes =
+    Test/equal(
+        [
+            read(Flt/to_str(Flt/pos_inf)),
+            read(Flt/to_str(Flt/neg_inf)),
+            read(Flt/to_str(Flt/nan)),
+            read("INF"),
+            read("-Infinity"),
+            read("nan"),
+            read("infx"),
+            read("2.5e-3")],
+        ["+inf", "-inf", "NaN", "+inf", "-inf", "NaN", "none", "+0.0025"]);

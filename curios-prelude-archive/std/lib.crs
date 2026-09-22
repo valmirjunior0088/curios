@@ -174,7 +174,7 @@ pub mod Tuple;
 pub mod Parse;
 pub use Parse/{let Parse};
 
---- JSON, decoded and encoded through `Parse`. Numbers are binary64 `Flt`: an integer above `2^24` decodes inexactly, and a non-finite value encodes as `null`.
+--- JSON, decoded and encoded through `Parse`. Numbers are binary64 `Flt`: an integer past `2^53` may decode inexactly, and a non-finite value encodes as `null`.
 pub mod Json;
 pub use Json/{let Json};
 

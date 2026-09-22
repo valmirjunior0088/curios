@@ -61,33 +61,50 @@ let pow2(k: Nat) -> Nat =
 let div_mod(r: Nat, s: Nat) -> {Nat, Nat} =
     match s | 0 => (0, r) | sp + 1 => (r / (sp + 1), r % (sp + 1)) end;
 
-let scale_up(rpm: Nat, s: Nat, k: Int) -> {Nat, Int} =
-    match rpm > s | true => scale_up(rpm, s * 10, k + 1) | false => (s, k) end;
+--- How many decimal places the two scalings may move the exponent. A finite binary64 lies between `4.9 · 10⁻³²⁴` and `1.8 · 10³⁰⁸`, so neither moves it past 324 places: the count never runs out and changes no answer, and it is what lets `to_str` stand in a type.
+let scaling_fuel: Nat = 330;
 
-let scale_down(r: Nat, mp: Nat, mm: Nat, s: Nat, k: Int) -> {Nat, Nat, Nat, Int} =
-    match (r + mp) * 10 <= s
-    | true => scale_down(r * 10, mp * 10, mm * 10, s, k - 1)
-    | false => (r, mp, mm, k)
+--- How many digits `generate` may write. Seventeen significant digits tell every binary64 apart, so the shortest spelling stops by then: the count never runs out and changes no answer.
+let digit_fuel: Nat = 20;
+
+let scale_up(fuel: Nat, rpm: Nat, s: Nat, k: Int) -> {Nat, Int} =
+    match fuel
+    | 0 => (s, k)
+    | pred + 1 => match rpm > s | true => scale_up(pred, rpm, s * 10, k + 1) | false => (s, k) end
     end;
 
-let generate(r: Nat, s: Nat, mp: Nat, mm: Nat, even: Bool) -> List(Nat) =
-    let r10 = r * 10;
-    let mp10 = mp * 10;
-    let mm10 = mm * 10;
-    let (d, rem) = div_mod(r10, s);
-    let low = match even | true => rem <= mm10 | false => rem < mm10 end;
-    let high = match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
-    match low || high
-    | true =>
-        let last =
-            choose
-            | Bool/not(low) => d + 1
-            | Bool/not(high) => d
-            | rem * 2 < s => d
-            | _ => d + 1
-            end;
-        [last]
-    | false => [d, ..generate(rem, s, mp10, mm10, even)]
+let scale_down(fuel: Nat, r: Nat, mp: Nat, mm: Nat, s: Nat, k: Int) -> {Nat, Nat, Nat, Int} =
+    match fuel
+    | 0 => (r, mp, mm, k)
+    | pred + 1 =>
+        match (r + mp) * 10 <= s
+        | true => scale_down(pred, r * 10, mp * 10, mm * 10, s, k - 1)
+        | false => (r, mp, mm, k)
+        end
+    end;
+
+let generate(fuel: Nat, r: Nat, s: Nat, mp: Nat, mm: Nat, even: Bool) -> List(Nat) =
+    match fuel
+    | 0 => []
+    | pred + 1 =>
+        let r10 = r * 10;
+        let mp10 = mp * 10;
+        let mm10 = mm * 10;
+        let (d, rem) = div_mod(r10, s);
+        let low = match even | true => rem <= mm10 | false => rem < mm10 end;
+        let high = match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
+        match low || high
+        | true =>
+            let last =
+                choose
+                | Bool/not(low) => d + 1
+                | Bool/not(high) => d
+                | rem * 2 < s => d
+                | _ => d + 1
+                end;
+            [last]
+        | false => [d, ..generate(pred, rem, s, mp10, mm10, even)]
+        end
     end;
 
 let digits_to_str(ds: List(Nat)) -> Str =
@@ -148,18 +165,30 @@ let layout(digits_str: Str, k: Int) -> Str =
 
 let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
     let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
-    let (s1, k1) = scale_up(r0 + mp0, s0, +0);
-    let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);
-    let digits = generate(r1, s1, mp1, mm1, even);
+    let (s1, k1) = scale_up(scaling_fuel, r0 + mp0, s0, +0);
+    let (r1, mp1, mm1, k2) = scale_down(scaling_fuel, r0, mp0, mm0, s1, k1);
+    let digits = generate(digit_fuel, r1, s1, mp1, mm1, even);
     let (norm, carry) = normalize(digits);
     match carry
     | true => layout(digits_to_str([1, ..norm]), k2 + 1)
     | false => layout(digits_to_str(norm), k2)
     end;
 
---- The order of the two, with a NaN answering `gt` against everything.
+--- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
+---
+--- `==` and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order `Ord`, and so `List/sort`, needs, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
 pub let ord(x: Flt, y: Flt) -> Ordering =
-    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+    choose
+    | x < y => Ordering/lt()
+    | y < x => Ordering/gt()
+    | _ => Nat/ord(total_key(x), total_key(y))
+    end;
+
+--- `f`'s bits as the natural whose order is the total one: a negative pattern complemented below `2⁶³`, a positive one lifted above it. Only equal numbers and NaNs reach it, since a comparison decides every other pair.
+let total_key(f: Flt) -> Nat =
+    let bits = Bytes/to_nat(to_le_bytes(f));
+    let top = pow2(63);
+    match bits >= top | true => pow2(64) - 1 - bits | false => bits + top end;
 
 --- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf` or `NaN`.
 pub let to_str(f: Flt) -> Str =
@@ -291,7 +320,7 @@ let exponent_of(s: Str, e_pos: Nat, len: Nat) -> Option(Int) =
     | false => Option/some(+0)
     end;
 
---- The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. `none` for any other text.
+--- The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. An optional sign before `inf`, `infinity` or `nan`, in any case, reads as the infinity of that sign or the NaN, which is what `to_str` writes for them and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
 pub let of_str(s: Str) -> Option(Flt) =
     match Str/is_empty(s)
     | true => Option/none()
@@ -300,27 +329,37 @@ pub let of_str(s: Str) -> Option(Flt) =
         let is_neg = first == '-';
         let start = choose | first == '+' => 1 | first == '-' => 1 | _ => 0 end;
         let len = Str/len(s);
-        let dot_pos = Option/unwrap_or(Str/index_of(s, '.'), len);
-        let e_pos =
-            Nat/min(
-                Option/unwrap_or(Str/index_of(s, 'e'), len),
-                Option/unwrap_or(Str/index_of(s, 'E'), len));
-        let int_end = Nat/min(dot_pos, e_pos);
-        let int_slice = Str/slice(s, start, int_end - start);
-        let frac_slice =
-            match dot_pos < e_pos
-            | true => Str/slice(s, dot_pos + 1, e_pos - (dot_pos + 1))
-            | false => ""
-            end;
-        match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
-        | true =>
-            let spelled = Str/concat(int_slice, frac_slice);
-            let digits = decimal_value(spelled)!;
-            let exponent = exponent_of(s, e_pos, len)!;
-            let scale = exponent - Nat/to_int(Str/len(frac_slice));
-            Option/some(of_decimal(is_neg, digits, scale, Str/len(spelled)))
-        | false => Option/none()
+        let body = Str/slice(s, start, len - start);
+        choose
+        | Str/eql_ascii_ci(body, "inf") || Str/eql_ascii_ci(body, "infinity") =>
+            Option/some(match is_neg | true => neg_inf | false => pos_inf end)
+        | Str/eql_ascii_ci(body, "nan") => Option/some(nan)
+        | _ => of_decimal_str(s, is_neg, start, len)
         end
+    end;
+
+--- The finite half of `of_str`: `s` read as a decimal whose digits begin at `start`.
+let of_decimal_str(s: Str, is_neg: Bool, start: Nat, len: Nat) -> Option(Flt) =
+    let dot_pos = Option/unwrap_or(Str/index_of(s, '.'), len);
+    let e_pos =
+        Nat/min(
+            Option/unwrap_or(Str/index_of(s, 'e'), len),
+            Option/unwrap_or(Str/index_of(s, 'E'), len));
+    let int_end = Nat/min(dot_pos, e_pos);
+    let int_slice = Str/slice(s, start, int_end - start);
+    let frac_slice =
+        match dot_pos < e_pos
+        | true => Str/slice(s, dot_pos + 1, e_pos - (dot_pos + 1))
+        | false => ""
+        end;
+    match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
+    | true =>
+        let spelled = Str/concat(int_slice, frac_slice);
+        let digits = decimal_value(spelled)!;
+        let exponent = exponent_of(s, e_pos, len)!;
+        let scale = exponent - Nat/to_int(Str/len(frac_slice));
+        Option/some(of_decimal(is_neg, digits, scale, Str/len(spelled)))
+    | false => Option/none()
     end;
 
 satisfy Eql(Flt) {

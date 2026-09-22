@@ -250,7 +250,7 @@ fn infix_undefined_operator_for_type_is_rejected() {
 
 #[test]
 fn infix_rem_on_flt_computes_fmod() {
-    // `%` on `Flt` is `fmod` (`FltRem`), expanded to `x - trunc(x/y)*y` at the cont -> wasm boundary. `5.5 % 2.0 == 1.5`, so the branch is `true`.
+    // `%` on `Flt` is exact `fmod` (`FltRem`), which the emitter computes in its shared `$flt/rem` helper. `5.5 % 2.0 == 1.5`, so the branch is `true`.
     assert_eq!(
         run(r#"
             use /std/{Str, Io};

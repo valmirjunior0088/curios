@@ -103,7 +103,7 @@ macro_rules! corpus {
     };
 }
 
-corpus! { strings, data, aggregates, numeric, cli, tui, big_nat }
+corpus! { strings, data, aggregates, numeric, flt, cli, tui, big_nat }
 
 /// A unit header with no row in `corpus!` would be compiled by nothing and silently pass, which is the one failure mode this arrangement has that a per-fixture Rust test does not.
 #[test]
