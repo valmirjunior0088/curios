@@ -1,0 +1,33 @@
+use /std/{Int, Bool, Option};
+use /std/Int/{Le, floor, floor_one, floor_succ};
+
+--- That `a` is below `b`, decided as `Nat/Lt` is.
+pub let Lt(a: Int, b: Int) -> Prop =
+    Bool/Holds(Int/lt(a, b));
+
+--- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
+pub let try(a: Int, b: Int) -> Option(Lt(a, b)) =
+    match a < b: (r) => Option(Bool/Holds(r))
+    | true => Option/some(Bool/True/qed())
+    | false => Option/none()
+    end;
+
+--- `a < b` gives `a <= b`.
+pub let le_of_lt(a: Int, b: Int, p: Lt(a, b)) -> Le(a, b) =
+    floor_one(Int/to_nat(b - a - 1, @p));
+
+--- Transitivity.
+pub let trans(@a: Int, @b: Int, @c: Int, p: Lt(a, b), q: Lt(b, c)) -> Lt(a, c) =
+    floor_succ(Int/to_nat(b - a - 1, @p), Int/to_nat(c - b - 1, @q));
+
+--- A strict bound composed with a loose one stays strict.
+pub let lt_of_lt_le(@a: Int, @b: Int, @c: Int, p: Lt(a, b), q: Le(b, c)) -> Lt(a, c) =
+    floor(Int/to_nat(b - a - 1, @p), Int/to_nat(c - b, @q));
+
+--- A loose bound composed with a strict one is strict.
+pub let lt_of_le_lt(@a: Int, @b: Int, @c: Int, p: Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
+    floor(Int/to_nat(b - a, @p), Int/to_nat(c - b - 1, @q));
+
+--- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
+pub let le_of_not_lt(a: Int, b: Int, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
+    p;

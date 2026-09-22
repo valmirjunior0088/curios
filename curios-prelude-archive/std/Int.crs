@@ -1,7 +1,7 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
-use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord};
+use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
@@ -11,6 +11,98 @@ pub let NonZero(a: Int) -> Prop =
 --- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
     Bool/Holds(ge(a, 0));
+
+--- That `a` is below `b`, decided as `Nat/Lt` is, with its laws and its crossings with `a <= b` beneath.
+---
+--- Each law names the difference a hypothesis makes non-negative as a natural, with `to_nat`, and concludes from `Nat`'s own floor read through the widening — the order on `Int` is `Nat`'s, carried along the embedding.
+pub mod Lt;
+pub use Lt/{let Lt};
+
+--- That `a` is below `b` or equal to it, decided, with its laws beneath.
+pub mod Le;
+pub use Le/{let Le};
+
+--- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
+---
+--- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart — `Int` has no constructors of its own, and this is the case split it would have. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `Lt` and `Le` go through it and through `Nat`.
+pub induct Sign: (Int) -> pub Type
+--- `i` is the natural `n`, widened.
+| nonneg(n: Nat): (Nat/to_int(n))
+--- `i` is `-1 - n` for the natural `n`.
+| neg(n: Nat): (-1 - Nat/to_int(n))
+end
+
+--- `i`'s form: the natural it is, or the natural one below its negation is.
+pub let view(i: Int) -> Sign(i) =
+    let go(r: Bool, c: Eq(i >= +0, r)) -> Sign(i) =
+        (match r: (s) => (Eq(i >= +0, s)) -> Sign(i)
+        | true =>
+            (c) =>
+                let ok: NonNeg(i) = Bool/holds_of_eq(i >= +0, c);
+                Sign/nonneg(to_nat(i, @ok))
+        | false =>
+            (c) =>
+                let ok: NonNeg(-1 - i) = Bool/holds_of_eq(i < +0, Eq/cong(Bool/not, c));
+                Sign/neg(to_nat(-1 - i, @ok))
+        end)(c);
+    go(i >= +0, Eq/refl());
+
+-- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
+let floor(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
+    Bool/True/qed();
+
+let floor_succ(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y) + 1) =
+    Bool/True/qed();
+
+let floor_one(x: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + 1) =
+    Bool/True/qed();
+
+let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
+    Bool/True/qed();
+
+let positive(m: Nat, y: Nat) -> Bool/Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
+    Bool/True/qed();
+
+let absurd_succ(@P: Type, x: Nat, h: Bool/Holds(+0 == Nat/to_int(x) + 1)) -> P =
+    match h: (_) => P end;
+
+--- Where `a` stands against `b`, with the evidence.
+pub induct Trichotomy(a: Int, b: Int): pub Type
+--- `a` is below `b`.
+| lt(p: Lt(a, b))
+--- They are one number.
+| eq(e: Eq(a, b))
+--- `a` is above `b`.
+| gt(p: Lt(b, a))
+end
+
+--- `a` against `b`: below, equal, or above, one of them with its proof.
+pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
+    let above(s: Bool, d: Eq(b < a, s), ge: Le(b, a)) -> Trichotomy(a, b) =
+        (match s: (t) => (Eq(b < a, t)) -> Trichotomy(a, b)
+        | true => (d) => Trichotomy/gt(Bool/holds_of_eq(b < a, d))
+        | false =>
+            (d) =>
+                let le: Le(a, b) = Bool/holds_of_eq(Bool/not(b < a), Eq/cong(Bool/not, d));
+                Trichotomy/eq(Le/antisym(a, b, le, ge))
+        end)(d);
+    let below(r: Bool, c: Eq(a < b, r)) -> Trichotomy(a, b) =
+        (match r: (s) => (Eq(a < b, s)) -> Trichotomy(a, b)
+        | true => (c) => Trichotomy/lt(Bool/holds_of_eq(a < b, c))
+        | false =>
+            (c) =>
+                let ge: Le(b, a) = Bool/holds_of_eq(Bool/not(a < b), Eq/cong(Bool/not, c));
+                above(b < a, Eq/refl(), ge)
+        end)(c);
+    below(a < b, Eq/refl());
+
+--- A decided equality is an equation: `a == b` gives `Eq(a, b)`.
+pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(a == b)) -> Eq(a, b) =
+    match trichotomy(a, b)
+    | lt(p) => absurd_succ(to_nat(b - a - 1, @p), h)
+    | eq(e) => e
+    | gt(p) => absurd_succ(to_nat(a - b - 1, @p), h)
+    end;
 
 --- The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
 pub let to_str(n: Int) -> Str =

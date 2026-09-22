@@ -1,0 +1,43 @@
+use /std/{Nat, Int, Bool, Option, Eq};
+use /std/Int/{floor, floor_mul, positive};
+
+--- That `a` is below `b` or equal to it, decided.
+pub let Le(a: Int, b: Int) -> Prop =
+    Bool/Holds(Int/le(a, b));
+
+--- `n <= n`.
+pub let refl(n: Int) -> Le(n, n) =
+    Bool/True/qed();
+
+--- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
+pub let try(a: Int, b: Int) -> Option(Le(a, b)) =
+    match a <= b: (r) => Option(Bool/Holds(r))
+    | true => Option/some(Bool/True/qed())
+    | false => Option/none()
+    end;
+
+--- Transitivity.
+pub let trans(@a: Int, @b: Int, @c: Int, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
+    floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));
+
+--- `a <= b` gives `n + a <= n + b`.
+pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Le(a, b)) -> Le(n + a, n + b) =
+    p;
+
+--- `a <= b` gives `a * k <= b * k` for a `k` no smaller than zero.
+pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Le(a, b), q: Le(+0, k)) -> Le(a * k, b * k) =
+    floor_mul(Int/to_nat(b - a, @p), Int/to_nat(k, @q));
+
+--- Two bounds facing each other pin one value.
+---
+--- The two differences are naturals summing to zero; a successor for the first is a positive sum, which the second hypothesis already refutes.
+pub let antisym(a: Int, b: Int, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
+    let other = Int/to_nat(a - b, @q);
+    (match Int/to_nat(b - a, @p): (m) => (Eq(Nat/to_int(m), b - a)) -> Eq(a, b)
+    | 0 => (e) => Eq/cong((x: Int) => a + x, e)
+    | m + 1 =>
+        (e) =>
+            let sum: Bool/Holds(+0 < (b - a) + Nat/to_int(other)) =
+                Eq/subst((x: Int) => Bool/Holds(+0 < x + Nat/to_int(other)), e, positive(m, other));
+            match sum: (_) => Eq(a, b) end
+    end)(Eq/refl());
