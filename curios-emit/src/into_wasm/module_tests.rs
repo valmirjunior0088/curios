@@ -59,15 +59,14 @@ fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
-    // Two classes: the narrowing's own guard, and the exit's, which narrows the result to the wire as every exit code is.
+    // One class: the narrowing's own guard. The exit's code is a `Byte`, a word already, so it crosses with nothing to refuse.
     assert_eq!(
         count(&wat, "(func $refuse/"),
-        2,
+        1,
         "one helper per class the code reaches"
     );
     assert_eq!(count(&wat, "(func $refuse/invariant"), 1);
-    assert_eq!(count(&wat, "(func $refuse/nat_wire"), 1);
-    assert_eq!(count(&wat, "(data $refusal/"), 2);
+    assert_eq!(count(&wat, "(data $refusal/"), 1);
     assert_absent(&wat, "(global $refusal/");
     assert_contains(&wat, "call $refuse/invariant");
 
