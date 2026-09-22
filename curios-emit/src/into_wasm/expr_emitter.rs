@@ -248,12 +248,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             (Some(_), &EmissionData::Flt(value)) => {
                 self.emit_instr(curios_wasm::Instr::F64Const { value })
             }
-            // No other shape is ever offered a register, so this arm builds the reference and reads it straight back down. It exists to keep the match total rather than to be taken.
-            (Some(carrier), value) => {
-                self.emit_data(value_name, value);
-                let load = LoadAs::of(&carrier);
-                self.emit_instrs(self.context.load_as_instrs(load, false));
-            }
+            // `represent.rs` offers a register to a small `Nat` literal and an `Flt` one and to no other construction, so any other shape held in one is this crate's broken contract rather than something to emit code for.
+            (Some(carrier), _) => panic!(
+                "`{value_name}` is a construction held in a register at {carrier:?}, which only a small `Nat` or an `Flt` literal is offered"
+            ),
             (None, value) => self.emit_data(value_name, value),
         }
 
