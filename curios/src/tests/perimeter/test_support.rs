@@ -703,6 +703,30 @@ pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = 
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
+        use /std/{Eq, Nat};
+
+        let Bot : Prop = (A : Prop) -> A;
+        let Top : Prop = (Bot) -> Bot;
+        let cast(A : Prop, B : Prop, e : Eq(A, B), x : A) -> B = match e | refl(@_) => x end;
+        let delta : Top = (z) => z(Top)(z);
+        let omega(h : (A : Prop, B : Prop) -> Eq(A, B)) -> Bot = (A) => cast(Top, A, h(Top, A), delta);
+        let Omega(h : (A : Prop, B : Prop) -> Eq(A, B)) -> Bot = delta(omega(h));
+
+        induct T: pub Prop
+        | t()
+        end
+
+        let within(h : (A : Prop, B : Prop) -> Eq(A, B), y : T, w : Eq(@T, y, y)) -> Nat =
+            match h(Top, Top)
+            | refl(@_) =>
+                let _v : Eq(@T, Omega(h)(T), y) = w;
+                0
+            end;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
         use /std/{Eq, Nat, State};
 
@@ -1593,6 +1617,13 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "two_accessibility_proofs_at_one_recursive_call_convert",
         TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    // The elaborator reduced both sides of a goal before asking whether its type was a proposition, and under an absurd arm's case equation Abel and Coquand's `Omega` reduces forever — so it spent its budget on two proofs irrelevance equates outright, a refusal the kernel, asking irrelevance first, never makes. Both now ask it first wherever nothing is flexible.
+    (
+        "a_proof_is_not_reduced_to_compare_it_with_another",
+        A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER,
         Expect::Accepts,
         Expect::Accepts,
     ),

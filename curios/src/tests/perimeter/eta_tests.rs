@@ -125,6 +125,12 @@ fn two_accessibility_proofs_at_one_recursive_call_convert() {
     );
 }
 
+// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** Inside the arm of `match h(Top, Top)` the case equation makes that proof `refl`, the cast along it reduces, and Abel and Coquand's `Omega(h)` unfolds forever — no recursion anywhere, so the totality obligations have nothing to refuse. The elaborator reduced both proofs before asking what their type was, and ran out of budget comparing two inhabitants of `T`. Outside the arm the same comparison was always accepted. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
+#[test]
+fn a_proof_is_not_reduced_to_compare_it_with_another() {
+    assert_eq!(run(A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER), b"1");
+}
+
 // **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
 //
 // The restriction is a proxy for that invariant rather than a second guarantee: a `Var` is as arbitrary a term as any other, and the invariant is a property of the *callers* rather than of this function. `struct_eta` now says so in its own documentation, which is where it was missing.

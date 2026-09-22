@@ -1586,6 +1586,14 @@ impl Convert {
                 continue;
             }
 
+            // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof then spent the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
+            if !this.has_metavar()
+                && !that.has_metavar()
+                && matches!(Sort::of(context, &type_)?, Sort::Prop)
+            {
+                continue;
+            }
+
             // The unreduced spellings, kept for the flex–rigid case: the reductions below apply counterfactual match-arm refinements, and a candidate *solution* must be derived without them (see `solve_refinement_free`).
             let this_raw = this.clone();
             let that_raw = that.clone();
@@ -1668,7 +1676,7 @@ impl Convert {
                 (None, None) => {}
             }
 
-            // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition).
+            // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
             if let Sort::Prop = Sort::of(context, &type_)? {
                 continue;
             }
