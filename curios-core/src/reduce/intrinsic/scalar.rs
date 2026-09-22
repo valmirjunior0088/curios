@@ -132,7 +132,7 @@ pub(super) fn reduce_int_division(
 ///
 /// **Why folding here is not the hazard the opacity this replaced was afraid of.** IEEE equality identifies `0.0` with `-0.0`, which `FltToLeBytes` tells apart — the singleton-forgery shape — but folding `FltEql(0.0, -0.0)` to the `Bool` `true` creates no convertibility: `Eq` still needs `refl`, conversion on literals is bitwise, and scrutinee refinement rewrites the scrutinee term rather than an operand. What *would* be a hazard is a fold the running program can disagree with, and the only thing IEEE and Wasm leave to the implementation is a computed NaN's sign and payload — which the model's NaN rule pins, and which `into_wasm` holds the running program to.
 ///
-/// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because [`/sys/Bound/Finite` and `/sys/Bound/NonNeg`](Intrinsic::signature) are bounds decided by a comparison.
+/// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because the domains [`Intrinsic::signature`] states for `Flt/to_int` and `Flt/to_nat` are bounds decided by a comparison.
 ///
 /// One fact predates all of it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 pub(super) fn reduce_flt_binary(

@@ -61,8 +61,6 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         true_qed: registry_name(&["std", "Bool", "True", "qed"]),
         true_type: registry_name(&["std", "Bool", "True"]),
         holds: registry_name(&["std", "Bool", "Holds"]),
-        flt_finite: registry_name(&["std", "Flt", "Finite"]),
-        flt_non_neg: registry_name(&["std", "Flt", "NonNeg"]),
     },
     test: TestSyntax {
         test_type: registry_name(&["std", "Test", "Test"]),
@@ -281,8 +279,6 @@ fn prelude_fixture() -> RootSource {
             end
             pub mod Flt
                 pub let EightBytes : Type = Type;
-                pub let Finite : Type = Type;
-                pub let NonNeg : Type = Type;
             end
             pub mod Bool
                 pub let Holds : Type = Type;

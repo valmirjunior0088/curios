@@ -159,7 +159,7 @@ pub(super) fn prop() -> Term {
     Subterm::Prop.into()
 }
 
-// A `Flt` literal, for the two range bounds below. The bounds are stated against the infinities rather than against a written magnitude, so no digit string has to be kept in step with the carrier.
+// A `Flt` literal, for the two range bounds in the roster. The bounds are stated against the infinities rather than against a written magnitude, so no digit string has to be kept in step with the carrier.
 pub(super) fn flt_lit(value: f64) -> Term {
     intrinsic(Intrinsic::Flt(Floating::from(value)))
 }

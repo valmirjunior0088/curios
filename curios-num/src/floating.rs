@@ -227,7 +227,7 @@ impl Floating {
         self.bits & EXPONENT_MASK == EXPONENT_MASK && self.bits & MANTISSA_MASK != 0
     }
 
-    /// Whether this is a *number*: finite, so neither infinity and not a NaN. The same reading `/sys/Bound/Finite` states, and what the surface lexer refuses a literal for.
+    /// Whether this is a *number*: finite, so neither infinity and not a NaN. The same reading `/std/Flt/Finite` states, and what the surface lexer refuses a literal for.
     pub fn is_finite(self) -> bool {
         self.bits & EXPONENT_MASK != EXPONENT_MASK
     }
@@ -770,7 +770,7 @@ impl Floating {
         round(negative, magnitude, exponent, false, rounding)
     }
 
-    /// The exact natural this truncates toward zero to, refusing outside the domain `/sys/Bound/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`. One refusal where there were two: the model decides what the truncation *is*, and no carrier adds a width on top of it.
+    /// The exact natural this truncates toward zero to, refusing outside the domain `/std/Flt/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`. One refusal where there were two: the model decides what the truncation *is*, and no carrier adds a width on top of it.
     ///
     /// Exact and unbounded: `to_natural(3.0e9)` is the natural `3000000000`, which the running program holds as a boxed magnitude.
     pub fn to_natural(self) -> Result<Natural, ScalarTrap> {
@@ -790,7 +790,7 @@ impl Floating {
         }
     }
 
-    /// The exact integer this truncates toward zero to, refusing a NaN or an infinity — outside the domain `/sys/Bound/Finite` states.
+    /// The exact integer this truncates toward zero to, refusing a NaN or an infinity — outside the domain `/std/Flt/Finite` states.
     pub fn to_integer(self) -> Result<Integer, ScalarTrap> {
         self.truncate_integer().ok_or(ScalarTrap::ConversionRange)
     }

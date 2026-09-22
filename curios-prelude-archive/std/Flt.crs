@@ -1,7 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs,
-    sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes,
-    Finite, NonNeg};
+    sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -49,6 +48,14 @@ pub let nan: Flt =
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
     f > neg_inf && f < pos_inf;
+
+--- That `f` is a number, decided: the domain `to_int` states.
+pub let Finite(f: Flt) -> Prop =
+    Bool/Holds(neg_inf < f && f < pos_inf);
+
+--- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
+pub let NonNeg(f: Flt) -> Prop =
+    Bool/Holds(+0.0 <= f && f < pos_inf);
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =

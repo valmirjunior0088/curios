@@ -2,7 +2,7 @@
 //!
 //! Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //!
-//! The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `flt_bounds` and `holds` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
+//! The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `holds` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
 //!
 //! **These declarations are a second statement of `Intrinsic::signature`, not a projection of it.** The table is `curios-core`'s; this roster is what a caller actually names, and elaborating a body here checks its operands against that table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced — so deriving either from the other would make the check compare the roster with itself.
 //!
@@ -109,44 +109,26 @@ fn holds() -> Decl {
     )
 }
 
-// The two `Flt` narrowings' domains, stated inside `/sys/Flt` because that is the carrier they are about. Each is a conjunction rather than one comparison, which is why `Intrinsic::signature` names them instead of building them as it builds the rest.
-fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
-    let and = |left: Term, right: Term| intrinsic(Intrinsic::BoolAnd(left, right));
-    let le = |left: Term, right: Term| intrinsic(Intrinsic::FltLe(left, right));
-    let lt = |left: Term, right: Term| intrinsic(Intrinsic::FltLt(left, right));
+// `-inf < a && a < +inf`: `a` is a number, which is the domain truncating a `Flt` to an `Int` states. `/std/Flt/Finite` names the same proposition for callers; the row builds it here because `/sys` elaborates before `/std` exists.
+fn flt_finite(syntax: &SyntaxRegistry) -> Term {
+    decided(
+        syntax,
+        intrinsic(Intrinsic::BoolAnd(
+            intrinsic(Intrinsic::FltLt(flt_lit(f64::NEG_INFINITY), name("a"))),
+            intrinsic(Intrinsic::FltLt(name("a"), flt_lit(f64::INFINITY))),
+        )),
+    )
+}
 
-    vec![
-        documented(
-            &["That `a` is neither infinite nor beyond what `Flt` represents, decided."],
-            pub_fn(
-                "Finite",
-                vec![("a", flt())],
-                prop(),
-                decided(
-                    syntax,
-                    and(
-                        lt(flt_lit(f64::NEG_INFINITY), name("a")),
-                        lt(name("a"), flt_lit(f64::INFINITY)),
-                    ),
-                ),
-            ),
-        ),
-        documented(
-            &["That `a` is zero or above and within range, decided."],
-            pub_fn(
-                "NonNeg",
-                vec![("a", flt())],
-                prop(),
-                decided(
-                    syntax,
-                    and(
-                        le(flt_lit(0.0), name("a")),
-                        lt(name("a"), flt_lit(f64::INFINITY)),
-                    ),
-                ),
-            ),
-        ),
-    ]
+// `0 <= a && a < +inf`, the domain truncating a `Flt` to a `Nat` states, named by `/std/Flt/NonNeg` as `flt_finite`'s is by `/std/Flt/Finite`.
+fn flt_non_neg(syntax: &SyntaxRegistry) -> Term {
+    decided(
+        syntax,
+        intrinsic(Intrinsic::BoolAnd(
+            intrinsic(Intrinsic::FltLe(flt_lit(0.0), name("a"))),
+            intrinsic(Intrinsic::FltLt(name("a"), flt_lit(f64::INFINITY))),
+        )),
+    )
 }
 
 fn nat_succ() -> Decl {
@@ -537,19 +519,15 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 "to_nat",
                 flt(),
                 nat(),
-                applied(registered(syntax.proof.flt_non_neg), vec![name("a")]),
+                flt_non_neg(syntax),
                 |flt, non_neg| Intrinsic::FltToNat { flt, non_neg },
             ),
         ),
         documented(
             &["The whole part of `a` as an `Int`, under the evidence that it is finite."],
-            guarded_unary(
-                "to_int",
-                flt(),
-                int(),
-                applied(registered(syntax.proof.flt_finite), vec![name("a")]),
-                |flt, finite| Intrinsic::FltToInt { flt, finite },
-            ),
+            guarded_unary("to_int", flt(), int(), flt_finite(syntax), |flt, finite| {
+                Intrinsic::FltToInt { flt, finite }
+            }),
         ),
         documented(
             &["Its eight bytes, least significant first."],
@@ -585,7 +563,6 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         .into_iter()
         .chain(items(decls))
         .chain(directed)
-        .chain(items(flt_bounds(syntax)))
         .collect()
 }
 

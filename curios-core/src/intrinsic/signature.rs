@@ -21,7 +21,7 @@
 use {
     super::Intrinsic,
     crate::{Nat, Term},
-    curios_num::{Grain, Integer},
+    curios_num::{Floating, Grain, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
 
@@ -87,7 +87,7 @@ impl Intrinsic {
             )
         };
 
-        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The five that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — were each one comparison under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
+        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The ones that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes`, and `Flt`'s `Finite` and `NonNeg` — were each a comparison or a conjunction of two under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
         let holds =
             |decision: Intrinsic| decided(syntax.proof.holds, vec![Term::intrinsic(decision)]);
 
@@ -212,14 +212,32 @@ impl Intrinsic {
             FltToNat { flt, .. } => sig(
                 vec![
                     Operand::At(flt_type()),
-                    Operand::At(decided(syntax.proof.flt_non_neg, vec![flt.clone()])),
+                    Operand::At(holds(BoolAnd(
+                        Term::intrinsic(FltLe(
+                            Term::intrinsic(Flt(Floating::zero(false))),
+                            flt.clone(),
+                        )),
+                        Term::intrinsic(FltLt(
+                            flt.clone(),
+                            Term::intrinsic(Flt(Floating::infinite(false))),
+                        )),
+                    ))),
                 ],
                 nat_type(),
             ),
             FltToInt { flt, .. } => sig(
                 vec![
                     Operand::At(flt_type()),
-                    Operand::At(decided(syntax.proof.flt_finite, vec![flt.clone()])),
+                    Operand::At(holds(BoolAnd(
+                        Term::intrinsic(FltLt(
+                            Term::intrinsic(Flt(Floating::infinite(true))),
+                            flt.clone(),
+                        )),
+                        Term::intrinsic(FltLt(
+                            flt.clone(),
+                            Term::intrinsic(Flt(Floating::infinite(false))),
+                        )),
+                    ))),
                 ],
                 int_type(),
             ),

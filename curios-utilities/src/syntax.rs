@@ -247,12 +247,8 @@ pub struct ProofSyntax {
     pub true_type: SyntaxName,
     /// The reflection of a decided comparison into a proposition — `Holds(b)`, which reduces to [`ProofSyntax::true_type`] on a refined scrutinee, and that is what lets an obligation be discharged without a written proof.
     ///
-    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — made the roster reach into a root above it for what it could spell itself. What survives beside this are the two `Flt` bounds, whose decision is a conjunction and so is authored rather than constructed.
+    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — made the roster reach into a root above it for what it could spell itself.
     pub holds: SyntaxName,
-    /// `a` is a number over `Flt` — finite, so neither infinity nor the NaN — the precondition truncating one to an `Int` states.
-    pub flt_finite: SyntaxName,
-    /// `0 <= a` and `a` is a number, the precondition truncating a `Flt` to a `Nat` states. An `Int`'s non-negativity needs no upper bound and so is built from [`ProofSyntax::holds`] over a single comparison; this one is not, which is why it is named.
-    pub flt_non_neg: SyntaxName,
 }
 
 impl ProofSyntax {
@@ -261,11 +257,9 @@ impl ProofSyntax {
             true_qed,
             true_type,
             holds,
-            flt_finite,
-            flt_non_neg,
         } = self;
 
-        [true_qed, true_type, holds, flt_finite, flt_non_neg].into_iter()
+        [true_qed, true_type, holds].into_iter()
     }
 }
 

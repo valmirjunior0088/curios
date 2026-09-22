@@ -57,8 +57,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         true_qed: name(&["std", "Bool", "True", "qed"]),
         true_type: name(&["std", "Bool", "True"]),
         holds: name(&["std", "Bool", "Holds"]),
-        flt_finite: name(&["std", "Flt", "Finite"]),
-        flt_non_neg: name(&["std", "Flt", "NonNeg"]),
     },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
