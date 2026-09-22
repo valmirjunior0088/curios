@@ -4,7 +4,6 @@ use {
         RopeData, Table, box_instr, call, either, get, set, tee, when,
     },
     curios_num::Grain,
-    std::iter,
 };
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.
@@ -250,9 +249,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn word(&self, operand: &Operand) -> Vec<curios_wasm::Instr> {
         match operand {
             Operand::Word(load) => load.clone(),
-            Operand::Reference(local) => iter::once(get(local))
-                .chain(self.context.load_as_instrs(LoadAs::Nat, true))
-                .collect(),
+            Operand::Reference(local) => {
+                self.context
+                    .load_as_instrs(vec![get(local)], LoadAs::Nat, true)
+            }
         }
     }
 

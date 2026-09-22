@@ -243,7 +243,6 @@ fn max_region_tuple_arity(region: &EmissionBody) -> usize {
 pub(crate) struct Table<'a> {
     special_field: curios_wasm::FieldName,
     special_local: curios_wasm::LocalName,
-    word_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
     clsr_tables: BTreeMap<usize, curios_wasm::TableName>,
     flt_type: curios_wasm::TypeName,
@@ -330,7 +329,6 @@ impl<'a> Table<'a> {
             raw,
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
-            word_local: curios_wasm::LocalName::from("!word"),
             special_label: curios_wasm::LabelName::from("!"),
             clsr_tables: module
                 .clsr_arities()
@@ -514,11 +512,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn special_local(&self) -> curios_wasm::LocalName {
         self.special_local.clone()
-    }
-
-    /// The scratch local a reference is narrowed to a word through, declared by every function the emitter writes: the narrowing tests the value and then reads it, and a block cannot consume a value from outside itself, so the value waits here. One per function serves every narrowing in it, since each is a straight run that leaves nothing behind.
-    pub(crate) fn word_local(&self) -> (curios_wasm::LocalName, curios_wasm::ValType) {
-        (self.word_local.clone(), Table::top_type(true))
     }
 
     pub(crate) fn special_label(&self) -> curios_wasm::LabelName {

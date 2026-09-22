@@ -60,8 +60,6 @@ impl<'a, 'b> Context<'a, 'b> {
         data: &'a ClsrData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
-        locals.push(table.word_local());
-
         Self::Closure {
             table,
             data,
@@ -76,8 +74,6 @@ impl<'a, 'b> Context<'a, 'b> {
         data: &'a FuncData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
-        locals.push(table.word_local());
-
         Self::Function {
             table,
             data,
@@ -245,12 +241,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// `producer`, which leaves a reference on the stack, followed by what reads that reference as `load_as` wants it — or, for a narrowing to a word, wrapped by it, since a narrowing consumes the reference where the producer leaves it.
     pub(crate) fn load_as_instrs(
         &self,
+        producer: Vec<curios_wasm::Instr>,
         load_as: LoadAs,
         is_nullable: bool,
     ) -> Vec<curios_wasm::Instr> {
-        match load_as {
+        let read = match load_as {
             LoadAs::Null => vec![],
             LoadAs::NonNull => match is_nullable {
                 true => vec![curios_wasm::Instr::RefAsNonNull],
@@ -272,9 +270,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
-            LoadAs::Nat => self.narrow_instrs(BigHelper::Word),
-            LoadAs::WireNat => self.narrow_instrs(BigHelper::NatWire),
-            LoadAs::WireInt => self.narrow_instrs(BigHelper::IntWire),
+            LoadAs::Nat => return self.narrow_instrs(producer, BigHelper::Word),
+            LoadAs::WireNat => return self.narrow_instrs(producer, BigHelper::NatWire),
+            LoadAs::WireInt => return self.narrow_instrs(producer, BigHelper::IntWire),
             LoadAs::Flt => {
                 vec![
                     curios_wasm::Instr::RefCast {
@@ -305,57 +303,78 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
-        }
+        };
+
+        producer.into_iter().chain(read).collect()
     }
 
-    /// Narrow the `Nat` or `Int` reference on the stack to a machine word: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating for a position, refusing for the host wire. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
-    fn narrow_instrs(&self, boxed: BigHelper) -> Vec<curios_wasm::Instr> {
-        let (word, _) = self.table().word_local();
+    /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine word: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating for a position, refusing for the host wire. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
+    ///
+    /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` made two, with the common case on the straight line. A block cannot consume a value from outside itself, which is what put the producer in here rather than a scratch local every narrowing in a function wrote.
+    ///
+    /// **Measured against that scratch local** (2026-09-22, x86-64 Linux, release, best of five after a warmup, whole process): `chain` −4%, `churn` −4.5%, `spines` −2%, `trees` unchanged, `lcg` +2%. The likely reason for `lcg`, unconfirmed: its loop narrows the counter for its dispatch and then tests the same counter's i31 for the monus fast path, and two `ref.test`s over one local were a value Binaryen could share, where a branch is not. `br_on_cast`, taking the branch on the common case, measured worse on `lcg` (+3%) for the same gains. Retake by compiling `programs/{lcg,trees,chain,churn,spines}` with each build and timing `echo N | ./program` at `benchmarks/entrypoint.sh`'s sizes, the builds interleaved.
+    fn narrow_instrs(
+        &self,
+        producer: Vec<curios_wasm::Instr>,
+        boxed: BigHelper,
+    ) -> Vec<curios_wasm::Instr> {
+        let narrowed = curios_wasm::LabelName::from("narrowed");
+        let large = curios_wasm::LabelName::from("large");
+        let any = curios_wasm::RefType {
+            is_nullable: true,
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
+        };
+        let small_path = [
+            curios_wasm::Instr::BrOnCastFail {
+                label_name: large.clone(),
+                source_type: any.clone(),
+                target_type: Table::int_type(false),
+            },
+            curios_wasm::Instr::I31GetS,
+            curios_wasm::Instr::Br {
+                label_name: narrowed.clone(),
+            },
+        ];
 
-        vec![
-            set(&word),
-            get(&word),
-            curios_wasm::Instr::RefTest {
-                ref_type: Table::int_type(false),
-            },
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("narrow"),
-                block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(
-                    curios_wasm::NumType::I32,
-                )),
-                then_instructions: vec![
-                    get(&word),
-                    curios_wasm::Instr::RefCast {
-                        ref_type: Table::int_type(false),
-                    },
-                    curios_wasm::Instr::I31GetS,
-                ],
-                else_instructions: vec![
-                    get(&word),
-                    curios_wasm::Instr::Call {
-                        func_name: self.table().big_func(boxed),
-                    },
-                ],
-            },
-        ]
+        vec![curios_wasm::Instr::Block {
+            label_name: narrowed,
+            block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(
+                curios_wasm::NumType::I32,
+            )),
+            instructions: vec![
+                curios_wasm::Instr::Block {
+                    label_name: large,
+                    block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Ref(any)),
+                    instructions: producer.into_iter().chain(small_path).collect(),
+                },
+                curios_wasm::Instr::Call {
+                    func_name: self.table().big_func(boxed),
+                },
+            ],
+        }]
     }
 
-    /// Coerce a value already on the stack in the register carrier its local is declared at, to what the reading position demands.
+    /// Coerce the value `producer` leaves in the register carrier its local is declared at, to what the reading position demands.
     ///
     /// The positions the analysis decided the carrier *for* want exactly what the register holds, and cost nothing — that is the whole point of deciding it. Every other position boxes the value back and then reads it the ordinary way, which is the "coercion at the disagreeing use" the analysis is built around: one `ref.i31` or one `struct.new`, set against the `ref.cast` plus `i31.get_u` that holding it boxed would have cost at *every* arithmetic use.
     fn raw_as_instrs(
         &self,
+        producer: Vec<curios_wasm::Instr>,
         carrier: curios_cont::Repr,
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
             // A word is below `2³⁰`, so it is already its narrowing to any position and either wire.
             (curios_cont::Repr::Nat, LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt)
-            | (curios_cont::Repr::Flt, LoadAs::Flt) => vec![],
-            _ => box_instr(&carrier, self.table())
-                .into_iter()
-                .chain(self.load_as_instrs(load_as, false))
-                .collect(),
+            | (curios_cont::Repr::Flt, LoadAs::Flt) => producer,
+            _ => self.load_as_instrs(
+                producer
+                    .into_iter()
+                    .chain(box_instr(&carrier, self.table()))
+                    .collect(),
+                load_as,
+                false,
+            ),
         }
     }
 
@@ -398,10 +417,8 @@ impl<'a, 'b> Context<'a, 'b> {
     ) -> Vec<curios_wasm::Instr> {
         self.refuse_raw_aggregate(value_name, &load_as);
 
-        let mut output = Vec::new();
-
         if let Some(field_data) = self.find_field(value_name) {
-            output.extend([
+            let producer = vec![
                 curios_wasm::Instr::LocalGet {
                     local_name: self.table().special_local(),
                 },
@@ -415,28 +432,26 @@ impl<'a, 'b> Context<'a, 'b> {
                     type_name: field_data.type_name(),
                     field_name: field_data.field_name(),
                 },
-            ]);
+            ];
 
-            output.extend(self.load_as_instrs(load_as, true));
+            self.load_as_instrs(producer, load_as, true)
         } else if let Some(local_data) = self.find_local(value_name) {
-            output.push(curios_wasm::Instr::LocalGet {
+            let producer = vec![curios_wasm::Instr::LocalGet {
                 local_name: local_data.local_name,
-            });
+            }];
 
             // Only a local can be held in a register. A closure field, a module const and a function parameter each arrive through a position that is a reference by declaration, which is what the representation analysis withholds its offer on.
             match self.table().raw_carrier(value_name) {
-                Some(carrier) => output.extend(self.raw_as_instrs(carrier, load_as)),
-                None => output.extend(self.load_as_instrs(load_as, local_data.is_nullable)),
+                Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
+                None => self.load_as_instrs(producer, load_as, local_data.is_nullable),
             }
         } else {
-            output.push(curios_wasm::Instr::GlobalGet {
+            let producer = vec![curios_wasm::Instr::GlobalGet {
                 global_name: self.table().find_const(value_name),
-            });
+            }];
 
-            output.extend(self.load_as_instrs(load_as, false));
+            self.load_as_instrs(producer, load_as, false)
         }
-
-        output
     }
 
     pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {

@@ -995,7 +995,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 type_name: start_type_name,
                 params: vec![],
                 // A constant row's word slot is filled through a narrowing, which the start function hosts like any other.
-                locals: vec![self.table.word_local()],
+                locals: vec![],
                 expr: self.start_expr.clone(),
             },
         );
