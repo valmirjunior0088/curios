@@ -5,15 +5,15 @@ use {
 
 #[test]
 fn traps_and_effects_classify_by_operation() {
-    // `IntDiv` keeps its trap for signed overflow — `i32::MIN / -1` is a *range* fact, which the divisor precondition says nothing about — and the float narrowings keep theirs for non-finite and out-of-range input.
-    assert!(Semantics::operation(Operation::IntDiv).observable.may_trap);
+    // The float narrowings keep their trap for non-finite and out-of-range input.
     assert!(
         Semantics::operation(Operation::FltToNat)
             .observable
             .may_trap
     );
-    // The divisions whose only trap was a zero divisor no longer carry one: `/sys` states that as a precondition, so a term reaching here was refused if it could not supply one. `IntRem` sheds it where `IntDiv` cannot, because the remainder instruction traps only on the divisor.
+    // No division carries a trap: `/sys` states a nonzero divisor as a precondition, so a term reaching here was refused if it could not supply one, and `IntDiv`'s signed overflow went with the carrier, since a quotient past the i31 grows into a boxed magnitude.
     assert!(!Semantics::operation(Operation::NatDiv).is_observable());
+    assert!(!Semantics::operation(Operation::IntDiv).is_observable());
     assert!(!Semantics::operation(Operation::NatRem).is_observable());
     assert!(!Semantics::operation(Operation::IntRem).is_observable());
     assert!(!Semantics::operation(Operation::NatAdd).is_observable());
@@ -77,7 +77,7 @@ fn terminators_report_exit_and_trap() {
 
 #[test]
 fn the_join_is_a_union() {
-    let trap = Semantics::operation(Operation::IntDiv);
+    let trap = Semantics::operation(Operation::FltToNat);
     let host = Semantics::local_behavior(&Rhs::Foreign {
         foreign: ForeignId(0),
         operands: vec![],

@@ -229,20 +229,20 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a scalar operation. `IntDiv` may trap, the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly eight bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm must cover every operation whose fold reports a *language-partial* trap. No size is refused among them: `Nat` and `Int` grow past the i31 fast path into a boxed magnitude, so add, multiply and left shift are total here, as `curios-cont`'s `Intrinsic::effect` states them from the other side. Every other scalar operation is total and allocation-free.
+    /// The behavior of a scalar operation. The float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly eight bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm must cover every operation whose fold reports a *language-partial* trap. No size is refused among them: `Nat` and `Int` grow past the i31 fast path into a boxed magnitude, so add, multiply and left shift are total here, as `curios-cont`'s `Intrinsic::effect` states them from the other side. Every other scalar operation is total and allocation-free.
     ///
-    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` alone keeps the classification, for the other half of its old note — signed overflow, `i32::MIN / -1`, a *range* fact rather than a domain one, so the precondition says nothing about it. The running program no longer has it, since a quotient past the i31 grows into a boxed magnitude, so the classification is conservative: it costs an optimization and never a wrong program. `IntRem` sheds it because the remainder instruction traps only on the divisor.
+    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` kept the classification longest, for signed overflow — `i32::MIN / -1`, a *range* fact the precondition says nothing about — and lost it with the carrier: a quotient past the i31 grows into a boxed magnitude. What the classification decides is only whether an unused binding may be deleted, which is safe for a division whatever its divisor; a guard keeps its proof by position, and nothing here moves an operation above one.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
-            IntDiv | FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
-            NatDiv | NatRem | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql
-            | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatLe | NatAnd | NatOr | NatXor
-            | NatShl | NatShr | ByteToNat | NatToByte | IntEql | IntNeq | IntAdd | IntSub
-            | IntMul | IntLt | IntLe | IntAnd | IntOr | IntXor | IntShl | IntShr | FltAdd
-            | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe | FltMin
-            | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil | FltTrunc
-            | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes => {
+            FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
+            NatDiv | NatRem | IntDiv | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq
+            | NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatLe | NatAnd | NatOr
+            | NatXor | NatShl | NatShr | ByteToNat | NatToByte | IntEql | IntNeq | IntAdd
+            | IntSub | IntMul | IntLt | IntLe | IntAnd | IntOr | IntXor | IntShl | IntShr
+            | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe
+            | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil
+            | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes => {
                 LocalBehavior::pure()
             }
         }
