@@ -40,5 +40,6 @@ curios-core = { workspace = true }
 curios-cont = { workspace = true }
 curios-elab = { workspace = true }
 curios-ersd = { workspace = true }
+curios-num = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-utilities = { workspace = true, features = ["test-support"] }

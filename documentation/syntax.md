@@ -649,7 +649,7 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded; the branch table is not. A dispatch literal is written whole, but the compiled carrier is 32 bits wide, and a case past it is refused where every numeral narrows, located at the arm, rather than changing what the program means.
+A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded; a dispatch key is not. A dispatch literal is written whole, but a key is compiled into 32 bits, and a key past them is refused at its arm rather than changing what the program means.
 
 ### List fold and case split
 
@@ -1119,7 +1119,7 @@ foreign close: (Handle) -> {};
 foreign read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Flt`, `Bytes`, `Bits`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Eight words that look like types and are not. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
+The wire types are `Nat`, `Int`, `Bool`, `Flt`, `Bytes`, `Bits`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Eight words that look like types and are not. A `Nat` or `Int` crosses as a 32-bit word although the program's are unbounded: a `Nat` argument crosses below `2³¹` and an `Int` between `-2³¹` and `2³¹ - 1`, and a larger one stops the program rather than crossing changed. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
 
 A wire result is a wire type, or a braced list of labelled wire types — the [tuple type](#tuple-types) the call yields. `{}` is no result at all, which is the unit type; `()` is the unit value and never stands here. Two or more fields are the tuple the guest projects by name, as `/std` reads `.status` and `.bytes` off a host read.
 

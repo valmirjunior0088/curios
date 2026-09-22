@@ -1,6 +1,6 @@
-//! Every folder computes what Core computes, and the backend boundary appears only as a trap.
+//! Every folder and the running program compute what Core computes, at every magnitude, and a narrowing refuses rather than changing a value.
 
-//! The numeric envelope gates: every constant folder computes over the same unbounded carriers Core does (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
+//! The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics on both sides of the i31, where the running program's form changes from an i31 to a boxed magnitude and its value must not.
 
 use {
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
@@ -11,9 +11,9 @@ use {
 use super::test_support::*;
 
 #[test]
-fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
+fn folded_and_executed_scalar_ops_agree() {
     folded_matches_runtime(&[
-        // Nat arithmetic at the top of the envelope.
+        // Nat arithmetic at the top of the i31.
         "Nat/to_str(1000000000 + 1000000000 + n)",
         "Nat/to_str(Nat/sub(3 + n, 5))",
         "Nat/to_str(Nat/mul(46340 + n, 46341))",
@@ -28,8 +28,32 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Int/to_str(Int/rem(Int/add(-7, i), +2))",
         "Int/to_str(Int/shl(Int/add(-3, i), 20))",
         "Int/to_str(Int/shr(Int/add(-65, i), 1))",
-        // Carrier reinterpretations inside both envelopes.
+        // Carrier reinterpretations.
         "Int/to_str(Nat/to_int(1000000000 + n))",
+        // Past the i31, where the running program's form changes and its value must not. Each of these used to refuse: a sum and a product past `2³¹`, a left shift whose product an `i32` would have truncated (`2³⁰ << 15`), a count Wasm would have reduced modulo the width (`<< 40`), the signed range one place short of the unsigned one (`+1 << 30`), and a float truncated past `2³¹` on each side of what `i32.trunc_f64_*` holds.
+        "Nat/to_str(1073741824 + 1073741824 + n)",
+        "Nat/to_str(Nat/mul(46341 + n, 46341))",
+        "Nat/to_str(Nat/shl(1 + n, 31))",
+        "Int/to_str(Nat/to_int(1073741824 + n))",
+        "Nat/to_str(Nat/shl(1073741824 + n, 15))",
+        "Nat/to_str(Nat/shl(1 + n, 40))",
+        "Int/to_str(Int/shl(Int/add(+1, i), 40))",
+        "Int/to_str(Int/shl(Int/add(+1, i), 30))",
+        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 3), 1.0e9)), 0))",
+        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 5), 1.0e9)), 0))",
+        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 2), -1.0e9)), +0))",
+        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 3), -1.0e9)), +0))",
+        // Past a limb, past 64 bits, and back down: a boxed operand in every operation's slow path.
+        "Nat/to_str(Nat/div(Nat/mul(4294967296 + n, 4294967297), 65537))",
+        "Nat/to_str(Nat/rem(Nat/mul(18446744073709551615 + n, 18446744073709551615), 4294967291))",
+        "Int/to_str(Int/mul(Int/sub(i, 9223372036854775808), Int/add(+3, i)))",
+        "Int/to_str(Int/div(Int/sub(i, 340282366920938463463374607431768211455), -18446744073709551616))",
+        "Int/to_str(Int/rem(Int/sub(i, 340282366920938463463374607431768211455), -18446744073709551616))",
+        "Int/to_str(Int/and(Int/sub(i, 18446744073709551616), +4294967295))",
+        "Int/to_str(Int/xor(Int/sub(i, 1180591620717411303424), +1180591620717411303423))",
+        "Int/to_str(Int/shr(Int/sub(i, 1180591620717411303425), 70))",
+        "Flt/to_str(Nat/to_flt(Nat/shl(9007199254740993 + n, 40)))",
+        "Flt/to_str(Int/to_flt(Int/sub(i, 1180591620717411303424)))",
         // Guarded on `>= +0`, the comparison `Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
         "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
         // Sign transfer.
@@ -60,13 +84,11 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
     ]);
 }
 
-/// A reassociating pass may not change *which* programs trap, and multiplication is where it would.
+/// A reassociated product answers what the written one does, however large its partial products grow.
 ///
-/// `k(1)` is zero, so the product is zero and no partial of the written order — innermost-out, `((1 * k(1)) * k(2)) * k(3)` — ever exceeds it. The accumulator rebase in `curios-ersd` threads the addends the other way, and the reversed order reaches `2¹⁶ * 2¹⁶` before it meets the zero, which leaves the `u32` carrier and traps.
+/// `k(1)` is zero, so the product is zero, while the accumulator rebase in `curios-ersd` threads the factors the other way and multiplies `65536 · 65536` before it meets the zero. That once turned a program that computed into one that refused, which is why multiplication was kept out of the rebase; nothing refuses a size now, so the row is registered and the two orders differ only in what their partials build.
 ///
-/// **Both spellings are the same program and the pair is the claim.** Binding the factor before the recursive call is the shape the rebase envelope accepts; using it inline puts the addend after the call, which the envelope declines. A rebase licensed by associativity alone makes the two disagree — this printed `0` and a trap when `NatMul` was a registered monoid — and the licence it actually needs is monotone definedness, which multiplication has not: see `curios-ersd`'s `optimize::rebase` and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`.
-///
-/// **Falsifiable, and checked to be.** Re-admitting the `NatMul` row to that table fails this fixture on the first assertion and leaves the second passing, which is the disagreement itself rather than a program that merely stopped working.
+/// **Both spellings are the same program and the pair is the claim.** Binding the factor before the recursive call is the shape the rebase envelope accepts; using it inline puts the addend after the call, which the envelope declines. Both answer `0`.
 #[test]
 fn a_reassociated_product_agrees_with_the_written_one() {
     let program = |combine: &str| {
@@ -90,38 +112,11 @@ fn a_reassociated_product_agrees_with_the_written_one() {
     assert_eq!(answer("prod(p) * k(p + 1)"), b"0");
 }
 
-#[test]
-fn overflowing_computations_trap_at_the_backend_boundary() {
-    // Each expression is a valid computation whose value leaves the carrier; the backend refuses it and traps instead of silently answering something else. Three ways a shift used to answer something else are covered below, and each was a different defect: a truncated product, a masked count, and the signed envelope being one place narrower than the unsigned one.
-    runtime_traps(&[
-        "Nat/to_str(1073741824 + 1073741824 + n)",
-        "Nat/to_str(Nat/mul(46341 + n, 46341))",
-        "Nat/to_str(Nat/shl(1 + n, 31))",
-        "Int/to_str(Nat/to_int(1073741824 + n))",
-        // A count under 32 whose *product* leaves the 32-bit carrier: `2^30 << 15` is `2^45`, which
-        // an `i32` shift truncates to zero — a result the old bit-31 test read as perfectly good,
-        // because the bits it would have seen were already gone.
-        "Nat/to_str(Nat/shl(1073741824 + n, 15))",
-        // A count Wasm would reduce modulo the operand width, turning `<< 40` into `<< 8`.
-        "Nat/to_str(Nat/shl(1 + n, 40))",
-        "Int/to_str(Int/shl(Int/add(+1, i), 40))",
-        // The signed envelope is `[-2^30, 2^30)`, so one place short of the unsigned one.
-        "Int/to_str(Int/shl(Int/add(+1, i), 30))",
-        // A float past the carrier, on each side of what the truncation instruction can itself hold: `i32.trunc_f64_u` traps from `2^32` and `i32.trunc_f64_s` from `2^31`, so a guard placed after the instruction refused the first of each pair and let the engine's bare trap answer the second.
-        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 3), 1.0e9)), 0))",
-        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 5), 1.0e9)), 0))",
-        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 2), -1.0e9)), +0))",
-        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 3), -1.0e9)), +0))",
-    ]);
-}
-
-/// A shift far past the envelope, compiled both ways: the fold answers the arithmetic and the runtime refuses.
+/// A shift far past the i31 answers the exact arithmetic, folded and executed alike.
 ///
-/// **This used to have to trap on both sides, and the reason is gone.** With `u32` carriers a fold had a width of its own, and `2^30 << 40` — `2^70`, whose low sixty-four bits are zero — read back through a widened `u64` intermediate as a representable `0`, so the folded half printed `0` while the executed half trapped. The carriers are unbounded now: the fold computes `2^70` because that is what Core computes, and the two halves no longer *can* disagree about a value. What differs between them is only whether the value is materialized, which is the one boundary left.
-///
-/// **It sits apart from the trap list because that list cannot see it.** [`runtime_traps`] compiles the tainted table only, so a row there exercises the backend and never the folder; what is checked here is that the two agree — one by computing, one by refusing.
+/// **This used to disagree, and then to refuse.** With `u32` carriers a fold had a width of its own, and `2^30 << 40` — `2^70`, whose low sixty-four bits are zero — read back through a widened `u64` intermediate as a representable `0` while the executed half trapped; once the carriers were unbounded the fold computed `2^70` and the executed half refused to box it. Now both compute it, so the rows pin the value as well as the agreement.
 #[test]
-fn a_shift_past_the_envelope_folds_exactly_and_traps_when_executed() {
+fn a_shift_past_the_i31_answers_the_arithmetic_folded_and_executed() {
     let rows = [
         (
             "Nat/to_str(Nat/shl(1073741824 + n, 40))",
@@ -131,28 +126,14 @@ fn a_shift_past_the_envelope_folds_exactly_and_traps_when_executed() {
             "Int/to_str(Int/shl(Int/add(+536870912, i), 35))",
             "+18446744073709551616",
         ),
+        (
+            "Int/to_str(Int/shl(Int/add(-536870912, i), 35))",
+            "-18446744073709551616",
+        ),
     ];
-    let sources = rows.iter().map(|(row, _)| *row).collect::<Vec<_>>();
-
-    // Untainted, every operand is a literal, so the fold answers — at the theory's width, not a carrier's.
-    let folded = compile(&table(&sources, false)).expect("the folded table compiles");
-    for (index, (row, expected)) in rows.iter().enumerate() {
-        let output = run_row(&folded, index).expect("a folded row answers");
-        assert_eq!(
-            String::from_utf8_lossy(&output).trim(),
-            *expected,
-            "expected the exact arithmetic for {row}"
-        );
-    }
-
-    // Tainted, the value must reach an `i31ref`, which is where it is refused.
-    let executed = compile(&table(&sources, true)).expect("the tainted table compiles");
-    for (index, (row, _)) in rows.iter().enumerate() {
-        let error = run_row(&executed, index).expect_err("the expression should trap");
-        assert!(
-            error.contains(carrier_refusal(row)),
-            "expected a trap for {row}, got: {error}"
-        );
+    let bodies = rows.iter().map(|(body, _)| *body).collect::<Vec<_>>();
+    for ((body, expected), executed) in rows.iter().zip(folded_matches_runtime(&bodies)) {
+        assert_eq!(executed, expected.as_bytes(), "wrong value for: {body}");
     }
 }
 
@@ -162,7 +143,7 @@ fn a_shift_past_the_envelope_folds_exactly_and_traps_when_executed() {
 ///
 /// The left shifts are here for the case the trap list cannot cover: shifting *zero* by a count past the width is still zero, so the count alone must not decide a refusal.
 ///
-/// Mutation-checked against both halves of the emitter's shift lowering, and they separate. Masking the count instead of clamping it — Wasm's own reduction — moves this fixture and the trap list together. Restoring the old `i32` shift with its bit-31 test moves the trap list alone, since a truncated product is invisible to that test while a clamped count is unaffected by it. Neither moves [`folded_and_executed_scalar_ops_agree_inside_the_envelope`], whose rows all sit inside the carrier.
+/// The fast path clamps a right shift's count to 31, where any i31 has become its sign, and takes a left shift's fast path only below 32; a count past either goes to the big-number helpers, which answer the same.
 #[test]
 fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
     let rows = [
@@ -182,7 +163,7 @@ fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
 
 /// The domain half, which is no longer a runtime concern: a negative narrowed to `Nat` and a zero divisor are refused where they are written, because `/sys` states both as preconditions.
 ///
-/// These two probes lived in the overflow list above and do not belong there — that list is about a *valid* computation whose value leaves the i31 envelope, a range fact the backend enforces at materialization. Out of domain is a different failure entirely, and it now has a different, earlier answer. `IntDiv` is the one operation in both categories: its precondition rules out the zero divisor, and signed overflow (`i32::MIN / -1`) remains the backend's.
+/// Out of domain is the one failure an operation on a `Nat` or `Int` has, and its answer is at the type level: the zero divisor and the negative narrowing are ruled out by the preconditions the operations carry, so neither reaches the running program.
 #[test]
 fn out_of_domain_computations_are_refused_where_they_are_written() {
     for (body, operation) in [
@@ -200,29 +181,33 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
     }
 }
 
+/// `2^30 + 2^30` folds to `2^31` at compile time, exactly as Core computes it, and adding the runtime zero keeps the literal alive to emission, where it materializes as a boxed magnitude built from its limbs — once a refusal, now a constant.
 #[test]
-fn folded_literal_outside_the_envelope_traps_at_materialization() {
-    // `2^30 + 2^30` folds to `2^31` at compile time, exactly as Core computes it; adding the runtime zero keeps the literal alive to emission, where the envelope cannot box it. Materialization is the one boundary, so the program traps at runtime — it must not crash the compiler.
-    runtime_traps(&["Nat/to_str(1073741824 + 1073741824 + n)"]);
+fn a_folded_literal_past_the_i31_materializes_as_its_value() {
+    assert_eq!(
+        folded_matches_runtime(&["Nat/to_str(1073741824 + 1073741824 + n)"]),
+        [b"2147483648".to_vec()]
+    );
 }
 
 #[test]
 fn a_closed_computation_folds_at_the_theory_s_width() {
-    // The erased carriers are unbounded, so a fold answers what Core answers and a value that never needs a runtime representation is not subject to the runtime's width. This once demonstrated a `u32` band between the folders and the envelope; there is no band now, and what it demonstrates is that the fold and the theory agree.
+    // The erased carriers are unbounded, so a fold answers what Core answers. This once demonstrated a `u32` band between the folders and the runtime's width; there is no band now, and what it demonstrates is that the fold and the theory agree.
     assert_eq!(
         run("use /std/{Nat, Io}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
     );
 }
 
-/// A growing fold declines rather than building a numeral no machine holds, and the program it leaves standing traps at the envelope instead.
+/// A growing fold declines rather than building a numeral past its allowance, and the program it leaves standing computes the value at run time instead.
 ///
-/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder diagnostics` reports only lints on this program, and `wonder stage ersd` shows the call arriving with both operands literal. With `u32` carriers the fold refused past the width and cost nothing; unbounded, it would be asked for a forty-million-bit numeral. The allowance is what declines instead, and a decline is invisible: the operation stays, and the envelope traps on it at its execution point.
-///
-/// The shift is closed and the taint is added *after* it, which is what makes this the decline's fixture rather than the emitter's: with `n` inside the shift there would be no constant pair to fold and nothing would be declined.
+/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder stage ersd` shows the call arriving with both operands literal. Unbounded, a fold would be asked for a forty-million-bit numeral; the allowance declines instead, and a decline is invisible: the operation stays, and the running program builds the five megabytes the value is and reads its top bits back.
 #[test]
-fn a_growing_fold_declines_rather_than_building_what_cannot_materialize() {
-    runtime_traps(&["Nat/to_str(Nat/shl(1, 40000000) + n)"]);
+fn a_growing_fold_declines_and_the_running_program_computes_the_value() {
+    assert_eq!(
+        folded_matches_runtime(&["Nat/to_str(Nat/shr(Nat/shl(1, 40000000) + n, 39999999))"]),
+        [b"2".to_vec()]
+    );
 }
 
 #[test]
@@ -334,9 +319,9 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
 
 /// A dispatch *key* narrows at erasure; a dispatch *value* no longer does.
 ///
-/// **These were one boundary and are now two different things.** A written numeral used to narrow into the erased carriers at erasure and refuse what a `u32` could not hold. The carriers are unbounded now, so a literal crosses whole and only materialization refuses it — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing stays, and it is the last one at this boundary.
+/// **These were one boundary and are now two different things.** A written numeral used to narrow into the erased carriers at erasure and refuse what a `u32` could not hold. The carriers are unbounded now, so a literal crosses whole — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing stays, and it is the last one at this boundary.
 ///
-/// The dispatch half also guards a defect worth keeping named: `curios-text` once narrowed the key in the parser, four stages above this, and the failure backtracked — a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core keys the switch by its unbounded value and the width is chosen here alone — see [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md).
+/// The dispatch half also guards a defect worth keeping named: `curios-text` once narrowed the key in the parser, four stages above this, and the failure backtracked — a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md).
 #[test]
 fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
     let refusal = |source: &str| {
@@ -345,7 +330,7 @@ fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
             .to_string()
     };
 
-    // A literal in an ordinary term is a *value*, and no longer narrows anywhere: it typechecks, and the envelope refuses it only if it has to be boxed.
+    // A literal in an ordinary term is a *value*, and narrows nowhere.
     assert!(
         typecheck(
             r#"
@@ -355,7 +340,7 @@ fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
         "#
         )
         .is_ok(),
-        "a numeral past the envelope is a value, not an error"
+        "a numeral past every machine word is a value, not an error"
     );
 
     // The same numeral as a dispatch case, which used to become a binder instead.
@@ -379,4 +364,33 @@ fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
         "#),
         b"7"
     );
+}
+
+/// A key the i31 does not hold is decided by equality rather than by the branch table, so a value past the i31 meets it exactly.
+///
+/// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly below `2³² - 1` and saturates there. So `2³²` read as a word is `4294967295`, which is a key a program may write; the lowering keeps every key at or past `2³⁰` out of the table and tests it for equality, and the third row is the one that would answer `7` if it did not.
+#[test]
+fn a_dispatch_key_past_the_i31_matches_exactly_at_run_time() {
+    let rows = [
+        (
+            "Nat/to_str(match 1073741824 + n | 1073741824 => 7 | 5 => 1 | _ => 0 end)",
+            "7",
+        ),
+        (
+            "Nat/to_str(match 4294967295 + n | 4294967295 => 7 | _ => 0 end)",
+            "7",
+        ),
+        (
+            "Nat/to_str(match 4294967296 + n | 4294967295 => 7 | _ => 0 end)",
+            "0",
+        ),
+        (
+            "Nat/to_str(match 5 + n | 1073741824 => 7 | 5 => 1 | _ => 0 end)",
+            "1",
+        ),
+    ];
+    let bodies = rows.iter().map(|(body, _)| *body).collect::<Vec<_>>();
+    for ((body, expected), executed) in rows.iter().zip(folded_matches_runtime(&bodies)) {
+        assert_eq!(executed, expected.as_bytes(), "wrong value for: {body}");
+    }
 }

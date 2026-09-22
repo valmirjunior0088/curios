@@ -567,6 +567,7 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-ersd",
+ "curios-num",
  "curios-package",
  "curios-pipeline",
  "curios-profile",

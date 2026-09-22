@@ -10,7 +10,7 @@
 //!
 //! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid, every row of which commutes, so the recursion may sit on either side of the combine.
 //!
-//! **Associativity is not on its own the licence, and believing it was is what let a wrong row in.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. On these carriers that is observable: the erased scalars refuse rather than wrap (`curios-num`'s `scalar`) and the emitter traps on a result leaving the i31 envelope, so `⊕` is partial, and a partial operation can be associative wherever both sides are defined while differing in *where* it is defined. What the reassociation consumes is therefore associativity, an erasure-stable identity, and **monotone definedness**: no partial of any association may fall outside the carrier when the total is inside it. The registered rows are exactly those that have it — see the table below for the three that do not.
+//! **The licence is associativity and an erasure-stable identity, because nothing here is partial.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. That once cost a third condition, monotone definedness, because a result leaving the i31 refused: a reversed order could refuse where the written one computed, and a multiplication row turned `((1 * 0) * 2¹⁶) * 2¹⁶` into a trap. `Nat` and `Int` are unbounded at run time now ([Nat and Int are an i31 until they outgrow it](../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so every partial of every order is defined, and a reversed order costs at most the size of what its partials build.
 
 #[cfg(test)]
 mod tests;
@@ -26,9 +26,7 @@ use {
 
 /// A monoid registered for accumulator reassociation, keyed in the erased operators.
 ///
-/// Every row here has the monotone definedness the module documentation states. `NatAdd` has it because its operands are non-negative, so every partial sum is at most the total: if the total is representable, so is each partial, and if it is not, both orders trap alike. `NatOr` and `IntOr` have it more simply — on operands that are already inside the envelope, OR cannot leave it, so nothing traps in either order.
-///
-/// **No `NatMul`, `IntMul` or `IntAdd` row, and each is excluded for a demonstrated reason rather than caution.** Multiplication has an annihilator: one zero factor makes the total `0` while a partial of the reversed order is the product of everything else, so `((1 * 0) * 2¹⁶) * 2¹⁶` computes and its reversal traps. Signed addition cancels: `MAX + MAX + MIN` is representable and `(MAX + MAX)` is not. Each turns a program that computed into one that traps — which is what the reversal costs when the row is not monotone, and it is not something a later row may be added without answering.
+/// Every row is an associative operation with an identity the erased stages agree on: addition and multiplication on both carriers, and `or`.
 ///
 /// No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
 ///
@@ -36,7 +34,10 @@ use {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Monoid {
     NatAdd,
+    NatMul,
     NatOr,
+    IntAdd,
+    IntMul,
     IntOr,
 }
 
@@ -44,7 +45,10 @@ impl Monoid {
     fn of_operation(operation: Operation) -> Option<Monoid> {
         Some(match operation {
             Operation::NatAdd => Monoid::NatAdd,
+            Operation::NatMul => Monoid::NatMul,
             Operation::NatOr => Monoid::NatOr,
+            Operation::IntAdd => Monoid::IntAdd,
+            Operation::IntMul => Monoid::IntMul,
             Operation::IntOr => Monoid::IntOr,
             _ => return None,
         })
@@ -76,7 +80,9 @@ impl Monoid {
     fn identity(self) -> Constant {
         match self {
             Monoid::NatAdd | Monoid::NatOr => Constant::Nat(Natural::zero()),
-            Monoid::IntOr => Constant::Int(Integer::from(0u32)),
+            Monoid::NatMul => Constant::Nat(Natural::from(1u32)),
+            Monoid::IntAdd | Monoid::IntOr => Constant::Int(Integer::from(0u32)),
+            Monoid::IntMul => Constant::Int(Integer::from(1u32)),
         }
     }
 
@@ -84,7 +90,10 @@ impl Monoid {
     fn build(self, left: Atom, right: Atom) -> Rhs {
         match self {
             Monoid::NatAdd => operation(Operation::NatAdd, left, right),
+            Monoid::NatMul => operation(Operation::NatMul, left, right),
             Monoid::NatOr => operation(Operation::NatOr, left, right),
+            Monoid::IntAdd => operation(Operation::IntAdd, left, right),
+            Monoid::IntMul => operation(Operation::IntMul, left, right),
             Monoid::IntOr => operation(Operation::IntOr, left, right),
         }
     }

@@ -2,7 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-//! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
+//! The differential harness: each scalar expression runs twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and the two answers must be identical, pinning the folders and the backend to one semantics.
 
 use {
     crate::tests::{Compiled, compile},
@@ -59,29 +59,9 @@ pub(super) fn folded_matches_runtime(rows: &[&str]) -> Vec<Vec<u8>> {
         .enumerate()
         .map(|(index, row)| {
             let folded = run_row(&folded, index).expect("a folded row runs");
-            let executed = run_row(&executed, index).expect("in-envelope expression executes");
+            let executed = run_row(&executed, index).expect("an executed row runs");
             assert_eq!(folded, executed, "fold/runtime disagreement on: {row}");
             executed
         })
         .collect()
-}
-
-/// Compile `rows` tainted and assert each traps at the backend boundary when it is the row selected, naming the carrier the row computes in — read off the row's `Nat/` or `Int/` head, which is the carrier its result leaves.
-pub(super) fn runtime_traps(rows: &[&str]) {
-    let executed = compile(&table(rows, true)).expect("the tainted table compiles");
-    for (index, row) in rows.iter().enumerate() {
-        let error = run_row(&executed, index).expect_err("expression should trap");
-        assert!(
-            error.contains(carrier_refusal(row)),
-            "expected a runtime trap for {row}, got: {error}"
-        );
-    }
-}
-
-/// The sentence a refusal of `row`'s carrier begins with: the report names the carrier the value left, and `BigNat` or `BigInt` as where larger values live.
-pub(super) fn carrier_refusal(row: &str) -> &'static str {
-    match row.starts_with("Int/") {
-        true => "panicked: an Int left its carrier",
-        false => "panicked: a Nat left its carrier",
-    }
 }

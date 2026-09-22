@@ -76,7 +76,7 @@ fn cell_new_and_get_use_the_cell_struct() {
 ///
 /// The positive control for `Context::refuse_raw_aggregate`, and the reason that guard is an assertion in the emitter rather than a remark in the door. A continuation parameter offers `Offer::Open`, so a raw demand from *any* of its uses settles it raw whatever flows in — the aggregate's own `Offer::Never` never enters the question, because the coercion happens on the edge rather than at the aggregate's definition. The edge then loads its argument at that carrier, and an aggregate argument becomes `ref.cast (ref i31)` over a `struct.new`: a module that verifies, emits, and traps.
 ///
-/// This is that shape stated directly — a continuation whose parameter feeds `NatAdd`, entered with a tuple. `curios-ersd`'s door no longer produces it (an immediate arm's binder was aliased to its scrutinee and now gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet`), but the IR still permits it, so the guard is what keeps the class from returning silently. Observed against the pre-fix door on 2026-08-20: `` `m869` is a `Tuple`/`List` construction loaded at the raw carrier Nat`` — the same value the emitted wasm had been casting.
+/// This is that shape stated directly — a continuation whose parameter feeds `FltAdd`, entered with a tuple. The float is the carrier that can still reach it: a parameter a word would hold is offered one only when every argument reaching it is a word already, which a construction never is, so the analysis refuses the word before the emitter could. `curios-ersd`'s door no longer produces it (an immediate arm's binder was aliased to its scrutinee and now gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet`), but the IR still permits it, so the guard is what keeps the class from returning silently. Observed against the pre-fix door on 2026-08-20: `` `m869` is a `Tuple`/`List` construction loaded at the raw carrier Nat`` — the same value the emitted wasm had been casting.
 ///
 /// The tuple here is closed, so `hoist` lifts it to a module const: this covers the const half of the population. [`a_region_aggregate_reaching_a_raw_parameter_is_refused`] covers the other.
 #[test]
@@ -90,14 +90,14 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
     let sum = module.add_value(Some("sum".into()));
     let aggregate = module.add_value(Some("aggregate".into()));
 
-    // The parameter's one use demands a raw `Nat`, which is what raises it out of a reference.
+    // The parameter's one use demands a raw `Flt`, which is what raises it out of a reference.
     let exit = module.add_node(curios_cont::Node::Exit {
         value: Some(curios_cont::Atom::Value(sum)),
     });
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::Intrinsic::NatAdd,
-        args: vec![curios_cont::Atom::Value(param), nat(1)],
+        op: curios_cont::Intrinsic::FltAdd,
+        args: vec![curios_cont::Atom::Value(param), flt(1.0)],
         next: exit,
     });
     let raised = module.add_continuation(curios_cont::Continuation {
@@ -155,8 +155,8 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     });
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::Intrinsic::NatAdd,
-        args: vec![curios_cont::Atom::Value(param), nat(1)],
+        op: curios_cont::Intrinsic::FltAdd,
+        args: vec![curios_cont::Atom::Value(param), flt(1.0)],
         next: exit,
     });
     let raised = module.add_continuation(curios_cont::Continuation {
@@ -255,7 +255,8 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     assert_contains(&wat, "struct.new $row/0$Shape");
     assert_contains(&wat, "ref.cast (ref $row/0$Shape)");
     assert_contains(&wat, "struct.get $row/0$Shape $1");
-    assert_absent(&wat, "ref.test");
+    // No cascade of tests against candidate types; the exit's narrowing tests for an i31, which is not one.
+    assert_absent(&wat, "ref.test (ref $");
     // The row type is final and unrelated: the printer renders no `sub` wrapper for one.
     for line in wat.lines().filter(|line| line.contains("(type $row/")) {
         assert!(!line.contains("sub"), "row types must be final: {line}");

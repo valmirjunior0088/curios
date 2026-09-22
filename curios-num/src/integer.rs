@@ -8,7 +8,7 @@ use {
     },
 };
 
-/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-emit`'s refusal at emission and by the runtime's own overflow traps.
+/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
@@ -92,7 +92,7 @@ impl Mul for Integer {
     }
 }
 
-/// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement representation `num-bigint` models. The type level pretends ℤ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend.
+/// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement representation `num-bigint` models. The type level pretends ℤ, and the running program computes the same unbounded operations.
 impl BitAnd for Integer {
     type Output = Self;
 

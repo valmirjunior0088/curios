@@ -59,7 +59,7 @@ The obligations below are the ones a search does not reveal.
 | Elaboration, typing, or conversion | Text lowering, erasure, diagnostics, integration tests |
 | Kernel judgments (`curios-cert`) | `curios-core`'s representation, `recheck.rs`, `documentation/design/language/the-soundness-perimeter.md` |
 | A shared analysis (`curios-analysis`) | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — and `curios-analysis/tests/driven.rs` |
-| A numeric carrier or its arithmetic | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` |
+| A numeric carrier or its arithmetic | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), `curios-emit`'s fast paths and its `big_emitter` library, and `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md` |
 | Concepts or witness resolution | Surface declarations, standard-library witnesses, syntax documentation |
 | A derivation (`curios-elab/src/derive.rs`) | The `DerivationSyntax` roster in `curios-utilities` and its three fills, the concept's own `/std` vocabulary, `curios/src/tests/derive.rs`, `curios-text/src/into_core/ordering_tests.rs`. The scheduler's edges read the roster, so `order.rs` needs no edit of its own |
 | Host operations or foreign calls | `curios-abi`'s row, compiler use, native runtime implementation, JavaScript implementation |

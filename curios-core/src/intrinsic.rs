@@ -84,7 +84,7 @@ pub enum Intrinsic {
     ByteToNat(Term),
     /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
     ///
-    /// Before this field the operation *masked*, which made it total by changing a value — the one narrowing on a numeric carrier that did, and the thing `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
+    /// Before this field the operation *masked*, which made it total by changing a value — the one narrowing on a numeric carrier that did, and the thing `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
     NatToByte {
         nat: Term,
         below: Term,

@@ -261,26 +261,35 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
 #[test]
 fn list_map_is_not_an_intrinsic_opcode() {
     assert!(Intrinsic::ListAppend.allocates());
-    assert!(!Intrinsic::NatAdd.is_total());
+    assert!(!Intrinsic::NatDiv.is_total());
 }
 
 #[test]
 fn every_guarded_operation_is_classified_as_trapping() {
-    // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first through the same checked helper as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
+    // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard, while a wildcard defaulting to `Total` would answer `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
     for op in [
-        Intrinsic::IntShl,
-        Intrinsic::NatToInt,
-        Intrinsic::IntToNat,
         Intrinsic::FltOfLeBytes,
+        Intrinsic::FltToNat,
+        Intrinsic::FltToInt,
+        Intrinsic::WindowExtent,
     ] {
         assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");
         assert!(!op.is_total(), "{op:?} must not be deletable when dead");
     }
 
-    // The controls that keep the rule from being "guard everything": monus saturates and a right shift only clears bits, so neither can leave the envelope.
-    assert!(Intrinsic::NatSub.is_total());
-    assert!(Intrinsic::NatShr.is_total());
-    assert!(Intrinsic::IntShr.is_total());
+    // The controls that keep the rule from being "guard everything": a `Nat` or `Int` is unbounded at run time, so a sum, a product, a left shift or a conversion between the two grows rather than refusing, and monus and a right shift never grow at all.
+    for op in [
+        Intrinsic::NatAdd,
+        Intrinsic::NatMul,
+        Intrinsic::IntShl,
+        Intrinsic::NatToInt,
+        Intrinsic::IntToNat,
+        Intrinsic::NatSub,
+        Intrinsic::NatShr,
+        Intrinsic::IntShr,
+    ] {
+        assert!(op.is_total(), "{op:?} grows rather than refusing");
+    }
 }
 
 #[test]

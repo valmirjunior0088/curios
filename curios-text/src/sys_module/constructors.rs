@@ -90,7 +90,7 @@ pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
 
 /// `decl` under `lines`, the block a `---` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
 ///
-/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value leaves the carrier is one rule stated once — `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
+/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value is narrowed is one rule stated once — `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
 pub(super) fn documented(lines: &[&str], decl: Decl) -> Decl {
     Decl {
         doc: Some(Doc {

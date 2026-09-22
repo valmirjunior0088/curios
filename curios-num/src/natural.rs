@@ -10,7 +10,7 @@ use {
     },
 };
 
-/// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-emit`'s refusal at emission and by the runtime's own overflow traps.
+/// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 ///
 /// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The scalar semantics the *erased* stages share live in [`nat_mul`](crate::nat_mul) and its siblings, which impose no width either: a growing operation takes an allowance from its caller and declines past it, because how large a numeral is worth building is a fact about a stage's resources rather than about ℕ.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -207,7 +207,7 @@ binary_op!(Sub, sub);
 binary_op!(Div, div);
 binary_op!(Rem, rem);
 
-// Unbounded bitwise `and`/`or`/`xor`, on the infinite binary expansion `num-bigint` models. The type level pretends ℕ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend.
+// Unbounded bitwise `and`/`or`/`xor`, on the infinite binary expansion `num-bigint` models. The type level pretends ℕ, and the running program computes the same unbounded operations.
 binary_op!(BitAnd, bitand);
 binary_op!(BitOr, bitor);
 binary_op!(BitXor, bitxor);
