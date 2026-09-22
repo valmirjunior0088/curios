@@ -97,15 +97,15 @@ test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
     Test/all([
         Test/equal(
             spelled(List/sort([1.0, Flt/nan, 0.5, -0.0, +0.0])),
-            ["-0", "+0", "+0.5", "+1", "NaN"]),
+            ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
             spelled(List/sort([Flt/nan, +0.0, 1.0, -0.0, 0.5])),
-            ["-0", "+0", "+0.5", "+1", "NaN"]),
+            ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
             spelled(List/sort([0.5, -0.0, Flt/nan, 1.0, +0.0])),
-            ["-0", "+0", "+0.5", "+1", "NaN"])]);
+            ["-0", "+0", "+0.5", "+1", "+nan"])]);
 
--- `of_str` reads every spelling `to_str` writes, the infinities and the NaN among them, in any case and with an optional sign.
+-- `of_str` reads every spelling `to_str` writes, the infinities and the default NaN among them, in any case and with an optional sign.
 test of_str_reads_back_what_to_str_writes =
     Test/equal(
         [
@@ -117,7 +117,7 @@ test of_str_reads_back_what_to_str_writes =
             read("nan"),
             read("infx"),
             read("2.5e-3")],
-        ["+inf", "-inf", "NaN", "+inf", "-inf", "NaN", "none", "+0.0025"]);
+        ["+inf", "-inf", "+nan", "+inf", "-inf", "+nan", "none", "+0.0025"]);
 
 -- IEEE's operations past the arithmetic hold in a type: the remainder is to the nearest quotient, `nextUp` steps a negative subnormal onto `-0`, the class tells the zeros apart, and a payload survives setting and reading it.
 let _the_remainder_takes_the_nearest_quotient: Eq(Flt/to_str(Flt/remainder(7.0, 2.0)), "-1") = Eq/refl();
@@ -144,7 +144,7 @@ test remainder_is_to_the_nearest_quotient =
             Flt/remainder(1.0, Flt/pos_inf),
             Flt/remainder(Flt/pos_inf, 1.0),
             Flt/remainder(1.0, 0.0)], show),
-        ["-1", "-1", "+1", "-0", "+1", "NaN", "NaN"]);
+        ["-1", "-1", "+1", "-0", "+1", "+nan", "+nan"]);
 
 -- `nextUp` and `nextDown` at every place IEEE names: the zeros, the negative least subnormal, both infinities and the largest finite value.
 test next_up_and_down_at_the_edges =
@@ -172,7 +172,7 @@ test the_min_and_max_variants =
             Flt/minimum_magnitude(-2.0, 2.0),
             Flt/maximum_magnitude_number(Flt/nan, -2.0),
             Flt/minimum_magnitude(Flt/nan, 1.0)], show),
-        ["+1", "+1", "+2", "-3", "-2", "-2", "NaN"]);
+        ["+1", "+1", "+2", "-3", "-2", "-2", "+nan"]);
 
 -- The payload operations: a quiet and a signaling NaN built from a payload read it back, an inadmissible payload builds `+0`, and anything but a NaN has payload `-1`.
 test payloads_are_set_and_read =
@@ -235,3 +235,57 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
             match Map/get(negative, "v") | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f) | _ => false end,
             true),
         Test/equal(Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(Flt/neg(Flt/nan)))), ""), "v = -nan\n")]);
+
+-- Every class reads back from what `to_str` writes, bit for bit — the NaNs with their signs, kinds and payloads — and from what `to_hex_str` writes.
+let _a_nan_spells_its_kind_in_a_type: Eq(Flt/to_str(Flt/signaling_nan(18.0)), "+snan(0x12)") = Eq/refl();
+let _hex_spells_three_in_a_type: Eq(Flt/to_hex_str(3.0), "+0x1.8p+1") = Eq/refl();
+
+let reads_back(f: Flt) -> Bool =
+    let decimal = match Flt/of_str(Flt/to_str(f)) | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f) | none() => false end;
+    let hex = match Flt/of_hex_str(Flt/to_hex_str(f)) | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f) | none() => false end;
+    decimal && hex;
+
+test every_class_reads_back_from_its_text =
+    let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
+    Test/equal(
+        List/map([
+            Flt/nan, Flt/neg(Flt/nan), Flt/signaling_nan(1.0), Flt/neg(Flt/signaling_nan(18.0)), Flt/quiet_nan(5.0),
+            Flt/pos_inf, Flt/neg_inf, +0.0, -0.0, least, Flt/neg(least), largest, 0.1, -2.5, 1.0e300], reads_back),
+        List/map(List/range(0, 15), (_) => true));
+
+test nan_and_hex_text_spell_as_ieee_writes_them =
+    Test/all([
+        Test/equal(
+            List/map([Flt/nan, Flt/neg(Flt/nan), Flt/signaling_nan(1.0), Flt/quiet_nan(5.0)], Flt/to_str),
+            ["+nan", "-nan", "+snan", "+nan(0x5)"]),
+        Test/equal(
+            List/map([3.0, -0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0], Flt/to_hex_str),
+            ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
+        Test/equal(
+            List/map(["snan(0x0)", "nan(0x)", "NaN(0X5)", "0x1p-1074", "-0x1.8P1", "0x"], (s) => Option/map(Flt/of_str(s), Flt/to_str)),
+            [Option/none(), Option/none(), Option/some("+nan(0x5)"), Option/some(Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))), Option/some("-3"), Option/none()])]);
+
+-- Text reads in a direction too: a tenth lands on either side of itself, and a value past the largest finite one stops at it toward zero.
+test text_reads_in_a_direction =
+    let read(r: Rounding, s: Str) -> Str = match rounded/of_str(r, s) | some(f) => Flt/to_str(f) | none() => "none" end;
+    Test/all([
+        Test/equal(read(Rounding/toward_positive(), "0.1"), Flt/to_str(0.1)),
+        Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(0.1))),
+        Test/equal(read(Rounding/toward_zero(), "1e400"), Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
+        Test/equal(read(Rounding/toward_positive(), "1e-400"), Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
+        Test/equal(read(Rounding/toward_negative(), "-0x1.00000000000008p0"), Flt/to_str(Flt/neg(Flt/next_up(1.0))))]);
+
+-- A fixed number of significant digits, rounded in a direction, carrying into the next power of ten when it rounds up past it.
+test significant_digits_round_in_a_direction =
+    let third = Flt/div(1.0, 3.0);
+    Test/equal(
+        [
+            Flt/to_str_significant(third, 5, @Bool/True/qed()),
+            rounded/to_str_significant(Rounding/toward_positive(), third, 5, @Bool/True/qed()),
+            Flt/to_str_significant(999.5, 3, @Bool/True/qed()),
+            Flt/to_str_significant(2.5, 1, @Bool/True/qed()),
+            rounded/to_str_significant(Rounding/ties_to_away(), 2.5, 1, @Bool/True/qed()),
+            Flt/to_str_significant(-0.0, 3, @Bool/True/qed()),
+            Flt/to_str_significant(123456.0, 2, @Bool/True/qed())],
+        ["+0.33333", "+0.33334", "+1000", "+2", "+3", "-0", "+120000"]);

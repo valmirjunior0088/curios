@@ -45,9 +45,13 @@ fn flt_to_str_matches_rust_shortest_format() {
         /std/print(Str/join("|", [{array}]))
         "#
     );
+    // Rust spells every NaN `NaN`, sign and payload dropped, where `to_str` writes the pattern so it reads back — so the oracle holds the numbers, and `0 / 0`, the default NaN, is spelled as the model writes it.
     let expected = cases
         .iter()
-        .map(|(_, value)| format!("{value:+}"))
+        .map(|(_, value)| match value.is_nan() {
+            true => "+nan".to_string(),
+            false => format!("{value:+}"),
+        })
         .collect::<Vec<_>>()
         .join("|");
     assert_eq!(run(&source), expected.into_bytes());

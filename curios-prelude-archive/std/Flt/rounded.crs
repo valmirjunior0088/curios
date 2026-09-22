@@ -1,4 +1,4 @@
-use /std/{Flt, Nat, Int, Bool};
+use /std/{Flt, Nat, Int, Bool, Str, Option};
 use /std/Flt/{Rounding, exact};
 
 --- `a + b`, in the direction `r` names.
@@ -132,10 +132,26 @@ let integral(r: Rounding, f: Flt) -> {Bool, Nat} =
     end;
 
 --- IEEE's `convertToInteger` in the direction `r` names (§5.8): `f` rounded to an `Int`, exactly. The bound excludes an infinity and a NaN.
-pub let to_int(r: Rounding, f: Flt, @_ok: Flt/Finite(f)) -> Int =
+pub let to_int(r: Rounding, f: Flt, @_: Flt/Finite(f)) -> Int =
     let (negative, magnitude) = integral(r, f);
     match negative | true => Int/sub(+0, Nat/to_int(magnitude)) | false => Nat/to_int(magnitude) end;
 
 --- `to_int` for a non-negative `f`, as a `Nat`.
-pub let to_nat(r: Rounding, f: Flt, @_ok: Flt/NonNeg(f)) -> Nat =
+pub let to_nat(r: Rounding, f: Flt, @_: Flt/NonNeg(f)) -> Nat =
     integral(r, f).1;
+
+--- `Flt/of_str` in the direction `r` names: decimal or hex text read exactly and rounded once, the special names read as they are. `none` for text that spells no number.
+pub let of_str(r: Rounding, s: Str) -> Option(Flt) =
+    Flt/of_str_in(r, s);
+
+--- `Flt/of_hex_str` in the direction `r` names.
+pub let of_hex_str(r: Rounding, s: Str) -> Option(Flt) =
+    Flt/of_hex_str_in(r, s);
+
+--- `Flt/of_decimal` in the direction `r` names: `d · 10^e`, of the sign `negative` gives, rounded once.
+pub let of_decimal(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
+    Flt/of_decimal_in(r, negative, d, e, digits);
+
+--- `Flt/to_str_significant` in the direction `r` names: exactly `n` significant digits (§5.12.2).
+pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @_: Nat/Lt(0, n)) -> Str =
+    Flt/to_str_significant_in(r, f, n);

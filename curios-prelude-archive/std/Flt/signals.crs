@@ -119,7 +119,7 @@ pub let of_int(r: Rounding, n: Int) -> Exceptions =
         rounded/of_int(r, n));
 
 --- What `rounded/to_integral(r, a)` raises: invalid for a signaling NaN, and nothing else — IEEE's named roundings to an integral value never signal inexact (§5.3.1).
-pub let to_integral(_r: Rounding, a: Flt) -> Exceptions =
+pub let to_integral(_: Rounding, a: Flt) -> Exceptions =
     match Flt/is_signaling(a) | true => invalid | false => Exceptions/none end;
 
 --- What IEEE's `roundToIntegralExact` in the direction `r` raises (§5.3.1): invalid for a signaling NaN, and inexact when the integral value differs from `a`.
