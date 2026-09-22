@@ -155,7 +155,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                 withdraw_params(module, *return_to, &mut withdrawn)
             }
 
-            // A host import's results are references too, with one exception: an `Flt` crosses back *raw*. Every other scalar re-enters as the i31 the host minted, and a reference as the rope the embed step builds — but a float's carrier is a struct the emitter defines, and the browser hands a plain JavaScript number straight through with nothing to box it with. So that parameter *is* the `f64`, offered at its carrier like any other definition, and a use wanting a reference boxes at its own site through the coercion every raw carrier already has.
+            // A host import's results are references too, with one exception: an `Flt` is held at its carrier. Every scalar crosses back raw, and the emitter boxes an integral one at the call — a `Nat` or `Int` past the i31 into the boxed magnitude only the guest can build — and embeds a reference into the rope; but a float's box is one allocation a use may never need. So that parameter *is* the `f64`, offered at its carrier like any other definition, and a use wanting a reference boxes at its own site through the coercion every raw carrier already has.
             //
             // Withdrawing it with the rest is what made an `Flt` result unrepresentable: the parameter became a reference the call had no way to produce, and the module failed validation with an `f64` where an `anyref` was wanted.
             Node::Foreign {

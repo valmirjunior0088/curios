@@ -68,7 +68,7 @@ macro_rules! host_ops {
             /// Close `h`. Closing an unknown handle is a no-op.
             handle_close as Handle/close [h: Handle] [];
 
-            /// Read the wall clock. `(secs_hi, secs_lo, nanos)`: seconds since the Unix epoch split base-10⁹ so each limb fits an i31, plus sub-second nanoseconds.
+            /// Read the wall clock. `(secs_hi, secs_lo, nanos)`: seconds since the Unix epoch split base-10⁹ so each limb fits the wire's `i32`, plus sub-second nanoseconds.
             clock_wall as clock/wall [] [secs_hi: Nat, secs_lo: Nat, nanos: Nat];
 
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
@@ -95,7 +95,7 @@ macro_rules! host_ops {
             /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). Break, the four status lines and drain are deliberately absent until a program needs them; drain in particular waits on the wire, which no row does.
             serial_control as serial/control [h: Handle, op: Nat, on: Bool] [status: Status];
 
-            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the i31 envelope is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
+            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the wire's `i32` is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
             file_stat as file/stat [path: Bytes] [status: Status, kind: Nat, size_hi: Nat, size_lo: Nat, mtime_hi: Nat, mtime_lo: Nat, mtime_nanos: Nat];
 
             /// Remove the file at `path`. `IsDirectory` on a directory.

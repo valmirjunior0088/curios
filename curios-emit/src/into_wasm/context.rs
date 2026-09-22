@@ -3,7 +3,7 @@ use {
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Table, get, set,
+        LocalData, Table, call, get, set,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_utilities::{Entropy, Grain},
@@ -12,6 +12,17 @@ use {
         iter,
     },
 };
+
+/// `val_type` with null admitted, so a local of it has a default to start at: a non-nullable reference has none, and a scalar is already defaultable.
+fn nullable(val_type: curios_wasm::ValType) -> curios_wasm::ValType {
+    match val_type {
+        curios_wasm::ValType::Ref(ref_type) => curios_wasm::ValType::Ref(curios_wasm::RefType {
+            is_nullable: true,
+            ..ref_type
+        }),
+        scalar => scalar,
+    }
+}
 
 fn is_sequential_from_zero(cases: &BTreeMap<u32, EmissionJumpTarget>) -> bool {
     cases.keys().enumerate().all(|(i, &k)| k == i as u32)
@@ -699,7 +710,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(crate) fn tail_instrs(&self, tail: &'a EmissionTail) -> Vec<curios_wasm::Instr> {
+    pub(crate) fn tail_instrs(&mut self, tail: &'a EmissionTail) -> Vec<curios_wasm::Instr> {
         match tail {
             EmissionTail::Jump(target) => self.jump_instrs(target),
             EmissionTail::Match(target) => self.match_instrs(target),
@@ -756,6 +767,18 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// Box one scalar host result: a `Nat` read unsigned and an `Int` signed, each widened and handed to `big/of_i64`, which answers the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cont` offers that parameter at its carrier.
+    fn box_result_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
+        let widen = match wire_type {
+            WireType::Nat => curios_wasm::Instr::I64ExtendI32U,
+            WireType::Int => curios_wasm::Instr::I64ExtendI32S,
+            WireType::Bool => return vec![curios_wasm::Instr::RefI31],
+            _ => return vec![],
+        };
+
+        vec![widen, call(&self.table().big_func(BigHelper::OfI64))]
+    }
+
     /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
@@ -807,7 +830,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// Emit a host intrinsic call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
-    pub(crate) fn host_instrs(&self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
+    pub(crate) fn host_instrs(&mut self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         match host {
@@ -834,8 +857,41 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().host_func(function),
                 });
 
-                // Embed the reference result back into a rope. It is the last to cross — `WireResults` can hold it nowhere else — which is what lets it be embedded with nothing above it on the stack; an earlier one would need juggling through locals.
-                if let Some((_, reference)) = signature.results.reference() {
+                // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`). Boxing works on the top of the stack only, so a row with one waits its results out in locals of their own and brings them back in order; a row without one needs only its reference embedded, which is the last to cross — `WireResults` can hold it nowhere else — and so is already on top.
+                let reference = signature
+                    .results
+                    .reference()
+                    .map(|(_, reference)| reference);
+                let results = signature
+                    .results
+                    .iter()
+                    .map(|(_, wire_type)| wire_type)
+                    .collect::<Vec<_>>();
+
+                if results.iter().any(|wire_type| {
+                    matches!(wire_type, WireType::Nat | WireType::Bool | WireType::Int)
+                }) {
+                    let waiting = results
+                        .iter()
+                        .map(|wire_type| {
+                            let val_type = nullable(self.table().wire_type(wire_type));
+                            self.push_local("result", val_type)
+                        })
+                        .collect::<Vec<_>>();
+
+                    output.extend(waiting.iter().rev().map(set));
+
+                    for (index, (wire_type, local)) in results.iter().zip(&waiting).enumerate() {
+                        output.push(get(local));
+                        match (reference, index + 1 == results.len()) {
+                            (Some(reference), true) => {
+                                output.push(curios_wasm::Instr::RefAsNonNull);
+                                output.extend(self.wire_embed_instrs(reference));
+                            }
+                            _ => output.extend(self.box_result_instrs(wire_type)),
+                        }
+                    }
+                } else if let Some(reference) = reference {
                     output.extend(self.wire_embed_instrs(reference));
                 }
 
@@ -846,7 +902,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 }
             }
             EmissionHostTarget::Exit { code } => {
-                output.extend(self.load_value_instrs(code, LoadAs::Nat));
+                // The exit code crosses as any `Nat` argument does, refused past the wire rather than saturated into a code the program never asked for.
+                output.extend(self.load_value_instrs(code, LoadAs::WireNat));
                 output.push(curios_wasm::Instr::Call {
                     func_name: self.table().exit_func().clone(),
                 });

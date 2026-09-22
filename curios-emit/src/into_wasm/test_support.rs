@@ -33,6 +33,11 @@ pub(super) fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
+/// The refusal calls a module makes besides its exit's: a fixture exits with the value it computed, and an exit code crosses the wire as any `Nat` argument does, so its narrowing can refuse whatever the operation under test did.
+pub(super) fn refusals_besides_the_exit(wat: &str) -> usize {
+    count(wat, "call $refuse/") - count(wat, "call $refuse/nat_wire")
+}
+
 pub(super) fn nat(value: u32) -> curios_cont::Atom {
     curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(value)))
 }

@@ -4,10 +4,10 @@
 
 use super::test_support::*;
 
-/// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal helper at all.
+/// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
 #[track_caller]
 fn assert_refuses_nothing(wat: &str) {
-    assert_absent(wat, "call $refuse/");
+    assert_eq!(refusals_besides_the_exit(wat), 0);
 }
 
 // --- Nat ------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn int_div_is_signed_and_boxes_the_one_quotient_past_the_i31() {
     assert_contains(&wat, "call $big/of_i64");
     assert_contains(&wat, "call $big/div");
     assert_eq!(
-        count(&wat, "call $refuse/"),
+        refusals_besides_the_exit(&wat),
         count(&wat, "call $refuse/invariant")
     );
 }
@@ -184,7 +184,7 @@ fn a_remainder_by_a_small_literal_is_held_in_a_word() {
     assert_contains(&wat, "i32.rem_u");
     assert_absent(&wat, "call $big/word");
     assert_eq!(
-        count(&wat, "call $refuse/"),
+        refusals_besides_the_exit(&wat),
         count(&wat, "call $refuse/invariant")
     );
 }

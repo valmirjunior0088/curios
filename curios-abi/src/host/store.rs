@@ -29,7 +29,7 @@ pub enum WireLeaf {
 
 /// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
 ///
-/// The scalar cases matter to codegen: a `Bool` crosses as its raw wasm `i32` word, and a `Nat` or `Int` is narrowed to one — an i31 read signed, and a boxed magnitude the `i32` cannot hold refused, the one place either narrows by refusing — so `handle_poll`'s timeout keeps the `poll(2)` sign convention. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`. `Bytes` and `Bits` are the two packed grains, distinct guest types over one payload: a row states which grain it means, and the guest seals the returned payload at that grain's length. `Byte` is a guest type with no wire spelling.
+/// The scalar cases matter to codegen: a `Bool` crosses as its raw wasm `i32` word, and a `Nat` or `Int` is narrowed to one — an i31 read signed, and a boxed magnitude the `i32` cannot hold refused, the one place either narrows by refusing — so `handle_poll`'s timeout keeps the `poll(2)` sign convention. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`. A scalar result comes back the same way, as the raw number, and the guest boxes it ([`WireScalar`] says why). `Bytes` and `Bits` are the two packed grains, distinct guest types over one payload: a row states which grain it means, and the guest seals the returned payload at that grain's length. `Byte` is a guest type with no wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireType {
@@ -59,7 +59,7 @@ impl From<WireLeaf> for WireType {
 
 /// A wire type that crosses as a raw wasm value rather than a reference — which is what decides that it may stand in any result slot, where a reference must stand last.
 ///
-/// **The carrier is the variant's, and so is who boxes it.** `Nat`, `Int` and `Bool` cross as `i32` and re-enter pre-boxed as i31 refs, which the host can mint for nothing. `Flt` crosses as `f64` and re-enters *raw*, boxed by the guest afterwards: its carrier is a struct whose shape `curios-emit` defines, and a host that allocated one would be a second crate needing to know that layout. The guest doing the reinterpretation is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded on the guest side and never crosses as one.
+/// **Every scalar re-enters raw, and the guest boxes it.** `Nat`, `Int` and `Bool` cross as `i32` and `Flt` as `f64`, in both directions. Every box is a layout `curios-emit` defines — an `Flt`'s struct, and a `Nat` or `Int` past the i31 a boxed magnitude — so a host that allocated one would be a second crate needing to know it, and a host that minted only the i31 would have to refuse a result past it. The guest doing the reinterpretation is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded on the guest side and never crosses as one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireScalar {

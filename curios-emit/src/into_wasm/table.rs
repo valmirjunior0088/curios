@@ -2,9 +2,9 @@ use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
         EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule,
-        EmissionValue, EmissionValueName, LoadAs, refuse_func_name,
+        EmissionValue, EmissionValueName, LoadAs, concrete_val, refuse_func_name,
     },
-    curios_abi::ForeignFunction,
+    curios_abi::{ForeignFunction, WireType},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, HashMap, HashSet},
@@ -568,6 +568,22 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {
         self.list_rope_type.clone()
+    }
+
+    /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: the integral scalars as a raw `i32`, `Flt` as a raw `f64`, references as their concrete non-nullable heap type (a handle is its `Bytes` token).
+    ///
+    /// **A scalar crosses as the number it is, both ways.** Going out, the call site narrows a `Nat` or `Int` through `LoadAs::WireNat`/`LoadAs::WireInt`, refusing past the wire, reads a `Bool` as its word and an `Flt` out of its box. Coming back, the guest boxes what the host answered (`Context::host_instrs`), because every box is a layout this crate defines: an `Flt`'s `$flt` struct, and a `Nat` or `Int` past the i31 the boxed magnitude. A host that minted either would be a second crate needing that layout, and one that could mint only the i31 would have to refuse a result past it.
+    pub(crate) fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
+        match wire_type {
+            WireType::Nat | WireType::Bool | WireType::Int => {
+                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+            }
+            WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            WireType::Bytes | WireType::Bits | WireType::Handle => {
+                concrete_val(self.bytes_type(), false)
+            }
+            WireType::List(_) => concrete_val(self.elems_type(), false),
+        }
     }
 
     pub(crate) fn bytes_type(&self) -> curios_wasm::TypeName {

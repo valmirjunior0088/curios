@@ -51,7 +51,7 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
     );
 }
 
-/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import, and a checked operation's guard calls its class's helper before the `unreachable` — never a bare trap. The helper builds the sentence from its data segment where the refusal fires, so the module carries the one class its code can reach and allocates no message at start-up.
+/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import, and a checked operation's guard calls its class's helper before the `unreachable` — never a bare trap. The helper builds the sentence from its data segment where the refusal fires, so the module carries exactly the classes its code can reach and allocates no message at start-up.
 #[test]
 fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
     let wat = wat(&intrinsic_main(
@@ -59,12 +59,15 @@ fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
+    // Two classes: the narrowing's own guard, and the exit's, which narrows the result to the wire as every exit code is.
     assert_eq!(
         count(&wat, "(func $refuse/"),
-        1,
+        2,
         "one helper per class the code reaches"
     );
-    assert_eq!(count(&wat, "(data $refusal/"), 1);
+    assert_eq!(count(&wat, "(func $refuse/invariant"), 1);
+    assert_eq!(count(&wat, "(func $refuse/nat_wire"), 1);
+    assert_eq!(count(&wat, "(data $refusal/"), 2);
     assert_absent(&wat, "(global $refusal/");
     assert_contains(&wat, "call $refuse/invariant");
 

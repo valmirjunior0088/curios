@@ -22,6 +22,22 @@ fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
     assert_eq!(io.output(), b"other 25");
 }
 
+// A host result crosses as the raw `i32` its bits fill and the program boxes it, so a `Nat` past the i31 — and past `2³¹`, where the bits read signed would be negative — arrives as the number the host answered rather than being refused on the way back.
+#[test]
+fn a_size_past_the_i31_crosses_back_whole() {
+    let source = r#"
+        use /std/{Show, Try, Io, Tty};
+        match Try/run(Tty/size(Tty/stdin))!
+        | success(s) => /std/print(Show/show(s))
+        | failure(e) => /std/print(Show/show(e))
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().tty_size(3_000_000_000, 1 << 30).build();
+    run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"3000000000x1073741824");
+}
+
 // `with_raw` switches raw mode on, runs the body, and switches it back, so the mock's record is exactly one switch each way around the body's result.
 #[test]
 fn with_raw_brackets_the_body_and_restores_the_mode() {

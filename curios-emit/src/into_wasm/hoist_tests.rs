@@ -36,5 +36,5 @@ fn big_scalars_and_their_aggregates_hoist_into_start_initialized_globals() {
     assert_contains(&wat, "array.new_data $limbs $const/");
     assert_contains(&wat, "struct.new $big");
     assert_contains(&wat, "global.set $const/");
-    assert_absent(&wat, "call $refuse/");
+    assert_eq!(refusals_besides_the_exit(&wat), 0);
 }

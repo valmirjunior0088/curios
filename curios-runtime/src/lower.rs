@@ -6,7 +6,7 @@ use {
     },
 };
 
-/// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half). Each impl produces the exact GC shape the generated code expects on that wire type (i31-boxed scalars, `Bytes` as an i8 array, `List` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
+/// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half). Each impl produces the exact shape the generated code expects on that wire type (a scalar as its raw number, `Bytes` as an i8 array, `List` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
 pub trait Lower {
     /// Encode `self` into the import's `results` slots, allocating any GC values through `caller`. Contract: every single-value impl fills exactly `results[0]` — the alignment the tuple impls rely on to re-slice per component.
     fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
@@ -19,7 +19,7 @@ impl Lower for () {
     }
 }
 
-/// A Curios IO status lowers as its `u32` wire code (an i31).
+/// A Curios IO status lowers as its `u32` wire code.
 impl Lower for Status {
     fn lower(
         self,
@@ -41,9 +41,9 @@ impl Lower for Handle {
     }
 }
 
-/// Box `value` as the i31 ref every scalar crosses this boundary in, refusing a value the box cannot hold rather than wrapping one.
+/// Box `value` as the i31 ref an element of a `List(Nat)` crosses in, refusing a value the box cannot hold rather than wrapping one.
 ///
-/// The guest reads every scalar box signed — a `Nat` and an `Int` share one runtime form, an i31 below `2³⁰` in magnitude and a boxed magnitude past it — so an unsigned result crosses through the signed door, which admits `0..2^30`. A host cannot mint the boxed form, whose layout is `curios-emit`'s, so a result past the i31 is refused here: `I31::wrapping_u32` would drop bits and report nothing, the one direction across this boundary in which a number would change instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `handle_write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
+/// A scalar result crosses raw and the guest boxes it, but a list's elements are built here, inside the array the guest receives, so an element is boxed on this side. The guest reads a box signed — a `Nat` and an `Int` share one runtime form, an i31 below `2³⁰` in magnitude and a boxed magnitude past it — so an unsigned element crosses through the signed door, which admits `0..2^30`, and the boxed form's layout is `curios-emit`'s to mint. `I31::wrapping_u32` would drop bits and report nothing; the one element that crosses, a poll mask, is a handful of bits.
 fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Error> {
     let boxed = i32::try_from(value)
         .ok()
@@ -53,41 +53,25 @@ fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Err
     Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
 }
 
-/// Box `value` as the i31 ref a *signed* scalar crosses in, refusing one the box cannot hold for the reason [`i31_ref`] states: `I31::new_i32` admits `-2^30..2^30`, which is exactly what the guest reads back signed.
-fn i31_ref_signed(caller: &mut Caller<'_, ()>, value: i32) -> Result<Val, wasmtime::Error> {
-    let boxed = I31::new_i32(value)
-        .ok_or_else(|| wasmtime::Error::msg(format!("host result {value} leaves the i31")))?;
-
-    Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
-}
-
-/// An `Int` result.
+/// An `Int` result, as the raw `i32` it is: the guest boxes it after the call, into the i31 or past it into the boxed magnitude, neither of which this side needs to know.
 impl Lower for i32 {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        results[0] = i31_ref_signed(caller, self)?;
+    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        results[0] = Val::I32(self);
 
         Ok(())
     }
 }
 
-/// Scalar results cross the boundary pre-boxed as i31 refs so generated code can land them directly in anyref block params (see `emit_sys_imports`).
+/// A `Nat` result, as the raw `i32` its bits fill: the guest reads them unsigned and boxes the number, so every `u32` crosses whole.
 impl Lower for u32 {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        results[0] = i31_ref(caller, self)?;
+    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        results[0] = Val::I32(self.cast_signed());
 
         Ok(())
     }
 }
 
-/// An `Flt` is the one scalar that does *not* go back pre-boxed: it leaves as the raw binary64 it is, and the guest wraps it in the `Flt` struct after the call. That struct's shape is `curios-emit`'s, and nothing here should have to know it — which is the whole reason this impl is three lines where [`u32`]'s has to mint a reference.
+/// An `Flt` result, as the raw binary64 it is: the guest wraps it in the `Flt` struct after the call, whose shape is `curios-emit`'s and nothing here should have to know.
 impl Lower for f64 {
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::F64(self.to_bits());

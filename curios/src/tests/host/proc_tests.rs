@@ -81,6 +81,24 @@ fn exit_halts_with_code() {
     assert!(io.output().is_empty());
 }
 
+// An exit code crosses as any `Nat` argument does, so one past the wire is refused rather than saturated into a code the program never asked for. The code is tainted by an unset variable so no folder decides it.
+#[test]
+fn an_exit_code_past_the_wire_is_refused() {
+    let source = r#"
+        use /std/{Nat, Bytes, Option, Io};
+        let v = /std/proc/env("CURIOS_UNSET_EXIT")!;
+        let _ = /std/proc/exit(@{}, Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])))!;
+        /std/Io/pure(())
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let refusal = run_text(source, system).expect_err("the code is past the wire");
+    assert!(
+        refusal.contains("past what the wire carries"),
+        "stopped, but not on the wire:\n{refusal}"
+    );
+}
+
 #[test]
 fn exit_in_local_binding_halts() {
     // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write. Regression test: erasure used to collapse such bindings to the unit constant wholesale, silently dropping the exit. Post-retype `go` must return an `Io` for the force to have a region at all — an unforced `proc/exit(3)` would be an inert description, which is the whole point of the carrier.
