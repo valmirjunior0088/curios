@@ -12,6 +12,15 @@ use crate::tests::run;
 
 use super::test_support::*;
 
+// **A solution keeps the universe instance its spelling had.** `refl`'s value is solved inside an arm whose scrutinee, `h(Eq(0, 0))`, is refined to the case, and solved with that refinement suppressed so it holds outside the arm. Under suppression the elaborator's reducer handed back the refinement's key in place of the probe — and the key erases universe instances by design, being a spelling to look up by — so the committed value held a bare `/std/Eq/Eq`, which the kernel refuses as an occurrence stating no instance. The kernel was right to refuse it; the elaborator was wrong to build it.
+#[test]
+fn an_inferred_value_under_a_refined_proof_keeps_its_universe_instance() {
+    assert_eq!(
+        run(AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE),
+        b"1"
+    );
+}
+
 // `zonk_module`'s *extent*, which is where its soundness sits. Every program reaches this pass, and every "was not inferred" diagnostic is the rule firing, so what needed checking was how far it reaches rather than whether it runs. The assumption is that no unsolved metavariable survives into the module, and the module has exactly four term-bearing places for one to survive in: a definition's type, a definition's body (with the entrypoint body walked separately from both), an `induct` registry telescope, and a `struct` field telescope. The fields `zonk_module` deliberately skips carry `Vec<String>`, `Vec<(usize, Global)>` and `BTreeSet<Global>`, so its comment that concept metadata and witness markers hold no terms of their own is exact rather than approximate.
 //
 // The extent is where the soundness sits, because the assumption's second clause is that nothing can *later* be solved to a partial or negatively-occurring term. `check_positivity` and `record_totality` run after zonking and on the module zonking returned, and positivity reads a `Metavar` through `opaque`: its spine children at `Mixed`, and never its solution, which does not exist yet. A metavariable surviving into a registry telescope would therefore be analyzed as a hole while the term it is later solved to is analyzed not at all. Refusal before those passes run is what closes that, not the ordering by itself.
