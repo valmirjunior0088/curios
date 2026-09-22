@@ -98,7 +98,7 @@ fn ops_rows_name_a_subject() {
     assert!(host_ops().iter().all(|function| function.subject.is_some()));
 }
 
-/// Result labels are the record fields the guest projects (`.status`, `.secs_hi`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
+/// Result labels are the record fields the guest projects (`.status`, `.secs`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
 #[test]
 fn result_records_keep_their_labels() {
     let store = host_ops();
@@ -121,22 +121,14 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("socket_open"), ["status", "handle"]);
     assert_eq!(labels("socket_accept"), ["status", "handle"]);
     assert_eq!(labels("tls_server_config"), ["status", "handle"]);
-    assert_eq!(labels("clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
+    assert_eq!(labels("clock_wall"), ["secs", "nanos"]);
     assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
     assert_eq!(labels("proc_env"), ["status", "value"]);
     assert_eq!(labels("tty_size"), ["status", "cols", "rows"]);
     assert_eq!(labels("serial_open"), ["status", "handle"]);
     assert_eq!(
         labels("file_stat"),
-        [
-            "status",
-            "kind",
-            "size_hi",
-            "size_lo",
-            "mtime_hi",
-            "mtime_lo",
-            "mtime_nanos"
-        ]
+        ["status", "kind", "size", "mtime_secs", "mtime_nanos"]
     );
     assert_eq!(labels("dir_list"), ["status", "names"]);
     assert_eq!(labels("proc_cwd"), ["status", "path"]);

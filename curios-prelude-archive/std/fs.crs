@@ -37,15 +37,11 @@ let kind_of(code: Nat) -> Kind =
 --- What `stat` reports.
 pub struct Metadata: pub Type {
     kind: Kind,
-    --- The size in bytes, as two base-billion limbs.
-    size: {hi: Nat, lo: Nat},
+    --- The size in bytes.
+    size: Nat,
     --- When the contents last changed.
     mtime: Timestamp,
 }
-
---- The size in bytes as one number.
-pub let size(m: Metadata) -> Nat =
-    m.size.hi * 1000000000 + m.size.lo;
 
 let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
@@ -59,8 +55,8 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
         Try/pure(
             Metadata {
                 kind = kind_of(r.kind),
-                size = (hi = r.size_hi, lo = r.size_lo),
-                mtime = Timestamp/of_unix(r.mtime_hi, r.mtime_lo, r.mtime_nanos),
+                size = r.size,
+                mtime = Timestamp/of_unix(r.mtime_secs, r.mtime_nanos),
             })
     end;
 

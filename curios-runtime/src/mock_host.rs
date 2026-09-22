@@ -394,7 +394,7 @@ pub struct MockHost {
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
-    clock_wall_seq: Mutex<VecDeque<(u64, u64, u64)>>,
+    clock_wall_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
     clock_mono_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Deterministic xorshift64 state backing `rand_bytes`.
@@ -780,12 +780,12 @@ impl HostOps for MockHost {
         }
     }
 
-    fn clock_wall(&self) -> (u64, u64, u64) {
+    fn clock_wall(&self) -> (u64, u64) {
         self.clock_wall_seq
             .lock()
             .unwrap()
             .pop_front()
-            .unwrap_or((0, 0, 0))
+            .unwrap_or((0, 0))
     }
 
     fn clock_mono(&self) -> (u64, u64) {
@@ -895,23 +895,11 @@ impl HostOps for MockHost {
         Status::Ok
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64, u64, u64) {
+    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64) {
         // The scripted disk keeps no timestamps, so a modification time is the epoch.
         match self.files.stat(path) {
-            Some((kind, size)) => {
-                let size = size as u64;
-
-                (
-                    Status::Ok,
-                    kind,
-                    size / 1_000_000_000,
-                    size % 1_000_000_000,
-                    0,
-                    0,
-                    0,
-                )
-            }
-            None => (Status::NotFound, 0, 0, 0, 0, 0, 0),
+            Some((kind, size)) => (Status::Ok, kind, size as u64, 0, 0),
+            None => (Status::NotFound, 0, 0, 0, 0),
         }
     }
 
@@ -1098,7 +1086,7 @@ pub struct MockHostBuilder {
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     inbound: VecDeque<Vec<Vec<u8>>>,
     connect_pending: bool,
-    clock_wall_seq: VecDeque<(u64, u64, u64)>,
+    clock_wall_seq: VecDeque<(u64, u64)>,
     clock_mono_seq: VecDeque<(u64, u64)>,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
@@ -1265,8 +1253,8 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the wall-clock readings served by `clock_wall`, in order. When the script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
-    pub fn wall<I: IntoIterator<Item = (u64, u64, u64)>>(mut self, readings: I) -> Self {
+    /// Script the wall-clock readings served by `clock_wall`, in order, each `(secs, nanos)`. When the script is exhausted `clock_wall` falls back to `(0, 0)`.
+    pub fn wall<I: IntoIterator<Item = (u64, u64)>>(mut self, readings: I) -> Self {
         self.clock_wall_seq.extend(readings);
 
         self

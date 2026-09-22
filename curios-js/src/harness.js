@@ -154,14 +154,8 @@ export async function run(config) {
     handle_close: () => {},
     clock_wall: () => {
       const millis = Date.now();
-      const secs = Math.floor(millis / 1000);
 
-      // The runtime splits the 64-bit seconds base-10⁹ into two Nat limbs.
-      return [
-        BigInt(Math.floor(secs / 1_000_000_000)),
-        BigInt(secs % 1_000_000_000),
-        BigInt((millis % 1000) * 1_000_000),
-      ];
+      return [BigInt(Math.floor(millis / 1000)), BigInt((millis % 1000) * 1_000_000)];
     },
     clock_mono: () => {
       const millis = performance.now();
@@ -191,7 +185,7 @@ export async function run(config) {
     serial_open: deniedHandle,
     serial_control: denied,
     // No filesystem either: every filesystem row is denied as `file_open` is. `dir_list` would answer a `List(Bytes)`, and `dns_resolve` and `proc_args` likewise, which nothing in the playground can fill — so they trap by name rather than returning an empty list a program would read as a fact.
-    file_stat: () => [config.status.PERMISSION_DENIED, 0n, 0n, 0n, 0n, 0n, 0n],
+    file_stat: () => [config.status.PERMISSION_DENIED, 0n, 0n, 0n, 0n],
     file_remove: denied,
     file_rename: denied,
     dir_list: unsupported("dir_list"),

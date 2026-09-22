@@ -77,7 +77,7 @@ impl Lower for f64 {
     }
 }
 
-/// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — `file_stat`'s seven results are the widest row.
+/// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — past `file_stat`'s five results, the widest row, so an embedder's own record result has room.
 macro_rules! lower_tuple {
     ($($name:ident $value:ident $index:tt),+) => {
         impl<$($name: Lower),+> Lower for ($($name,)+) {

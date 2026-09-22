@@ -101,11 +101,11 @@ fn clock_diff_of_two_distinct_now_readings() {
     assert_eq!(io.output(), b"30");
 }
 
-// `Timestamp` is the moment with a meaning: it reads the wall clock, its limbs canonicalise on the way in — a second of nanoseconds carries into the seconds, a billion seconds into the high limb — and it shows as the epoch seconds with nine digits of fraction.
+// `Timestamp` is the moment with a meaning: it reads the wall clock, its nanoseconds canonicalise on the way in — a second of them carries into the seconds — and it shows as the epoch seconds with nine digits of fraction.
 #[test]
 fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
     let (system, io) = MockHost::builder()
-        .wall([(1, 100, 500), (1, 130, 900)])
+        .wall([(1_000_000_100, 500), (1_000_000_130, 900)])
         .build();
     run_text(
         r#"
@@ -116,9 +116,9 @@ fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
         /std/print(Str/join(" ", [
             Nat/to_str(Duration/secs(Timestamp/diff(b, a))),
             Show/show(a),
-            Show/show(Timestamp/of_unix(0, 1000000000, 1500000000)),
+            Show/show(Timestamp/of_unix(1000000000, 1500000000)),
             Bool/to_str(Timestamp/before(a, b)),
-            Bool/to_str(a == Timestamp/of_unix(0, 1000000100, 500))
+            Bool/to_str(a == Timestamp/of_unix(1000000100, 500))
         ]))
         "#,
         system,

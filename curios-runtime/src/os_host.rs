@@ -682,18 +682,12 @@ impl HostOps for OsHost {
         }
     }
 
-    fn clock_wall(&self) -> (u64, u64, u64) {
+    fn clock_wall(&self) -> (u64, u64) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
 
-        let secs = now.as_secs();
-
-        (
-            secs / 1_000_000_000,
-            secs % 1_000_000_000,
-            u64::from(now.subsec_nanos()),
-        )
+        (now.as_secs(), u64::from(now.subsec_nanos()))
     }
 
     fn clock_mono(&self) -> (u64, u64) {
@@ -830,7 +824,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64, u64, u64) {
+    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64) {
         let path = OsStr::from_bytes(path);
 
         let metadata = match fs::metadata(path) {
@@ -839,12 +833,12 @@ impl HostOps for OsHost {
             Err(error) if error.kind() == ErrorKind::NotFound => {
                 return match fs::symlink_metadata(path) {
                     Ok(link) if link.file_type().is_symlink() => {
-                        (Status::Ok, file_kind::SYMLINK, 0, 0, 0, 0, 0)
+                        (Status::Ok, file_kind::SYMLINK, 0, 0, 0)
                     }
-                    _ => (status_from_error(error), 0, 0, 0, 0, 0, 0),
+                    _ => (status_from_error(error), 0, 0, 0, 0),
                 };
             }
-            Err(error) => return (status_from_error(error), 0, 0, 0, 0, 0, 0),
+            Err(error) => return (status_from_error(error), 0, 0, 0, 0),
         };
 
         let file_type = metadata.file_type();
@@ -853,27 +847,14 @@ impl HostOps for OsHost {
             () if file_type.is_file() => file_kind::FILE,
             () => file_kind::OTHER,
         };
-        let (size_hi, size_lo) = split_billions(metadata.len());
-        let (mtime_hi, mtime_lo, mtime_nanos) = metadata
+        let (mtime_secs, mtime_nanos) = metadata
             .modified()
             .ok()
             .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-            .map(|since_epoch| {
-                let (hi, lo) = split_billions(since_epoch.as_secs());
+            .map(|since_epoch| (since_epoch.as_secs(), u64::from(since_epoch.subsec_nanos())))
+            .unwrap_or((0, 0));
 
-                (hi, lo, u64::from(since_epoch.subsec_nanos()))
-            })
-            .unwrap_or((0, 0, 0));
-
-        (
-            Status::Ok,
-            kind,
-            size_hi,
-            size_lo,
-            mtime_hi,
-            mtime_lo,
-            mtime_nanos,
-        )
+        (Status::Ok, kind, metadata.len(), mtime_secs, mtime_nanos)
     }
 
     fn file_remove(&self, path: &[u8]) -> Status {
@@ -1084,11 +1065,6 @@ fn outcome(result: std::io::Result<()>) -> Status {
         Ok(()) => Status::Ok,
         Err(error) => status_from_error(error),
     }
-}
-
-/// A count split base-10⁹ into two limbs that each fit an i31, the way `clock_wall` splits its seconds.
-fn split_billions(count: u64) -> (u64, u64) {
-    (count / 1_000_000_000, count % 1_000_000_000)
 }
 
 /// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `handle_read` serves, the raw ones included.

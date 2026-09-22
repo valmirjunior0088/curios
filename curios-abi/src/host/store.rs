@@ -126,7 +126,7 @@ impl From<WireReference> for WireType {
 
 /// The named results of one foreign function, in the order they cross: any number of scalars, then at most one reference, last.
 ///
-/// **The shape is the type's, so a row cannot spell a reference anywhere else.** Codegen embeds only the final result back into a rope — an earlier reference would sit under later stack values and need juggling through locals — and the runtime lowers references on the same assumption; `README.md` states the decision. The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: the standard library projects `.status`, `.secs_hi`, ….
+/// **The shape is the type's, so a row cannot spell a reference anywhere else.** Codegen embeds only the final result back into a rope — an earlier reference would sit under later stack values and need juggling through locals — and the runtime lowers references on the same assumption; `README.md` states the decision. The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: the standard library projects `.status`, `.secs`, ….
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
@@ -202,7 +202,7 @@ impl WireResults {
     }
 }
 
-/// How a row's results reach the guest: no result is the unit value, one is the bare value forwarded through, two or more a record of the named fields — whose labels are load-bearing, since the standard library projects `.status`, `.secs_hi`, ….
+/// How a row's results reach the guest: no result is the unit value, one is the bare value forwarded through, two or more a record of the named fields — whose labels are load-bearing, since the standard library projects `.status`, `.secs`, ….
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultShape<'a> {
     Unit,
