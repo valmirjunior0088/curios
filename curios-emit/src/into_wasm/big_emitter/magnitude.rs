@@ -4,7 +4,7 @@
 
 use super::{
     BigEmitter, BigHelper, Chunk, Scope, block, br, br_if, either, get, i32_const, i32_type,
-    i64_const, i64_type, repeat, return_if, set, tee, walk, wasm, when,
+    i64_const, i64_type, len, repeat, return_if, set, tee, walk, wasm, when,
 };
 
 /// The limb base, `2³²`, as the 64-bit intermediates compare against it.
@@ -33,14 +33,10 @@ impl BigEmitter<'_, '_> {
         };
         let instrs = wasm![
             return_if(
-                wasm![self.len(&a), self.len(&b), curios_wasm::Instr::I32Ne],
-                order(wasm![
-                    self.len(&a),
-                    self.len(&b),
-                    curios_wasm::Instr::I32LtU
-                ]),
+                wasm![len(&a), len(&b), curios_wasm::Instr::I32Ne],
+                order(wasm![len(&a), len(&b), curios_wasm::Instr::I32LtU]),
             ),
-            self.len(&a),
+            len(&a),
             set(&i),
             repeat(
                 "scan",
@@ -81,9 +77,9 @@ impl BigEmitter<'_, '_> {
         let carry = scope.local("carry", i64_type());
         let sum = scope.local("sum", i64_type());
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&la),
-            self.len(&b),
+            len(&b),
             set(&lb),
             get(&la),
             get(&lb),
@@ -146,9 +142,9 @@ impl BigEmitter<'_, '_> {
         let borrow = scope.local("borrow", i64_type());
         let difference = scope.local("difference", i64_type());
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&la),
-            self.len(&b),
+            len(&b),
             set(&lb),
             self.new_limbs(vec![get(&la)]),
             set(&r),
@@ -240,9 +236,9 @@ impl BigEmitter<'_, '_> {
         ];
 
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&la),
-            self.len(&b),
+            len(&b),
             set(&lb),
             self.new_limbs(vec![get(&la), get(&lb), curios_wasm::Instr::I32Add]),
             set(&r),
@@ -277,7 +273,7 @@ impl BigEmitter<'_, '_> {
             ]
         };
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&la),
             get(&count),
             i32_const(5),
@@ -350,7 +346,7 @@ impl BigEmitter<'_, '_> {
             set(&carry),
             walk(
                 &i,
-                self.len(&a),
+                len(&a),
                 "negate",
                 wasm![
                     self.limb(&a, vec![get(&i)]),
@@ -728,9 +724,9 @@ impl BigEmitter<'_, '_> {
         ];
 
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&la),
-            self.len(&b),
+            len(&b),
             set(&lb),
             get(&lb),
             curios_wasm::Instr::I32Eqz,

@@ -338,8 +338,9 @@ fn a_tuple_is_read_at_its_own_final_type() {
         "the walk reads the family at its own exact type: {}",
         kernel.body
     );
+    // A number's fast path tests for an i31, `ref.test (ref i31)`; a cascade is a test against a concrete type.
     assert!(
-        !kernel.body.contains("ref.test"),
+        !kernel.body.contains("ref.test (ref $"),
         "and needs no roster cascade to find it: {}",
         kernel.body
     );

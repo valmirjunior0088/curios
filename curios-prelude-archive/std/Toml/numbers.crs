@@ -21,7 +21,8 @@ let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
     end;
 
 --- The largest magnitude a TOML integer has: `2⁶³`, which only the most negative 64-bit integer reaches. TOML 1.0 asks for every 64-bit signed integer and an error past them, and a magnitude is refused the digit it passes this, so no longer numeral is read to its end.
-let magnitude_limit: Nat = 9223372036854775808;
+let magnitude_limit: Nat =
+    9223372036854775808;
 
 let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Nat) =
     let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
@@ -88,10 +89,7 @@ let prefixed: Parse(Nat) =
 
 let decimal: Parse(Nat) =
     let leading = leading_zero!;
-    match leading
-    | true => Parse/fail("leading zero")
-    | false => magnitude(10, dec_digit)
-    end;
+    match leading | true => Parse/fail("leading zero") | false => magnitude(10, dec_digit) end;
 
 let int_magnitude(signed: Bool) -> Parse(Nat) =
     match signed
@@ -116,7 +114,13 @@ pub let int_value: Parse(Toml) =
         end
     end;
 
-let flt_digits_stop(sig: Nat, count: Nat, shift: Nat, seen: Bool, pend: Bool) -> Parse({Nat, Nat, Nat}) =
+let flt_digits_stop(
+    sig: Nat,
+    count: Nat,
+    shift: Nat,
+    seen: Bool,
+    pend: Bool,
+) -> Parse({Nat, Nat, Nat}) =
     match pend
     | true => Parse/fail("malformed underscore")
     | false =>

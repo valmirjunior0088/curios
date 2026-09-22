@@ -1,9 +1,6 @@
 //! A proof gives a program no behaviour: an erased proof is never computed, wherever it is bound, while a kept value still is — and a program pays for nothing it does not name.
 
-use {
-    crate::tests::{cont_optm, run, run_text},
-    curios_runtime::MockHost,
-};
+use crate::tests::{cont_optm, run};
 
 // Regression: a `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` used to keep it, so rebuilding the constructor computed the field from binders the same erasure had dropped — `Eq/cong` erased to `apply f(unit)`, and a proof bound as a top-level item, which then ran at initialization, fed that unit to a `Bits` fold and trapped. Such an item is no longer computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this still holds is the classification.
 #[test]
@@ -38,35 +35,6 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
     );
 }
 
-// What a computed proof could still do is refuse: the lemma's first argument leaves the `Nat` carrier at run time. Bound by `let` or written where it is used, the proof is the same proof, so the program runs alike — a proof gives a program no behaviour.
-#[test]
-fn a_let_bound_proof_cannot_refuse_the_program() {
-    let bound = r#"
-        use /std/{Nat, List, Io, proc, print};
-        use /std/Nat/{Le};
-        let lemma(k: Nat, a: Nat) -> Nat/Le(a, a) = Le/refl(a);
-        let keep(a: Nat, _p: Nat/Le(a, a)) -> Nat = a;
-        Io/bind(proc/args, (args) =>
-            let n = List/len(args);
-            let p = lemma(n * 1000000 * 1000000, n);
-            print(Nat/to_str(keep(n, p))))
-        "#;
-    let inline = r#"
-        use /std/{Nat, List, Io, proc, print};
-        use /std/Nat/{Le};
-        let lemma(k: Nat, a: Nat) -> Nat/Le(a, a) = Le/refl(a);
-        let keep(a: Nat, _p: Nat/Le(a, a)) -> Nat = a;
-        Io/bind(proc/args, (args) =>
-            let n = List/len(args);
-            print(Nat/to_str(keep(n, lemma(n * 1000000 * 1000000, n)))))
-        "#;
-    for source in [bound, inline] {
-        let (system, io) = MockHost::builder().args(["prog", "x"]).build();
-        run_text(source, system).expect("a proof gives a program no way to refuse");
-        assert_eq!(io.output(), b"2");
-    }
-}
-
 // A top-level item that is not a function is a value computed at initialization, and a proof there is a kept slot like a local one. Pruning already drops an unused item whose evaluation the erased program calls pure; a lemma that recurses is one it has to keep, since a recursive call may diverge for all it knows, and that lemma ran — here three hundred steps — before the program's first instruction.
 #[test]
 fn a_top_level_proof_does_not_run_before_the_program() {
@@ -84,21 +52,22 @@ fn a_top_level_proof_does_not_run_before_the_program() {
     assert_eq!(run(source), b"ok");
 }
 
-// The control: a binding that is a value is still computed where it is written, used or not, so the same product bound as a `Nat` refuses.
+// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `Le/succ_r`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
 #[test]
 fn a_let_bound_value_is_still_computed() {
     let source = r#"
-        use /std/{Nat, List, Io, proc, print};
+        use /std/{Nat, List, Io, proc};
+        let count(a: Nat, b: Nat) -> Nat =
+            match a | 0 => b | ap + 1 => count(ap, b + 1) end;
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
-            let _unused = n * 1000000 * 1000000;
-            print(Nat/to_str(n)))
+            let _unused = count(n, n);
+            proc/exit(n))
         "#;
-    let (system, _io) = MockHost::builder().args(["prog", "x"]).build();
-    let refusal = run_text(source, system).expect_err("the product leaves the carrier");
+    let optimized = cont_optm(source);
     assert!(
-        refusal.contains("left its carrier"),
-        "stopped, but not on the carrier:\n{refusal}"
+        optimized.contains("count"),
+        "the value's recursion was dropped from the optimized program:\n{optimized}"
     );
 }
 

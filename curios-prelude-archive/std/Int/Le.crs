@@ -37,7 +37,7 @@ pub let antisym(a: Int, b: Int, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
     | 0 => (e) => Eq/cong((x: Int) => a + x, e)
     | m + 1 =>
         (e) =>
-            let sum: Bool/Holds(+0 < (b - a) + Nat/to_int(other)) =
+            let sum: Bool/Holds(+0 < b - a + Nat/to_int(other)) =
                 Eq/subst((x: Int) => Bool/Holds(+0 < x + Nat/to_int(other)), e, positive(m, other));
             match sum: (_) => Eq(a, b) end
     end)(Eq/refl());

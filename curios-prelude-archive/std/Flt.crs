@@ -170,7 +170,9 @@ pub let to_str(f: Flt) -> Str =
     let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
     let place = (acc: Nat, v: Nat) => Nat/shl(acc, 8) + v;
     let mant_field =
-        place(place(place(place(place(place(b6 % 0x10, at(5)), at(4)), at(3)), at(2)), at(1)), at(0));
+        place(
+            place(place(place(place(place(b6 % 0x10, at(5)), at(4)), at(3)), at(2)), at(1)),
+            at(0));
     let sign = match b7 >= 0x80 | true => "-" | false => "+" end;
     choose
     | exp_field == 0x7FF && mant_field == 0 => Str/concat(sign, "inf")

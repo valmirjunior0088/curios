@@ -15,9 +15,7 @@ pub let refl(d: Nat) -> Divides(d, d) =
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Divides(a, b), q: Divides(b, c)) -> Divides(a, c) =
     match p
     | intro(k, e) =>
-        match q
-        | intro(m, f) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq(c, m * x), e, f))
-        end
+        match q | intro(m, f) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq(c, m * x), e, f)) end
     end;
 
 --- Every number divides zero.
@@ -34,8 +32,7 @@ pub let add(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a), q: Divides(d, b)) -> Di
     | intro(k, e) =>
         match q
         | intro(m, f) =>
-            let first: Eq(a + b, k * d + b) =
-                Eq/subst((x: Nat) => Eq(a + b, x + b), e, Eq/refl());
+            let first: Eq(a + b, k * d + b) = Eq/subst((x: Nat) => Eq(a + b, x + b), e, Eq/refl());
             Divides/intro(k + m, Eq/subst((x: Nat) => Eq(a + b, k * d + x), f, first))
         end
     end;
@@ -53,13 +50,16 @@ let zero_of_eql(x: Nat, h: Bool/Holds(x == 0)) -> Eq(x, 0) =
     end;
 
 --- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
-pub let of_rem(n: Nat, d: Nat, @ok: Lt(0, d), h: Bool/Holds(Nat/rem(n, d, @ok) == 0)) -> Divides(d, n) =
+pub let of_rem(
+    n: Nat,
+    d: Nat,
+    @ok: Lt(0, d),
+    h: Bool/Holds(Nat/rem(n, d, @ok) == 0),
+) -> Divides(d, n) =
     let joined: Eq(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
     Divides/intro(
         Nat/div(n, d, @ok),
         Eq/subst(
             (r: Nat) => Eq(n, Nat/div(n, d, @ok) * d + r),
             zero_of_eql(Nat/rem(n, d, @ok), h),
-            joined,
-        ),
-    );
+            joined));

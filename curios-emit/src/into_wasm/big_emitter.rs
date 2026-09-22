@@ -258,6 +258,20 @@ fn zero() -> Vec<curios_wasm::Instr> {
     vec![i32_const(0), curios_wasm::Instr::RefI31]
 }
 
+/// How many limbs `limbs` holds.
+fn len(limbs: &curios_wasm::LocalName) -> Vec<curios_wasm::Instr> {
+    vec![get(limbs), curios_wasm::Instr::ArrayLen]
+}
+
+/// The scope of a helper over two integers, `x` and `y`.
+fn binary_scope() -> (Scope, curios_wasm::LocalName, curios_wasm::LocalName) {
+    let mut scope = Scope::default();
+    let x = scope.param("x", Table::top_type(true));
+    let y = scope.param("y", Table::top_type(true));
+
+    (scope, x, y)
+}
+
 #[derive(Debug)]
 pub(crate) struct BigEmitter<'a, 'b> {
     table: &'a Table<'a>,
@@ -358,10 +372,6 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     fn big_type(&self) -> curios_wasm::ValType {
         concrete_val(self.big.big.clone(), true)
-    }
-
-    fn len(&self, limbs: &curios_wasm::LocalName) -> Vec<curios_wasm::Instr> {
-        vec![get(limbs), curios_wasm::Instr::ArrayLen]
     }
 
     fn limb(
@@ -469,17 +479,9 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         (a, b, instrs)
     }
 
-    fn binary_scope(&self) -> (Scope, curios_wasm::LocalName, curios_wasm::LocalName) {
-        let mut scope = Scope::default();
-        let x = scope.param("x", Table::top_type(true));
-        let y = scope.param("y", Table::top_type(true));
-
-        (scope, x, y)
-    }
-
     /// `nat/sub`: zero when the subtrahend is at least the minuend, the difference otherwise.
     fn emit_nat_sub(&mut self) {
-        let (scope, x, y) = self.binary_scope();
+        let (scope, x, y) = binary_scope();
         let instrs = wasm![
             return_if(
                 wasm![
@@ -502,7 +504,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     /// `big/add`: magnitudes of one sign add, and of two signs subtract the smaller from the larger, which keeps the larger's sign.
     fn emit_big_add(&mut self) {
-        let (mut scope, x, y) = self.binary_scope();
+        let (mut scope, x, y) = binary_scope();
         let flip = scope.param("flip", i32_type());
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let sa = scope.local("sa", i32_type());
@@ -561,7 +563,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     /// `big/mul`: the magnitudes' product under the signs' agreement.
     fn emit_big_mul(&mut self) {
-        let (mut scope, x, y) = self.binary_scope();
+        let (mut scope, x, y) = binary_scope();
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let instrs = wasm![
             widen,
@@ -579,7 +581,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     /// `big/div` and `big/rem`: truncated division, so the quotient takes the signs' agreement and the remainder the dividend's sign — the pair `d · (x / d) + x % d = x` holds of.
     fn emit_big_div(&mut self, remainder: bool) {
-        let (mut scope, x, y) = self.binary_scope();
+        let (mut scope, x, y) = binary_scope();
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let (helper, sign) = match remainder {
             true => (BigHelper::Rem, self.sign(&a)),
@@ -603,7 +605,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     /// `big/cmp`: two signs order by sign, and one sign by magnitude, reversed below zero. Zero widens unsigned, so it is never mistaken for a negative.
     fn emit_big_cmp(&mut self) {
-        let (mut scope, x, y) = self.binary_scope();
+        let (mut scope, x, y) = binary_scope();
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let order = scope.local("order", i32_type());
         let instrs = wasm![
@@ -629,7 +631,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
 
     /// `big/bitwise`: both operands in two's complement one limb wider than either magnitude — wide enough that the top limb is all sign — combined limb by limb, and read back as a sign and a magnitude.
     fn emit_big_bitwise(&mut self) {
-        let (mut scope, x, y) = self.binary_scope();
+        let (mut scope, x, y) = binary_scope();
         let op = scope.param("op", i32_type());
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let la = scope.local("la", i32_type());
@@ -739,7 +741,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             i32_const(0),
             get(&m),
             i32_const(0),
-            self.len(&m),
+            len(&m),
             curios_wasm::Instr::ArrayCopy {
                 target_name: self.big.limbs.clone(),
                 source_name: self.big.limbs.clone(),
@@ -770,7 +772,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             set(&a),
             self.magnitude(&a),
             set(&m),
-            return_if(wasm![self.len(&m), curios_wasm::Instr::I32Eqz], zero()),
+            return_if(wasm![len(&m), curios_wasm::Instr::I32Eqz], zero()),
             self.sign(&a),
             get(&m),
             get(&count),
@@ -863,7 +865,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             set(&m),
             self.sign(&a),
             set(&sa),
-            self.len(&m),
+            len(&m),
             set(&la),
             get(&count),
             i32_const(5),
@@ -1055,7 +1057,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             set(&b),
             self.magnitude(&b),
             set(&m),
-            self.len(&m),
+            len(&m),
             set(&la),
             get(&la),
             i32_const(5),
@@ -1158,7 +1160,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             return_if(
                 wasm![
                     self.sign(&b),
-                    self.len(&m),
+                    len(&m),
                     i32_const(1),
                     curios_wasm::Instr::I32Ne,
                     curios_wasm::Instr::I32Or,
@@ -1187,7 +1189,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                 wasm![
                     self.sign(&b),
                     curios_wasm::Instr::I32Eqz,
-                    self.len(&m),
+                    len(&m),
                     i32_const(1),
                     curios_wasm::Instr::I32Eq,
                     curios_wasm::Instr::I32And,
@@ -1217,7 +1219,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             set(&b),
             self.magnitude(&b),
             set(&m),
-            self.len(&m),
+            len(&m),
             i32_const(1),
             curios_wasm::Instr::I32Eq,
             when(wasm![
@@ -1370,7 +1372,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let t = scope.local("t", self.limbs_type());
         let bound = i32_const(1 << (curios_cont::ENVELOPE_BITS - 1));
         let instrs = wasm![
-            self.len(&a),
+            len(&a),
             set(&n),
             block(
                 "trimmed",
@@ -1425,7 +1427,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                 ),
             ]),
             get(&n),
-            self.len(&a),
+            len(&a),
             curios_wasm::Instr::I32Ne,
             when(wasm![
                 self.new_limbs(vec![get(&n)]),
