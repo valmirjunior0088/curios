@@ -1119,13 +1119,13 @@ fn handle_ops() -> Vec<Decl> {
 
 /// The one operation placed by hand rather than by a row: `exit` is `Intrinsic::ProcExit` and traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it joins the module its subject already opened.
 ///
-/// `(@A : Type, n : Nat) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
+/// `(@A : Type, n : Byte) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
 fn proc_exit() -> Decl {
     pub_fn_marked(
         "exit",
         vec![
             (Plicity::Implicit, "A", type_()),
-            (Plicity::Explicit, "n", nat()),
+            (Plicity::Explicit, "n", byte()),
         ],
         io_of(name("A")),
         intrinsic(Intrinsic::ProcExit {

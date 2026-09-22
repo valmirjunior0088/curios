@@ -115,11 +115,11 @@ fn curried_function() {
 
 #[test]
 fn folds_constant_arg_through_let_function() {
-    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is now a description yielding unit, so no user value reaches that continuation at all. `proc/exit` is the shortest host operation taking a `Nat`, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is now a description yielding unit, so no user value reaches that continuation at all. `proc/exit` is the shortest host operation, reached here through the narrowing to its `Byte` that the literal discharges, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
-        /std/proc/exit(f(3))
+        /std/proc/exit(Nat/to_byte(f(3)))
         "#;
 
     let entrypoint = source.parse::<Entrypoint>().unwrap();

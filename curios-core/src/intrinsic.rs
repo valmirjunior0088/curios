@@ -276,9 +276,9 @@ pub enum Intrinsic {
     },
     HandleType,
     Handle(u32),
-    // `(Nat) -> Io({})`: end the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
+    // End the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
     //
-    // (@A, n : Nat) -> Io(A): the description that ends the process with `n` and yields nothing, at whatever the region wanted. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits, and `Io(A)` is never that type: `Io` has no eliminator, so an inhabitant of `Io(False)` proves nothing — the same fact `IoType` states above and the whole effect discipline rests on. Typing the payload at `{}` was the earlier, stricter answer; it forced every exiting arm to sit in a unit region, and bought nothing the opacity does not already buy.
+    // (@A, n : Byte) -> Io(A): the description that ends the process with `n` and yields nothing, at whatever the region wanted. The code is a `Byte` because that is the status every host carries whole: POSIX keeps a status's low eight bits, so a wider code would reach the parent as a different one. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits, and `Io(A)` is never that type: `Io` has no eliminator, so an inhabitant of `Io(False)` proves nothing — the same fact `IoType` states above and the whole effect discipline rests on. Typing the payload at `{}` was the earlier, stricter answer; it forced every exiting arm to sit in a unit region, and bought nothing the opacity does not already buy.
     ProcExit {
         result: Term,
         code: Term,

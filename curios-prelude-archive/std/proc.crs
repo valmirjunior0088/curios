@@ -1,5 +1,5 @@
 pub use /sys/proc/{args};
-use /std/{Bytes, Nat, Str, Option, Io};
+use /std/{Byte, Bytes, Str, Option, Io};
 
 --- The environment variable `name`, or `none` when it is unset.
 pub let env(name: Str) -> Io(Option(Bytes)) =
@@ -10,6 +10,6 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
         | false => Option/none()
         end);
 
---- End the process with `code`. The description yields whatever the region wanted, so an exiting arm can end a region of any type.
-pub let exit(@A: Type, code: Nat) -> Io(A) =
+--- End the process with `code`, a byte because that is the status every host hands its parent whole. The description yields whatever the region wanted, so an exiting arm can end a region of any type.
+pub let exit(@A: Type, code: Byte) -> Io(A) =
     /sys/proc/exit(code);

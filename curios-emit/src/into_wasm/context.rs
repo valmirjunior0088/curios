@@ -910,8 +910,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 }
             }
             EmissionHostTarget::Exit { code } => {
-                // The exit code crosses as any `Nat` argument does, refused past the wire rather than saturated into a code the program never asked for.
-                output.extend(self.load_value_instrs(code, LoadAs::WireNat));
+                // The exit code is a `Byte`, a machine word already, so it crosses with nothing to refuse.
+                output.extend(self.load_value_instrs(code, LoadAs::Nat));
                 output.push(curios_wasm::Instr::Call {
                     func_name: self.table().exit_func().clone(),
                 });

@@ -35,6 +35,15 @@ impl Lift for Mode {
     }
 }
 
+/// A `Byte` arrives as the word it is. The guest's byte is below `256`, so a word past it comes from a module this compiler did not emit, and is refused rather than truncated into a different byte.
+impl Lift for u8 {
+    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        let word = params[0].unwrap_i32();
+
+        u8::try_from(word).map_err(|_| wasmtime::Error::msg(format!("{word} is not a byte")))
+    }
+}
+
 impl Lift for u32 {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(params[0].unwrap_i32() as u32)

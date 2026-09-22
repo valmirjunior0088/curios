@@ -1,7 +1,7 @@
 //! The process surface: argv, environment and exit through `/std/proc`, and children started through `/std/Command` and reaped through `/std/Command/Child`.
 
 use {
-    crate::tests::{run, run_text},
+    crate::tests::{run, run_text, typecheck},
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
@@ -81,21 +81,13 @@ fn exit_halts_with_code() {
     assert!(io.output().is_empty());
 }
 
-// An exit code crosses as any `Nat` argument does, so one past the wire is refused rather than saturated into a code the program never asked for. The code is tainted by an unset variable so no folder decides it.
+// An exit code is a `Byte`, so a code no parent would read whole is refused where it is written rather than at run time: POSIX keeps a status's low eight bits, and `256` would reach the parent as the `0` of a success.
 #[test]
-fn an_exit_code_past_the_wire_is_refused() {
-    let source = r#"
-        use /std/{Nat, Bytes, Option, Io};
-        let v = /std/proc/env("CURIOS_UNSET_EXIT")!;
-        let _ = /std/proc/exit(@{}, Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])))!;
-        /std/Io/pure(())
-        "#;
-
-    let (system, _io) = MockHost::builder().build();
-    let refusal = run_text(source, system).expect_err("the code is past the wire");
+fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
+    let refusal = typecheck("/std/proc/exit(256)").expect_err("256 is not a byte");
     assert!(
-        refusal.contains("past what the wire carries"),
-        "stopped, but not on the wire:\n{refusal}"
+        refusal.contains("Byte literal 256 is out of range"),
+        "refused, but not as a byte:\n{refusal}"
     );
 }
 

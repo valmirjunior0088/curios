@@ -100,7 +100,7 @@ fn compile(source: &str) -> Result<Compiled, String> {
 
 impl Compiled {
     /// Run the compiled program under `host` — the deserialize-and-execute half of [`run_wasm`].
-    fn run<H: HostOps + Send + Sync + 'static>(&self, host: H) -> Result<i32, String> {
+    fn run<H: HostOps + Send + Sync + 'static>(&self, host: H) -> Result<u8, String> {
         // SAFETY: `cwasm` was precompiled in this process when `self` was built.
         unsafe { run_bytes(&self.cwasm, host, ForeignBindings::empty()) }
     }

@@ -26,7 +26,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
             let p = Le/succ_r(n, n, Le/refl(n));
-            proc/exit(use_it(n, n + 1, p)))
+            proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(
@@ -62,7 +62,7 @@ fn a_let_bound_value_is_still_computed() {
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
             let _unused = count(n, n);
-            proc/exit(n))
+            proc/exit(Nat/to_byte(n % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(

@@ -4,12 +4,7 @@ use {
     curios_runtime::{
         Bundle, DeclaredModule, ModuleBytes, OsHost, extract_bundle, plugin_bindings, run_bytes,
     },
-    std::{
-        env,
-        ffi::OsString,
-        fs,
-        process::{self, ExitCode},
-    },
+    std::{env, ffi::OsString, fs, process::ExitCode},
 };
 
 /// Recover the appended bundle from this executable's own tail. The tail format lives in `curios_runtime::bundle`, shared with the bundler.
@@ -49,8 +44,7 @@ fn main() -> ExitCode {
     };
 
     match launch() {
-        Ok(0) => ExitCode::SUCCESS,
-        Ok(code) => process::exit(code),
+        Ok(code) => ExitCode::from(code),
         Err(error) => {
             eprintln!("{error}");
 

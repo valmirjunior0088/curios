@@ -443,7 +443,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
 
 /// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap.
 #[derive(Debug)]
-struct ExitTrap(i32);
+struct ExitTrap(u8);
 
 impl fmt::Display for ExitTrap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -474,7 +474,7 @@ pub unsafe fn run_bytes<H: HostOps + Send + Sync + 'static>(
     payload: &[u8],
     host: H,
     bindings: ForeignBindings,
-) -> Result<i32, String> {
+) -> Result<u8, String> {
     let engine = shared_engine();
 
     // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
@@ -490,7 +490,7 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
     module: &Module,
     host: H,
     bindings: ForeignBindings,
-) -> Result<i32, String> {
+) -> Result<u8, String> {
     let impls = sys_impls(Arc::new(host));
     let mut linker = Linker::new(engine);
 
@@ -507,11 +507,8 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
                     let exit_type = FuncType::new(engine, [ValType::I32], []);
 
                     linker
-                        .func_new(SYS, EXIT, exit_type, move |_caller, params, _| {
-                            let code = match params.first() {
-                                Some(wasmtime::Val::I32(code)) => *code,
-                                _ => 0,
-                            };
+                        .func_new(SYS, EXIT, exit_type, move |mut caller, params, _| {
+                            let code = u8::lift(&mut caller, params)?;
 
                             Err(wasmtime::Error::from(ExitTrap(code)))
                         })

@@ -399,7 +399,7 @@ impl Intrinsic {
 
             // A mutable cell, and the process exit. All of these are host effects and so describe rather than do: `CellGet` returning `Io(T)` rather than `T` is what makes `match Cell/get(c)` ill-typed.
             ProcExit { result, .. } => sig(
-                vec![Operand::IsType, Operand::At(nat_type())],
+                vec![Operand::IsType, Operand::At(byte_type())],
                 io_type(result.clone()),
             ),
             Cell { element, .. } => sig(

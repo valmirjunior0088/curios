@@ -160,7 +160,7 @@ fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations(
     .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        "let doubled = /ffi/double(3)!;\nlet _ = /std/proc/exit(@{}, doubled)!;\n/std/Io/pure(())\n",
+        "let doubled = /ffi/double(3)!;\nlet _ = /std/proc/exit(@{}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(())\n",
     )
     .expect("write the temp source");
 

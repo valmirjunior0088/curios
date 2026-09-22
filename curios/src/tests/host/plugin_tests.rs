@@ -122,7 +122,7 @@ fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
 }
 
 /// Compile `source`, bind it against the fixture plugin, and run it, answering the exit code.
-fn run_against(source: &str, exports: &[(&str, &str)]) -> Result<i32, String> {
+fn run_against(source: &str, exports: &[(&str, &str)]) -> Result<u8, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
@@ -147,7 +147,7 @@ fn a_scalar_crosses_to_a_plugin_and_back() {
     let code = run_against(
         r#"
         foreign double : (Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, double(21)!)!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         /std/Io/pure(())
         "#,
         &[("double", "/double")],
@@ -203,7 +203,7 @@ fn a_run_shorter_than_its_bytes_returns_padded_to_them() {
         let answered = echo(b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])!;
         let padded = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
         let matched = /std/Bits/eql(answered, padded);
-        let _ = /std/proc/exit(@{}, match matched | true => /std/Bits/len(answered) | false => 1 end)!;
+        let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(/std/Bits/len(answered) % 256) | false => 1 end)!;
         /std/Io/pure(())
         "#,
         &[("echo", "/echo")],
@@ -223,7 +223,7 @@ fn a_declaration_no_export_claims_is_refused() {
         r#"
         foreign double : (Nat) -> Nat;
         foreign unclaimed : (Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, double(21)!)!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         /std/Io/pure(())
         "#,
         &[("double", "/double")],
@@ -242,7 +242,7 @@ fn a_claim_naming_no_declaration_is_refused() {
     let refusal = run_against(
         r#"
         foreign double : (Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, double(21)!)!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         /std/Io/pure(())
         "#,
         &[("double", "/double"), ("echo", "/absent")],
@@ -258,7 +258,7 @@ fn a_claim_on_a_missing_export_is_refused_listing_what_there_is() {
     let refusal = run_against(
         r#"
         foreign double : (Nat) -> Nat;
-        let _ = /std/proc/exit(@{}, double(21)!)!;
+        let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
         /std/Io/pure(())
         "#,
         &[("dubble", "/double")],
