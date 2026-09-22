@@ -283,3 +283,56 @@ fn a_recurrence_does_not_excuse_a_finite_disagreement() {
         "the recurrence on the domain was read as settling the whole comparison",
     );
 }
+
+/// **Two calls of one recursive group differing only in a proof convert by their spines, the proof compared at the member's own type.** A `rec` projection carries its member type, so `spine_telescope` reads the telescope there as it does off a variable's declaration. When the projection handed back none, the proof was compared at `Type`, the spines disagreed, and the retry unfolded the group under fresh binders at every round — so the conversion recurrence, keyed on the binders in scope, never met its goal again and the budget, small here, ran out before any verdict. `tests::perimeter`'s `a_recursive_function_carrying_a_proof_converts_without_unfolding` is the program, reaching the group through a global it is the value of; `two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an_unfolding`, whose spines differ in an argument the fold discards, is the control that a mismatch still unfolds.
+///
+/// Mutation-checked against the two halves of the rule: reading no telescope off a `rec` projection fails this with the budget exhausted, and removing the spine attempt before forcing leaves it passing — that half is `irrelevance_tests`'s `a_definition_applied_to_two_proofs_converts_before_unfolding`, which fails under it.
+#[test]
+fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
+    let mut kernel = Kernel::new(10_000, SYNTAX);
+    kernel.set_local_floor(1_000);
+    let proposition = declare(&mut kernel, "P", Term::prop());
+
+    let countdown = binder(20, "countdown");
+    let (n, p) = (binder(21, "n"), binder(22, "p"));
+    let (motive, pred, ih) = (binder(23, "m"), binder(24, "pred"), binder(25, "ih"));
+    let body = Term::func(
+        [(n.clone(), nat_type()), (p.clone(), proposition.clone())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &ih,
+            Term::apply(
+                Term::free_var(&countdown),
+                [Term::free_var(&pred), Term::free_var(&p)],
+            ),
+        ),
+    );
+    let group = Term::rec(
+        [(
+            countdown.clone(),
+            Term::func_type([(n, nat_type()), (p, proposition.clone())], nat_type()),
+            body,
+        )],
+        Term::free_var(&countdown),
+    );
+
+    let x = binder(26, "x");
+    let (left, right) = (binder(27, "p"), binder(28, "q"));
+    kernel.assume(&x, &nat_type());
+    kernel.assume(&left, &proposition);
+    kernel.assume(&right, &proposition);
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::apply(group.clone(), [Term::free_var(&x), Term::free_var(&left)]),
+            &Term::apply(group, [Term::free_var(&x), Term::free_var(&right)]),
+        ),
+        Ok(true),
+    );
+}

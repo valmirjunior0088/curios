@@ -16,7 +16,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — a stuck elimination's motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An application spine's arguments left that list when a *variable* head was found to carry the telescope they inhabit: reading it is a lookup rather than an inference, so `compare_arguments` types them at no new cost and at no new thing consulted, and a head that names no type still grounds. A struct type's, a struct literal's and a constructor's parameters left it with `params_at`, which reads the declaration's outer telescope the way `induct_type_args` reads a family's — the asymmetry between them was an accident of which shape a witness forced first, not a rule. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`. A struct literal's fields and a constructor's payload left it when the proof-carrying idiom met it: two `Str`s built from different proofs of the same bytes were unequal here and equal to the elaborator, so both now compare at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read.
+//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An application spine's arguments left that list when a *variable* head was found to carry the telescope they inhabit: reading it is a lookup rather than an inference, so `compare_arguments` types them at no new cost and at no new thing consulted. A universe instance of a variable and a projection of a `rec` group carry one the same way, read by `synth_neutral`, and a head that names no type still grounds. Two applications of one definition are compared by those spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`): unfolded first, a proof argument landed in a stuck scrutinee, where it is not typed, and a recursive function carrying one unfolded until the budget ran out. A struct type's, a struct literal's and a constructor's parameters left it with `params_at`, which reads the declaration's outer telescope the way `induct_type_args` reads a family's — the asymmetry between them was an accident of which shape a witness forced first, not a rule. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`. A struct literal's fields and a constructor's payload left it when the proof-carrying idiom met it: two `Str`s built from different proofs of the same bytes were unequal here and equal to the elaborator, so both now compare at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -33,12 +33,12 @@ mod recursion_tests;
 mod test_support;
 
 use {
-    super::{Counted, Kernel, KernelError, Sort, infer, unfold_spelling},
+    super::{Counted, Kernel, KernelError, Sort, infer, synth_neutral, unfold_spelling},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level,
-        Many, MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Two, decide_bool, instantiate_universe_levels_scoped,
-        is_bool_connective, strip_universe_levels,
+        Apply, Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance,
+        InstanceHead, Level, Many, MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, Two, decide_bool,
+        instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -142,17 +142,67 @@ fn compare(
             Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
                 eta_tuple(kernel, history, telescope, this, that)
             }
-            _ => {
-                let this = kernel.reduce_forced(this.clone())?;
-                let that = kernel.reduce_forced(that.clone())?;
+            _ => match one_definition_by_its_spines(kernel, history, this, that)? {
+                true => Ok(true),
+                false => {
+                    let this = kernel.reduce_forced(this.clone())?;
+                    let that = kernel.reduce_forced(that.clone())?;
 
-                structural(kernel, history, &this, &that)
-            }
+                    structural(kernel, history, &this, &that)
+                }
+            },
         };
 
         history.leave(&goal);
         outcome
     })
+}
+
+/// Two applications of one definition, decided by their spines before either is unfolded — congruence, which is sufficient and never necessary, so a mismatch decides nothing and the pair goes on to be forced as before.
+///
+/// Forcing first is what made two calls differing only in a proof unequal here while the elaborator, which compares the spines of one global or one `rec` member before it unfolds, called them equal. Unfolded, the proof lands where nothing types it — a stuck match's scrutinee, or the argument of a folded recursive call — and a recursive function carrying a proof unfolded under fresh binders until the budget ran out, each round lengthening the context the recurrence key records so the goal never recurred. The spine compares at the head's telescope through [`compare_arguments`], so the proof meets irrelevance at its own type. `tests::perimeter`'s `a_definition_applied_to_two_proofs_converts_before_unfolding` and `a_recursive_function_carrying_a_proof_converts_without_unfolding` are the programs; this crate's `irrelevance_tests` and `recursion_tests` put the same two to this function directly.
+///
+/// Only heads that would unfold qualify, because a head with nothing to unfold reaches the same spine comparison in [`structural`] anyway, and asking twice would double the cost of every mismatch.
+fn one_definition_by_its_spines(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, KernelError> {
+    let (Subterm::Apply(left), Subterm::Apply(right)) = (&**this, &**that) else {
+        return Ok(false);
+    };
+    if !left.plicities().eq(right.plicities()) {
+        return Ok(false);
+    }
+
+    let one_head = match rec_instances(kernel, &left.head, &right.head) {
+        Some(verdict) => verdict,
+        None => match (&*left.head, &*right.head) {
+            (Subterm::Var(left), Subterm::Var(right)) => {
+                let name = left.unwrap();
+                name == right.unwrap() && kernel.value(name).is_some()
+            }
+            (
+                Subterm::Instance(Instance {
+                    head: InstanceHead::Var(left),
+                    levels: left_levels,
+                }),
+                Subterm::Instance(Instance {
+                    head: InstanceHead::Var(right),
+                    levels: right_levels,
+                }),
+            ) => {
+                let name = left.unwrap();
+                name == right.unwrap()
+                    && kernel.value_at(name).is_some()
+                    && kernel.levels_eq(left_levels, right_levels)
+            }
+            _ => false,
+        },
+    };
+
+    Ok(one_head && compare_arguments(kernel, history, left, right)?)
 }
 
 /// Eta at a function type: apply both sides to the same fresh binders and compare the results at the codomain.
@@ -964,7 +1014,7 @@ fn compare_field_telescope(
 ///
 /// **The head's type is the typed context this position was said to lack.** A variable head carries one — it was assumed or declared at it — so the domains of its function type are what an argument inhabits, exactly as a struct's field telescope is what a field inhabits ([`compare_fields_at`]). Comparing there is what lets eta and irrelevance fire: `f(p)` against `f(q)` for two proofs of one proposition is discharged without reading either, which is the acceptance `a_grounded_argument_forfeits_irrelevance` recorded the kernel refusing while the elaborator accepted.
 ///
-/// **What still grounds.** A head that is not a variable — a projection, a stuck elimination, a `rec` member — hands back no telescope here, and neither does a variable whose recorded type is not a function of this arity: a binder opened by [`ground_scope`] carries the stand-in `Type`, so a comparison under one keeps the untyped concession it was opened with, and `a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type` is the fixture that says so. Reading the type is a lookup rather than an inference, so a spine costs what it did.
+/// **What still grounds.** A universe instance of a variable and a `rec` member carry a telescope as a variable does (see [`spine_telescope`]); a record projection and a stuck elimination hand back none here, and neither does a variable whose recorded type is not a function of this arity: a binder opened by [`ground_scope`] carries the stand-in `Type`, so a comparison under one keeps the untyped concession it was opened with, and `a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type` is the fixture that says so. Reading the type is a lookup rather than an inference, so a spine costs what it did.
 ///
 /// The justification is the callers': every pair compared here is the corresponding children of two parents already shown convertible, so the two heads have one type and one telescope to assign.
 fn compare_arguments(
@@ -983,19 +1033,23 @@ fn compare_arguments(
     compare_fields_at(kernel, history, Some(telescope), &this, &that)
 }
 
-/// The function type a variable head was bound at, opened for `arity` arguments — or `None` where the head names no type, or names one that is not a function of that arity.
+/// The function type a head was bound or declared at, opened for `arity` arguments — or `None` where the head names no type, or names one that is not a function of that arity.
+///
+/// The heads that name one are a variable, a universe instance of one, and a projection of a `rec` group, whose member type the group carries — each read by [`synth_neutral`], which is a lookup and never reaches conversion. A record projection and a stuck elimination stay untyped here, though `synth_neutral` could answer the first: no disagreement has asked for it, and every position typed is a position whose comparison changes.
 fn spine_telescope(
     kernel: &mut Kernel,
     head: &Term,
     arity: usize,
 ) -> Result<Option<Telescope<Term>>, KernelError> {
-    let Subterm::Var(var) = &**head else {
-        return Ok(None);
+    let names_a_type = match &**head {
+        Subterm::Var(var) => var.as_free().is_some(),
+        Subterm::Instance(_) => true,
+        _ => head.as_rec_proj().is_some(),
     };
-    let Some(name) = var.as_free() else {
+    if !names_a_type {
         return Ok(None);
-    };
-    let Some(type_) = kernel.type_of(name)?.cloned() else {
+    }
+    let Some(type_) = synth_neutral(kernel, head)? else {
         return Ok(None);
     };
 

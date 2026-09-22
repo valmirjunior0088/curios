@@ -4,8 +4,8 @@ use super::test_support::*;
 use {
     crate::{KernelError, convert},
     curios_core::{
-        Atom, Free, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
-        UniverseContext,
+        Atom, Cases, Free, InductDecl, InductParam, Intrinsic, Level, Match, MatchResult,
+        StructDecl, Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -25,6 +25,49 @@ fn any_two_inhabitants_of_a_proposition_convert() {
             &Term::free_var(&right),
         ),
         Ok(true),
+    );
+}
+
+/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair was refused where the elaborator — comparing the spines of one global first — accepted it. `tests::perimeter`'s row of the same name is the program.
+///
+/// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds as before, and the two eliminations stay apart. Mutation-checked: removing the spine attempt before forcing fails the proposition's half, and reading no telescope off a `rec` projection leaves this passing — that half is `recursion_tests`'s `two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding`.
+#[test]
+fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
+    let applied_to_two = |sort: Term| {
+        let mut kernel = kernel();
+        let family = declare(&mut kernel, "F", sort);
+        let (h, e) = (binder(60, "h"), binder(61, "e"));
+        let eliminated = Term::from(Subterm::Match(Match {
+            head: Term::free_var(&e),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+            },
+        }));
+        kernel.define(
+            &h,
+            &Term::func_type([(e.clone(), family.clone())], nat_type()),
+            &Term::func([(e, family.clone())], eliminated),
+            &UniverseContext::default(),
+        );
+        let (left, right) = (binder(62, "p"), binder(63, "q"));
+        kernel.assume(&left, &family);
+        kernel.assume(&right, &family);
+
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::apply(Term::free_var(&h), [Term::free_var(&left)]),
+            &Term::apply(Term::free_var(&h), [Term::free_var(&right)]),
+        )
+    };
+
+    assert_eq!(applied_to_two(Term::prop()), Ok(true));
+    assert_eq!(
+        applied_to_two(Term::type_ground()),
+        Ok(false),
+        "two relevant arguments were identified",
     );
 }
 

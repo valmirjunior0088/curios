@@ -29,11 +29,11 @@ use {
         unfold_rec_apply,
     },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
-        Level, Many, Match, MatchResult, Metavar, Proj, Rec, ReduceError, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, Variant, Visit, decide_bool,
-        instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
+        InstanceHead, Intrinsic, Level, Many, Match, MatchResult, Metavar, Proj, Rec, ReduceError,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variant, Visit,
+        decide_bool, instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
@@ -346,35 +346,51 @@ impl Convert {
     }
 
     /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and `/std/BigNat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
+    ///
+    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changed what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
-        this: &Term,
-        that: &Term,
+        this_term: &Term,
+        that_term: &Term,
     ) -> Result<bool, ReduceError> {
-        let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this, &**that) else {
+        let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this_term, &**that_term) else {
             return Ok(false);
         };
         if this.arguments.len() != that.arguments.len() {
             return Ok(false);
         }
         let global = |head: &Term| match &**applied_head(head) {
-            Subterm::Var(var) => var.as_free().and_then(Free::as_global).cloned(),
+            Subterm::Var(var) => var
+                .as_free()
+                .and_then(Free::as_global)
+                .map(|global| (global.clone(), false)),
+            Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                ..
+            }) => var
+                .as_free()
+                .and_then(Free::as_global)
+                .map(|global| (global.clone(), true)),
             _ => None,
         };
-        let (Some(this_global), Some(that_global)) = (global(&this.head), global(&that.head))
+        let (Some((this_global, polymorphic)), Some((that_global, _))) =
+            (global(&this.head), global(&that.head))
         else {
             return Ok(false);
         };
-        if this_global != that_global {
+        if this_global != that_global
+            || (polymorphic && (this_term.has_metavar() || that_term.has_metavar()))
+        {
             return Ok(false);
         }
 
         let param_types = apply_param_types(context, &this.head, &this.arguments)?;
         let mark = context.solution_mark();
-        let mut converts = matches!(
-            convert_outcome(context, &Term::type_ground(), &this.head, &that.head)?,
-            Outcome::Converts
-        );
+        let mut converts = polymorphic
+            || matches!(
+                convert_outcome(context, &Term::type_ground(), &this.head, &that.head)?,
+                Outcome::Converts
+            );
         for (index, (a, b)) in this.params().zip(that.params()).enumerate() {
             if !converts {
                 break;
@@ -387,6 +403,10 @@ impl Convert {
                 convert_outcome(context, &param_type, a, b)?,
                 Outcome::Converts
             );
+        }
+        if polymorphic && converts {
+            converts = identify_universe_levels(context, &this.head, &that.head)?
+                == Identification::Identified;
         }
         match converts {
             true => context.end_solutions(mark),

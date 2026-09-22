@@ -633,6 +633,76 @@ pub(super) const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct Z: (Nat) -> pub Prop
+        | mk(): (0)
+        end
+
+        let h(n : Nat, e : Z(n)) -> Nat = match e | mk() => 1 end;
+
+        let same(n : Nat, p : Z(n), q : Z(n), x : Eq(h(n, p), 0)) -> Eq(h(n, q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str = r#"
+        use /std/{Eq, Nat};
+
+        let h(n : Nat, e : Eq(n, n)) -> Nat = match e | refl(@_) => 1 end;
+
+        let same(n : Nat, p : Eq(n, n), q : Eq(n, n), x : Eq(h(n, p), 0)) -> Eq(h(n, q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct T: pub Prop
+        | t()
+        end
+
+        let g(n : Nat, p : T) -> Nat = match n | 0 => 0 | k + 1; _ => g(k, p) + 1 end;
+
+        let same(n : Nat, p : T, q : T, x : Eq(g(n, p), 0)) -> Eq(g(n, q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct T: pub Prop
+        | t()
+        end
+
+        let g(n : Nat, p : T) -> Nat = match n | 0 => (match p | t() => 0 end) | k + 1; _ => g(k, p) + 1 end;
+
+        let same(n : Nat, p : T, q : T, x : Eq(g(n, p), 0)) -> Eq(g(n, q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = r#"
+        use /std/{Eq, Nat};
+        use /std/WellFounded/{Accessible};
+
+        let R(y : Nat, x : Nat) -> Prop = Nat/Lt(x, y);
+
+        let f(n : Nat, lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R, n)) -> Nat =
+            match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;
+
+        let inv(n : Nat, a : Accessible(R, n)) -> (y : Nat, r : R(y, n)) -> Accessible(R, y) =
+            (y, r) => match a | intro(@_, below) => below(y, r) end;
+
+        let same(lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R, 0), x : Eq(f(0, lt, a), 0))
+            -> Eq(f(0, lt, Accessible/intro(inv(0, a))), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
         use /std/{Eq, Nat, State};
 
@@ -1492,6 +1562,37 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "a_spine_argument_compares_at_the_heads_domain",
         A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    // **Four more sat in that quadrant, found by putting the checkers to programs rather than by reading this table.** The elaborator compares two applications of one definition by their spines before it unfolds either, typing each argument at the head's telescope, so two proofs meet irrelevance; the kernel forced both sides first, and the proof landed where nothing typed it — a stuck match's scrutinee, or a folded recursive call it then unfolded under fresh binders until the budget ran out. The kernel now compares the spines first too, and the elaborator's own rule reaches the universe-polymorphic head a definition mentioning `Eq` has, which it had skipped.
+    (
+        "a_definition_applied_to_two_proofs_converts_before_unfolding",
+        A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "a_polymorphic_definition_applied_to_two_proofs_converts",
+        A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "a_recursive_function_carrying_a_proof_converts_without_unfolding",
+        A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "a_recursive_function_matching_its_proof_converts",
+        A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "two_accessibility_proofs_at_one_recursive_call_convert",
+        TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT,
         Expect::Accepts,
         Expect::Accepts,
     ),

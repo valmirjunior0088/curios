@@ -92,7 +92,7 @@ struct Tally {
 ///
 /// A row moving between quadrants — a disagreement closed, a kernel twin written — moves a number here, and deliberately: `the_kernel_refuses_alone` is what the second checker's incompleteness costs on this corpus, and `unasked_with_none` is how many rules the kernel is never put to anywhere. The elaborator refusing what the kernel accepts has no field, because no row may sit there.
 ///
-/// **`the_kernel_refuses_alone` is zero, and that is a weaker statement than it sounds.** Every disagreement this corpus *has* is closed; what the corpus does not have, it cannot count. Four sat here at once — two spine and struct-eta positions the kernel compared untyped, and a level entailment that read a constant before its hypotheses — and none was found by the checkers being run against each other. Three came from stating `/std`'s own laws and reading this table, one from a three-line group nobody had written down. A zero here is therefore a fact about the corpus, and the differential the design record still calls a missing test is what would make it a fact about the checkers.
+/// **`the_kernel_refuses_alone` is zero, and that is a weaker statement than it sounds.** Every disagreement this corpus *has* is closed; what the corpus does not have, it cannot count. Four sat here at once — two spine and struct-eta positions the kernel compared untyped, and a level entailment that read a constant before its hypotheses — and none was found by the checkers being run against each other. Three came from stating `/std`'s own laws and reading this table, one from a three-line group nobody had written down. Four more were found by the method the table lacks — programs written to set the checkers against each other, a definition or a recursive function applied to two proofs — and each sat in this quadrant until both checkers compared the spines of one definition before unfolding it; they are the rows from `a_definition_applied_to_two_proofs_converts_before_unfolding` on. A zero here is therefore a fact about the corpus, and the differential the design record still calls a missing test is what would make it a fact about the checkers.
 #[test]
 fn the_matrix_tallies_as_recorded() {
     let mut tally = Tally::default();
@@ -112,7 +112,7 @@ fn the_matrix_tallies_as_recorded() {
     assert_eq!(
         tally,
         Tally {
-            both_accept: 22,
+            both_accept: 27,
             both_refuse: 9,
             the_kernel_refuses_alone: 0,
             unasked_with_a_twin: 19,
