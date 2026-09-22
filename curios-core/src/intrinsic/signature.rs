@@ -148,8 +148,17 @@ impl Intrinsic {
             ),
             FltAdd(..) | FltSub(..) | FltMul(..) | FltDiv(..) | FltRem(..) | FltMin(..)
             | FltMax(..) | FltCopysign(..) => bin_op(flt_type(), flt_type()),
-            FltNeg(..) | FltAbs(..) | FltSqrt(..) | FltFloor(..) | FltCeil(..) | FltTrunc(..)
-            | FltNearest(..) => un(flt_type(), flt_type()),
+            FltNeg(..) | FltAbs(..) | FltSqrt(..) | FltRoundIntegral(..) => {
+                un(flt_type(), flt_type())
+            }
+            FltFma(..) => sig(
+                vec![
+                    Operand::At(flt_type()),
+                    Operand::At(flt_type()),
+                    Operand::At(flt_type()),
+                ],
+                flt_type(),
+            ),
 
             // The guarded divisions. A natural is nonzero exactly when zero is below it, which is why `Nat` needs no `NonZero` of its own.
             NatDiv { divisor, .. } | NatRem { divisor, .. } => sig(

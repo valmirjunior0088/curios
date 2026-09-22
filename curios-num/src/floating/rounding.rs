@@ -30,6 +30,28 @@ impl Rounding {
         Self::TowardNegative,
     ];
 
+    /// The direction's name in snake case: the `/sys/Flt` module holding the operations rounded this way, and how every printer spells one. The default direction's operations live at `/sys/Flt` itself.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::TiesToEven => "ties_to_even",
+            Self::TiesToAway => "ties_to_away",
+            Self::TowardZero => "toward_zero",
+            Self::TowardPositive => "toward_positive",
+            Self::TowardNegative => "toward_negative",
+        }
+    }
+
+    /// What rounding to an integral value in this direction is called, the names C and IEEE's §5.3.1 readers know it by.
+    pub fn integral_label(self) -> &'static str {
+        match self {
+            Self::TiesToEven => "nearest",
+            Self::TiesToAway => "round",
+            Self::TowardZero => "trunc",
+            Self::TowardPositive => "ceil",
+            Self::TowardNegative => "floor",
+        }
+    }
+
     /// Whether a magnitude that lost bits steps up to the next representable one. `dropped` places what was lost against half a unit in the last kept place, `odd` says whether the kept significand is odd, and `inexact` whether anything was lost at all — which the directed modes alone read, since for them any loss decides.
     pub(crate) fn rounds_up(
         self,

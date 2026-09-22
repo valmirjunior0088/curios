@@ -682,11 +682,16 @@ fn no_node_identity_appears_in_a_well_formed_dump() {
 #[test]
 fn an_intrinsic_spells_its_carrier_and_operation() {
     use crate::Intrinsic::*;
-    use curios_num::Grain;
+    use curios_num::{Grain, Rounding};
 
     for (op, expected) in [
         (NatAdd, "Nat/add"),
-        (IntToFlt, "Int/to_flt"),
+        (IntToFlt(Rounding::TiesToEven), "Int/to_flt"),
+        (IntToFlt(Rounding::TowardZero), "Flt/toward_zero/of_int"),
+        (FltAdd(Rounding::TowardPositive), "Flt/toward_positive/add"),
+        (FltFma(Rounding::TiesToEven), "Flt/fma"),
+        (FltRoundIntegral(Rounding::TowardNegative), "Flt/floor"),
+        (FltRoundIntegral(Rounding::TiesToAway), "Flt/round"),
         (FltOfLeBytes, "Flt/of_le_bytes"),
         (BinLen(Grain::X), "Bytes/len"),
         (BinChunk(Grain::B, 3), "Bits/chunk"),

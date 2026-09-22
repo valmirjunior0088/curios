@@ -6,5 +6,6 @@ mod byte_word_tests;
 mod flt_tests;
 mod grid_tests;
 mod packed_word_tests;
+mod rounding_tests;
 mod test_support;
 mod unbounded_tests;

@@ -30,7 +30,7 @@ use {
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         project_erased_universes,
     },
-    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
@@ -811,33 +811,33 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
         Intrinsic::Flt(flt) => Ok(Subterm::Intrinsic(Intrinsic::Flt(*flt))),
-        Intrinsic::FltAdd(left, right) => reduce_flt_binary(
+        Intrinsic::FltAdd(rounding, left, right) => reduce_flt_binary(
             reducer,
             left,
             right,
-            |l, r| Intrinsic::Flt(l + r),
-            Intrinsic::FltAdd,
+            |l, r| Intrinsic::Flt(l.sum(r, *rounding)),
+            |l, r| Intrinsic::FltAdd(*rounding, l, r),
         ),
-        Intrinsic::FltSub(left, right) => reduce_flt_binary(
+        Intrinsic::FltSub(rounding, left, right) => reduce_flt_binary(
             reducer,
             left,
             right,
-            |l, r| Intrinsic::Flt(l - r),
-            Intrinsic::FltSub,
+            |l, r| Intrinsic::Flt(l.difference(r, *rounding)),
+            |l, r| Intrinsic::FltSub(*rounding, l, r),
         ),
-        Intrinsic::FltMul(left, right) => reduce_flt_binary(
+        Intrinsic::FltMul(rounding, left, right) => reduce_flt_binary(
             reducer,
             left,
             right,
-            |l, r| Intrinsic::Flt(l * r),
-            Intrinsic::FltMul,
+            |l, r| Intrinsic::Flt(l.product(r, *rounding)),
+            |l, r| Intrinsic::FltMul(*rounding, l, r),
         ),
-        Intrinsic::FltDiv(left, right) => reduce_flt_binary(
+        Intrinsic::FltDiv(rounding, left, right) => reduce_flt_binary(
             reducer,
             left,
             right,
-            |l, r| Intrinsic::Flt(l / r),
-            Intrinsic::FltDiv,
+            |l, r| Intrinsic::Flt(l.quotient(r, *rounding)),
+            |l, r| Intrinsic::FltDiv(*rounding, l, r),
         ),
         // `%` is C's `fmod` over binary64: the exact remainder `x - trunc(x / y) * y`, sign of the dividend, never a rounding — the value `curios-emit`'s `$flt/rem` helper computes.
         Intrinsic::FltRem(left, right) => reduce_flt_binary(
@@ -908,35 +908,23 @@ pub fn reduce_intrinsic(
             |v| Some(Intrinsic::Flt(v.abs())),
             Intrinsic::FltAbs,
         ),
-        Intrinsic::FltSqrt(inner) => reduce_flt_unary(
+        Intrinsic::FltSqrt(rounding, inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.sqrt(Rounding::TiesToEven))),
-            Intrinsic::FltSqrt,
+            |v| Some(Intrinsic::Flt(v.sqrt(*rounding))),
+            |inner| Intrinsic::FltSqrt(*rounding, inner),
         ),
-        Intrinsic::FltFloor(inner) => reduce_flt_unary(
+        Intrinsic::FltRoundIntegral(rounding, inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardNegative))),
-            Intrinsic::FltFloor,
+            |v| Some(Intrinsic::Flt(v.round_integral(*rounding))),
+            |inner| Intrinsic::FltRoundIntegral(*rounding, inner),
         ),
-        Intrinsic::FltCeil(inner) => reduce_flt_unary(
+        Intrinsic::FltFma(rounding, a, b, c) => reduce_flt_ternary(
             reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardPositive))),
-            Intrinsic::FltCeil,
-        ),
-        Intrinsic::FltTrunc(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardZero))),
-            Intrinsic::FltTrunc,
-        ),
-        Intrinsic::FltNearest(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TiesToEven))),
-            Intrinsic::FltNearest,
+            (a, b, c),
+            |a, b, c| Intrinsic::Flt(a.fma(b, c, *rounding)),
+            |a, b, c| Intrinsic::FltFma(*rounding, a, b, c),
         ),
         // The two reinterpretations, whose round-trip laws are theorems of the model rather than a postulate: every one of the 2⁶⁴ bit patterns is a distinct float, so `of_le_bytes(to_le_bytes(x))` is `x` for every `x` and `to_le_bytes(of_le_bytes(b))` is `b` for every eight-byte `b`.
         Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(
@@ -980,17 +968,17 @@ pub fn reduce_intrinsic(
             // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
             Ok(Term::unwrap_or_clone(int_of_nat(&inner)))
         }
-        // Into `Flt` the conversions are total and take no proof: rounding to nearest is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, and a magnitude past the largest finite value answers the infinity of its sign.
-        Intrinsic::NatToFlt(inner) => reduce_nat_unary(
+        // Into `Flt` the conversions are total and take no proof: rounding is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, in whichever direction the operation names, and a magnitude past the largest finite value answers what that direction sends an overflow to.
+        Intrinsic::NatToFlt(rounding, inner) => reduce_nat_unary(
             reducer,
             inner,
             |v| {
                 Some(Intrinsic::Flt(Floating::of_natural(
                     &v.to_natural()?,
-                    Rounding::TiesToEven,
+                    *rounding,
                 )))
             },
-            Intrinsic::NatToFlt,
+            |inner| Intrinsic::NatToFlt(*rounding, inner),
         ),
         // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation now states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
         Intrinsic::IntToNat { int, non_neg } => {
@@ -1018,16 +1006,11 @@ pub fn reduce_intrinsic(
                 })),
             }
         }
-        Intrinsic::IntToFlt(inner) => reduce_int_unary(
+        Intrinsic::IntToFlt(rounding, inner) => reduce_int_unary(
             reducer,
             inner,
-            |v| {
-                Some(Intrinsic::Flt(Floating::of_integer(
-                    &v,
-                    Rounding::TiesToEven,
-                )))
-            },
-            Intrinsic::IntToFlt,
+            |v| Some(Intrinsic::Flt(Floating::of_integer(&v, *rounding))),
+            |inner| Intrinsic::IntToFlt(*rounding, inner),
         ),
         // The two narrowings truncate toward zero and answer the *exact* unbounded natural or integer: `to_nat(3.0e9)` is `3000000000`, which the running program holds as a boxed magnitude. Outside the domain each bound states, the model declines and the neutral is rebuilt, carrying the proof it was handed.
         Intrinsic::FltToNat { flt, non_neg } => reduce_flt_unary(

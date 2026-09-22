@@ -1,9 +1,9 @@
 use {
     super::{
         BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, FltHelper, ImmediateLayout,
-        LoadAs, RopeData, Table, box_instr, call, either, get, set, tee, when,
+        LoadAs, RopeData, Table, box_instr, call, either, get, rounding_code, set, tee, when,
     },
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
 };
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.
@@ -271,6 +271,29 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
+    /// Lower a float operation in a direction Wasm has no instruction for: the operands, the last negated when `negated`, then the direction as an `i32`, into `helper`.
+    fn emit_flt_rounded(
+        &mut self,
+        dest: &Dest<'_>,
+        intrinsic: &curios_cont::Intrinsic,
+        operands: &[EmissionValueName],
+        rounding: Rounding,
+        negated: bool,
+        helper: FltHelper,
+    ) {
+        for (index, operand) in operands.iter().enumerate() {
+            self.emit_operand(intrinsic, index, operand);
+        }
+        if negated {
+            self.emit_instr(curios_wasm::Instr::F64Neg);
+        }
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: rounding_code(rounding),
+        });
+        self.emit_instr(call(&self.context.table().flt_func(helper)));
+        self.emit_store(dest, &intrinsic.result_repr());
+    }
+
     /// A call to the big-number helper `helper`, marking it for emission.
     fn big(&self, helper: BigHelper) -> curios_wasm::Instr {
         call(&self.context.table().big_func(helper))
@@ -497,8 +520,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &curios_cont::Repr::Nat);
     }
 
-    /// Lower a conversion to `Flt`: an i31 converts exactly, and a boxed value through `big/to_f64`, which rounds to nearest as the model does.
-    fn emit_to_flt(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
+    /// Lower a conversion to `Flt` in the direction named: an i31 converts exactly, whatever the direction, and a boxed value through `big/to_f64`, which rounds as the model does.
+    fn emit_to_flt(&mut self, dest: &Dest<'_>, operand: &EmissionValueName, rounding: Rounding) {
         let operand = self.operand(operand);
         let fast = operand
             .small()
@@ -508,7 +531,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let slow = operand
             .reference()
             .into_iter()
-            .chain([self.big(BigHelper::ToF64)])
+            .chain([
+                curios_wasm::Instr::I32Const {
+                    value: rounding_code(rounding),
+                },
+                self.big(BigHelper::ToF64),
+            ])
             .collect();
 
         self.emit_split(
@@ -1678,34 +1706,51 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::FltAdd => self.emit_flt_checked(
+            // The default direction is the hardware's, checked for a NaN; every other one, and a fused multiply-add in any, is a helper computing the model's rounding in integers.
+            curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Add],
                 false,
             ),
-            curios_cont::Intrinsic::FltSub => self.emit_flt_checked(
+            curios_cont::Intrinsic::FltSub(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Sub],
                 true,
             ),
-            curios_cont::Intrinsic::FltMul => self.emit_flt_checked(
+            curios_cont::Intrinsic::FltMul(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Mul],
                 false,
             ),
-            curios_cont::Intrinsic::FltDiv => self.emit_flt_checked(
+            curios_cont::Intrinsic::FltDiv(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Div],
                 false,
             ),
+            curios_cont::Intrinsic::FltAdd(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Add)
+            }
+            // The model's difference is the sum with the subtrahend negated, which `neg` does bit for bit.
+            curios_cont::Intrinsic::FltSub(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, true, FltHelper::Add)
+            }
+            curios_cont::Intrinsic::FltMul(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Mul)
+            }
+            curios_cont::Intrinsic::FltDiv(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Div)
+            }
+            curios_cont::Intrinsic::FltFma(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Fma)
+            }
             // WebAssembly has no `f64.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
             curios_cont::Intrinsic::FltRem => {
                 let rem = call(&self.context.table().flt_rem_func());
@@ -1751,48 +1796,39 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 &args[1],
                 curios_wasm::Instr::F64Copysign,
             ),
-            curios_cont::Intrinsic::FltSqrt => self.emit_flt_checked(
+            curios_cont::Intrinsic::FltSqrt(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0]],
                 vec![curios_wasm::Instr::F64Sqrt],
                 false,
             ),
-            curios_cont::Intrinsic::FltFloor => self.emit_flt_checked(
-                dest,
-                &op,
-                &[&args[0]],
-                vec![curios_wasm::Instr::F64Floor],
-                false,
-            ),
-            curios_cont::Intrinsic::FltCeil => self.emit_flt_checked(
-                dest,
-                &op,
-                &[&args[0]],
-                vec![curios_wasm::Instr::F64Ceil],
-                false,
-            ),
-            curios_cont::Intrinsic::FltTrunc => self.emit_flt_checked(
-                dest,
-                &op,
-                &[&args[0]],
-                vec![curios_wasm::Instr::F64Trunc],
-                false,
-            ),
-            curios_cont::Intrinsic::FltNearest => self.emit_flt_checked(
-                dest,
-                &op,
-                &[&args[0]],
-                vec![curios_wasm::Instr::F64Nearest],
-                false,
-            ),
+            curios_cont::Intrinsic::FltSqrt(rounding) => {
+                self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Sqrt)
+            }
+            // Four of the five directions are an instruction each; ties away from zero is not.
+            curios_cont::Intrinsic::FltRoundIntegral(Rounding::TiesToAway) => {
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
+                self.emit_instr(call(&self.context.table().flt_func(FltHelper::Round)));
+                self.emit_store(dest, &op.result_repr());
+            }
+            curios_cont::Intrinsic::FltRoundIntegral(rounding) => {
+                let instr = match rounding {
+                    Rounding::TowardNegative => curios_wasm::Instr::F64Floor,
+                    Rounding::TowardPositive => curios_wasm::Instr::F64Ceil,
+                    Rounding::TowardZero => curios_wasm::Instr::F64Trunc,
+                    Rounding::TiesToEven | Rounding::TiesToAway => curios_wasm::Instr::F64Nearest,
+                };
+                self.emit_flt_checked(dest, &op, &[&args[0]], vec![instr], false)
+            }
             // `Nat` and `Int` share one runtime form, so either conversion is the identity on the reference. `Int/to_nat` carries the evidence that its operand is not negative, and `Nat/to_int` needs none.
             curios_cont::Intrinsic::NatToInt | curios_cont::Intrinsic::IntToNat => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::NatToFlt | curios_cont::Intrinsic::IntToFlt => {
-                self.emit_to_flt(dest, &args[0])
+            curios_cont::Intrinsic::NatToFlt(rounding)
+            | curios_cont::Intrinsic::IntToFlt(rounding) => {
+                self.emit_to_flt(dest, &args[0], rounding)
             }
             curios_cont::Intrinsic::FltToLeBytes => {
                 let operand = &args[0];

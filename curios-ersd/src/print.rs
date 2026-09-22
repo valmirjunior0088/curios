@@ -19,7 +19,7 @@ use {
         ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs, SequenceGrain,
         SequenceOp, Statement, StatementId, Terminator, ValueId,
     },
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -860,8 +860,8 @@ fn grain_carrier(grain: Grain) -> &'static str {
 //
 // The table follows `/sys`'s own spelling, which is where a reader met these operations — `Nat/add`, `Byte/to_nat`, `Flt/of_le_bytes`. `curios-core`'s printer hardcodes the same paths for the same reason: this is display text, not a name the compiler emits, so it reaches no `SyntaxRegistry` slot and no prelude declaration. A handful of operations are lowering-internal and have no `/sys` declaration to follow — `Bool/neq`, which the surface desugars through `Bool/xor`, and `List/build`, which is what a list literal lowers to — and those are spelled in the same style rather than left to leak a Rust variant name.
 
-fn operation_name(operation: Operation) -> &'static str {
-    match operation {
+fn operation_name(operation: Operation) -> String {
+    let name = match operation {
         Operation::BoolAnd => "Bool/and",
         Operation::BoolOr => "Bool/or",
         Operation::BoolXor => "Bool/xor",
@@ -897,10 +897,11 @@ fn operation_name(operation: Operation) -> &'static str {
         Operation::IntXor => "Int/xor",
         Operation::IntShl => "Int/shl",
         Operation::IntShr => "Int/shr",
-        Operation::FltAdd => "Flt/add",
-        Operation::FltSub => "Flt/sub",
-        Operation::FltMul => "Flt/mul",
-        Operation::FltDiv => "Flt/div",
+        Operation::FltAdd(rounding) => return flt_rounded(rounding, "add"),
+        Operation::FltSub(rounding) => return flt_rounded(rounding, "sub"),
+        Operation::FltMul(rounding) => return flt_rounded(rounding, "mul"),
+        Operation::FltDiv(rounding) => return flt_rounded(rounding, "div"),
+        Operation::FltFma(rounding) => return flt_rounded(rounding, "fma"),
         Operation::FltRem => "Flt/rem",
         Operation::FltEql => "Flt/eql",
         Operation::FltNeq => "Flt/neq",
@@ -911,19 +912,30 @@ fn operation_name(operation: Operation) -> &'static str {
         Operation::FltCopysign => "Flt/copysign",
         Operation::FltNeg => "Flt/neg",
         Operation::FltAbs => "Flt/abs",
-        Operation::FltSqrt => "Flt/sqrt",
-        Operation::FltFloor => "Flt/floor",
-        Operation::FltCeil => "Flt/ceil",
-        Operation::FltTrunc => "Flt/trunc",
-        Operation::FltNearest => "Flt/nearest",
+        Operation::FltSqrt(rounding) => return flt_rounded(rounding, "sqrt"),
+        Operation::FltRoundIntegral(rounding) => {
+            return format!("Flt/{}", rounding.integral_label());
+        }
         Operation::NatToInt => "Nat/to_int",
-        Operation::NatToFlt => "Nat/to_flt",
+        Operation::NatToFlt(Rounding::TiesToEven) => "Nat/to_flt",
+        Operation::NatToFlt(rounding) => return flt_rounded(rounding, "of_nat"),
         Operation::IntToNat => "Int/to_nat",
-        Operation::IntToFlt => "Int/to_flt",
+        Operation::IntToFlt(Rounding::TiesToEven) => "Int/to_flt",
+        Operation::IntToFlt(rounding) => return flt_rounded(rounding, "of_int"),
         Operation::FltToNat => "Flt/to_nat",
         Operation::FltToInt => "Flt/to_int",
         Operation::FltToLeBytes => "Flt/to_le_bytes",
         Operation::FltOfLeBytes => "Flt/of_le_bytes",
+    };
+
+    name.to_string()
+}
+
+/// The `/sys` path of a float operation rounded in `rounding`: `Flt/add` in the default direction, `Flt/toward_zero/add` in another.
+fn flt_rounded(rounding: Rounding, operation: &str) -> String {
+    match rounding {
+        Rounding::TiesToEven => format!("Flt/{operation}"),
+        rounding => format!("Flt/{}/{operation}", rounding.label()),
     }
 }
 

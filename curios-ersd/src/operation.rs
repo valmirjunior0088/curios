@@ -1,6 +1,8 @@
 //! The scalar operation alphabet.
 //!
-//! One fieldless variant per intrinsic operation over the scalar shapes — `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving binary64), and `Handle` — transcribed one-to-one from Core's intrinsic vocabulary. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
+//! One variant per intrinsic operation over the scalar shapes — `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving binary64), and `Handle` — transcribed one-to-one from Core's intrinsic vocabulary, with the operations that round carrying their [`Rounding`] direction as Core's do. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
+
+use curios_num::Rounding;
 
 /// A scalar intrinsic operation. [`arity`](Operation::arity) is the single authoritative operand count; the verifier and every later consumer delegate to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,10 +43,11 @@ pub enum Operation {
     IntXor,
     IntShl,
     IntShr,
-    FltAdd,
-    FltSub,
-    FltMul,
-    FltDiv,
+    FltAdd(Rounding),
+    FltSub(Rounding),
+    FltMul(Rounding),
+    FltDiv(Rounding),
+    FltFma(Rounding),
     FltRem,
     FltEql,
     FltNeq,
@@ -55,15 +58,12 @@ pub enum Operation {
     FltCopysign,
     FltNeg,
     FltAbs,
-    FltSqrt,
-    FltFloor,
-    FltCeil,
-    FltTrunc,
-    FltNearest,
+    FltSqrt(Rounding),
+    FltRoundIntegral(Rounding),
     NatToInt,
-    NatToFlt,
+    NatToFlt(Rounding),
     IntToNat,
-    IntToFlt,
+    IntToFlt(Rounding),
     FltToNat,
     FltToInt,
     FltToLeBytes,
@@ -78,15 +78,12 @@ impl Operation {
             | Self::NatToByte
             | Self::FltNeg
             | Self::FltAbs
-            | Self::FltSqrt
-            | Self::FltFloor
-            | Self::FltCeil
-            | Self::FltTrunc
-            | Self::FltNearest
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
             | Self::NatToInt
-            | Self::NatToFlt
+            | Self::NatToFlt(_)
             | Self::IntToNat
-            | Self::IntToFlt
+            | Self::IntToFlt(_)
             | Self::FltToNat
             | Self::FltToInt
             | Self::FltToLeBytes
@@ -124,10 +121,10 @@ impl Operation {
             | Self::IntXor
             | Self::IntShl
             | Self::IntShr
-            | Self::FltAdd
-            | Self::FltSub
-            | Self::FltMul
-            | Self::FltDiv
+            | Self::FltAdd(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
             | Self::FltRem
             | Self::FltEql
             | Self::FltNeq
@@ -136,6 +133,7 @@ impl Operation {
             | Self::FltMin
             | Self::FltMax
             | Self::FltCopysign => 2,
+            Self::FltFma(_) => 3,
         }
     }
 }

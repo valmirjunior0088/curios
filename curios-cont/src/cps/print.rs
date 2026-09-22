@@ -18,7 +18,7 @@ use {
         Atom, Callee, CellOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
     curios_utilities::ArenaId,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -657,6 +657,14 @@ fn grain_carrier(grain: Grain) -> &'static str {
 
 /// The name of every intrinsic, carrier first and operation last.
 ///
+/// The `/sys` path of a float operation rounded in `rounding`: `Flt/add` in the default direction, `Flt/toward_zero/add` in another.
+fn flt_rounded(rounding: Rounding, operation: &str) -> String {
+    match rounding {
+        Rounding::TiesToEven => format!("Flt/{operation}"),
+        rounding => format!("Flt/{}/{operation}", rounding.label()),
+    }
+}
+
 /// Spelled out rather than derived from the Rust variant for the reason the erased rung spells its operations rather than printing them infix: below Core there are no types left to recover a carrier from, so the carrier lives in the name. The match is exhaustive with no wildcard arm, which is what makes a new intrinsic a compile error here rather than a leaked variant name in a dump. The variadic widths do not enter the name — the operand list already says how many there are.
 fn intrinsic_name(op: &Intrinsic) -> String {
     let name = match op {
@@ -676,7 +684,8 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::NatShr => "Nat/shr",
         Intrinsic::NatEqz => "Nat/eqz",
         Intrinsic::NatToInt => "Nat/to_int",
-        Intrinsic::NatToFlt => "Nat/to_flt",
+        Intrinsic::NatToFlt(Rounding::TiesToEven) => "Nat/to_flt",
+        Intrinsic::NatToFlt(rounding) => return flt_rounded(*rounding, "of_nat"),
         Intrinsic::IntEql => "Int/eql",
         Intrinsic::IntNeq => "Int/neq",
         Intrinsic::IntAdd => "Int/add",
@@ -693,11 +702,13 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::IntShr => "Int/shr",
         Intrinsic::IntEqz => "Int/eqz",
         Intrinsic::IntToNat => "Int/to_nat",
-        Intrinsic::IntToFlt => "Int/to_flt",
-        Intrinsic::FltAdd => "Flt/add",
-        Intrinsic::FltSub => "Flt/sub",
-        Intrinsic::FltMul => "Flt/mul",
-        Intrinsic::FltDiv => "Flt/div",
+        Intrinsic::IntToFlt(Rounding::TiesToEven) => "Int/to_flt",
+        Intrinsic::IntToFlt(rounding) => return flt_rounded(*rounding, "of_int"),
+        Intrinsic::FltAdd(rounding) => return flt_rounded(*rounding, "add"),
+        Intrinsic::FltSub(rounding) => return flt_rounded(*rounding, "sub"),
+        Intrinsic::FltMul(rounding) => return flt_rounded(*rounding, "mul"),
+        Intrinsic::FltDiv(rounding) => return flt_rounded(*rounding, "div"),
+        Intrinsic::FltFma(rounding) => return flt_rounded(*rounding, "fma"),
         Intrinsic::FltRem => "Flt/rem",
         Intrinsic::FltEql => "Flt/eql",
         Intrinsic::FltNeq => "Flt/neq",
@@ -707,11 +718,10 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::FltMax => "Flt/max",
         Intrinsic::FltNeg => "Flt/neg",
         Intrinsic::FltAbs => "Flt/abs",
-        Intrinsic::FltSqrt => "Flt/sqrt",
-        Intrinsic::FltFloor => "Flt/floor",
-        Intrinsic::FltCeil => "Flt/ceil",
-        Intrinsic::FltTrunc => "Flt/trunc",
-        Intrinsic::FltNearest => "Flt/nearest",
+        Intrinsic::FltSqrt(rounding) => return flt_rounded(*rounding, "sqrt"),
+        Intrinsic::FltRoundIntegral(rounding) => {
+            return format!("Flt/{}", rounding.integral_label());
+        }
         Intrinsic::FltCopysign => "Flt/copysign",
         Intrinsic::FltToNat => "Flt/to_nat",
         Intrinsic::FltToLeBytes => "Flt/to_le_bytes",

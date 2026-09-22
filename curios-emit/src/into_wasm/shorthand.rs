@@ -123,6 +123,19 @@ pub(super) fn when(then_instructions: Vec<curios_wasm::Instr>) -> curios_wasm::I
     }
 }
 
+/// An `if` with an `else` and no result, over the condition already on the stack.
+pub(super) fn branch(
+    then_instructions: Vec<curios_wasm::Instr>,
+    else_instructions: Vec<curios_wasm::Instr>,
+) -> curios_wasm::Instr {
+    curios_wasm::Instr::If {
+        label_name: curios_wasm::LabelName::from("branch"),
+        block_type: curios_wasm::BlockType::Empty,
+        then_instructions,
+        else_instructions,
+    }
+}
+
 /// An `if` whose two arms each leave one `result`, over the condition already on the stack.
 pub(super) fn either(
     result: curios_wasm::ValType,

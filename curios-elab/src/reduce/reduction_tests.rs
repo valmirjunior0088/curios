@@ -5,7 +5,7 @@ use curios_core::*;
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
-    curios_num::{Binary, Floating, Grain, Integer},
+    curios_num::{Binary, Floating, Grain, Integer, Rounding},
 };
 
 #[test]
@@ -455,7 +455,7 @@ fn flt_folds_through_the_model() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::intrinsic(Intrinsic::flt_mul(flt(1.5), flt(2.0)))
+            Term::intrinsic(Intrinsic::flt_mul(Rounding::TiesToEven, flt(1.5), flt(2.0)))
         ),
         Ok(flt(3.0)),
     );
@@ -464,7 +464,7 @@ fn flt_folds_through_the_model() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::intrinsic(Intrinsic::flt_div(flt(1.0), flt(0.0)))
+            Term::intrinsic(Intrinsic::flt_div(Rounding::TiesToEven, flt(1.0), flt(0.0)))
         ),
         Ok(flt(f64::INFINITY)),
     );
@@ -473,14 +473,52 @@ fn flt_folds_through_the_model() {
             &mut context,
             Term::intrinsic(Intrinsic::FltCopysign(
                 flt(1.0),
-                Term::intrinsic(Intrinsic::flt_div(flt(0.0), flt(0.0))),
+                Term::intrinsic(Intrinsic::flt_div(Rounding::TiesToEven, flt(0.0), flt(0.0))),
             ))
         ),
         Ok(flt(1.0)),
     );
 
+    // A direction folds as the model rounds in it: a tenth is inexact, so each direction lands on its own side of it, and ties away from zero parts from ties to even at a halfway integer.
+    let mut tenth = |rounding| {
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::flt_div(rounding, flt(1.0), flt(10.0))),
+        )
+    };
+    assert_eq!(tenth(Rounding::TiesToEven), Ok(flt(0.1)));
+    assert_eq!(
+        tenth(Rounding::TowardNegative),
+        Ok(flt(f64::from_bits(0.1f64.to_bits() - 1)))
+    );
+    assert_eq!(tenth(Rounding::TowardZero), tenth(Rounding::TowardNegative));
+    assert_eq!(tenth(Rounding::TowardPositive), Ok(flt(0.1)));
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::flt_round_integral(
+                Rounding::TiesToAway,
+                flt(2.5)
+            ))
+        ),
+        Ok(flt(3.0)),
+    );
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::flt_fma(
+                Rounding::TiesToEven,
+                flt(0.1),
+                flt(10.0),
+                flt(-1.0)
+            ))
+        ),
+        Ok(flt(2f64.powi(-54))),
+    );
+
     // A symbolic operand still rebuilds the neutral term.
     let symbolic = Term::intrinsic(Intrinsic::flt_mul(
+        Rounding::TiesToEven,
         Term::free_var(&Free::local(1, Some("x"))),
         flt(2.0),
     ));

@@ -1,4 +1,4 @@
-use curios_num::{Floating, Natural};
+use curios_num::{Floating, Natural, Rounding};
 
 use {
     super::{Storage, storage},
@@ -229,7 +229,7 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
     // Read as a float here...
     let float = module.add_node(Node::LetIntrinsic {
         result: second,
-        op: Intrinsic::FltAdd,
+        op: Intrinsic::FltAdd(Rounding::TiesToEven),
         args: vec![
             Atom::Value(shared),
             Atom::Literal(Literal::Flt(Floating::from(1.0))),

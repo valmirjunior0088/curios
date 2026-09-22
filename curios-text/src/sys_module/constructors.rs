@@ -156,7 +156,7 @@ pub(super) fn binary(
     label: &str,
     operand: Term,
     output: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
+    ctor: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Decl {
     pub_fn(
         label,
@@ -205,12 +205,35 @@ pub(super) fn guarded_unary(
     )
 }
 
-pub(super) fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> Decl {
+pub(super) fn unary(
+    label: &str,
+    input: Term,
+    output: Term,
+    ctor: impl FnOnce(Term) -> Intrinsic,
+) -> Decl {
     pub_fn(
         label,
         vec![("a", input)],
         output,
         intrinsic(ctor(name("a"))),
+    )
+}
+
+pub(super) fn ternary(
+    label: &str,
+    operand: Term,
+    output: Term,
+    ctor: impl FnOnce(Term, Term, Term) -> Intrinsic,
+) -> Decl {
+    pub_fn(
+        label,
+        vec![
+            ("a", operand.clone()),
+            ("b", operand.clone()),
+            ("c", operand),
+        ],
+        output,
+        intrinsic(ctor(name("a"), name("b"), name("c"))),
     )
 }
 

@@ -1,4 +1,4 @@
-use curios_num::{Integer, Natural};
+use curios_num::{Integer, Natural, Rounding};
 
 use {
     crate::*,
@@ -160,7 +160,7 @@ fn identities_mint_monotonically_per_arena() {
 #[test]
 fn operation_arities_are_exact() {
     assert_eq!(Operation::NatAdd.arity(), 2);
-    assert_eq!(Operation::FltSqrt.arity(), 1);
+    assert_eq!(Operation::FltSqrt(Rounding::TiesToEven).arity(), 1);
     assert_eq!(
         SequenceOp::BinSlice(Grain::X).arity(),
         SequenceArity::Exactly(3)

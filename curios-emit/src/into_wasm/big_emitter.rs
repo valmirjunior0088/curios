@@ -9,9 +9,9 @@
 mod magnitude;
 
 use super::{
-    BigData, Chunk, Scope, Table, block, br, br_if, call, cast, concrete_val, declare_helper,
-    either, f64_type, field_get, get, i32_const, i32_type, i64_const, i64_type, repeat, set, tee,
-    wasm, when,
+    BigData, Chunk, FltHelper, Scope, Table, block, br, br_if, branch, call, cast, concrete_val,
+    declare_helper, either, f64_type, field_get, get, i32_const, i32_type, i64_const, i64_type,
+    repeat, set, tee, wasm, when,
 };
 
 /// Every big-number helper, named by what it computes.
@@ -35,7 +35,7 @@ pub(crate) enum BigHelper {
     Shl,
     /// `(anyref, i32 count) -> (ref any)`: the floor of the value over `2^count`.
     Shr,
-    /// `(anyref) -> f64`: the correctly rounded float nearest the value, ties to even, `±inf` past the largest finite one.
+    /// `(anyref, i32 direction) -> f64`: the float the value rounds to in the direction named, through `flt/pack` — which sends a value past the largest finite one where that direction sends an overflow.
     ToF64,
     /// `(f64) -> (ref any)`: the float truncated toward zero, which the caller has made sure is finite.
     OfF64,
@@ -874,6 +874,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     fn emit_big_to_f64(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
+        let direction = scope.param("direction", i32_type());
         let b = scope.local("b", self.big_type());
         let m = scope.local("m", self.words_type());
         let la = scope.local("la", i32_type());
@@ -884,10 +885,10 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let sticky = scope.local("sticky", i32_type());
         let i = scope.local("i", i32_type());
         let w = scope.local("w", i64_type());
-        let f = scope.local("f", f64_type());
         let i31 = Table::int_type(false);
         let from = |offset: i32| wasm![get(&skip), i32_const(offset), curios_wasm::Instr::I32Add];
 
+        // At most 64 bits: the magnitude is the significand, exact, with nothing sticky.
         let narrow = wasm![
             self.limb64(&m, vec![i32_const(0)]),
             get(&la),
@@ -903,7 +904,11 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                 vec![i64_const(0)],
             ),
             curios_wasm::Instr::I64Or,
-            curios_wasm::Instr::F64ConvertI64U,
+            set(&w),
+            i32_const(0),
+            set(&shift),
+            i32_const(0),
+            set(&sticky),
         ];
 
         let window = either(
@@ -975,35 +980,10 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     set(&sticky),
                 ],
             ),
-            get(&w),
             get(&sticky),
             i32_const(0),
             curios_wasm::Instr::I32Ne,
-            curios_wasm::Instr::I64ExtendI32U,
-            curios_wasm::Instr::I64Or,
-            curios_wasm::Instr::F64ConvertI64U,
-            set(&f),
-            // Past 2^1000 the top 64 bits already put the value above the largest finite float, whose exponent is 1023; below it, 2^shift is itself a normal float.
-            get(&shift),
-            i32_const(1000),
-            curios_wasm::Instr::I32GtU,
-            either(
-                f64_type(),
-                vec![curios_wasm::Instr::F64Const {
-                    value: f64::INFINITY
-                }],
-                vec![
-                    get(&f),
-                    i32_const(1023),
-                    get(&shift),
-                    curios_wasm::Instr::I32Add,
-                    curios_wasm::Instr::I64ExtendI32U,
-                    i64_const(52),
-                    curios_wasm::Instr::I64Shl,
-                    curios_wasm::Instr::F64ReinterpretI64,
-                    curios_wasm::Instr::F64Mul,
-                ],
-            ),
+            set(&sticky),
         ];
 
         let instrs = wasm![
@@ -1035,13 +1015,16 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             get(&width),
             i32_const(64),
             curios_wasm::Instr::I32LeU,
-            either(f64_type(), narrow, wide),
-            set(&f),
-            get(&f),
-            curios_wasm::Instr::F64Neg,
-            get(&f),
+            branch(narrow, wide),
+            // The top 64 bits of the magnitude at `2^shift`, the rest sticky, rounded once in the direction named.
             self.sign(&b),
-            curios_wasm::Instr::Select { val_types: vec![] },
+            i32_const(0),
+            curios_wasm::Instr::I32Ne,
+            get(&w),
+            get(&shift),
+            get(&sticky),
+            get(&direction),
+            call(&self.table.flt_func(FltHelper::Pack)),
         ];
 
         self.add_helper(BigHelper::ToF64, scope, f64_type(), instrs);

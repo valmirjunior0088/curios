@@ -1,6 +1,6 @@
 //! Dead code, jump forwarding, atom rewriting, and the intrinsic identities the simplifier folds.
 
-use curios_num::{Integer, Natural};
+use curios_num::{Integer, Natural, Rounding};
 
 use {
     super::test_support::unary_intrinsic_module,
@@ -490,14 +490,14 @@ fn identity_folds_leave_traps_and_flt_untouched() {
             ],
         ),
         (
-            Intrinsic::FltAdd,
+            Intrinsic::FltAdd(Rounding::TiesToEven),
             vec![
                 Atom::Value(x),
                 Atom::Literal(Literal::Flt(Floating::from(0.0))),
             ],
         ),
         (
-            Intrinsic::FltMul,
+            Intrinsic::FltMul(Rounding::TiesToEven),
             vec![
                 Atom::Value(x),
                 Atom::Literal(Literal::Flt(Floating::from(1.0))),

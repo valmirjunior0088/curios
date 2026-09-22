@@ -1,7 +1,14 @@
 pub use /sys/{Flt};
-pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
-    floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
+pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs,
+    sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 pub use /sys/Flt/{Finite, NonNeg};
+
+--- IEEE 754's rounding directions.
+pub mod Rounding;
+pub use Rounding/{let Rounding};
+
+--- The operations that round, each in the direction its first argument names.
+pub mod rounded;
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 

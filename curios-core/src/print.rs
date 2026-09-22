@@ -6,7 +6,7 @@ use {
         TupleType, Two, Var, Variant,
     },
     curios_abi::stdio,
-    curios_num::{Binary, Floating, Grain},
+    curios_num::{Binary, Floating, Grain, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{Plicity, Qualifier, recurse},
     std::{
@@ -638,13 +638,29 @@ fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: 
     }
 }
 
+/// The `/sys` path of a float operation rounded in `rounding`: `Flt/add` in the default direction, `Flt/toward_zero/add` in another.
+fn flt_rounded(rounding: Rounding, operation: &str) -> String {
+    match rounding {
+        Rounding::TiesToEven => format!("Flt/{operation}"),
+        rounding => format!("Flt/{}/{operation}", rounding.label()),
+    }
+}
+
 /// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix (`InfixOp::symbol`); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
     Some(match intrinsic {
-        Intrinsic::NatAdd(..) | Intrinsic::IntAdd(..) | Intrinsic::FltAdd(..) => "+",
-        Intrinsic::NatSub(..) | Intrinsic::IntSub(..) | Intrinsic::FltSub(..) => "-",
-        Intrinsic::NatMul(..) | Intrinsic::IntMul(..) | Intrinsic::FltMul(..) => "*",
-        Intrinsic::NatDiv { .. } | Intrinsic::IntDiv { .. } | Intrinsic::FltDiv(..) => "/",
+        Intrinsic::NatAdd(..)
+        | Intrinsic::IntAdd(..)
+        | Intrinsic::FltAdd(Rounding::TiesToEven, ..) => "+",
+        Intrinsic::NatSub(..)
+        | Intrinsic::IntSub(..)
+        | Intrinsic::FltSub(Rounding::TiesToEven, ..) => "-",
+        Intrinsic::NatMul(..)
+        | Intrinsic::IntMul(..)
+        | Intrinsic::FltMul(Rounding::TiesToEven, ..) => "*",
+        Intrinsic::NatDiv { .. }
+        | Intrinsic::IntDiv { .. }
+        | Intrinsic::FltDiv(Rounding::TiesToEven, ..) => "/",
         Intrinsic::NatRem { .. } | Intrinsic::IntRem { .. } | Intrinsic::FltRem(..) => "%",
         Intrinsic::NatEql(..)
         | Intrinsic::IntEql(..)
@@ -826,10 +842,25 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::IntShr(l, r) => print_call("Int/shr", vec![], vec![l, r], frame),
         Intrinsic::FltType => pure("Flt"),
         Intrinsic::Flt(flt) => print_flt(flt),
-        Intrinsic::FltAdd(l, r) => print_infix("+", l, r, frame),
-        Intrinsic::FltSub(l, r) => print_infix("-", l, r, frame),
-        Intrinsic::FltMul(l, r) => print_infix("*", l, r, frame),
-        Intrinsic::FltDiv(l, r) => print_infix("/", l, r, frame),
+        Intrinsic::FltAdd(Rounding::TiesToEven, l, r) => print_infix("+", l, r, frame),
+        Intrinsic::FltSub(Rounding::TiesToEven, l, r) => print_infix("-", l, r, frame),
+        Intrinsic::FltMul(Rounding::TiesToEven, l, r) => print_infix("*", l, r, frame),
+        Intrinsic::FltDiv(Rounding::TiesToEven, l, r) => print_infix("/", l, r, frame),
+        Intrinsic::FltAdd(rounding, l, r) => {
+            print_call(flt_rounded(rounding, "add"), vec![], vec![l, r], frame)
+        }
+        Intrinsic::FltSub(rounding, l, r) => {
+            print_call(flt_rounded(rounding, "sub"), vec![], vec![l, r], frame)
+        }
+        Intrinsic::FltMul(rounding, l, r) => {
+            print_call(flt_rounded(rounding, "mul"), vec![], vec![l, r], frame)
+        }
+        Intrinsic::FltDiv(rounding, l, r) => {
+            print_call(flt_rounded(rounding, "div"), vec![], vec![l, r], frame)
+        }
+        Intrinsic::FltFma(rounding, a, b, c) => {
+            print_call(flt_rounded(rounding, "fma"), vec![], vec![a, b, c], frame)
+        }
         Intrinsic::FltRem(l, r) => print_infix("%", l, r, frame),
         Intrinsic::FltEql(l, r) => print_infix("==", l, r, frame),
         Intrinsic::FltNeq(l, r) => print_infix("!=", l, r, frame),
@@ -840,19 +871,33 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::FltCopysign(l, r) => print_call("Flt/copysign", vec![], vec![l, r], frame),
         Intrinsic::FltNeg(i) => print_call("Flt/neg", vec![], vec![i], frame),
         Intrinsic::FltAbs(i) => print_call("Flt/abs", vec![], vec![i], frame),
-        Intrinsic::FltSqrt(i) => print_call("Flt/sqrt", vec![], vec![i], frame),
-        Intrinsic::FltFloor(i) => print_call("Flt/floor", vec![], vec![i], frame),
-        Intrinsic::FltCeil(i) => print_call("Flt/ceil", vec![], vec![i], frame),
-        Intrinsic::FltTrunc(i) => print_call("Flt/trunc", vec![], vec![i], frame),
-        Intrinsic::FltNearest(i) => print_call("Flt/nearest", vec![], vec![i], frame),
+        Intrinsic::FltSqrt(rounding, i) => {
+            print_call(flt_rounded(rounding, "sqrt"), vec![], vec![i], frame)
+        }
+        Intrinsic::FltRoundIntegral(rounding, i) => print_call(
+            format!("Flt/{}", rounding.integral_label()),
+            vec![],
+            vec![i],
+            frame,
+        ),
         Intrinsic::FltToLeBytes(i) => print_call("Flt/to_le_bytes", vec![], vec![i], frame),
         Intrinsic::FltOfLeBytes { bin: i, .. } => {
             print_call("Flt/of_le_bytes", vec![], vec![i], frame)
         }
         Intrinsic::NatToInt(i) => print_call("Nat/to_int", vec![], vec![i], frame),
-        Intrinsic::NatToFlt(i) => print_call("Nat/to_flt", vec![], vec![i], frame),
+        Intrinsic::NatToFlt(Rounding::TiesToEven, i) => {
+            print_call("Nat/to_flt", vec![], vec![i], frame)
+        }
+        Intrinsic::NatToFlt(rounding, i) => {
+            print_call(flt_rounded(rounding, "of_nat"), vec![], vec![i], frame)
+        }
         Intrinsic::IntToNat { int: i, .. } => print_call("Int/to_nat", vec![], vec![i], frame),
-        Intrinsic::IntToFlt(i) => print_call("Int/to_flt", vec![], vec![i], frame),
+        Intrinsic::IntToFlt(Rounding::TiesToEven, i) => {
+            print_call("Int/to_flt", vec![], vec![i], frame)
+        }
+        Intrinsic::IntToFlt(rounding, i) => {
+            print_call(flt_rounded(rounding, "of_int"), vec![], vec![i], frame)
+        }
         Intrinsic::FltToNat { flt: i, .. } => print_call("Flt/to_nat", vec![], vec![i], frame),
         Intrinsic::FltToInt { flt: i, .. } => print_call("Flt/to_int", vec![], vec![i], frame),
         Intrinsic::BinType(Grain::X) => pure("Bytes"),

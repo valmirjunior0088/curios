@@ -1272,17 +1272,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Intrinsic::FltType => curios_core::Intrinsic::FltType,
             Intrinsic::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
-            Intrinsic::FltAdd(left, right) => {
-                curios_core::Intrinsic::flt_add(self.term(left)?, self.term(right)?)
+            Intrinsic::FltAdd(rounding, left, right) => {
+                curios_core::Intrinsic::flt_add(*rounding, self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltSub(left, right) => {
-                curios_core::Intrinsic::flt_sub(self.term(left)?, self.term(right)?)
+            Intrinsic::FltSub(rounding, left, right) => {
+                curios_core::Intrinsic::flt_sub(*rounding, self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltMul(left, right) => {
-                curios_core::Intrinsic::flt_mul(self.term(left)?, self.term(right)?)
+            Intrinsic::FltMul(rounding, left, right) => {
+                curios_core::Intrinsic::flt_mul(*rounding, self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltDiv(left, right) => {
-                curios_core::Intrinsic::flt_div(self.term(left)?, self.term(right)?)
+            Intrinsic::FltDiv(rounding, left, right) => {
+                curios_core::Intrinsic::flt_div(*rounding, self.term(left)?, self.term(right)?)
             }
             Intrinsic::FltRem(left, right) => {
                 curios_core::Intrinsic::FltRem(self.term(left)?, self.term(right)?)
@@ -1310,11 +1310,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::FltCopysign(left, right) => {
                 curios_core::Intrinsic::FltCopysign(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltSqrt(inner) => curios_core::Intrinsic::flt_sqrt(self.term(inner)?),
-            Intrinsic::FltFloor(inner) => curios_core::Intrinsic::flt_floor(self.term(inner)?),
-            Intrinsic::FltCeil(inner) => curios_core::Intrinsic::flt_ceil(self.term(inner)?),
-            Intrinsic::FltTrunc(inner) => curios_core::Intrinsic::flt_trunc(self.term(inner)?),
-            Intrinsic::FltNearest(inner) => curios_core::Intrinsic::flt_nearest(self.term(inner)?),
+            Intrinsic::FltFma(rounding, a, b, c) => curios_core::Intrinsic::flt_fma(
+                *rounding,
+                self.term(a)?,
+                self.term(b)?,
+                self.term(c)?,
+            ),
+            Intrinsic::FltSqrt(rounding, inner) => {
+                curios_core::Intrinsic::flt_sqrt(*rounding, self.term(inner)?)
+            }
+            Intrinsic::FltRoundIntegral(rounding, inner) => {
+                curios_core::Intrinsic::flt_round_integral(*rounding, self.term(inner)?)
+            }
             Intrinsic::FltToLeBytes(inner) => {
                 curios_core::Intrinsic::flt_to_le_bytes(self.term(inner)?)
             }
@@ -1327,11 +1334,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::ProcExit { result, code } => {
                 curios_core::Intrinsic::proc_exit(self.term(result)?, self.term(code)?)
             }
-            Intrinsic::NatToFlt(inner) => curios_core::Intrinsic::nat_to_flt(self.term(inner)?),
+            Intrinsic::NatToFlt(rounding, inner) => {
+                curios_core::Intrinsic::nat_to_flt(*rounding, self.term(inner)?)
+            }
             Intrinsic::IntToNat { int, non_neg } => {
                 curios_core::Intrinsic::int_to_nat(self.term(int)?, self.term(non_neg)?)
             }
-            Intrinsic::IntToFlt(inner) => curios_core::Intrinsic::int_to_flt(self.term(inner)?),
+            Intrinsic::IntToFlt(rounding, inner) => {
+                curios_core::Intrinsic::int_to_flt(*rounding, self.term(inner)?)
+            }
             Intrinsic::FltToNat { flt, non_neg } => {
                 curios_core::Intrinsic::flt_to_nat(self.term(flt)?, self.term(non_neg)?)
             }

@@ -1,7 +1,7 @@
 use {
     super::{Nat, Term},
-    curios_num::Grain,
     curios_num::{Floating, Integer},
+    curios_num::{Grain, Rounding},
 };
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List` exactly as before.
@@ -87,10 +87,11 @@ pub enum Intrinsic {
     IntShr(Term, Term),
     FltType,
     Flt(Floating),
-    FltAdd(Term, Term),
-    FltSub(Term, Term),
-    FltMul(Term, Term),
-    FltDiv(Term, Term),
+    FltAdd(Rounding, Term, Term),
+    FltSub(Rounding, Term, Term),
+    FltMul(Rounding, Term, Term),
+    FltDiv(Rounding, Term, Term),
+    FltFma(Rounding, Term, Term, Term),
     FltRem(Term, Term),
     FltEql(Term, Term),
     FltNeq(Term, Term),
@@ -100,19 +101,16 @@ pub enum Intrinsic {
     FltMax(Term, Term),
     FltNeg(Term),
     FltAbs(Term),
-    FltSqrt(Term),
-    FltFloor(Term),
-    FltCeil(Term),
-    FltTrunc(Term),
-    FltNearest(Term),
+    FltSqrt(Rounding, Term),
+    FltRoundIntegral(Rounding, Term),
     FltCopysign(Term, Term),
     NatToInt(Term),
-    NatToFlt(Term),
+    NatToFlt(Rounding, Term),
     IntToNat {
         int: Term,
         non_neg: Term,
     },
-    IntToFlt(Term),
+    IntToFlt(Rounding, Term),
     FltToNat {
         flt: Term,
         non_neg: Term,

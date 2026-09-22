@@ -268,10 +268,21 @@ pub(super) fn erase_intrinsic(
         ),
 
         &Intrinsic::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
-        Intrinsic::FltAdd(l, r) => op!(curios_ersd::Operation::FltAdd, flt_type, l, r),
-        Intrinsic::FltSub(l, r) => op!(curios_ersd::Operation::FltSub, flt_type, l, r),
-        Intrinsic::FltMul(l, r) => op!(curios_ersd::Operation::FltMul, flt_type, l, r),
-        Intrinsic::FltDiv(l, r) => op!(curios_ersd::Operation::FltDiv, flt_type, l, r),
+        Intrinsic::FltAdd(rounding, l, r) => {
+            op!(curios_ersd::Operation::FltAdd(*rounding), flt_type, l, r)
+        }
+        Intrinsic::FltSub(rounding, l, r) => {
+            op!(curios_ersd::Operation::FltSub(*rounding), flt_type, l, r)
+        }
+        Intrinsic::FltMul(rounding, l, r) => {
+            op!(curios_ersd::Operation::FltMul(*rounding), flt_type, l, r)
+        }
+        Intrinsic::FltDiv(rounding, l, r) => {
+            op!(curios_ersd::Operation::FltDiv(*rounding), flt_type, l, r)
+        }
+        Intrinsic::FltFma(rounding, a, b, c) => {
+            op!(curios_ersd::Operation::FltFma(*rounding), flt_type, a, b, c)
+        }
         Intrinsic::FltRem(l, r) => op!(curios_ersd::Operation::FltRem, flt_type, l, r),
         Intrinsic::FltEql(l, r) => op!(curios_ersd::Operation::FltEql, flt_type, l, r),
         Intrinsic::FltNeq(l, r) => op!(curios_ersd::Operation::FltNeq, flt_type, l, r),
@@ -282,18 +293,27 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltCopysign(l, r) => op!(curios_ersd::Operation::FltCopysign, flt_type, l, r),
         Intrinsic::FltNeg(inner) => op!(curios_ersd::Operation::FltNeg, flt_type, inner),
         Intrinsic::FltAbs(inner) => op!(curios_ersd::Operation::FltAbs, flt_type, inner),
-        Intrinsic::FltSqrt(inner) => op!(curios_ersd::Operation::FltSqrt, flt_type, inner),
-        Intrinsic::FltFloor(inner) => op!(curios_ersd::Operation::FltFloor, flt_type, inner),
-        Intrinsic::FltCeil(inner) => op!(curios_ersd::Operation::FltCeil, flt_type, inner),
-        Intrinsic::FltTrunc(inner) => op!(curios_ersd::Operation::FltTrunc, flt_type, inner),
-        Intrinsic::FltNearest(inner) => op!(curios_ersd::Operation::FltNearest, flt_type, inner),
+        Intrinsic::FltSqrt(rounding, inner) => {
+            op!(curios_ersd::Operation::FltSqrt(*rounding), flt_type, inner)
+        }
+        Intrinsic::FltRoundIntegral(rounding, inner) => {
+            op!(
+                curios_ersd::Operation::FltRoundIntegral(*rounding),
+                flt_type,
+                inner
+            )
+        }
 
         Intrinsic::NatToInt(inner) => op!(curios_ersd::Operation::NatToInt, nat_type, inner),
-        Intrinsic::NatToFlt(inner) => op!(curios_ersd::Operation::NatToFlt, nat_type, inner),
+        Intrinsic::NatToFlt(rounding, inner) => {
+            op!(curios_ersd::Operation::NatToFlt(*rounding), nat_type, inner)
+        }
         Intrinsic::IntToNat { int: inner, .. } => {
             op!(curios_ersd::Operation::IntToNat, int_type, inner)
         }
-        Intrinsic::IntToFlt(inner) => op!(curios_ersd::Operation::IntToFlt, int_type, inner),
+        Intrinsic::IntToFlt(rounding, inner) => {
+            op!(curios_ersd::Operation::IntToFlt(*rounding), int_type, inner)
+        }
         Intrinsic::FltToNat { flt: inner, .. } => {
             op!(curios_ersd::Operation::FltToNat, flt_type, inner)
         }

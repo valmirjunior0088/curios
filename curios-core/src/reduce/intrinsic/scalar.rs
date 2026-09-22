@@ -134,7 +134,7 @@ pub(super) fn reduce_int_division(
 ///
 /// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because [`/sys/Bound/Finite` and `/sys/Bound/NonNeg`](Intrinsic::signature) are bounds decided by a comparison.
 ///
-/// One fact predates all of it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `4` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
+/// One fact predates all of it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 pub(super) fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -153,6 +153,28 @@ pub(super) fn reduce_flt_binary(
     Ok(Subterm::Intrinsic(match folded {
         Some(intrinsic) => intrinsic,
         None => rebuild(left, right),
+    }))
+}
+
+/// [`reduce_flt_binary`]'s three-operand counterpart, for the fused multiply-add: every operand a literal folds, and anything symbolic rebuilds the neutral term.
+pub(super) fn reduce_flt_ternary(
+    reducer: &mut impl Reducer,
+    (a, b, c): (&Term, &Term, &Term),
+    fold: impl FnOnce(Floating, Floating, Floating) -> Intrinsic,
+    rebuild: impl FnOnce(Term, Term, Term) -> Intrinsic,
+) -> Result<Subterm, ReduceError> {
+    let a = reducer.reduce_forced(a.clone())?;
+    let b = reducer.reduce_forced(b.clone())?;
+    let c = reducer.reduce_forced(c.clone())?;
+
+    let folded = match (a.as_flt(), b.as_flt(), c.as_flt()) {
+        (Some(x), Some(y), Some(z)) => Some(fold(x, y, z)),
+        _ => None,
+    };
+
+    Ok(Subterm::Intrinsic(match folded {
+        Some(intrinsic) => intrinsic,
+        None => rebuild(a, b, c),
     }))
 }
 

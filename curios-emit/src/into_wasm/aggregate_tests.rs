@@ -2,7 +2,7 @@
 
 //! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
-use curios_num::{Binary, Grain};
+use curios_num::{Binary, Grain, Rounding};
 
 use super::test_support::*;
 
@@ -96,7 +96,7 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
     });
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::Intrinsic::FltAdd,
+        op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
         args: vec![curios_cont::Atom::Value(param), flt(1.0)],
         next: exit,
     });
@@ -155,7 +155,7 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     });
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::Intrinsic::FltAdd,
+        op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
         args: vec![curios_cont::Atom::Value(param), flt(1.0)],
         next: exit,
     });

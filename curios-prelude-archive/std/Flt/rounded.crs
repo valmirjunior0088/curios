@@ -1,0 +1,92 @@
+use /std/{Flt, Nat, Int};
+use /std/Flt/{Rounding};
+
+--- `a + b`, in the direction `r` names.
+pub let add(r: Rounding, a: Flt, b: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/add(a, b)
+    | ties_to_away() => /sys/Flt/ties_to_away/add(a, b)
+    | toward_zero() => /sys/Flt/toward_zero/add(a, b)
+    | toward_positive() => /sys/Flt/toward_positive/add(a, b)
+    | toward_negative() => /sys/Flt/toward_negative/add(a, b)
+    end;
+
+--- `a - b`, in the direction `r` names.
+pub let sub(r: Rounding, a: Flt, b: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/sub(a, b)
+    | ties_to_away() => /sys/Flt/ties_to_away/sub(a, b)
+    | toward_zero() => /sys/Flt/toward_zero/sub(a, b)
+    | toward_positive() => /sys/Flt/toward_positive/sub(a, b)
+    | toward_negative() => /sys/Flt/toward_negative/sub(a, b)
+    end;
+
+--- `a · b`, in the direction `r` names.
+pub let mul(r: Rounding, a: Flt, b: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/mul(a, b)
+    | ties_to_away() => /sys/Flt/ties_to_away/mul(a, b)
+    | toward_zero() => /sys/Flt/toward_zero/mul(a, b)
+    | toward_positive() => /sys/Flt/toward_positive/mul(a, b)
+    | toward_negative() => /sys/Flt/toward_negative/mul(a, b)
+    end;
+
+--- `a / b`, in the direction `r` names.
+pub let div(r: Rounding, a: Flt, b: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/div(a, b)
+    | ties_to_away() => /sys/Flt/ties_to_away/div(a, b)
+    | toward_zero() => /sys/Flt/toward_zero/div(a, b)
+    | toward_positive() => /sys/Flt/toward_positive/div(a, b)
+    | toward_negative() => /sys/Flt/toward_negative/div(a, b)
+    end;
+
+--- `a · b + c`, rounded once, in the direction `r` names.
+pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/fma(a, b, c)
+    | ties_to_away() => /sys/Flt/ties_to_away/fma(a, b, c)
+    | toward_zero() => /sys/Flt/toward_zero/fma(a, b, c)
+    | toward_positive() => /sys/Flt/toward_positive/fma(a, b, c)
+    | toward_negative() => /sys/Flt/toward_negative/fma(a, b, c)
+    end;
+
+--- The square root of `a`, in the direction `r` names.
+pub let sqrt(r: Rounding, a: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/sqrt(a)
+    | ties_to_away() => /sys/Flt/ties_to_away/sqrt(a)
+    | toward_zero() => /sys/Flt/toward_zero/sqrt(a)
+    | toward_positive() => /sys/Flt/toward_positive/sqrt(a)
+    | toward_negative() => /sys/Flt/toward_negative/sqrt(a)
+    end;
+
+--- The `Flt` a `Nat` rounds to in the direction `r` names.
+pub let of_nat(r: Rounding, n: Nat) -> Flt =
+    match r
+    | ties_to_even() => /sys/Nat/to_flt(n)
+    | ties_to_away() => /sys/Flt/ties_to_away/of_nat(n)
+    | toward_zero() => /sys/Flt/toward_zero/of_nat(n)
+    | toward_positive() => /sys/Flt/toward_positive/of_nat(n)
+    | toward_negative() => /sys/Flt/toward_negative/of_nat(n)
+    end;
+
+--- The `Flt` an `Int` rounds to in the direction `r` names.
+pub let of_int(r: Rounding, n: Int) -> Flt =
+    match r
+    | ties_to_even() => /sys/Int/to_flt(n)
+    | ties_to_away() => /sys/Flt/ties_to_away/of_int(n)
+    | toward_zero() => /sys/Flt/toward_zero/of_int(n)
+    | toward_positive() => /sys/Flt/toward_positive/of_int(n)
+    | toward_negative() => /sys/Flt/toward_negative/of_int(n)
+    end;
+
+--- The integral value `a` rounds to in the direction `r` names (§5.3.1): `floor` toward negative, `ceil` toward positive, `trunc` toward zero, `nearest` ties to even and `round` ties away.
+pub let to_integral(r: Rounding, a: Flt) -> Flt =
+    match r
+    | ties_to_even() => /sys/Flt/nearest(a)
+    | ties_to_away() => /sys/Flt/round(a)
+    | toward_zero() => /sys/Flt/trunc(a)
+    | toward_positive() => /sys/Flt/ceil(a)
+    | toward_negative() => /sys/Flt/floor(a)
+    end;

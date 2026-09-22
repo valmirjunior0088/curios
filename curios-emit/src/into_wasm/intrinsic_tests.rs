@@ -2,7 +2,7 @@
 
 //! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
-use super::test_support::*;
+use {super::test_support::*, curios_num::Rounding};
 
 /// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
 #[track_caller]
@@ -91,7 +91,7 @@ fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
 #[test]
 fn nat_to_flt_converts_an_i31_and_rounds_a_boxed_value() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatToFlt,
+        curios_cont::Intrinsic::NatToFlt(Rounding::TiesToEven),
         vec![nat(7)],
     ));
     assert_contains(&wat, "f64.convert_i32_s");
@@ -194,7 +194,7 @@ fn a_remainder_by_a_small_literal_is_held_in_a_word() {
 #[test]
 fn flt_add_boxes_into_the_flt_struct() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltAdd,
+        curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
         vec![flt(1.5), flt(2.5)],
     ));
     assert_contains(&wat, "f64.add");
@@ -205,7 +205,7 @@ fn flt_add_boxes_into_the_flt_struct() {
 #[test]
 fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
     for intrinsic in [
-        curios_cont::Intrinsic::FltAdd,
+        curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
         curios_cont::Intrinsic::FltMin,
         curios_cont::Intrinsic::FltRem,
     ] {
@@ -216,7 +216,7 @@ fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
     }
 
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltSqrt,
+        curios_cont::Intrinsic::FltSqrt(Rounding::TiesToEven),
         vec![flt(2.0)],
     ));
     assert_contains(&wat, "call $flt/nan");
@@ -243,7 +243,7 @@ fn a_sign_operation_and_the_bytes_carry_a_nan_as_it_is() {
 fn flt_div_divides() {
     assert_contains(
         &wat(&intrinsic_main(
-            curios_cont::Intrinsic::FltDiv,
+            curios_cont::Intrinsic::FltDiv(Rounding::TiesToEven),
             vec![flt(3.0), flt(2.0)],
         )),
         "f64.div",

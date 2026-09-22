@@ -7,7 +7,7 @@ use {
         Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
         Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
 };
 
@@ -154,31 +154,31 @@ impl Intrinsic {
         Self::IntLe(left.into(), right.into())
     }
 
-    /// A `FltAdd` node from anything term-shaped.
-    pub fn flt_add<F, S>(left: F, right: S) -> Self
+    /// A `FltAdd` node rounded in `rounding`, from anything term-shaped.
+    pub fn flt_add<F, S>(rounding: Rounding, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltAdd(left.into(), right.into())
+        Self::FltAdd(rounding, left.into(), right.into())
     }
 
-    /// A `FltSub` node from anything term-shaped.
-    pub fn flt_sub<F, S>(left: F, right: S) -> Self
+    /// A `FltSub` node rounded in `rounding`, from anything term-shaped.
+    pub fn flt_sub<F, S>(rounding: Rounding, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltSub(left.into(), right.into())
+        Self::FltSub(rounding, left.into(), right.into())
     }
 
-    /// A `FltMul` node from anything term-shaped.
-    pub fn flt_mul<F, S>(left: F, right: S) -> Self
+    /// A `FltMul` node rounded in `rounding`, from anything term-shaped.
+    pub fn flt_mul<F, S>(rounding: Rounding, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltMul(left.into(), right.into())
+        Self::FltMul(rounding, left.into(), right.into())
     }
 
     /// A `FltNeg` node from anything term-shaped.
@@ -197,53 +197,39 @@ impl Intrinsic {
         Self::FltAbs(inner.into())
     }
 
-    /// A `FltSqrt` node from anything term-shaped.
-    pub fn flt_sqrt<T>(inner: T) -> Self
+    /// A `FltSqrt` node rounded in `rounding`, from anything term-shaped.
+    pub fn flt_sqrt<T>(rounding: Rounding, inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltSqrt(inner.into())
+        Self::FltSqrt(rounding, inner.into())
     }
 
-    /// A `FltFloor` node from anything term-shaped.
-    pub fn flt_floor<T>(inner: T) -> Self
+    /// A `FltFma` node, `a · b + c` rounded once in `rounding`, from anything term-shaped.
+    pub fn flt_fma<A, B, C>(rounding: Rounding, a: A, b: B, c: C) -> Self
+    where
+        A: Into<Term>,
+        B: Into<Term>,
+        C: Into<Term>,
+    {
+        Self::FltFma(rounding, a.into(), b.into(), c.into())
+    }
+
+    /// A `FltRoundIntegral` node in `rounding`, from anything term-shaped.
+    pub fn flt_round_integral<T>(rounding: Rounding, inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltFloor(inner.into())
+        Self::FltRoundIntegral(rounding, inner.into())
     }
 
-    /// A `FltCeil` node from anything term-shaped.
-    pub fn flt_ceil<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltCeil(inner.into())
-    }
-
-    /// A `FltTrunc` node from anything term-shaped.
-    pub fn flt_trunc<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltTrunc(inner.into())
-    }
-
-    /// A `FltNearest` (round-ties-to-even) node from anything term-shaped.
-    pub fn flt_nearest<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltNearest(inner.into())
-    }
-
-    /// A `FltDiv` node from anything term-shaped.
-    pub fn flt_div<F, S>(left: F, right: S) -> Self
+    /// A `FltDiv` node rounded in `rounding`, from anything term-shaped.
+    pub fn flt_div<F, S>(rounding: Rounding, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltDiv(left.into(), right.into())
+        Self::FltDiv(rounding, left.into(), right.into())
     }
 
     /// A `FltMin` node from anything term-shaped.
@@ -332,20 +318,20 @@ impl Intrinsic {
         }
     }
 
-    /// An `IntToFlt` conversion node from anything term-shaped.
-    pub fn int_to_flt<T>(inner: T) -> Self
+    /// An `IntToFlt` conversion node rounded in `rounding`, from anything term-shaped.
+    pub fn int_to_flt<T>(rounding: Rounding, inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::IntToFlt(inner.into())
+        Self::IntToFlt(rounding, inner.into())
     }
 
-    /// A `NatToFlt` conversion node from anything term-shaped.
-    pub fn nat_to_flt<T>(inner: T) -> Self
+    /// A `NatToFlt` conversion node rounded in `rounding`, from anything term-shaped.
+    pub fn nat_to_flt<T>(rounding: Rounding, inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::NatToFlt(inner.into())
+        Self::NatToFlt(rounding, inner.into())
     }
 
     /// A `FltToInt` conversion node from anything term-shaped.

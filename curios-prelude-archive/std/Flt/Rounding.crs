@@ -1,0 +1,39 @@
+use /std/{Show, Spell, Ord, Hash};
+use /std/ops/{Eql};
+
+--- Which representable value an inexact result becomes: one of IEEE 754's five rounding-direction attributes (§4.3).
+---
+--- The plain operations of `/std/Flt` round ties to even, the default the standard names; `/std/Flt/rounded` takes the direction as its first argument.
+pub induct Rounding: pub Type
+--- The nearest value, and at a tie the one whose significand is even.
+| ties_to_even()
+--- The nearest value, and at a tie the one of greater magnitude.
+| ties_to_away()
+--- The nearest value no greater in magnitude.
+| toward_zero()
+--- The nearest value no less.
+| toward_positive()
+--- The nearest value no greater.
+| toward_negative()
+end
+
+pub use Rounding/*;
+
+satisfy Eql(Rounding);
+
+satisfy Show(Rounding) {
+    show(r) =
+        match r
+        | ties_to_even() => "ties_to_even"
+        | ties_to_away() => "ties_to_away"
+        | toward_zero() => "toward_zero"
+        | toward_positive() => "toward_positive"
+        | toward_negative() => "toward_negative"
+        end,
+}
+
+satisfy Spell(Rounding);
+
+satisfy Ord(Rounding);
+
+satisfy Hash(Rounding);

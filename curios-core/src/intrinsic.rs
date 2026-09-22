@@ -4,7 +4,7 @@ pub use signature::*;
 use {
     super::{Bound, Free, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ResultShape, WireResults, WireType},
-    curios_num::{Binary, Floating, Grain, Integer},
+    curios_num::{Binary, Floating, Grain, Integer, Rounding},
     std::collections::BTreeSet,
 };
 
@@ -115,10 +115,13 @@ pub enum Intrinsic {
     IntShr(Term, Term),
     FltType,
     Flt(Floating),
-    FltAdd(Term, Term),
-    FltSub(Term, Term),
-    FltMul(Term, Term),
-    FltDiv(Term, Term),
+    /// The rounded operations carry their IEEE rounding direction as static data, as a packed operation carries its [`Grain`]: the direction is fixed where the operation is written, so every folder and the emitter read the same one.
+    FltAdd(Rounding, Term, Term),
+    FltSub(Rounding, Term, Term),
+    FltMul(Rounding, Term, Term),
+    FltDiv(Rounding, Term, Term),
+    /// `a · b + c`, rounded once.
+    FltFma(Rounding, Term, Term, Term),
     FltRem(Term, Term),
     FltEql(Term, Term),
     FltNeq(Term, Term),
@@ -128,20 +131,18 @@ pub enum Intrinsic {
     FltMax(Term, Term),
     FltNeg(Term),
     FltAbs(Term),
-    FltSqrt(Term),
-    FltFloor(Term),
-    FltCeil(Term),
-    FltTrunc(Term),
-    FltNearest(Term),
+    FltSqrt(Rounding, Term),
+    /// The integral value the operand rounds to in the direction named: `floor` is toward negative, `ceil` toward positive, `trunc` toward zero, `nearest` ties to even and `round` ties away.
+    FltRoundIntegral(Rounding, Term),
     FltCopysign(Term, Term),
     NatToInt(Term),
-    NatToFlt(Term),
+    NatToFlt(Rounding, Term),
     /// `non_neg` proves `0 <= int`, the domain the narrowing to `Nat` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
     IntToNat {
         int: Term,
         non_neg: Term,
     },
-    IntToFlt(Term),
+    IntToFlt(Rounding, Term),
     /// `non_neg` proves the operand is a non-negative *number*, which is what excludes `+inf` and every NaN alongside every negative. Carried for the reason [`Intrinsic::NatDiv`]'s bound is.
     FltToNat {
         flt: Term,
@@ -727,16 +728,13 @@ impl Intrinsic {
 
             Intrinsic::FltToLeBytes(t)
             | Intrinsic::NatToInt(t)
-            | Intrinsic::NatToFlt(t)
-            | Intrinsic::IntToFlt(t)
+            | Intrinsic::NatToFlt(_, t)
+            | Intrinsic::IntToFlt(_, t)
             | Intrinsic::ByteToNat(t)
             | Intrinsic::FltNeg(t)
             | Intrinsic::FltAbs(t)
-            | Intrinsic::FltSqrt(t)
-            | Intrinsic::FltFloor(t)
-            | Intrinsic::FltCeil(t)
-            | Intrinsic::FltTrunc(t)
-            | Intrinsic::FltNearest(t)
+            | Intrinsic::FltSqrt(_, t)
+            | Intrinsic::FltRoundIntegral(_, t)
             | Intrinsic::BinLen(Grain::X, t)
             | Intrinsic::BinLen(Grain::B, t)
             | Intrinsic::ListType(t)
@@ -771,10 +769,10 @@ impl Intrinsic {
             | Intrinsic::IntXor(a, b)
             | Intrinsic::IntShl(a, b)
             | Intrinsic::IntShr(a, b)
-            | Intrinsic::FltAdd(a, b)
-            | Intrinsic::FltSub(a, b)
-            | Intrinsic::FltMul(a, b)
-            | Intrinsic::FltDiv(a, b)
+            | Intrinsic::FltAdd(_, a, b)
+            | Intrinsic::FltSub(_, a, b)
+            | Intrinsic::FltMul(_, a, b)
+            | Intrinsic::FltDiv(_, a, b)
             | Intrinsic::FltRem(a, b)
             | Intrinsic::FltEql(a, b)
             | Intrinsic::FltNeq(a, b)
@@ -817,7 +815,8 @@ impl Intrinsic {
                 element: a,
                 list: b,
                 item: c,
-            } => {
+            }
+            | Intrinsic::FltFma(_, a, b, c) => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -1129,10 +1128,18 @@ impl Intrinsic {
             Intrinsic::IntShr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntShr),
             Intrinsic::FltType => Intrinsic::FltType,
             Intrinsic::Flt(flt) => Intrinsic::Flt(*flt),
-            Intrinsic::FltAdd(l, r) => traverse_binary(l, r, visit, Intrinsic::FltAdd),
-            Intrinsic::FltSub(l, r) => traverse_binary(l, r, visit, Intrinsic::FltSub),
-            Intrinsic::FltMul(l, r) => traverse_binary(l, r, visit, Intrinsic::FltMul),
-            Intrinsic::FltDiv(l, r) => traverse_binary(l, r, visit, Intrinsic::FltDiv),
+            Intrinsic::FltAdd(rounding, l, r) => {
+                traverse_binary(l, r, visit, |l, r| Intrinsic::FltAdd(*rounding, l, r))
+            }
+            Intrinsic::FltSub(rounding, l, r) => {
+                traverse_binary(l, r, visit, |l, r| Intrinsic::FltSub(*rounding, l, r))
+            }
+            Intrinsic::FltMul(rounding, l, r) => {
+                traverse_binary(l, r, visit, |l, r| Intrinsic::FltMul(*rounding, l, r))
+            }
+            Intrinsic::FltDiv(rounding, l, r) => {
+                traverse_binary(l, r, visit, |l, r| Intrinsic::FltDiv(*rounding, l, r))
+            }
             Intrinsic::FltRem(l, r) => traverse_binary(l, r, visit, Intrinsic::FltRem),
             Intrinsic::FltEql(l, r) => traverse_binary(l, r, visit, Intrinsic::FltEql),
             Intrinsic::FltNeq(l, r) => traverse_binary(l, r, visit, Intrinsic::FltNeq),
@@ -1143,23 +1150,34 @@ impl Intrinsic {
             Intrinsic::FltCopysign(l, r) => traverse_binary(l, r, visit, Intrinsic::FltCopysign),
             Intrinsic::FltNeg(inner) => Intrinsic::FltNeg(visit.visit_subterm(inner)),
             Intrinsic::FltAbs(inner) => Intrinsic::FltAbs(visit.visit_subterm(inner)),
-            Intrinsic::FltSqrt(inner) => Intrinsic::FltSqrt(visit.visit_subterm(inner)),
-            Intrinsic::FltFloor(inner) => Intrinsic::FltFloor(visit.visit_subterm(inner)),
-            Intrinsic::FltCeil(inner) => Intrinsic::FltCeil(visit.visit_subterm(inner)),
-            Intrinsic::FltTrunc(inner) => Intrinsic::FltTrunc(visit.visit_subterm(inner)),
-            Intrinsic::FltNearest(inner) => Intrinsic::FltNearest(visit.visit_subterm(inner)),
+            Intrinsic::FltSqrt(rounding, inner) => {
+                Intrinsic::FltSqrt(*rounding, visit.visit_subterm(inner))
+            }
+            Intrinsic::FltRoundIntegral(rounding, inner) => {
+                Intrinsic::FltRoundIntegral(*rounding, visit.visit_subterm(inner))
+            }
+            Intrinsic::FltFma(rounding, a, b, c) => Intrinsic::FltFma(
+                *rounding,
+                visit.visit_subterm(a),
+                visit.visit_subterm(b),
+                visit.visit_subterm(c),
+            ),
             Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(visit.visit_subterm(inner)),
             Intrinsic::FltOfLeBytes { bin, eight_bytes } => Intrinsic::FltOfLeBytes {
                 bin: visit.visit_subterm(bin),
                 eight_bytes: visit.visit_subterm(eight_bytes),
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
-            Intrinsic::NatToFlt(inner) => Intrinsic::NatToFlt(visit.visit_subterm(inner)),
+            Intrinsic::NatToFlt(rounding, inner) => {
+                Intrinsic::NatToFlt(*rounding, visit.visit_subterm(inner))
+            }
             Intrinsic::IntToNat { int, non_neg } => Intrinsic::IntToNat {
                 int: visit.visit_subterm(int),
                 non_neg: visit.visit_subterm(non_neg),
             },
-            Intrinsic::IntToFlt(inner) => Intrinsic::IntToFlt(visit.visit_subterm(inner)),
+            Intrinsic::IntToFlt(rounding, inner) => {
+                Intrinsic::IntToFlt(*rounding, visit.visit_subterm(inner))
+            }
             Intrinsic::FltToNat { flt, non_neg } => Intrinsic::FltToNat {
                 flt: visit.visit_subterm(flt),
                 non_neg: visit.visit_subterm(non_neg),

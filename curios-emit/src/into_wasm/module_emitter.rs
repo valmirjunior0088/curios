@@ -942,7 +942,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
     /// Add the float helpers the emitted code referenced, in [`FltHelper::ALL`]'s order.
     fn emit_flt_funcs(&mut self) {
-        let mut flts = FltEmitter::new(self.module);
+        let mut flts = FltEmitter::new(self.table, self.module);
 
         for helper in FltHelper::ALL {
             if self.table.flt_used(helper) {

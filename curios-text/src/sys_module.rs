@@ -30,7 +30,7 @@ use {
         ForeignStore, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status,
         stdio, stdio_mode,
     },
-    curios_num::{Grain, Integer},
+    curios_num::{Grain, Integer, Rounding},
     curios_utilities::{Plicity, SyntaxRegistry},
 };
 
@@ -278,7 +278,9 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &["The nearest `Flt` to it."],
-            unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
+            unary("to_flt", nat(), flt(), |a| {
+                Intrinsic::NatToFlt(Rounding::TiesToEven, a)
+            }),
         ),
         documented(
             &["The same number as a `Byte`, under the evidence that it is below `256`."],
@@ -440,29 +442,15 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &["The nearest `Flt` to it."],
-            unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
+            unary("to_flt", int(), flt(), |a| {
+                Intrinsic::IntToFlt(Rounding::TiesToEven, a)
+            }),
         ),
     ]
 }
 
-fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
-    let items = vec![
-        documented(
-            &["Their sum."],
-            binary("add", flt(), flt(), Intrinsic::FltAdd),
-        ),
-        documented(
-            &["`b` taken from `a`."],
-            binary("sub", flt(), flt(), Intrinsic::FltSub),
-        ),
-        documented(
-            &["Their product."],
-            binary("mul", flt(), flt(), Intrinsic::FltMul),
-        ),
-        documented(
-            &["`a` divided by `b`."],
-            binary("div", flt(), flt(), Intrinsic::FltDiv),
-        ),
+fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+    let decls = vec![
         documented(
             &["What `a` leaves after dividing by `b`."],
             binary("rem", flt(), flt(), Intrinsic::FltRem),
@@ -508,24 +496,36 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             unary("abs", flt(), flt(), Intrinsic::FltAbs),
         ),
         documented(
-            &["The square root of `a`."],
-            unary("sqrt", flt(), flt(), Intrinsic::FltSqrt),
+            &[
+                "The whole number nearest `a`, and the one farther from zero where it falls halfway.",
+            ],
+            unary("round", flt(), flt(), |a| {
+                Intrinsic::FltRoundIntegral(Rounding::TiesToAway, a)
+            }),
         ),
         documented(
             &["The greatest whole number at or below `a`."],
-            unary("floor", flt(), flt(), Intrinsic::FltFloor),
+            unary("floor", flt(), flt(), |a| {
+                Intrinsic::FltRoundIntegral(Rounding::TowardNegative, a)
+            }),
         ),
         documented(
             &["The least whole number at or above `a`."],
-            unary("ceil", flt(), flt(), Intrinsic::FltCeil),
+            unary("ceil", flt(), flt(), |a| {
+                Intrinsic::FltRoundIntegral(Rounding::TowardPositive, a)
+            }),
         ),
         documented(
             &["`a` with its fraction dropped, toward zero."],
-            unary("trunc", flt(), flt(), Intrinsic::FltTrunc),
+            unary("trunc", flt(), flt(), |a| {
+                Intrinsic::FltRoundIntegral(Rounding::TowardZero, a)
+            }),
         ),
         documented(
             &["The whole number nearest `a`, and the even one where it falls halfway."],
-            unary("nearest", flt(), flt(), Intrinsic::FltNearest),
+            unary("nearest", flt(), flt(), |a| {
+                Intrinsic::FltRoundIntegral(Rounding::TiesToEven, a)
+            }),
         ),
         documented(
             &["`a` carrying `b`'s sign."],
@@ -576,7 +576,73 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
     ];
 
-    items.into_iter().chain(flt_bounds(syntax)).collect()
+    let directed = Rounding::ALL
+        .into_iter()
+        .filter(|rounding| *rounding != Rounding::TiesToEven)
+        .map(|rounding| pub_mod(rounding.label(), items(flt_rounded(rounding))));
+
+    items(flt_rounded(Rounding::TiesToEven))
+        .into_iter()
+        .chain(items(decls))
+        .chain(directed)
+        .chain(items(flt_bounds(syntax)))
+        .collect()
+}
+
+/// The operations IEEE computes exactly and rounds once, in the direction `rounding` names — at the root for the default, ties to even, and in `/sys/Flt/<direction>` for each other — as the packed operations are written once per [`Grain`].
+fn flt_rounded(rounding: Rounding) -> Vec<Decl> {
+    let mut decls = vec![
+        documented(
+            &["Their sum."],
+            binary("add", flt(), flt(), |a, b| {
+                Intrinsic::FltAdd(rounding, a, b)
+            }),
+        ),
+        documented(
+            &["`b` taken from `a`."],
+            binary("sub", flt(), flt(), |a, b| {
+                Intrinsic::FltSub(rounding, a, b)
+            }),
+        ),
+        documented(
+            &["Their product."],
+            binary("mul", flt(), flt(), |a, b| {
+                Intrinsic::FltMul(rounding, a, b)
+            }),
+        ),
+        documented(
+            &["`a` divided by `b`."],
+            binary("div", flt(), flt(), |a, b| {
+                Intrinsic::FltDiv(rounding, a, b)
+            }),
+        ),
+        documented(
+            &["`a` times `b`, plus `c`, rounded once."],
+            ternary("fma", flt(), flt(), |a, b, c| {
+                Intrinsic::FltFma(rounding, a, b, c)
+            }),
+        ),
+        documented(
+            &["The square root of `a`."],
+            unary("sqrt", flt(), flt(), |a| Intrinsic::FltSqrt(rounding, a)),
+        ),
+    ];
+
+    // The default direction's conversions are `Nat/to_flt` and `Int/to_flt`, beside the carriers they convert from.
+    if rounding != Rounding::TiesToEven {
+        decls.extend([
+            documented(
+                &["The `Flt` a `Nat` rounds to."],
+                unary("of_nat", nat(), flt(), |a| Intrinsic::NatToFlt(rounding, a)),
+            ),
+            documented(
+                &["The `Flt` an `Int` rounds to."],
+                unary("of_int", int(), flt(), |a| Intrinsic::IntToFlt(rounding, a)),
+            ),
+        ]);
+    }
+
+    decls
 }
 
 fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
@@ -1245,7 +1311,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             "Flt",
             &["A binary64 floating-point number."],
             pub_let("Flt", type_(), flt()),
-            items(flt_ops(syntax)),
+            flt_ops(syntax),
         ),
         // The two packed runs share every operation name, so neither type is hoisted: `Bits` and `Bytes` are reached through their own modules.
         SysModule::packed(

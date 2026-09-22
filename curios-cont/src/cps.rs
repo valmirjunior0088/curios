@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
     curios_utilities::{Arena, ArenaId, id},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -95,7 +95,7 @@ pub enum Intrinsic {
     NatShr,
     NatEqz,
     NatToInt,
-    NatToFlt,
+    NatToFlt(Rounding),
     IntEql,
     IntNeq,
     IntAdd,
@@ -112,11 +112,12 @@ pub enum Intrinsic {
     IntShr,
     IntEqz,
     IntToNat,
-    IntToFlt,
-    FltAdd,
-    FltSub,
-    FltMul,
-    FltDiv,
+    IntToFlt(Rounding),
+    FltAdd(Rounding),
+    FltSub(Rounding),
+    FltMul(Rounding),
+    FltDiv(Rounding),
+    FltFma(Rounding),
     FltRem,
     FltEql,
     FltNeq,
@@ -126,11 +127,8 @@ pub enum Intrinsic {
     FltMax,
     FltNeg,
     FltAbs,
-    FltSqrt,
-    FltFloor,
-    FltCeil,
-    FltTrunc,
-    FltNearest,
+    FltSqrt(Rounding),
+    FltRoundIntegral(Rounding),
     FltCopysign,
     FltToNat,
     FltToLeBytes,
@@ -236,16 +234,16 @@ impl Intrinsic {
             // A `Nat` or `Int` is a reference whatever its size — an i31 or a boxed magnitude — and each lowering takes it apart itself, the small case inline, or takes the word it already is; a shift count is such a `Nat` too.
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatLe
-                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt | IntEql
-                | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe | IntAnd
-                | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt,
+                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt(_)
+                | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe
+                | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt(_),
                 _,
             ) => Repr::Number,
 
             (
-                FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe
-                | FltMin | FltMax | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil | FltTrunc
-                | FltNearest | FltCopysign | FltToNat | FltToLeBytes | FltToInt,
+                FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltEql
+                | FltNeq | FltLt | FltLe | FltMin | FltMax | FltNeg | FltAbs | FltSqrt(_)
+                | FltRoundIntegral(_) | FltCopysign | FltToNat | FltToLeBytes | FltToInt,
                 _,
             ) => Repr::Flt,
         }
@@ -294,9 +292,9 @@ impl Intrinsic {
             | IntAnd | IntOr | IntXor | IntShl | IntShr | NatToInt | FltToInt | BinLen(_)
             | ListLen | WindowExtent => Repr::Ref,
 
-            FltAdd | FltSub | FltMul | FltDiv | FltRem | FltMin | FltMax | FltNeg | FltAbs
-            | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
-            | IntToFlt | FltOfLeBytes => Repr::Flt,
+            FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltMin
+            | FltMax | FltNeg | FltAbs | FltSqrt(_) | FltRoundIntegral(_) | FltCopysign
+            | NatToFlt(_) | IntToFlt(_) | FltOfLeBytes => Repr::Flt,
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
             BinGet(_) | IsImmediate => Repr::Nat,
@@ -336,17 +334,14 @@ impl Intrinsic {
         match self {
             Self::NatEqz
             | Self::NatToInt
-            | Self::NatToFlt
+            | Self::NatToFlt(_)
             | Self::IntEqz
             | Self::IntToNat
-            | Self::IntToFlt
+            | Self::IntToFlt(_)
             | Self::FltNeg
             | Self::FltAbs
-            | Self::FltSqrt
-            | Self::FltFloor
-            | Self::FltCeil
-            | Self::FltTrunc
-            | Self::FltNearest
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
             | Self::FltToNat
             | Self::FltToLeBytes
             | Self::FltOfLeBytes
@@ -387,10 +382,10 @@ impl Intrinsic {
             | Self::IntXor
             | Self::IntShl
             | Self::IntShr
-            | Self::FltAdd
-            | Self::FltSub
-            | Self::FltMul
-            | Self::FltDiv
+            | Self::FltAdd(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
             | Self::FltRem
             | Self::FltEql
             | Self::FltNeq
@@ -410,7 +405,7 @@ impl Intrinsic {
             | Self::ListGet
             | Self::ListRest
             | Self::ListAppend => 2,
-            Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
+            Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent | Self::FltFma(_) => 3,
             Self::BinConcat(_, arity)
             | Self::ListConcat(arity)
             | Self::BinChunk(_, arity)
@@ -477,7 +472,7 @@ impl Intrinsic {
             | Self::NatXor
             | Self::NatShr
             | Self::NatEqz
-            | Self::NatToFlt
+            | Self::NatToFlt(_)
             | Self::IntEql
             | Self::IntNeq
             | Self::IntLt
@@ -487,11 +482,12 @@ impl Intrinsic {
             | Self::IntXor
             | Self::IntShr
             | Self::IntEqz
-            | Self::IntToFlt
-            | Self::FltAdd
-            | Self::FltSub
-            | Self::FltMul
-            | Self::FltDiv
+            | Self::IntToFlt(_)
+            | Self::FltAdd(_)
+            | Self::FltFma(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
             | Self::FltRem
             | Self::FltEql
             | Self::FltNeq
@@ -501,11 +497,8 @@ impl Intrinsic {
             | Self::FltMax
             | Self::FltNeg
             | Self::FltAbs
-            | Self::FltSqrt
-            | Self::FltFloor
-            | Self::FltCeil
-            | Self::FltTrunc
-            | Self::FltNearest
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
             | Self::FltCopysign
             | Self::BinLen(_)
             | Self::BinEql(_)
