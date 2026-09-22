@@ -5,8 +5,8 @@ use {
         Free, Intrinsic, Nat, Peel, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
         peel_nat_terms, peel_position,
     },
+    curios_num::Grain,
     curios_num::Integer,
-    curios_utilities::Grain,
 };
 
 use super::test_support::*;

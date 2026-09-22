@@ -7,7 +7,7 @@ use {
         Intrinsic, Nat, Subterm, Term, int_cancel_common, int_monomial, int_shaped,
         project_erased_universes,
     },
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
     std::collections::VecDeque,
 };
 
@@ -744,13 +744,13 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
         Atom::Literal(atoms) => Term::intrinsic(Intrinsic::Bin(
             grain,
             match grain {
-                Grain::B => PackedBin::from_bits(atoms.into_iter().map(|bit| bit != 0)),
-                Grain::X => PackedBin::from_bytes(atoms),
+                Grain::B => Binary::from_bits(atoms.into_iter().map(|bit| bit != 0)),
+                Grain::X => Binary::from_bytes(atoms),
             },
         )),
         Atom::Single(byte) => Term::intrinsic(Intrinsic::bin_append(
             grain,
-            Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+            Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
             byte,
         )),
         Atom::Window {

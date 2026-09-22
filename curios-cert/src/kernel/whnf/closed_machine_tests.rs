@@ -4,7 +4,8 @@ use {
     super::unfold_rec,
     crate::Kernel,
     curios_core::{Free, Global, Intrinsic, Many, Reducer, Scope, Subterm, Term},
-    curios_utilities::{Grain, PackedBin, Qualifier},
+    curios_num::{Binary, Grain},
+    curios_utilities::Qualifier,
 };
 
 use super::test_support::*;
@@ -69,8 +70,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
     let bin_type = Term::intrinsic(Intrinsic::BinType(Grain::X));
-    let bytes =
-        |data: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(data)));
+    let bytes = |data: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(data)));
     let motive = || {
         let m = binder(100, "m");
         Scope::close(Many(1), &[&m], nat_type())

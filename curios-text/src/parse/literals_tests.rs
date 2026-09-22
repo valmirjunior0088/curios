@@ -2,8 +2,8 @@
 
 use {
     crate::*,
-    curios_num::Floating,
-    curios_utilities::{Grain, Sign},
+    curios_num::{Floating, Grain},
+    curios_utilities::Sign,
 };
 
 use super::test_support::*;

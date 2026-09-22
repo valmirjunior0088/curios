@@ -19,7 +19,7 @@ use {
         either, field_get, field_set, get, i32_const, null, repeat, set,
     },
     curios_abi::{WireLeaf, WireType},
-    curios_utilities::Grain,
+    curios_num::Grain,
 };
 
 #[derive(Debug)]
@@ -1177,7 +1177,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// **Three helpers rather than six, because a payload does not know its grain.** The operands arrive already forced, so what is left is a walk over two byte arrays — the same walk whether the generators are bits or bytes — and the grain survives only in which `force` the caller reached for and which length it hands over. The `eql` pair above is two functions for the opposite reason: equality compares *logical* lengths, and a bit grain's final byte carries padding a comparison must not read.
     ///
-    /// **The padding needs no mask**, which is `PackedBin::pointwise`'s argument one rung down: `force` fills a zeroed payload and copies only the logical run, so every padding bit enters as zero, and `and`, `or` and `xor` each take `(0, 0)` to `0`.
+    /// **The padding needs no mask**, which is `Binary::pointwise`'s argument one rung down: `force` fills a zeroed payload and copies only the logical run, so every padding bit enters as zero, and `and`, `or` and `xor` each take `(0, 0)` to `0`.
     ///
     /// `len` is the run's own rather than the payload's extent: at the byte grain the two agree, while at the bit grain the payload is `ceil(len/8)` bytes and the leaf has to carry the bit count. Forcing at the call site is what keeps this grain-free, and it is allowed there because a pair of calls is a straight-line sequence — the loop, which is not, stays here. Equal operand lengths are the type's to guarantee; the bound is discharged above erasure and nothing here re-checks it.
     pub(crate) fn emit_pointwise_func(
@@ -1341,7 +1341,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
     /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bin)`: `count` copies of one generator, as one flat leaf.
     ///
-    /// **Split by grain where the pointwise emitter is not**, for the one difference that survives to the payload: a byte grain fills every slot with the generator and is finished, while a bit grain fills with all-ones and then has to *unset* the bits past the length. That is the mask `PackedBin::replicate` carries and the only place a fill needs one — `cmp` and `hash` read the stored bytes and trust the padding to be zero, so an all-ones tail would leave a run comparing unequal to itself packed any other way.
+    /// **Split by grain where the pointwise emitter is not**, for the one difference that survives to the payload: a byte grain fills every slot with the generator and is finished, while a bit grain fills with all-ones and then has to *unset* the bits past the length. That is the mask `Binary::replicate` carries and the only place a fill needs one — `cmp` and `hash` read the stored bytes and trust the padding to be zero, so an all-ones tail would leave a run comparing unequal to itself packed any other way.
     ///
     /// No loop either way. `array.new` is the fill, and the bit grain's partial tail is one store after it: `fill & ((1 << (count & 7)) - 1)`, which needs no second branch on the generator because a clear fill masks to zero regardless. The fill itself is `0 - atom` rather than a select, which is all-ones for the set bit and zero for the clear one, and the payload packs to `i8` so the store keeps the low byte.
     pub(crate) fn emit_replicate_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {

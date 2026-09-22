@@ -21,8 +21,8 @@
 use {
     super::Intrinsic,
     crate::{Nat, Term},
-    curios_num::Integer,
-    curios_utilities::{Grain, SyntaxName, SyntaxRegistry},
+    curios_num::{Grain, Integer},
+    curios_utilities::{SyntaxName, SyntaxRegistry},
 };
 
 /// What one operand must be, in [`Intrinsic::traverse`] order.

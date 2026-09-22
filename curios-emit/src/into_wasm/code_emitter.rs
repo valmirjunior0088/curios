@@ -3,7 +3,7 @@ use {
         BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs,
         RopeData, Table, box_instr, call, either, get, set, tee, when,
     },
-    curios_utilities::Grain,
+    curios_num::Grain,
     std::iter,
 };
 

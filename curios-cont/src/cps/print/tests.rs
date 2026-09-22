@@ -682,7 +682,7 @@ fn no_node_identity_appears_in_a_well_formed_dump() {
 #[test]
 fn an_intrinsic_spells_its_carrier_and_operation() {
     use crate::Intrinsic::*;
-    use curios_utilities::Grain;
+    use curios_num::Grain;
 
     for (op, expected) in [
         (NatAdd, "Nat/add"),

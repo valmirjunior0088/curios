@@ -3,7 +3,7 @@ use {
     std::{collections::hash_map::DefaultHasher, hash::Hasher},
 };
 
-fn hash(value: &PackedBin) -> u64 {
+fn hash(value: &Binary) -> u64 {
     let mut h = DefaultHasher::new();
     value.hash(&mut h);
     h.finish()
@@ -16,8 +16,8 @@ fn windows_compare_logically_and_ignore_padding() {
             let bits = (0..length)
                 .map(|i| mask & (1 << i) != 0)
                 .collect::<Vec<_>>();
-            let direct = PackedBin::from_bits(bits.iter().copied());
-            let framed = PackedBin::from_bits(
+            let direct = Binary::from_bits(bits.iter().copied());
+            let framed = Binary::from_bits(
                 [true, false, true]
                     .into_iter()
                     .chain(bits.iter().copied())
@@ -49,7 +49,7 @@ impl Hasher for Counting {
 fn a_value_past_the_sample_is_hashed_at_a_cost_its_length_does_not_move() {
     let read = |bytes: usize| {
         let mut counting = Counting::default();
-        PackedBin::from_bytes(vec![0x5A; bytes]).hash(&mut counting);
+        Binary::from_bytes(vec![0x5A; bytes]).hash(&mut counting);
         counting.0
     };
 
@@ -68,8 +68,8 @@ fn a_window_past_the_sample_hashes_as_the_value_it_equals() {
     let bytes = (0..300u32)
         .map(|index| (index * 7 % 251) as u8)
         .collect::<Vec<_>>();
-    let direct = PackedBin::from_bytes(bytes);
-    let framed = PackedBin::from_bits(
+    let direct = Binary::from_bytes(bytes);
+    let framed = Binary::from_bits(
         [true, false, true]
             .into_iter()
             .chain((0..direct.bit_length).map(|index| direct.bit(index).unwrap()))
@@ -82,18 +82,18 @@ fn a_window_past_the_sample_hashes_as_the_value_it_equals() {
     // The sample reaches both ends, so a value differing only in its last byte is still told apart by the hash rather than by the comparison behind it.
     let mut last = direct.to_bytes().unwrap();
     *last.last_mut().unwrap() ^= 0xFF;
-    assert_ne!(hash(&direct), hash(&PackedBin::from_bytes(last)));
+    assert_ne!(hash(&direct), hash(&Binary::from_bytes(last)));
 }
 
 /// The three arms of equality answer alike: a window against itself, an aligned window against a fresh buffer of the same bytes, and an aligned window against an unaligned window of the same bits — and a window against the same buffer one offset over is unequal when the bits say so.
 #[test]
 fn equality_agrees_across_its_arms() {
-    let buffer = PackedBin::from_bytes(vec![0x61, 0x62, 0x63, 0x64, 0x61, 0x62]);
+    let buffer = Binary::from_bytes(vec![0x61, 0x62, 0x63, 0x64, 0x61, 0x62]);
     let tail = buffer.window(16, 32).unwrap();
 
     assert_eq!(tail, buffer.window(16, 32).unwrap());
-    assert_eq!(tail, PackedBin::from_bytes(vec![0x63, 0x64, 0x61, 0x62]));
-    let framed = PackedBin::from_bits(
+    assert_eq!(tail, Binary::from_bytes(vec![0x63, 0x64, 0x61, 0x62]));
+    let framed = Binary::from_bits(
         [true, false, false]
             .into_iter()
             .chain((0..32).map(|i| tail.bit(i).unwrap())),
@@ -111,7 +111,7 @@ fn equality_agrees_across_its_arms() {
 #[test]
 fn first_written_bit_is_least_significant() {
     assert_eq!(
-        PackedBin::from_bits([true, false, true]).to_packed_bytes(),
+        Binary::from_bits([true, false, true]).to_packed_bytes(),
         vec![5]
     );
 }
@@ -123,7 +123,7 @@ fn exhaustive_short_bit_operations_match_vec_model() {
             let model = (0..length)
                 .map(|index| mask & (1 << index) != 0)
                 .collect::<Vec<_>>();
-            let value = PackedBin::from_bits(model.iter().copied());
+            let value = Binary::from_bits(model.iter().copied());
 
             assert_eq!(value.len(Grain::B), model.len());
             for index in 0..=length {
@@ -132,7 +132,7 @@ fn exhaustive_short_bit_operations_match_vec_model() {
             for start in 0..=length {
                 for end in start..=length {
                     let slice = value.slice(Grain::B, start, end).unwrap();
-                    let expected = PackedBin::from_bits(model[start..end].iter().copied());
+                    let expected = Binary::from_bits(model[start..end].iter().copied());
                     assert_eq!(slice, expected);
                     assert_eq!(hash(&slice), hash(&expected));
 
@@ -142,7 +142,7 @@ fn exhaustive_short_bit_operations_match_vec_model() {
                         shifted.push(bit);
                         assert_eq!(
                             slice.append_bit(bit),
-                            PackedBin::from_bits(shifted.into_iter())
+                            Binary::from_bits(shifted.into_iter())
                         );
                     }
                 }
@@ -152,7 +152,7 @@ fn exhaustive_short_bit_operations_match_vec_model() {
                 expected.push(bit);
                 assert_eq!(
                     value.append_bit(bit),
-                    PackedBin::from_bits(expected.into_iter())
+                    Binary::from_bits(expected.into_iter())
                 );
             }
         }
@@ -163,7 +163,7 @@ fn exhaustive_short_bit_operations_match_vec_model() {
 fn byte_operations_preserve_alignment_and_match_vec_model() {
     let models = [vec![], vec![0], vec![0xff], vec![1, 2, 3, 4, 5, 6, 7, 8, 9]];
     for model in models {
-        let value = PackedBin::from_bytes(model.clone());
+        let value = Binary::from_bytes(model.clone());
         assert!(value.is_x_aligned());
         assert_eq!(value.len(Grain::X), model.len());
         assert_eq!(value.to_bytes().unwrap(), model);
@@ -184,7 +184,7 @@ fn byte_operations_preserve_alignment_and_match_vec_model() {
         }
     }
 
-    let unaligned = PackedBin::from_bits([true, false, true]);
+    let unaligned = Binary::from_bits([true, false, true]);
     assert!(!unaligned.is_x_aligned());
     assert!(unaligned.append_byte(0).is_none());
     assert!(unaligned.to_bytes().is_none());
@@ -192,9 +192,9 @@ fn byte_operations_preserve_alignment_and_match_vec_model() {
 
 #[test]
 fn aligned_concat_matches_the_bit_path_and_stays_aligned() {
-    let left = PackedBin::from_bytes(vec![1, 2, 3]);
-    let right = PackedBin::from_bytes(vec![4, 5]);
-    let unaligned_twin = PackedBin::from_bits(
+    let left = Binary::from_bytes(vec![1, 2, 3]);
+    let right = Binary::from_bytes(vec![4, 5]);
+    let unaligned_twin = Binary::from_bits(
         [false; 3]
             .into_iter()
             .chain((0..right.bit_length()).map(|index| right.bit(index).unwrap())),
@@ -202,8 +202,8 @@ fn aligned_concat_matches_the_bit_path_and_stays_aligned() {
     .window(3, right.bit_length())
     .unwrap();
 
-    let fast = PackedBin::concat([&left, &right]);
-    let slow = PackedBin::concat([&left, &unaligned_twin]);
+    let fast = Binary::concat([&left, &right]);
+    let slow = Binary::concat([&left, &unaligned_twin]);
     assert!(fast.is_x_aligned());
     assert_eq!(fast, slow);
     assert_eq!(hash(&fast), hash(&slow));
@@ -212,11 +212,11 @@ fn aligned_concat_matches_the_bit_path_and_stays_aligned() {
 
 #[test]
 fn concat_crosses_byte_boundaries_without_exposing_padding() {
-    let left = PackedBin::from_bits([true, false, true, true, false]);
-    let middle = PackedBin::from_bits([false, true, true, false, true, false]);
-    let right = PackedBin::from_bits([true, true, false]);
-    let actual = PackedBin::concat([&left, &middle, &right]);
-    let expected = PackedBin::from_bits([
+    let left = Binary::from_bits([true, false, true, true, false]);
+    let middle = Binary::from_bits([false, true, true, false, true, false]);
+    let right = Binary::from_bits([true, true, false]);
+    let actual = Binary::concat([&left, &middle, &right]);
+    let expected = Binary::from_bits([
         true, false, true, true, false, false, true, true, false, true, false, true, true, false,
     ]);
     assert_eq!(actual, expected);
@@ -227,15 +227,15 @@ fn concat_crosses_byte_boundaries_without_exposing_padding() {
 /// The order agrees with equality on every short bit string, and separates two values one packed byte cannot: `b[1]` and `b[1, 0]` pack alike and are ordered by length, shorter first.
 #[test]
 fn the_order_agrees_with_equality_and_separates_equal_packings() {
-    let short = PackedBin::from_bits([true]);
-    let long = PackedBin::from_bits([true, false]);
+    let short = Binary::from_bits([true]);
+    let long = Binary::from_bits([true, false]);
     assert_eq!(short.to_packed_bytes(), long.to_packed_bytes());
     assert!(short < long);
 
     let values = (0..=9)
         .flat_map(|length| {
             (0..(1usize << length)).map(move |mask| {
-                PackedBin::from_bits((0..length).map(|index| mask & (1 << index) != 0))
+                Binary::from_bits((0..length).map(|index| mask & (1 << index) != 0))
             })
         })
         .collect::<Vec<_>>();
@@ -258,8 +258,8 @@ fn the_order_answers_alike_across_its_arms() {
             let bits = (0..length)
                 .map(|index| mask & (1 << index) != 0)
                 .collect::<Vec<_>>();
-            let direct = PackedBin::from_bits(bits.iter().copied());
-            let framed = PackedBin::from_bits(
+            let direct = Binary::from_bits(bits.iter().copied());
+            let framed = Binary::from_bits(
                 [true, false, true]
                     .into_iter()
                     .chain(bits.iter().copied())
@@ -267,7 +267,7 @@ fn the_order_answers_alike_across_its_arms() {
             );
             let window = framed.window(3, length).unwrap();
             assert!(direct.cmp(&window).is_eq());
-            for other in [PackedBin::from_bits([true]), PackedBin::from_bytes(vec![7])] {
+            for other in [Binary::from_bits([true]), Binary::from_bytes(vec![7])] {
                 assert_eq!(direct.cmp(&other), window.cmp(&other));
                 assert_eq!(other.cmp(&direct), other.cmp(&window));
             }
@@ -278,7 +278,7 @@ fn the_order_answers_alike_across_its_arms() {
 /// The byte grain orders as `/std/Bytes/cmp` does — bytewise, the shorter prefix first — so the compiler's order and the language's never disagree about a value both can see.
 #[test]
 fn the_byte_grain_orders_as_the_language_does() {
-    let model = |bytes: Vec<u8>| PackedBin::from_bytes(bytes);
+    let model = |bytes: Vec<u8>| Binary::from_bytes(bytes);
     assert!(model(vec![1, 2]) < model(vec![1, 3]));
     assert!(model(vec![1]) < model(vec![1, 0]));
     assert!(model(vec![2]) > model(vec![1, 9]));
@@ -292,8 +292,8 @@ fn the_byte_grain_orders_as_the_language_does() {
 fn a_replicated_fill_leaves_no_padding_set() {
     for count in 0..=20 {
         for atom in [0u8, 1] {
-            let filled = PackedBin::replicate(Grain::B, atom, count);
-            let model = PackedBin::from_bits((0..count).map(|_| atom != 0));
+            let filled = Binary::replicate(Grain::B, atom, count);
+            let model = Binary::from_bits((0..count).map(|_| atom != 0));
 
             assert_eq!(filled, model, "a fill of {atom} at length {count}");
             assert_eq!(hash(&filled), hash(&model));
@@ -302,8 +302,8 @@ fn a_replicated_fill_leaves_no_padding_set() {
     }
 
     for count in 0..=6 {
-        let filled = PackedBin::replicate(Grain::X, 0xA5, count);
-        assert_eq!(filled, PackedBin::from_bytes(vec![0xA5; count]));
+        let filled = Binary::replicate(Grain::X, 0xA5, count);
+        assert_eq!(filled, Binary::from_bytes(vec![0xA5; count]));
         assert_eq!(filled.len(Grain::X), count);
     }
 }
@@ -312,7 +312,7 @@ fn a_replicated_fill_leaves_no_padding_set() {
 #[test]
 fn pointwise_operations_agree_with_the_bit_model() {
     let bits = |length: usize, mask: usize| {
-        PackedBin::from_bits((0..length).map(move |index| mask & (1 << index) != 0))
+        Binary::from_bits((0..length).map(move |index| mask & (1 << index) != 0))
     };
 
     for length in 0..=8 {
@@ -334,12 +334,12 @@ fn pointwise_operations_agree_with_the_bit_model() {
 fn a_misaligned_operand_combines_as_its_packed_twin_does() {
     for length in 0usize..=10 {
         for offset in 0usize..=9 {
-            let framed = PackedBin::from_bits(
+            let framed = Binary::from_bits(
                 (0..offset + length + 3).map(|index: usize| index.is_multiple_of(3)),
             );
             let window = framed.window(offset, length).unwrap();
-            let packed = PackedBin::from_bits((0..length).map(|i| (i + offset).is_multiple_of(3)));
-            let ones = PackedBin::replicate(Grain::B, 1, length);
+            let packed = Binary::from_bits((0..length).map(|i| (i + offset).is_multiple_of(3)));
+            let ones = Binary::replicate(Grain::B, 1, length);
 
             assert_eq!(window, packed);
             assert_eq!(window.xor(&ones), packed.xor(&ones));

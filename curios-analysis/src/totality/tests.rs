@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_core::{Atom, Free, Global, InductDecl, Intrinsic, Rec, StructDecl, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
@@ -319,7 +319,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
 
     let single = Term::intrinsic(Intrinsic::BinAppend {
         grain: Grain::X,
-        bin: Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::empty())),
+        bin: Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::empty())),
         element: Term::free_var(&h),
     });
     let cons = Term::intrinsic(Intrinsic::BinConcat {

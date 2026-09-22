@@ -3,8 +3,7 @@
 use {
     super::Reducer,
     crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term},
-    curios_num::{Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Integer, Natural},
 };
 
 use super::test_support::*;
@@ -108,7 +107,7 @@ fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
         grain: Grain::B,
         bin: Term::intrinsic(Intrinsic::Bin(
             Grain::B,
-            PackedBin::from_bits((0..BITS).map(|index| index % 2 == 0)),
+            Binary::from_bits((0..BITS).map(|index| index % 2 == 0)),
         )),
         element: Term::intrinsic(Intrinsic::Bool(true)),
     });
@@ -146,10 +145,7 @@ fn a_window_charges_for_no_payload_it_did_not_build() {
     let slice = |n: usize| {
         Term::intrinsic(Intrinsic::BinSlice {
             grain: Grain::X,
-            bin: Term::intrinsic(Intrinsic::Bin(
-                Grain::X,
-                PackedBin::from_bytes(vec![7u8; n]),
-            )),
+            bin: Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![7u8; n]))),
             start: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             length: Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
             within: qed(),

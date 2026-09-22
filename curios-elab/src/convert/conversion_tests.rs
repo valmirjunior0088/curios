@@ -5,8 +5,8 @@ use curios_core::*;
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
-    curios_num::Integer,
-    curios_utilities::{Grain, PackedBin, Plicity, Qualifier},
+    curios_num::{Binary, Grain, Integer},
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// The value fast path's sound population, pinned together with the license that makes it sound.
@@ -27,7 +27,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
                 Grain::X,
                 Term::intrinsic(Intrinsic::Bin(
                     Grain::X,
-                    PackedBin::from_bytes(Vec::<u8>::new()),
+                    Binary::from_bytes(Vec::<u8>::new()),
                 )),
                 nat(0),
                 qed(),

@@ -4,7 +4,7 @@
 //!
 //! Each bound is computed from operand *sizes* rather than from the result, so a fold that would allocate more than the budget allows is refused before `num-bigint` is asked for anything — the difference between a diagnostic and a process the allocator does not return from.
 
-use {crate::Cost, curios_utilities::Grain};
+use {crate::Cost, curios_num::Grain};
 
 /// What a packed value of `bits` logical bits costs, in its grain's own row of the price list.
 ///

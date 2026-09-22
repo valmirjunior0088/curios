@@ -2,8 +2,7 @@ use curios_num::{Integer, Natural};
 
 use {
     crate::*,
-    curios_num::Floating,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain},
 };
 
 #[test]
@@ -41,8 +40,8 @@ fn float_constants_intern_by_bit_pattern() {
 #[test]
 fn binary_constants_intern_by_logical_bits_across_windows() {
     let mut module = Module::new();
-    let direct = PackedBin::from_bits([true, false, true]);
-    let framed = PackedBin::from_bits([false, true, false, true, true])
+    let direct = Binary::from_bits([true, false, true]);
+    let framed = Binary::from_bits([false, true, false, true, true])
         .window(1, 3)
         .unwrap();
     let a = module.intern_constant(Constant::Bin(Grain::B, direct));

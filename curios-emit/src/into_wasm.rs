@@ -1,8 +1,8 @@
 use {
     crate::machine::{lower, structurize, value_id, value_name},
     curios_abi::ForeignFunction,
-    curios_num::{Integer, Natural},
-    curios_utilities::{Grain, PackedBin, grown},
+    curios_num::{Binary, Grain, Integer, Natural},
+    curios_utilities::grown,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
@@ -107,7 +107,7 @@ pub(crate) enum EmissionData {
     Nat(Natural),
     Int(Integer),
     Flt(f64),
-    Bin(Grain, PackedBin),
+    Bin(Grain, Binary),
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.

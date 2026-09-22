@@ -12,7 +12,8 @@ use {
         decide_bool, int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool,
         peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
-    curios_utilities::{Grain, PackedBin, SyntaxRegistry},
+    curios_num::{Binary, Grain},
+    curios_utilities::SyntaxRegistry,
 };
 
 pub(crate) fn convert_intrinsic(
@@ -195,7 +196,7 @@ fn packed_literal_view(cmp: &mut Convert, this: &Intrinsic, that: &Intrinsic) ->
     }
 }
 
-fn literal_of(intrinsic: &Intrinsic) -> Option<(Grain, &PackedBin)> {
+fn literal_of(intrinsic: &Intrinsic) -> Option<(Grain, &Binary)> {
     match intrinsic {
         Intrinsic::Bin(grain, value) => Some((*grain, value)),
         _ => None,
@@ -225,7 +226,7 @@ fn known_len(grain: Grain, term: &Term) -> Option<usize> {
     }
 }
 
-fn literal_len(grain: Grain, value: &PackedBin) -> usize {
+fn literal_len(grain: Grain, value: &Binary) -> usize {
     match grain {
         Grain::B => value.bit_length(),
         Grain::X => value
@@ -236,18 +237,18 @@ fn literal_len(grain: Grain, value: &PackedBin) -> usize {
 }
 
 /// The literal's atoms `lo..hi` as a `Bin` literal of the same grain.
-fn literal_slice(grain: Grain, value: &PackedBin, lo: usize, hi: usize) -> Term {
+fn literal_slice(grain: Grain, value: &Binary, lo: usize, hi: usize) -> Term {
     Term::intrinsic(Intrinsic::Bin(
         grain,
         match grain {
-            Grain::B => PackedBin::from_bits((lo..hi).map(|index| value.bit(index).unwrap())),
-            Grain::X => PackedBin::from_bytes(value.to_bytes().unwrap()[lo..hi].to_vec()),
+            Grain::B => Binary::from_bits((lo..hi).map(|index| value.bit(index).unwrap())),
+            Grain::X => Binary::from_bytes(value.to_bytes().unwrap()[lo..hi].to_vec()),
         },
     ))
 }
 
 /// The literal's atom at `index` as the element intrinsic an `append` operand carries: a `Bool` for `Bits`, a `Byte` for `Bytes`.
-fn literal_atom(grain: Grain, value: &PackedBin, index: usize) -> Term {
+fn literal_atom(grain: Grain, value: &Binary, index: usize) -> Term {
     Term::intrinsic(match grain {
         Grain::B => Intrinsic::Bool(value.bit(index).unwrap()),
         Grain::X => Intrinsic::Byte(value.to_bytes().unwrap()[index]),
@@ -255,12 +256,7 @@ fn literal_atom(grain: Grain, value: &PackedBin, index: usize) -> Term {
 }
 
 /// Split `lit` against one spine node, enqueuing the aligned sub-goals.
-fn split_against(
-    cmp: &mut Convert,
-    grain: Grain,
-    lit: &PackedBin,
-    spine: &Intrinsic,
-) -> Option<bool> {
+fn split_against(cmp: &mut Convert, grain: Grain, lit: &Binary, spine: &Intrinsic) -> Option<bool> {
     let len = literal_len(grain, lit);
     match spine {
         // `append(base, atom) = base ++ [atom]`: the last literal atom pairs with `atom`, the rest with `base`. An empty literal against an always-nonempty `append` is a definite clash.

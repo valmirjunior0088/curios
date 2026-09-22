@@ -2,10 +2,10 @@ use {
     super::{Intrinsic, Label, Name, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_abi::ForeignFunction,
-    curios_num::Natural,
+    curios_num::{Grain, Natural},
     curios_parse::{ParserError, run_parser, take_eof},
     curios_print::run_printer,
-    curios_utilities::{Grain, InfixOp, Plicity, Sign, Source, Span},
+    curios_utilities::{InfixOp, Plicity, Sign, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 

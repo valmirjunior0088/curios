@@ -9,8 +9,7 @@ use curios_num::{Integer, Natural};
 use {
     crate::into_wasm,
     curios_abi::host_ops,
-    curios_num::Floating,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain},
     std::collections::BTreeMap,
 };
 
@@ -175,7 +174,7 @@ pub(super) fn bin_len() -> curios_cont::Module {
         // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value now rides.
         value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
             Grain::X,
-            PackedBin::from_bytes(vec![1, 2, 3, 4]),
+            Binary::from_bytes(vec![1, 2, 3, 4]),
         )),
         next: measure,
     });
@@ -361,7 +360,7 @@ pub(super) fn indirect_apply() -> curios_cont::Module {
 pub(super) fn bin_lit(bytes: Vec<u8>) -> curios_cont::Atom {
     curios_cont::Atom::Literal(curios_cont::Literal::Bin(
         Grain::X,
-        PackedBin::from_bytes(bytes),
+        Binary::from_bytes(bytes),
     ))
 }
 

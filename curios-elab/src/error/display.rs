@@ -9,7 +9,8 @@ use {
     super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
     curios_core::{CalleeId, Free, Level, Spelling, Subterm, Term, UniverseMetaId},
-    curios_utilities::{Grain, Plicity, Qualifier},
+    curios_num::Grain,
+    curios_utilities::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 

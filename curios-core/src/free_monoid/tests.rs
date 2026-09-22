@@ -5,7 +5,7 @@ fn deep_bin(grain: Grain, depth: usize) -> Term {
     let leaf = |byte| {
         Term::from(Subterm::Intrinsic(Intrinsic::Bin(
             grain,
-            PackedBin::from_bytes(vec![byte]),
+            Binary::from_bytes(vec![byte]),
         )))
     };
 
@@ -49,7 +49,7 @@ fn a_deep_concatenation_peels_its_first_generator() {
         head,
         Term::from(Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
-            PackedBin::from_bytes(vec![0x30])
+            Binary::from_bytes(vec![0x30])
         ))),
         "the leftmost leaf's byte, found under a hundred thousand levels"
     );

@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 #[test]
@@ -36,9 +36,9 @@ fn a_decode_that_folds_to_a_trap_is_classified_as_one() {
     // The classifier and the folder have to name the same set, and `FltOfLeBytes` is where they once disagreed: `TrapKind::MalformedInput` exists for this operation alone, yet the classifier reported it pure — which is `prune` dropping a top-level item whose only observable effect is the malformed decode.
     let eight = Constant::Bin(
         Grain::X,
-        PackedBin::from_bytes(vec![0, 0, 0, 0, 0, 0, 0xf0, 0x3f]),
+        Binary::from_bytes(vec![0, 0, 0, 0, 0, 0, 0xf0, 0x3f]),
     );
-    let four = Constant::Bin(Grain::X, PackedBin::from_bytes(vec![0, 0, 0x80, 0x3f]));
+    let four = Constant::Bin(Grain::X, Binary::from_bytes(vec![0, 0, 0x80, 0x3f]));
 
     assert!(matches!(
         Semantics::fold_operation(Operation::FltOfLeBytes, &[four], u64::MAX),

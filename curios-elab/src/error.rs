@@ -11,8 +11,8 @@ use {
         Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
         build_shorten_layered, display_names,
     },
-    curios_num::{Integer, Natural},
-    curios_utilities::{Grain, InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
+    curios_num::{Grain, Integer, Natural},
+    curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         fmt,

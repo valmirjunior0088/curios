@@ -5,7 +5,7 @@
 use {
     super::{Reducer, reduce_intrinsic},
     crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 /// A binder no fixture spells: the suites name their symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
@@ -179,10 +179,7 @@ pub(super) fn as_nat(term: &Term) -> Nat {
 }
 
 pub(super) fn run_bytes(run: &[u8]) -> Term {
-    Term::intrinsic(Intrinsic::Bin(
-        Grain::X,
-        PackedBin::from_bytes(run.to_vec()),
-    ))
+    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.to_vec())))
 }
 
 /// The same five bytes, spelled four ways: whole, split once, split twice, and left-nested the way an accumulation builds one.

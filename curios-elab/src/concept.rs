@@ -9,7 +9,8 @@ use {
     curios_core::{
         Free, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType, UniverseContext,
     },
-    curios_utilities::{Grain, Qualifier},
+    curios_num::Grain,
+    curios_utilities::Qualifier,
     std::fmt,
 };
 

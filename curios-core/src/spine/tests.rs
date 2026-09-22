@@ -52,11 +52,11 @@ fn peel_nat_continues_where_the_residuals_may_still_agree() {
 }
 
 fn bytes(run: impl Into<Vec<u8>>) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(run.into())))
+    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.into())))
 }
 
 fn bits(run: impl IntoIterator<Item = bool>) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::B, PackedBin::from_bits(run)))
+    Term::intrinsic(Intrinsic::Bin(Grain::B, Binary::from_bits(run)))
 }
 
 fn nats(run: impl IntoIterator<Item = u32>) -> Term {

@@ -91,7 +91,7 @@ fn the_larger_contributor_keeps_its_category() {
     );
 }
 
-/// Multiplying keeps the row: two payloads are still payload, which is what `PackedBin::concat`'s double charge has to report.
+/// Multiplying keeps the row: two payloads are still payload, which is what `Binary::concat`'s double charge has to report.
 #[test]
 fn multiplying_keeps_the_category() {
     let doubled = Cost::packed_bits(64).saturating_mul(2);

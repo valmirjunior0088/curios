@@ -19,8 +19,8 @@ use {
         NodeId, Origin, UseTarget, ValueExpr, ValueId, analysis::analyze_calls, demand_of, demands,
         optimize::PARAM_SPLIT_GROWTH_LIMIT, origins, simplify::rewire_node,
     },
+    curios_num::Grain,
     curios_num::Natural,
-    curios_utilities::Grain,
     std::collections::{BTreeMap, BTreeSet},
 };
 

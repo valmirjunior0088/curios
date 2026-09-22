@@ -5,8 +5,7 @@ use curios_core::*;
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
-    curios_num::{Floating, Integer},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain, Integer},
 };
 
 #[test]
@@ -565,7 +564,7 @@ fn list_get_errors_on_out_of_bounds() {
 fn bin_append_adds_byte() {
     let mut context = context();
 
-    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
+    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(3));
 
     assert_eq!(
@@ -573,11 +572,7 @@ fn bin_append_adds_byte() {
             &mut context,
             Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::Bin(
-            Grain::X,
-            PackedBin::from_bytes(vec![1, 2, 3])
-        ))
-        .into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3]))).into())
     );
 }
 
@@ -585,7 +580,7 @@ fn bin_append_adds_byte() {
 fn bin_append_adds_the_full_byte_range() {
     let mut context = context();
 
-    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
+    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(255));
 
     assert_eq!(
@@ -595,7 +590,7 @@ fn bin_append_adds_the_full_byte_range() {
         ),
         Ok(Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
-            PackedBin::from_bytes(vec![1, 2, 255])
+            Binary::from_bytes(vec![1, 2, 255])
         ))
         .into())
     );

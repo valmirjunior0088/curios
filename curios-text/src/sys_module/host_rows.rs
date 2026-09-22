@@ -8,7 +8,8 @@ use {
     super::{Decl, helpers::*},
     crate::{Doc, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{ForeignFunction, ForeignStore, Namespace, ResultShape, WireType},
-    curios_utilities::{Grain, Plicity},
+    curios_num::Grain,
+    curios_utilities::Plicity,
     std::sync::Arc,
 };
 

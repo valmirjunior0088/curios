@@ -2,7 +2,7 @@
 
 use super::test_support::*;
 use curios_core::*;
-use curios_utilities::{Grain, PackedBin};
+use curios_num::{Binary, Grain};
 
 #[test]
 fn intrinsic_nat_add_recurses_into_operands() {
@@ -130,8 +130,8 @@ fn intrinsic_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
         ),
         Ok(true)
     );
@@ -139,8 +139,8 @@ fn intrinsic_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![1, 3]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 3]))).into(),
         ),
         Ok(false)
     );

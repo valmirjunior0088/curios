@@ -8,8 +8,7 @@ use {
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
         EmissionValueName,
     },
-    curios_num::{Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Integer, Natural},
     std::collections::HashMap,
 };
 
@@ -19,8 +18,8 @@ enum ConstKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    /// The [`PackedBin`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
-    Bin(Grain, PackedBin),
+    /// The [`Binary`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
+    Bin(Grain, Binary),
     List(Vec<String>),
     Tuple(Vec<String>),
     /// A nominal row is its identity, its load mode and its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant. The load mode rides the key so two rows that would emit different loads can never share one global, whether or not a tolerant one can reach here.

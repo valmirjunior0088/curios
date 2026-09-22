@@ -7,7 +7,7 @@
 use {
     super::*,
     crate::{Intrinsic, Nat, Piece, ReduceError, Reducer, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 /// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, a `Window` cut from a base with the bound that placed it, or an `Opaque` node (a variable) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
@@ -150,7 +150,7 @@ pub(super) fn nat_sum(images: Vec<Term>) -> Term {
 
 /// One piece of a located `Bin` window, as a value.
 ///
-/// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `PackedBin::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
+/// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `Binary::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
 pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),
@@ -171,8 +171,8 @@ pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
 ///
 /// The generator at an index of a literal run, as the value its grain reads it as.
 ///
-/// **The one place the grain decides what a generator *is*.** `PackedBin` has a reader per grain and the two produce different carriers — a `Byte` at X, a `Bool` at B — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
-pub(super) fn element_of_run(grain: Grain, run: &PackedBin, local: usize) -> Option<Subterm> {
+/// **The one place the grain decides what a generator *is*.** `Binary` has a reader per grain and the two produce different carriers — a `Byte` at X, a `Bool` at B — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
+pub(super) fn element_of_run(grain: Grain, run: &Binary, local: usize) -> Option<Subterm> {
     match grain {
         Grain::X => run
             .byte(local)
@@ -204,7 +204,7 @@ impl Generator {
     }
 
     /// The run with this generator appended — `None` at the byte grain alone, over a run that is not byte-aligned.
-    pub(super) fn appended_to(self, run: &PackedBin) -> Option<PackedBin> {
+    pub(super) fn appended_to(self, run: &Binary) -> Option<Binary> {
         match self {
             Self::Byte(byte) => run.append_byte(byte),
             Self::Bit(bit) => Some(run.append_bit(bit)),
@@ -214,10 +214,10 @@ impl Generator {
     /// `count` copies of this generator, as a run of its own.
     ///
     /// The fill partner of [`Generator::appended_to`], and total where that one can refuse: an append has to land a byte on a byte boundary, while a fill decides its own length and starts from zero. Placed here for the same reason the append is — the carrier a generator reads into is the grain's seam, and both directions of it belong in one place.
-    pub(super) fn replicated(self, count: usize) -> PackedBin {
+    pub(super) fn replicated(self, count: usize) -> Binary {
         match self {
-            Self::Byte(byte) => PackedBin::replicate(Grain::X, byte, count),
-            Self::Bit(bit) => PackedBin::replicate(Grain::B, u8::from(bit), count),
+            Self::Byte(byte) => Binary::replicate(Grain::X, byte, count),
+            Self::Bit(bit) => Binary::replicate(Grain::B, u8::from(bit), count),
         }
     }
 }

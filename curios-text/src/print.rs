@@ -13,12 +13,12 @@ use {
     },
     crate::parse::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
-    curios_num::Natural,
+    curios_num::{Grain, Natural},
     curios_print::{
         Printer, begins, fill, flat, group, hard_line, if_break, indent, line, named, pure,
         reaches, sep_flat, soft_line,
     },
-    curios_utilities::{Grain, Plicity, Span},
+    curios_utilities::{Plicity, Span},
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {

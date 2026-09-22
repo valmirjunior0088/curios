@@ -7,8 +7,7 @@ use {
         Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
         case_substitution,
     },
-    curios_num::Natural,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Natural},
     std::collections::BTreeSet,
 };
 
@@ -298,7 +297,7 @@ fn elaborate_bin_match(
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
-    let empty_value: Term = Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into();
+    let empty_value: Term = Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -321,7 +320,7 @@ fn elaborate_bin_match(
         // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
         let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend {
             grain,
-            bin: Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+            bin: Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
             element: Term::free_var(&head_label),
         })
         .into();

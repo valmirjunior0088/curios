@@ -7,7 +7,7 @@ use {
         rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
     std::iter,
 };
 
@@ -414,7 +414,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &PackedBin) {
+    fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &Binary) {
         // A small packed constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it, which is why both paths pack through one layout.
         let layout = ImmediateLayout::of(grain);
         if layout.holds(value.len(grain)) {

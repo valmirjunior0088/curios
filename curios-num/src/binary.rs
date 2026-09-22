@@ -1,4 +1,4 @@
-//! Shared packed storage for the two intrinsic binary-sequence grains.
+//! The packed `Binary` a `Bits` or `Bytes` value is, beside the numbers every constant folder shares, and the `Grain` it is read at.
 //!
 //! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte, so advancing a B tail is O(1).
 
@@ -34,13 +34,13 @@ impl Grain {
 /// An immutable logical bit window over shared packed bytes.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub struct PackedBin {
+pub struct Binary {
     bytes: Arc<[u8]>,
     bit_offset: usize,
     bit_length: usize,
 }
 
-impl PackedBin {
+impl Binary {
     pub fn empty() -> Self {
         Self::from_bytes(Vec::new())
     }
@@ -72,7 +72,7 @@ impl PackedBin {
 
     /// `count` copies of one generator — a byte at `X`, a bit at `B`, where `atom` is `0` or `1`.
     ///
-    /// **The one place a fill has to mask.** Every other constructor here writes padding as zero because it starts from a zeroed buffer and sets only the bits it owns; an all-ones bit fill is the exception, since the byte it repeats carries eight set bits whether or not the length claims them. Left alone, `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it is, because [`PackedBin::cmp`] and [`PackedBin::hash`] read the stored bytes and trust the padding to be zero.
+    /// **The one place a fill has to mask.** Every other constructor here writes padding as zero because it starts from a zeroed buffer and sets only the bits it owns; an all-ones bit fill is the exception, since the byte it repeats carries eight set bits whether or not the length claims them. Left alone, `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it is, because [`Binary::cmp`] and [`Binary::hash`] read the stored bytes and trust the padding to be zero.
     pub fn replicate(grain: Grain, atom: u8, count: usize) -> Self {
         match grain {
             Grain::X => Self::from_bytes(vec![atom; count]),
@@ -116,7 +116,7 @@ impl PackedBin {
     }
     /// The window's length in the grain's own generators.
     ///
-    /// **Asserted rather than debug-asserted.** A byte-grain length over a window that is not byte-aligned is not a near miss but a wrong number, and `bit_length / 8` hands it back silently — into the reducer's cost accounting, into an out-of-range report, and through conversion into what the kernel compares. The alignment holds by construction, since [`PackedBin::window`] adds offsets and an X-grain [`PackedBin::slice`] multiplies both of its bounds by eight, so this never fires; what it buys is that a path which breaks the invariant says so where it breaks it rather than somewhere downstream of a wrong length.
+    /// **Asserted rather than debug-asserted.** A byte-grain length over a window that is not byte-aligned is not a near miss but a wrong number, and `bit_length / 8` hands it back silently — into the reducer's cost accounting, into an out-of-range report, and through conversion into what the kernel compares. The alignment holds by construction, since [`Binary::window`] adds offsets and an X-grain [`Binary::slice`] multiplies both of its bounds by eight, so this never fires; what it buys is that a path which breaks the invariant says so where it breaks it rather than somewhere downstream of a wrong length.
     pub fn len(&self, grain: Grain) -> usize {
         assert!(
             grain == Grain::B || self.is_x_aligned(),
@@ -189,7 +189,7 @@ impl PackedBin {
 
     /// The value with one bit appended.
     ///
-    /// **Packed, like every other append.** [`PackedBin::concat`] already takes the bulk byte copy where the operands allow it and repacks bit by bit only where they do not, and this is that rule at one generator: [`PackedBin::to_packed_bytes`] normalizes any offset and already returns the stored bytes outright for an aligned window, so the cost is the payload rather than the `bool`-per-bit scratch `from_bits` would materialize — eight units for every one the result holds. Total, unlike [`PackedBin::append_byte`], because a bit needs no alignment to land on.
+    /// **Packed, like every other append.** [`Binary::concat`] already takes the bulk byte copy where the operands allow it and repacks bit by bit only where they do not, and this is that rule at one generator: [`Binary::to_packed_bytes`] normalizes any offset and already returns the stored bytes outright for an aligned window, so the cost is the payload rather than the `bool`-per-bit scratch `from_bits` would materialize — eight units for every one the result holds. Total, unlike [`Binary::append_byte`], because a bit needs no alignment to land on.
     pub fn append_bit(&self, bit: bool) -> Self {
         let mut bytes = self.to_packed_bytes();
         if self.bit_length.is_multiple_of(8) {
@@ -223,9 +223,9 @@ impl PackedBin {
 
     /// Two runs combined generator-wise, one stored byte at a time.
     ///
-    /// **The padding needs no mask, which is what keeps this a zip.** Both operands normalize through [`PackedBin::to_packed_bytes`], whose per-bit arm zeroes a partial trailing byte and whose aligned arm has no partial byte to leave dirty — so every padding bit enters as zero, and `&`, `|` and `^` each take `(0, 0)` to `0`. The invariant [`PackedBin::cmp`] rests on therefore survives by construction, the way [`PackedBin::append_bit`] already trusts it to. [`PackedBin::replicate`] is where a fill has to mask instead, and says so.
+    /// **The padding needs no mask, which is what keeps this a zip.** Both operands normalize through [`Binary::to_packed_bytes`], whose per-bit arm zeroes a partial trailing byte and whose aligned arm has no partial byte to leave dirty — so every padding bit enters as zero, and `&`, `|` and `^` each take `(0, 0)` to `0`. The invariant [`Binary::cmp`] rests on therefore survives by construction, the way [`Binary::append_bit`] already trusts it to. [`Binary::replicate`] is where a fill has to mask instead, and says so.
     ///
-    /// Equal lengths are the caller's to establish rather than this function's to accommodate: `/sys` states the bound in the type and every reduction reaches here through it, so a mismatch is a broken invariant, not an input. Asserted for [`PackedBin::len`]'s reason — a pointwise result over two lengths is not a near miss but a run that is neither operand's, and it should say so where it breaks rather than downstream of a wrong length.
+    /// Equal lengths are the caller's to establish rather than this function's to accommodate: `/sys` states the bound in the type and every reduction reaches here through it, so a mismatch is a broken invariant, not an input. Asserted for [`Binary::len`]'s reason — a pointwise result over two lengths is not a near miss but a run that is neither operand's, and it should say so where it breaks rather than downstream of a wrong length.
     fn pointwise(&self, other: &Self, combine: impl Fn(u8, u8) -> u8) -> Self {
         assert_eq!(
             self.bit_length, other.bit_length,
@@ -253,7 +253,7 @@ impl PackedBin {
         })
     }
 
-    /// The `index`-th byte of the packed form, read without materializing it — bits past `bit_length` read as the zero padding [`PackedBin::to_packed_bytes`] writes.
+    /// The `index`-th byte of the packed form, read without materializing it — bits past `bit_length` read as the zero padding [`Binary::to_packed_bytes`] writes.
     ///
     /// The streaming spelling `Hash` and `Ord` share: `Ord` must agree with the aligned arm's byte slice it compares beside, and a second copy of this loop is a second thing to keep in step with it.
     fn packed_byte(&self, index: usize) -> u8 {
@@ -267,7 +267,7 @@ impl PackedBin {
     }
 }
 
-impl PartialEq for PackedBin {
+impl PartialEq for Binary {
     /// Equal bits, decided as cheaply as the representation allows.
     ///
     /// **Two windows of one buffer at one offset are the same bits**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it bit by bit made a `Str` literal's check quadratic in wall clock where every counter said linear — 2.8 s of a 16 000-character literal's 2.9 s in the machine, 0.4 s with this arm — and `curios`' `str_literal_cost_measurements` carries the ladder.
@@ -286,14 +286,14 @@ impl PartialEq for PackedBin {
         }
     }
 }
-impl Eq for PackedBin {}
-/// How many packed bytes [`PackedBin`]'s hash reads from a value larger than that. Enough that two values of one length agreeing at all of them are not a shape a program writes by accident, and small enough that hashing is a constant.
+impl Eq for Binary {}
+/// How many packed bytes [`Binary`]'s hash reads from a value larger than that. Enough that two values of one length agreeing at all of them are not a shape a program writes by accident, and small enough that hashing is a constant.
 const HASH_SAMPLE_BYTES: usize = 32;
 
-impl Hash for PackedBin {
-    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`PackedBin::eq`] records on its own side of the same probe, where a window of one buffer is now equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
+impl Hash for Binary {
+    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`Binary::eq`] records on its own side of the same probe, where a window of one buffer is now equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
     ///
-    /// The length is hashed whole and at most `HASH_SAMPLE_BYTES` bytes are read from the packed form, spread across it with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`PackedBin::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
+    /// The length is hashed whole and at most `HASH_SAMPLE_BYTES` bytes are read from the packed form, spread across it with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`Binary::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
     ///
     /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction. The streamed spelling is the only one now — the aligned arm's byte slice bought a bulk hash of the whole value, which is the cost this removes — so no two arms have to be kept agreeing byte for byte.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -318,17 +318,17 @@ impl Hash for PackedBin {
     }
 }
 
-impl PartialOrd for PackedBin {
+impl PartialOrd for Binary {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
-impl Ord for PackedBin {
+impl Ord for Binary {
     /// Packed bytes first, then logical length — bytewise with the shorter prefix first, which is `/std/Bytes/cmp` at the byte grain, where a packed byte *is* the element and the agreement falls out rather than being engineered.
     ///
-    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`PackedBin::eq`] that a key's correctness rests on. The bit grain's ordering in the language is deliberately *not* this one: `/std/Bits/cmp` compares bit by bit from index zero, while this compares packed bytes, whose most significant bit is the run's seventh — so `b[1, 0]` sorts below `b[0, 1]` here and above it there. Nothing observes both. This order is a key's, reached through a `BTreeMap` or `BTreeSet` of the compiler's own and nowhere else, and matching it would have cost a program an order that is neither the sequence reading the carrier documents nor the numeric one `shl` and `shr` obey.
+    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`Binary::eq`] that a key's correctness rests on. The bit grain's ordering in the language is deliberately *not* this one: `/std/Bits/cmp` compares bit by bit from index zero, while this compares packed bytes, whose most significant bit is the run's seventh — so `b[1, 0]` sorts below `b[0, 1]` here and above it there. Nothing observes both. This order is a key's, reached through a `BTreeMap` or `BTreeSet` of the compiler's own and nowhere else, and matching it would have cost a program an order that is neither the sequence reading the carrier documents nor the numeric one `shl` and `shr` obey.
     ///
-    /// Allocation-free on both arms for [`PackedBin::hash`]'s reason — this is what an optimizer's key sort walks.
+    /// Allocation-free on both arms for [`Binary::hash`]'s reason — this is what an optimizer's key sort walks.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let ordering = match (self.as_bytes(), other.as_bytes()) {
             (Some(left), Some(right)) => left.cmp(right),

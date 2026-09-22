@@ -4,7 +4,7 @@ use super::test_support::folded_matches_runtime;
 
 /// **Every row is tainted in an operand, never in a length.** The pointwise operations state `len(a) == len(b)` as a decided bound, so a tainted length would leave the obligation stuck and the row would not compile at all — the taint goes in a *bit* (`Nat/eql(n, 1)` is a `Bool` the folder cannot see through) or in a fill's generator, both of which leave the length structural. `replicate`'s own count is safe to taint precisely because a fill carries no bound.
 ///
-/// **The partial-byte rows are the ones that matter.** A three-bit run occupies one stored byte with five bits of padding, and `PackedBin`'s equality and hash read stored bytes and trust that padding to be zero. So `xor` against a three-bit fill — which is what `/std`'s `not` will be — is where an unmasked `replicate` would leak: the value would print correctly and still compare unequal to itself. The `eql` row is there to catch exactly that, since `show` alone would not.
+/// **The partial-byte rows are the ones that matter.** A three-bit run occupies one stored byte with five bits of padding, and `Binary`'s equality and hash read stored bytes and trust that padding to be zero. So `xor` against a three-bit fill — which is what `/std`'s `not` will be — is where an unmasked `replicate` would leak: the value would print correctly and still compare unequal to itself. The `eql` row is there to catch exactly that, since `show` alone would not.
 #[test]
 fn the_packed_bitwise_operations_agree_between_the_folder_and_the_backend() {
     let outputs = folded_matches_runtime(&[

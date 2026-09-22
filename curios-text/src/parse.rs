@@ -50,15 +50,13 @@ use {
         TupleTypeParam, UseGroup, WitnessField,
     },
     curios_abi::{WireLeaf, WireResults, WireShape, WireSignature, WireType},
-    curios_num::{Floating, Natural},
+    curios_num::{Floating, Grain, Natural},
     curios_parse::{
         Mark, Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize,
         not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
         take_eof, take_exact, take_n, take_while, uncommit,
     },
-    curios_utilities::{
-        Grain, InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword,
-    },
+    curios_utilities::{InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
 

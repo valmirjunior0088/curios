@@ -8,7 +8,7 @@
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 /// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bin`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
@@ -103,15 +103,14 @@ impl Head {
     fn into_chunk(self, grain: Grain) -> Term {
         match self {
             Head::LiteralBit(bit) => {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::B, PackedBin::from_bits([bit]))).into()
+                Subterm::Intrinsic(Intrinsic::Bin(Grain::B, Binary::from_bits([bit]))).into()
             }
             Head::LiteralByte(byte) => {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(vec![byte])))
-                    .into()
+                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![byte]))).into()
             }
             Head::Symbolic(atom) => Term::intrinsic(Intrinsic::bin_append(
                 grain,
-                Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())),
                 atom,
             )),
         }
@@ -216,7 +215,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
         front = match (level, front) {
             (BinLevel::Appended(atom), Front::Empty) => Front::Cons {
                 head: Head::Symbolic(atom.clone()),
-                tail: Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+                tail: Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
             },
             (BinLevel::Appended(atom), Front::Cons { head, tail }) => Front::Cons {
                 head,
@@ -240,7 +239,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 }
                 segments.extend(rest.iter().cloned());
                 let tail = match segments.len() {
-                    0 => Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+                    0 => Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
                     1 => segments.into_iter().next().unwrap(),
                     _ => Subterm::Intrinsic(Intrinsic::BinConcat {
                         grain,
@@ -473,7 +472,7 @@ impl FreeMonoid {
                 base,
                 singleton: Term::intrinsic(Intrinsic::bin_append(
                     grain,
-                    Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                    Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
                     element.clone(),
                 )),
             }),
@@ -677,14 +676,14 @@ fn window(
 /// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that used to close by literal equality failing to close through the peel. It does not: `bin_atoms`/`list_atoms` flatten a concatenation into segments and `push` merges adjacent literal runs (`crate::spine`), so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;
 
-/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`PackedBin` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
+/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
 pub(crate) trait Run {
     fn is_empty(&self) -> bool;
 }
 
-impl Run for PackedBin {
+impl Run for Binary {
     fn is_empty(&self) -> bool {
-        PackedBin::is_empty(self)
+        Binary::is_empty(self)
     }
 }
 
@@ -694,7 +693,7 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `PackedBin::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///

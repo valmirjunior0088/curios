@@ -5,14 +5,13 @@
 use {
     super::simplify::{rewire_node, rewrite_atoms},
     super::*,
-    curios_num::{Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Integer, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 /// An operand under a total order, with `Flt` by bit pattern and packed data by the value's own, so commutative normalization can sort and the scope table can key deterministically.
 ///
-/// A `Bin` holds the [`PackedBin`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes collided them, and two `BinEql`s against those two literals deduped into one.
+/// A `Bin` holds the [`Binary`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes collided them, and two `BinEql`s against those two literals deduped into one.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum AtomKey {
     Value(u32),
@@ -20,7 +19,7 @@ enum AtomKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    Bin(Grain, PackedBin),
+    Bin(Grain, Binary),
     Filler,
 }
 

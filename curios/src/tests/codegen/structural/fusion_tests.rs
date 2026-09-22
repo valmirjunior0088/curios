@@ -26,18 +26,12 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
     let module = cont_optm_module(source);
     assert!(
         emits(&module, |op| *op
-            == curios_cont::Intrinsic::BinChunk(
-                curios_utilities::Grain::X,
-                2
-            )),
+            == curios_cont::Intrinsic::BinChunk(curios_num::Grain::X, 2)),
         "the byte atoms fuse into one chunk: {module}"
     );
     assert!(
         emits(&module, |op| *op
-            == curios_cont::Intrinsic::BinChunk(
-                curios_utilities::Grain::B,
-                1
-            )),
+            == curios_cont::Intrinsic::BinChunk(curios_num::Grain::B, 1)),
         "the bit atom fuses into one chunk: {module}"
     );
 

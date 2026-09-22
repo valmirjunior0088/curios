@@ -3,7 +3,7 @@
 use {
     super::reduce_intrinsic,
     crate::{Free, Intrinsic, Nat, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 use super::test_support::*;
@@ -12,7 +12,7 @@ use super::test_support::*;
 #[test]
 fn bit_get_of_a_symbolic_cons_head_is_the_bit() {
     let bit = Term::free_var(&Free::local(0, Some("bit")));
-    let empty: Term = Subterm::Intrinsic(Intrinsic::Bin(Grain::B, PackedBin::empty())).into();
+    let empty: Term = Subterm::Intrinsic(Intrinsic::Bin(Grain::B, Binary::empty())).into();
     let cons = Term::intrinsic(Intrinsic::bin_append(Grain::B, empty, bit.clone()));
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
     let get = Intrinsic::bin_get(Grain::B, cons, zero, qed());
@@ -78,7 +78,7 @@ fn a_window_over_a_spine_is_the_window_over_its_run() {
                 sliced,
                 Subterm::Intrinsic(Intrinsic::Bin(
                     Grain::X,
-                    PackedBin::from_bytes(whole[start..start + count].to_vec()),
+                    Binary::from_bytes(whole[start..start + count].to_vec()),
                 )),
                 "the {count} bytes at {start} are the same however the run is grouped",
             );

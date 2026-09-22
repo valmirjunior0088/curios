@@ -6,7 +6,8 @@ use {
         LocalData, Table, get, set,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
-    curios_utilities::{Entropy, Grain},
+    curios_num::Grain,
+    curios_utilities::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
         iter,

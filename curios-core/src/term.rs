@@ -30,9 +30,9 @@ use {
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
-    curios_num::{Floating, Integer, Natural},
+    curios_num::{Floating, Grain, Integer, Natural},
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{Grain, InfixOp, Mint, Plicity, Sign, Span, recurse},
+    curios_utilities::{InfixOp, Mint, Plicity, Sign, Span, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,

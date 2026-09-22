@@ -4,7 +4,7 @@ use {
     super::test_support::duplicate_pair_module,
     crate::cps::cse::dedupe_intrinsics,
     crate::{Atom, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueId},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
     std::collections::BTreeMap,
 };
 
@@ -205,7 +205,7 @@ fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
         op: Intrinsic::BinEql(Grain::B),
         args: vec![
             Atom::Value(x),
-            Atom::Literal(Literal::Bin(Grain::B, PackedBin::from_bits([true, false]))),
+            Atom::Literal(Literal::Bin(Grain::B, Binary::from_bits([true, false]))),
         ],
         next: return_node,
     });
@@ -214,7 +214,7 @@ fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
         op: Intrinsic::BinEql(Grain::B),
         args: vec![
             Atom::Value(x),
-            Atom::Literal(Literal::Bin(Grain::B, PackedBin::from_bits([true]))),
+            Atom::Literal(Literal::Bin(Grain::B, Binary::from_bits([true]))),
         ],
         next: second_node,
     });

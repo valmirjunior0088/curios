@@ -5,7 +5,8 @@ use {
         Let, LetBinding, LetGroup, LetSignature, Lint, ListEntry, Name, Nat, NatLiteral, NumLit,
         Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
     },
-    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, recurse},
+    curios_num::{Binary, Grain},
+    curios_utilities::{Plicity, Qualifier, Span, recurse},
     std::{
         cell::{Cell, RefCell},
         collections::HashSet,
@@ -1066,8 +1067,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
         let packed = |run: Vec<u8>| match grain {
-            Grain::B => PackedBin::from_bits(run.into_iter().map(|atom| atom != 0)),
-            Grain::X => PackedBin::from_bytes(run),
+            Grain::B => Binary::from_bits(run.into_iter().map(|atom| atom != 0)),
+            Grain::X => Binary::from_bytes(run),
         };
         let flush = |operands: &mut Vec<curios_core::Term>, run: &mut Vec<u8>| {
             if !run.is_empty() {
@@ -1091,7 +1092,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     let base = operands.pop().unwrap_or_else(|| {
                         curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
                             grain,
-                            PackedBin::empty(),
+                            Binary::empty(),
                         ))
                     });
                     let atom = lower(term)?;

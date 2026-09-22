@@ -30,8 +30,7 @@ use {
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         project_erased_universes,
     },
-    curios_num::{Floating, Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
@@ -314,7 +313,7 @@ fn reduce_bin_pointwise(
     left: &Term,
     right: &Term,
     same_length: &Term,
-    combine: impl Fn(&PackedBin, &PackedBin) -> PackedBin,
+    combine: impl Fn(&Binary, &Binary) -> Binary,
     rebuild: impl FnOnce(Grain, Term, Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
@@ -943,7 +942,7 @@ pub fn reduce_intrinsic(
             |v| {
                 Some(Intrinsic::Bin(
                     Grain::X,
-                    PackedBin::from_bytes(v.to_bits().to_le_bytes().to_vec()),
+                    Binary::from_bytes(v.to_bits().to_le_bytes().to_vec()),
                 ))
             },
             Intrinsic::FltToLeBytes,
@@ -1257,10 +1256,7 @@ pub fn reduce_intrinsic(
             }
             // The empty slice is empty: `slice(b, i, 0)` is the empty run. The dual of the full-window identity and equally sound — a zero-length window yields no generators regardless of `b` or `i`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons. Reading a *count* is what makes this one test rather than a comparison of two subjects.
             if Nat::is_zero(&length_reduced) {
-                return Ok(Subterm::Intrinsic(Intrinsic::Bin(
-                    grain,
-                    PackedBin::empty(),
-                )));
+                return Ok(Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())));
             }
             let s = as_index(&start_reduced);
             let n = as_index(&length_reduced);
@@ -1400,7 +1396,7 @@ pub fn reduce_intrinsic(
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `PackedBin::concat`, collapse a lone operand. Grain-generic: both carriers fuse in the packed representation. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
+            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `Binary::concat`, collapse a lone operand. Grain-generic: both carriers fuse in the packed representation. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
             //
             // A run past `FUSION_CAP` declines to lend itself, so the concatenation keeps its node instead of copying both operands into a third. Measured in the grain's own generators, which is what makes one constant serve both: a bit-grain operand is capped at 64 bits and a byte-grain one at 64 bytes, and the corpus reaches neither.
             // The reduced operand vector, and the survivor vector the normalizer filters out of it — two collections whose length is the operand count, charged together before either exists.
@@ -1417,7 +1413,7 @@ pub fn reduce_intrinsic(
                     _ => None,
                 },
                 |runs| {
-                    // Twice the fused payload, per the price list's last paragraph: `PackedBin::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
+                    // Twice the fused payload, per the price list's last paragraph: `Binary::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
                     let bits = runs
                         .iter()
                         .map(|run| run.bit_length() as u64)
@@ -1426,7 +1422,7 @@ pub fn reduce_intrinsic(
 
                     Ok(Subterm::Intrinsic(Intrinsic::Bin(
                         grain,
-                        PackedBin::concat(runs),
+                        Binary::concat(runs),
                     )))
                 },
                 |kept| {
@@ -1491,7 +1487,7 @@ pub fn reduce_intrinsic(
                     true => (run.clone(), Cost::NOTHING),
                     // A window holding whole bytes at an offset that is not one has the right count of bits and the wrong place to share them from, so this one is repacked rather than retagged.
                     false => (
-                        PackedBin::from_bytes(run.to_packed_bytes()),
+                        Binary::from_bytes(run.to_packed_bytes()),
                         packed_bound(Grain::X, run.bit_length() as u64),
                     ),
                 };
@@ -1515,7 +1511,7 @@ pub fn reduce_intrinsic(
             left,
             right,
             same_length,
-            PackedBin::and,
+            Binary::and,
             Intrinsic::bin_and,
         ),
         Intrinsic::BinOr {
@@ -1529,7 +1525,7 @@ pub fn reduce_intrinsic(
             left,
             right,
             same_length,
-            PackedBin::or,
+            Binary::or,
             Intrinsic::bin_or,
         ),
         Intrinsic::BinXor {
@@ -1543,7 +1539,7 @@ pub fn reduce_intrinsic(
             left,
             right,
             same_length,
-            PackedBin::xor,
+            Binary::xor,
             Intrinsic::bin_xor,
         ),
         Intrinsic::ListType(elem) => {

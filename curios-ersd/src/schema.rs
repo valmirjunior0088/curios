@@ -4,7 +4,7 @@
 
 use {
     super::{ConstructorId, FamilyId, ProductId},
-    curios_utilities::Grain,
+    curios_num::Grain,
 };
 
 /// The post-erasure field row of a structure (or tuple). Field names are debug metadata only; identity and layout are positional.

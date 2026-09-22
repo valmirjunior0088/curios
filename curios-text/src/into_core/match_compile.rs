@@ -4,8 +4,8 @@ use {
         BinPattern, Choose, ChooseArm, ChooseTest, Error, Label, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
-    curios_num::Natural,
-    curios_utilities::{Grain, Plicity},
+    curios_num::{Grain, Natural},
+    curios_utilities::Plicity,
     std::{collections::BTreeMap, mem},
 };
 

@@ -1,7 +1,6 @@
 use {
     crate::*,
-    curios_num::Natural,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Natural},
 };
 
 fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
@@ -765,10 +764,7 @@ fn folds_lower_to_accumulator_loops() {
 fn a_sequence_fold_reads_through_its_grain() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let bytes = builder.constant(Constant::Bin(
-        Grain::X,
-        PackedBin::from_bytes(vec![1, 2, 3]),
-    ));
+    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
     let zero = nat(&mut builder, 0);
     let empty_block = builder.seal_block(Terminator::Return(zero));
@@ -841,10 +837,7 @@ fn a_sequence_fold_reads_through_its_grain() {
 fn an_unused_fold_suffix_is_not_sliced() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let bytes = builder.constant(Constant::Bin(
-        Grain::X,
-        PackedBin::from_bytes(vec![1, 2, 3]),
-    ));
+    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
     let zero = nat(&mut builder, 0);
     let empty_block = builder.seal_block(Terminator::Return(zero));

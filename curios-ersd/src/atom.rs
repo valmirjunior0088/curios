@@ -4,8 +4,7 @@
 
 use {
     super::{ConstantId, FunctionId, ValueId},
-    curios_num::{Floating, Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
 /// An atomic operand: a lexically bound value, a bound function used as a value, or an interned constant.
@@ -31,7 +30,7 @@ pub enum Constant {
     Flt(Floating),
     Byte(u8),
     /// A packed binary of the given grain.
-    Bin(Grain, PackedBin),
+    Bin(Grain, Binary),
     /// An opaque host handle token.
     Handle(u32),
 }

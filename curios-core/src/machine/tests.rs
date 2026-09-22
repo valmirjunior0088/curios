@@ -1,7 +1,7 @@
 use {
     super::{ClosedHost, Demand, reduce_closed, unfold_rec},
     crate::{Category, Cost, Free, Intrinsic, Many, ReduceError, Reducer, Scope, Subterm, Term},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
     std::collections::BTreeMap,
 };
 
@@ -76,7 +76,7 @@ fn bin_type() -> Term {
 }
 
 fn bytes(data: Vec<u8>) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(data)))
+    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(data)))
 }
 
 fn motive() -> Scope<Many> {

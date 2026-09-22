@@ -3,7 +3,7 @@ use curios_num::Natural;
 use {
     super::evaluate_closed_terms,
     crate::*,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain},
 };
 
 /// `make(x) = (y) => x + y`, bound as an item.
@@ -311,10 +311,7 @@ fn folded(mut builder: ErsdBuilder, value: ValueId) -> Constant {
 #[test]
 fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
     let mut builder = ErsdBuilder::new();
-    let bytes = builder.constant(Constant::Bin(
-        Grain::X,
-        PackedBin::from_bytes(vec![1, 2, 3]),
-    ));
+    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
@@ -419,10 +416,7 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
 #[test]
 fn a_fold_step_sees_the_suffix_after_its_element() {
     let mut builder = ErsdBuilder::new();
-    let bytes = builder.constant(Constant::Bin(
-        Grain::X,
-        PackedBin::from_bytes(vec![1, 2, 3]),
-    ));
+    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {

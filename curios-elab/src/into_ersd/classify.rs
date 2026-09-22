@@ -4,7 +4,7 @@ use {
     super::Lowering,
     crate::{Context, Error, is_prop_in, reduce_with},
     curios_core::{Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
-    curios_utilities::Grain,
+    curios_num::Grain,
     std::collections::BTreeSet,
 };
 

@@ -4,8 +4,7 @@ pub use signature::*;
 use {
     super::{Bound, Free, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ResultShape, WireResults, WireType},
-    curios_num::{Floating, Integer},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain, Integer},
     std::collections::BTreeSet,
 };
 
@@ -160,7 +159,7 @@ pub enum Intrinsic {
         finite: Term,
     },
     BinType(Grain),
-    Bin(Grain, PackedBin),
+    Bin(Grain, Binary),
     BinLen(Grain, Term),
     BinEql(Grain, Term, Term),
     /// `in_range` proves `index < len(bin)`, carried for the reason [`Intrinsic::NatDiv`]'s bound is.

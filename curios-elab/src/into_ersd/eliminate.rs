@@ -13,8 +13,7 @@ use {
     },
     curios_analysis::{case_target_indices, pinned_by_targets},
     curios_core::{Free, Level, MatchResult},
-    curios_num::Natural,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Natural},
 };
 
 /// The `List`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
@@ -50,7 +49,7 @@ impl SeqCarrier<'_> {
                 element: element.clone(),
                 items: vec![],
             }),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
         }
     }
 
@@ -72,7 +71,7 @@ impl SeqCarrier<'_> {
                 operands: vec![
                     Term::intrinsic(Intrinsic::BinAppend {
                         grain,
-                        bin: Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                        bin: Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
                         element: head.clone(),
                     }),
                     tail.clone(),

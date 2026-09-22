@@ -6,9 +6,9 @@ use {
         TupleType, Two, Var, Variant,
     },
     curios_abi::stdio,
-    curios_num::Floating,
+    curios_num::{Binary, Floating, Grain},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
-    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, recurse},
+    curios_utilities::{Plicity, Qualifier, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
@@ -577,7 +577,7 @@ fn escaped(text: &str) -> String {
 }
 
 /// The constant atoms of a packed literal, spelled as the surface writes them — `0`/`1` for bits, hexadecimal numerals for bytes.
-fn bin_atoms(grain: Grain, packed: &PackedBin) -> Vec<Printer> {
+fn bin_atoms(grain: Grain, packed: &Binary) -> Vec<Printer> {
     match grain {
         Grain::B => (0..packed.bit_length())
             .map(|index| pure(if packed.bit(index).unwrap() { "1" } else { "0" }))

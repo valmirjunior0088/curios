@@ -6,8 +6,7 @@ use curios_core::*;
 use {
     crate::{Context, reduce},
     curios_analysis::fixture::SYNTAX,
-    curios_num::Natural,
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Grain, Natural},
 };
 
 fn context() -> Context {
@@ -349,8 +348,7 @@ fn bin_eql_decides_structurally() {
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
     let y_binder = context.fresh(Some("y"));
-    let bin =
-        |bytes: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(bytes)));
+    let bin = |bytes: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(bytes)));
     let x = Term::free_var(&x_binder);
 
     // Reflexivity over a symbolic value: `eql(x, x) = true`.
@@ -415,7 +413,7 @@ fn bits_reduce_through_symbolic_free_monoid_spines() {
     let bits = |values: &[bool]| {
         Term::intrinsic(Intrinsic::Bin(
             Grain::B,
-            PackedBin::from_bits(values.iter().copied()),
+            Binary::from_bits(values.iter().copied()),
         ))
     };
     let tail = Term::free_var(&tail_binder);

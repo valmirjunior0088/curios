@@ -75,7 +75,7 @@ pub struct Cost {
 
 /// The fixed cost of a packed value or a big number: its length, its offset, and the handle to its buffer.
 ///
-/// Four units rather than three because a `PackedBin` carries a buffer handle and two indices, and a charge that exactly matched today's field count would have to move whenever one is added.
+/// Four units rather than three because a `Binary` carries a buffer handle and two indices, and a charge that exactly matched today's field count would have to move whenever one is added.
 const VALUE_HEADER: u64 = 4;
 
 /// The fixed cost of a collection: its handle, its length, and its capacity.

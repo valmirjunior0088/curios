@@ -41,7 +41,8 @@ use {
         Intrinsic, Let, Many, MatchResult, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_results_term, wire_term,
     },
-    curios_utilities::{Grain, PackedBin, recurse},
+    curios_num::{Binary, Grain},
+    curios_utilities::recurse,
 };
 
 /// The type of `term`.
@@ -734,7 +735,7 @@ fn check_free_monoid(
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             }
 
-            let empty = Term::intrinsic(Intrinsic::Bin(*grain, PackedBin::empty()));
+            let empty = Term::intrinsic(Intrinsic::Bin(*grain, Binary::empty()));
             at(kernel, empty.clone(), empty_case)?;
 
             let atom_type = Term::intrinsic(match grain {

@@ -7,8 +7,8 @@ use {
         Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Label, Name, Nat, NatLiteral, Subterm,
         Term, TupleType, TupleTypeParam,
     },
-    curios_num::Floating,
-    curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
+    curios_num::{Floating, Grain},
+    curios_utilities::{Plicity, SyntaxName, SyntaxRegistry},
 };
 
 pub(super) fn name(label: &str) -> Term {

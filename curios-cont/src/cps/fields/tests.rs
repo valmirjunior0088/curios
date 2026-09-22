@@ -902,7 +902,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
     // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces rather than one it no longer can.
     let slice = module.add_node(Node::LetIntrinsic {
         result: tail,
-        op: Intrinsic::BinRest(curios_utilities::Grain::X),
+        op: Intrinsic::BinRest(curios_num::Grain::X),
         args: vec![
             Atom::Value(window),
             Atom::Literal(Literal::Nat(Natural::from(1u32))),
@@ -911,7 +911,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
     });
     let read = module.add_node(Node::LetIntrinsic {
         result: head,
-        op: Intrinsic::BinGet(curios_utilities::Grain::X),
+        op: Intrinsic::BinGet(curios_num::Grain::X),
         args: vec![
             Atom::Value(window),
             Atom::Literal(Literal::Nat(Natural::from(0u32))),
@@ -920,7 +920,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
     });
     let measure = module.add_node(Node::LetIntrinsic {
         result: length,
-        op: Intrinsic::BinLen(curios_utilities::Grain::X),
+        op: Intrinsic::BinLen(curios_num::Grain::X),
         args: vec![Atom::Value(window)],
         next: read,
     });

@@ -10,10 +10,9 @@ mod tests;
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
-        Floating, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_div, int_mul, int_rem,
-        int_shl, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
+        Binary, Floating, Grain, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_div,
+        int_mul, int_rem, int_shl, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
     },
-    curios_utilities::{Grain, PackedBin},
 };
 
 /// What allocating a value commits a pass to. Immutable allocation is not language-observable and may be discarded or duplicated; mutable allocation (a cell) may not. Ordered by severity so [`join`](Allocation::join) is `max`.
@@ -435,7 +434,7 @@ impl Semantics {
                 NatToByte => Constant::Byte(u8::try_from(nat(0)?.to_u32()?).ok()?),
                 FltToLeBytes => Constant::Bin(
                     Grain::X,
-                    PackedBin::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),
+                    Binary::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),
                 ),
                 FltOfLeBytes => return Some(flt_of_le_bytes(bin_x(0)?)),
             }))
@@ -502,7 +501,7 @@ impl Semantics {
                 }
                 BinConcat(grain) => Constant::Bin(
                     grain,
-                    PackedBin::concat(
+                    Binary::concat(
                         (0..operands.len())
                             .map(|index| bin(index, grain))
                             .collect::<Option<Vec<_>>>()?,
@@ -511,11 +510,11 @@ impl Semantics {
                 // Split by grain for [`SequenceOp::BinAppend`]'s reason: the generator is a `Byte` constant at one and a `Bool` at the other, and only the grain says which to read.
                 BinReplicate(Grain::X) => Constant::Bin(
                     Grain::X,
-                    PackedBin::replicate(Grain::X, byte(1)?, nat(0)?.to_usize()?),
+                    Binary::replicate(Grain::X, byte(1)?, nat(0)?.to_usize()?),
                 ),
                 BinReplicate(Grain::B) => Constant::Bin(
                     Grain::B,
-                    PackedBin::replicate(Grain::B, u8::from(bool_(1)?), nat(0)?.to_usize()?),
+                    Binary::replicate(Grain::B, u8::from(bool_(1)?), nat(0)?.to_usize()?),
                 ),
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
                 BinAnd(grain) => {
@@ -541,7 +540,7 @@ impl Semantics {
                             grain.other(),
                             match run.is_x_aligned() {
                                 true => run.clone(),
-                                false => PackedBin::from_bytes(run.to_packed_bytes()),
+                                false => Binary::from_bytes(run.to_packed_bytes()),
                             },
                         )
                     })?
@@ -576,7 +575,7 @@ fn scalar_result<T>(
 }
 
 /// Decode a little-endian binary64, trapping unless exactly eight bytes.
-fn flt_of_le_bytes(value: &PackedBin) -> Result<Constant, TrapKind> {
+fn flt_of_le_bytes(value: &Binary) -> Result<Constant, TrapKind> {
     value
         .to_bytes()
         .as_deref()

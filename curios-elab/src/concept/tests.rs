@@ -1,7 +1,8 @@
 use {
     super::{HeadKey, WitnessKey},
     curios_core::{Free, Global, Term},
-    curios_utilities::{Grain, Plicity, Qualifier},
+    curios_num::Grain,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A tuple type whose fields are all `Type` — the field types are not in the key, so any term does.

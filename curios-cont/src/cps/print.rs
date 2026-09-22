@@ -18,7 +18,8 @@ use {
         Atom, Callee, CellOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
-    curios_utilities::{ArenaId, Grain},
+    curios_num::Grain,
+    curios_utilities::ArenaId,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

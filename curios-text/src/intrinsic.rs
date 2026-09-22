@@ -1,7 +1,7 @@
 use {
     super::{Nat, Term},
+    curios_num::Grain,
     curios_num::{Floating, Integer},
-    curios_utilities::Grain,
 };
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List` exactly as before.

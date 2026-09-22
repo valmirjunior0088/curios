@@ -4,8 +4,8 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_num::{Floating, Integer, Natural},
-    curios_utilities::{Arena, ArenaId, Grain, PackedBin, id},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_utilities::{Arena, ArenaId, id},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -53,7 +53,7 @@ pub enum Literal {
     Nat(Natural),
     Int(Integer),
     Flt(Floating),
-    Bin(Grain, PackedBin),
+    Bin(Grain, Binary),
 }
 
 #[derive(Debug, Clone, PartialEq)]

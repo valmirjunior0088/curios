@@ -4,7 +4,7 @@
 
 use {
     super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
-    curios_utilities::Grain,
+    curios_num::Grain,
 };
 
 /// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-emit` refuses one the envelope cannot box.

@@ -20,8 +20,8 @@ use {
         StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient, Tuple, Two,
         UniverseContext, Var, Variant,
     },
-    curios_num::Natural,
-    curios_utilities::{Grain, InfixOp, Plicity, Qualifier},
+    curios_num::{Grain, Natural},
+    curios_utilities::{InfixOp, Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice, sync::Arc},
 };
 

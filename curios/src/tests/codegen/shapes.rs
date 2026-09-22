@@ -4,9 +4,9 @@ use {
     super::map_wall::{cwasm_of, run, timed},
     crate::{tests::ersd_optm, wasm_optm},
     curios_ersd::{FieldShape, Module},
+    curios_num::Grain,
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::Grain,
     std::collections::BTreeMap,
 };
 

@@ -4,7 +4,7 @@
 //!
 //! **Two constants are free; the rest are consequences.** `envelope` and `len_shift` are decided, and the payload mask, the payload byte count, the element mask and the element stride follow from them and the grain. Deriving them is what makes a disagreement unspellable rather than merely unlikely, and [`ImmediateLayout::of`] asserts the two invariants that relate the free pair: the payload fits below the length field, and the length field is wide enough to count the envelope.
 
-use curios_utilities::Grain;
+use curios_num::Grain;
 
 /// One grain's immediate layout. Every quantity is in the units a Wasm instruction takes them in, so a caller reads fields rather than converting.
 pub(crate) struct ImmediateLayout {

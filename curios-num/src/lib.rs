@@ -13,6 +13,9 @@ pub use integer::*;
 mod floating;
 pub use floating::*;
 
+mod binary;
+pub use binary::*;
+
 mod scalar;
 pub use scalar::*;
 

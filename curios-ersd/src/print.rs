@@ -19,7 +19,7 @@ use {
         ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs, SequenceGrain,
         SequenceOp, Statement, StatementId, Terminator, ValueId,
     },
-    curios_utilities::Grain,
+    curios_num::Grain,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

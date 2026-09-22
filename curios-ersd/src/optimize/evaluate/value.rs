@@ -4,8 +4,7 @@
 
 use {
     crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
-    curios_num::{Floating, Integer, Natural},
-    curios_utilities::{Grain, PackedBin},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
     std::{cell::RefCell, ops::Deref, rc::Rc},
 };
 
@@ -20,7 +19,7 @@ pub(super) enum Value {
     Int(Integer),
     Flt(Floating),
     Handle(u32),
-    Bin(Grain, Rc<PackedBin>),
+    Bin(Grain, Rc<Binary>),
     List(ListWindow),
     /// A product value, in the schema's field order.
     Product(ProductId, Rc<Vec<Value>>),
@@ -35,7 +34,7 @@ pub(super) struct Closure {
     pub(super) env: RefCell<Vec<(ValueId, Value)>>,
 }
 
-/// An immutable window over shared list elements — the list mirror of [`PackedBin`], so a suffix or a slice is a start and a length over the same allocation rather than a copy of the elements.
+/// An immutable window over shared list elements — the list mirror of [`Binary`], so a suffix or a slice is a start and a length over the same allocation rather than a copy of the elements.
 ///
 /// This is the runtime's own shape, not an evaluator convenience: `ListRest` and `ListSlice` are windows over one rope, and the peel the interpreter performs has to cost what the door's `emit_peel` costs, or a walk the program takes in linear time is taken here in quadratic. Before this, a suffix was rebuilt element by element at every step.
 #[derive(Clone)]

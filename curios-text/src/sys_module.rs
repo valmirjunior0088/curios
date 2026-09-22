@@ -30,8 +30,8 @@ use {
         ForeignStore, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status,
         stdio, stdio_mode,
     },
-    curios_num::Integer,
-    curios_utilities::{Grain, Plicity, SyntaxRegistry},
+    curios_num::{Grain, Integer},
+    curios_utilities::{Plicity, SyntaxRegistry},
 };
 
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.

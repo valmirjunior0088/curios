@@ -1,6 +1,6 @@
 # curios-num
 
-The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Floating`, and the `scalar` semantics of the erased carriers — `Natural`, `Integer` and binary64 again — every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how the carriers stay unbounded at run time, and where a narrowing refuses, is [Nat and Int are an i31 until they outgrow it](../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md); local architecture belongs to the crate rustdoc.
+The values of the Curios intrinsic carriers: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Floating`, the packed `Binary` a `Bits` or `Bytes` is read from at its `Grain`, and the `scalar` semantics of the erased carriers — `Natural`, `Integer` and binary64 again — every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how the carriers stay unbounded at run time, and where a narrowing refuses, is [Nat and Int are an i31 until they outgrow it](../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 
