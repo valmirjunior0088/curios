@@ -17,7 +17,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bidirectional dependent type checking with full definitional equality
 - [x] Eta-reduction for Π-types and Σ-types
 - [x] Named tuple fields
-- [x] `Prop` universe with definitional proof irrelevance
+- [x] `Prop` universe with definitional proof irrelevance, asked before either side is reduced in both checkers ([A proof is never reduced to decide what irrelevance decides](design/language/a-proof-is-never-reduced-to-decide-what-irrelevance-decides.md))
 - [x] Implicit cumulative `Type` hierarchy with declaration-local universe polymorphism
 - [x] Implicit arguments (`@`-marked binders)
   - [x] Plicity as part of function-type identity, with lambda-binder insertion
@@ -44,7 +44,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Indexed families (e.g. `std/Tui/Layout/Sizes`)
   - [x] Variant arity checking
   - [x] Exhaustiveness/coverage checking (index inversion)
-  - [x] Large-elimination guard (restricts `Prop` → `Type` elimination)
+  - [x] Large-elimination guard (restricts `Prop` → `Type` elimination; erasure reads a payload the guard admits as pinned back from the scrutinee's index)
   - [x] [Strict positivity modulo polarity](design/language/strict-positivity-modulo-polarity.md) (per-parameter polarity vectors)
 - [x] Unification solver
   - [x] Pattern unification for higher-order metavariable spines
