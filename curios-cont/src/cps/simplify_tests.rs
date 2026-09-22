@@ -197,7 +197,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     module.verify().unwrap();
 }
 
-/// A NaN literal riding a jump used to keep `forward_continuations` reporting a change on every round: `thread_edge` compared the edge it rebuilt against the edge it read, and under IEEE equality on an `f32` literal a NaN is unequal to itself, so an untouched edge read as rewritten and the fixpoint ran to its backstop. `Literal::Flt` is bitwise now, and this pins the consequence — the second call over a settled module reports nothing.
+/// A NaN literal riding a jump used to keep `forward_continuations` reporting a change on every round: `thread_edge` compared the edge it rebuilt against the edge it read, and under IEEE equality on a float literal a NaN is unequal to itself, so an untouched edge read as rewritten and the fixpoint ran to its backstop. `Literal::Flt` is bitwise now, and this pins the consequence — the second call over a settled module reports nothing.
 #[test]
 fn forwarding_a_nan_literal_settles_in_one_round() {
     let mut module = Module::new();

@@ -142,7 +142,7 @@ pub enum Intrinsic {
         non_neg: Term,
     },
     IntToFlt(Term),
-    /// `non_neg` proves the operand is a non-negative *number*, which is what excludes `+inf` and the NaN alongside every negative. Carried for the reason [`Intrinsic::NatDiv`]'s bound is.
+    /// `non_neg` proves the operand is a non-negative *number*, which is what excludes `+inf` and every NaN alongside every negative. Carried for the reason [`Intrinsic::NatDiv`]'s bound is.
     FltToNat {
         flt: Term,
         non_neg: Term,
@@ -153,7 +153,7 @@ pub enum Intrinsic {
         bin: Term,
         eight_bytes: Term,
     },
-    /// `finite` proves the operand is a number — neither infinity, and not the NaN — which is the whole of what truncating toward zero needs.
+    /// `finite` proves the operand is a number — neither infinity, and not a NaN — which is the whole of what truncating toward zero needs.
     FltToInt {
         flt: Term,
         finite: Term,

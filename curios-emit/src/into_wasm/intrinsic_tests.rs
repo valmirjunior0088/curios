@@ -201,6 +201,44 @@ fn flt_add_boxes_into_the_flt_struct() {
     assert_contains(&wat, "struct.new $flt");
 }
 
+/// Every arithmetic answer but a NaN's is the instruction's, and a NaN result is replaced by `flt/nan` of the operands, which the model's NaN rule fixes and the engine does not.
+#[test]
+fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
+    for intrinsic in [
+        curios_cont::Intrinsic::FltAdd,
+        curios_cont::Intrinsic::FltMin,
+        curios_cont::Intrinsic::FltRem,
+    ] {
+        let wat = wat(&intrinsic_main(intrinsic, vec![flt(1.5), flt(2.5)]));
+        assert_contains(&wat, "f64.ne");
+        assert_contains(&wat, "call $flt/nan");
+        assert_contains(&wat, "(func $flt/nan");
+    }
+
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::FltSqrt,
+        vec![flt(2.0)],
+    ));
+    assert_contains(&wat, "call $flt/nan");
+}
+
+/// The sign operations and the byte conversion touch bits alone in WebAssembly as in IEEE, a NaN's included, so nothing checks or rewrites what they produce.
+#[test]
+fn a_sign_operation_and_the_bytes_carry_a_nan_as_it_is() {
+    for (intrinsic, operands) in [
+        (
+            curios_cont::Intrinsic::FltCopysign,
+            vec![flt(1.0), flt(-2.0)],
+        ),
+        (curios_cont::Intrinsic::FltNeg, vec![flt(1.0)]),
+        (curios_cont::Intrinsic::FltToLeBytes, vec![flt(1.0)]),
+    ] {
+        let wat = wat(&intrinsic_main(intrinsic, operands));
+        assert_absent(&wat, "flt/nan");
+        assert_absent(&wat, "select");
+    }
+}
+
 #[test]
 fn flt_div_divides() {
     assert_contains(

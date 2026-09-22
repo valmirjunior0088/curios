@@ -30,7 +30,7 @@ use {
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         project_erased_universes,
     },
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
 };
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
@@ -102,7 +102,7 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
 
 /// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor, since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
 ///
-/// Asked for by name in both converters beside [`normalize_bool`], and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against the NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
+/// Asked for by name in both converters beside [`normalize_bool`], and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
 pub fn align_comparisons(
     reducer: &mut impl Reducer,
     this: &Intrinsic,
@@ -238,7 +238,7 @@ fn dual_of_negated(
     Ok(Some(dual))
 }
 
-/// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against the NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
+/// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against a NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
 ///
 /// Two readers: [`align_comparisons`], which spells a negated probe as its dual, and both reducers' refinement probes, which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
 pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
@@ -839,7 +839,7 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Flt(l / r),
             Intrinsic::FltDiv,
         ),
-        // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend — the same value the `cont -> wasm` expansion computes.
+        // `%` is C's `fmod` over binary64: the exact remainder `x - trunc(x / y) * y`, sign of the dividend, never a rounding — the value `curios-emit`'s `$flt/rem` helper computes.
         Intrinsic::FltRem(left, right) => reduce_flt_binary(
             reducer,
             left,
@@ -911,34 +911,34 @@ pub fn reduce_intrinsic(
         Intrinsic::FltSqrt(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.sqrt())),
+            |v| Some(Intrinsic::Flt(v.sqrt(Rounding::TiesToEven))),
             Intrinsic::FltSqrt,
         ),
         Intrinsic::FltFloor(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.floor())),
+            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardNegative))),
             Intrinsic::FltFloor,
         ),
         Intrinsic::FltCeil(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.ceil())),
+            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardPositive))),
             Intrinsic::FltCeil,
         ),
         Intrinsic::FltTrunc(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.trunc())),
+            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TowardZero))),
             Intrinsic::FltTrunc,
         ),
         Intrinsic::FltNearest(inner) => reduce_flt_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(v.nearest())),
+            |v| Some(Intrinsic::Flt(v.round_integral(Rounding::TiesToEven))),
             Intrinsic::FltNearest,
         ),
-        // The two reinterpretations, whose round-trip laws are now theorems of the model rather than a postulate: `of_le_bytes(to_le_bytes(x))` is `x` for every `x`, and `to_le_bytes(of_le_bytes(b))` is `b` for every `b` that is not a non-canonical NaN pattern — which every NaN pattern reaching `Floating` is turned into.
+        // The two reinterpretations, whose round-trip laws are theorems of the model rather than a postulate: every one of the 2⁶⁴ bit patterns is a distinct float, so `of_le_bytes(to_le_bytes(x))` is `x` for every `x` and `to_le_bytes(of_le_bytes(b))` is `b` for every eight-byte `b`.
         Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(
             reducer,
             inner,
@@ -948,7 +948,7 @@ pub fn reduce_intrinsic(
         Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
 
-            // Inversion of the constructor, and *only* this way round. `Flt/to_le_bytes` answers the one canonical NaN, so decoding what it wrote is the float it was given; decoding first and re-encoding is not the identity, because a NaN payload the bytes carried comes back canonicalised. The pair is bit-preserving in the direction that starts from a float and in no other.
+            // Inversion of the constructor: decoding what `Flt/to_le_bytes` wrote is the float it was given, NaNs and both zeros included. The other direction holds of the model as well, since no pattern is merged, and folds on a literal; a symbolic one is not inverted here.
             if let Subterm::Intrinsic(Intrinsic::FltToLeBytes(flt)) = &*bin {
                 return reducer.reduce(flt.clone()).map(Term::unwrap_or_clone);
             }
@@ -984,7 +984,12 @@ pub fn reduce_intrinsic(
         Intrinsic::NatToFlt(inner) => reduce_nat_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(Floating::of_natural(&v.to_natural()?))),
+            |v| {
+                Some(Intrinsic::Flt(Floating::of_natural(
+                    &v.to_natural()?,
+                    Rounding::TiesToEven,
+                )))
+            },
             Intrinsic::NatToFlt,
         ),
         // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation now states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
@@ -1016,7 +1021,12 @@ pub fn reduce_intrinsic(
         Intrinsic::IntToFlt(inner) => reduce_int_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Flt(Floating::of_integer(&v))),
+            |v| {
+                Some(Intrinsic::Flt(Floating::of_integer(
+                    &v,
+                    Rounding::TiesToEven,
+                )))
+            },
             Intrinsic::IntToFlt,
         ),
         // The two narrowings truncate toward zero and answer the *exact* unbounded natural or integer: `to_nat(3.0e9)` is `3000000000`, which the running program holds as a boxed magnitude. Outside the domain each bound states, the model declines and the neutral is rebuilt, carrying the proof it was handed.

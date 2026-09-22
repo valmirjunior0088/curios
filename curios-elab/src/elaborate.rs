@@ -39,7 +39,7 @@ use {
         Transient, Tuple, TupleType, Variant, WitnessOrigin, instantiate_universe_levels_scoped,
         wire_results_term, wire_term,
     },
-    curios_num::{Floating, Integer},
+    curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity, recurse},
     std::{
         collections::{BTreeSet, VecDeque},

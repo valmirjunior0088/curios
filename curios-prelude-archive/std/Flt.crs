@@ -17,11 +17,11 @@ pub let pos_inf: Flt =
 pub let neg_inf: Flt =
     div(-1.0, +0.0);
 
---- The one NaN, with a fixed bit pattern.
+--- The default NaN: positive, quiet and without a payload, which is what an invalid operation with no NaN operand answers.
 pub let nan: Flt =
     of_le_bytes(x[0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xF8, 0x7F]);
 
---- Whether `f` is a number: neither infinity nor the NaN.
+--- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
     f > neg_inf && f < pos_inf;
 
@@ -320,7 +320,7 @@ let exponent_of(s: Str, e_pos: Nat, len: Nat) -> Option(Int) =
     | false => Option/some(+0)
     end;
 
---- The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. An optional sign before `inf`, `infinity` or `nan`, in any case, reads as the infinity of that sign or the NaN, which is what `to_str` writes for them and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
+--- The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. An optional sign before `inf`, `infinity` or `nan`, in any case, reads as the infinity of that sign or the default NaN, which is what `to_str` writes for them and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
 pub let of_str(s: Str) -> Option(Flt) =
     match Str/is_empty(s)
     | true => Option/none()

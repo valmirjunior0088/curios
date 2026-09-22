@@ -9,37 +9,10 @@
 mod magnitude;
 
 use super::{
-    BigData, Table, block, br, br_if, call, cast, concrete_val, either, field_get, get, i32_const,
-    i64_const, repeat, set, tee, when,
+    BigData, Chunk, Scope, Table, block, br, br_if, call, cast, concrete_val, declare_helper,
+    either, f64_type, field_get, get, i32_const, i32_type, i64_const, i64_type, repeat, set, tee,
+    wasm, when,
 };
-
-/// One piece of an instruction sequence: a single instruction or a run of them, so [`wasm!`] can splice either.
-trait Chunk {
-    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>);
-}
-
-impl Chunk for curios_wasm::Instr {
-    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>) {
-        instrs.push(self);
-    }
-}
-
-impl Chunk for Vec<curios_wasm::Instr> {
-    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>) {
-        instrs.extend(self);
-    }
-}
-
-/// An instruction sequence spliced from [`Chunk`]s, in stack order.
-macro_rules! wasm {
-    ($($chunk:expr),* $(,)?) => {{
-        let mut instrs = Vec::new();
-        $(Chunk::push_into($chunk, &mut instrs);)*
-        instrs
-    }};
-}
-
-use wasm;
 
 /// Every big-number helper, named by what it computes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,39 +160,6 @@ impl Bitwise {
     }
 }
 
-/// One helper's parameters and locals, declared as its body names them.
-#[derive(Default)]
-struct Scope {
-    params: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
-    locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
-}
-
-impl Scope {
-    fn param(&mut self, name: &str, val_type: curios_wasm::ValType) -> curios_wasm::LocalName {
-        let local = curios_wasm::LocalName::from(name);
-        self.params.push((local.clone(), val_type));
-        local
-    }
-
-    fn local(&mut self, name: &str, val_type: curios_wasm::ValType) -> curios_wasm::LocalName {
-        let local = curios_wasm::LocalName::from(name);
-        self.locals.push((local.clone(), val_type));
-        local
-    }
-}
-
-fn i32_type() -> curios_wasm::ValType {
-    curios_wasm::ValType::Num(curios_wasm::NumType::I32)
-}
-
-fn i64_type() -> curios_wasm::ValType {
-    curios_wasm::ValType::Num(curios_wasm::NumType::I64)
-}
-
-fn f64_type() -> curios_wasm::ValType {
-    curios_wasm::ValType::Num(curios_wasm::NumType::F64)
-}
-
 /// Count `i` up from wherever the caller left it to `bound`, running `body` each time: the loop every limb walk is. `label` names the pair, so a walk nested in another takes its own.
 fn walk(
     i: &curios_wasm::LocalName,
@@ -324,7 +264,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         }
     }
 
-    /// Declare one helper: a final func type named after the function, plus the function itself, as `RopeEmitter::add_helper` does.
+    /// Declare `helper` over `scope`, answering `result`.
     fn add_helper(
         &mut self,
         helper: BigHelper,
@@ -332,32 +272,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         result: curios_wasm::ValType,
         instrs: Vec<curios_wasm::Instr>,
     ) {
-        let func_name = helper.func_name();
-        let type_name = curios_wasm::TypeName::from(func_name.as_str());
-
-        self.module.add_type(
-            type_name.clone(),
-            curios_wasm::SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
-                    inputs: curios_wasm::ResultType::from(
-                        scope.params.iter().map(|(_, val_type)| val_type.clone()),
-                    ),
-                    outputs: curios_wasm::ResultType::from([result]),
-                }),
-            },
-        );
-
-        self.module.add_func(
-            func_name,
-            curios_wasm::Func {
-                type_name,
-                params: scope.params.into_iter().map(|(name, _)| name).collect(),
-                locals: scope.locals,
-                expr: instrs.into(),
-            },
-        );
+        declare_helper(self.module, helper.func_name(), scope, result, instrs);
     }
 
     /// A call to `helper`, marking it for emission.

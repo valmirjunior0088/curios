@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_num::{Floating, Integer, Natural},
+    curios_num::{Floating, Integer, Natural, Rounding},
 };
 
 /// The allowance the growing folds take here: `curios-ersd`'s own bound on a folded scalar, since a folded `Nat` or `Int` past the i31 materializes as a boxed constant and one wider than that could not have come down from the stage above. A literal count may still ask for a numeral no machine holds, and past this the fold declines.
@@ -62,7 +62,7 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::NatShr => Some(Literal::Nat(nat(0)? >> nat(1)?)),
         Intrinsic::NatEqz => bool_(nat(0)?.is_zero()),
         Intrinsic::NatToInt => Some(Literal::Int(Integer::from(nat(0)?.clone()))),
-        Intrinsic::NatToFlt => flt_(Floating::of_natural(nat(0)?)),
+        Intrinsic::NatToFlt => flt_(Floating::of_natural(nat(0)?, Rounding::TiesToEven)),
         Intrinsic::IntEql => bool_(int(0)? == int(1)?),
         Intrinsic::IntNeq => bool_(int(0)? != int(1)?),
         Intrinsic::IntAdd => Some(Literal::Int(int(0)?.clone() + int(1)?.clone())),
@@ -83,7 +83,7 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::IntShr => Some(Literal::Int(int(0)? >> nat(1)?)),
         Intrinsic::IntEqz => bool_(int(0)?.is_zero()),
         Intrinsic::IntToNat => Some(Literal::Nat(Natural::try_from(int(0)?).ok()?)),
-        Intrinsic::IntToFlt => flt_(Floating::of_integer(int(0)?)),
+        Intrinsic::IntToFlt => flt_(Floating::of_integer(int(0)?, Rounding::TiesToEven)),
         Intrinsic::FltAdd => flt_(flt(0)? + flt(1)?),
         Intrinsic::FltSub => flt_(flt(0)? - flt(1)?),
         Intrinsic::FltMul => flt_(flt(0)? * flt(1)?),
@@ -97,11 +97,11 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::FltMax => flt_(flt(0)?.max(flt(1)?)),
         Intrinsic::FltNeg => flt_(-flt(0)?),
         Intrinsic::FltAbs => flt_(flt(0)?.abs()),
-        Intrinsic::FltSqrt => flt_(flt(0)?.sqrt()),
-        Intrinsic::FltFloor => flt_(flt(0)?.floor()),
-        Intrinsic::FltCeil => flt_(flt(0)?.ceil()),
-        Intrinsic::FltTrunc => flt_(flt(0)?.trunc()),
-        Intrinsic::FltNearest => flt_(flt(0)?.nearest()),
+        Intrinsic::FltSqrt => flt_(flt(0)?.sqrt(Rounding::TiesToEven)),
+        Intrinsic::FltFloor => flt_(flt(0)?.round_integral(Rounding::TowardNegative)),
+        Intrinsic::FltCeil => flt_(flt(0)?.round_integral(Rounding::TowardPositive)),
+        Intrinsic::FltTrunc => flt_(flt(0)?.round_integral(Rounding::TowardZero)),
+        Intrinsic::FltNearest => flt_(flt(0)?.round_integral(Rounding::TiesToEven)),
         Intrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
         Intrinsic::FltToNat => Some(Literal::Nat(flt(0)?.to_natural().ok()?)),
         Intrinsic::FltToInt => Some(Literal::Int(flt(0)?.to_integer().ok()?)),

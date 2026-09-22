@@ -9,7 +9,7 @@ mod tests;
 
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
-    curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
+    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding, ScalarTrap},
 };
 
 /// What allocating a value commits a pass to. Immutable allocation is not language-observable and may be discarded or duplicated; mutable allocation (a cell) may not. Ordered by severity so [`join`](Allocation::join) is `max`.
@@ -410,20 +410,20 @@ impl Semantics {
                 FltCopysign => Constant::Flt(flt(0)?.copysign(flt(1)?)),
                 FltNeg => Constant::Flt(-flt(0)?),
                 FltAbs => Constant::Flt(flt(0)?.abs()),
-                FltSqrt => Constant::Flt(flt(0)?.sqrt()),
-                FltFloor => Constant::Flt(flt(0)?.floor()),
-                FltCeil => Constant::Flt(flt(0)?.ceil()),
-                FltTrunc => Constant::Flt(flt(0)?.trunc()),
-                FltNearest => Constant::Flt(flt(0)?.nearest()),
+                FltSqrt => Constant::Flt(flt(0)?.sqrt(Rounding::TiesToEven)),
+                FltFloor => Constant::Flt(flt(0)?.round_integral(Rounding::TowardNegative)),
+                FltCeil => Constant::Flt(flt(0)?.round_integral(Rounding::TowardPositive)),
+                FltTrunc => Constant::Flt(flt(0)?.round_integral(Rounding::TowardZero)),
+                FltNearest => Constant::Flt(flt(0)?.round_integral(Rounding::TiesToEven)),
                 FltEql => Constant::Bool(flt(0)?.eql(flt(1)?)),
                 FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
                 FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
                 FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
 
                 NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
-                NatToFlt => Constant::Flt(Floating::of_natural(nat(0)?)),
+                NatToFlt => Constant::Flt(Floating::of_natural(nat(0)?, Rounding::TiesToEven)),
                 IntToNat => return Some(scalar_result(Natural::try_from(int(0)?), Constant::Nat)),
-                IntToFlt => Constant::Flt(Floating::of_integer(int(0)?)),
+                IntToFlt => Constant::Flt(Floating::of_integer(int(0)?, Rounding::TiesToEven)),
                 FltToNat => return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat)),
                 FltToInt => return Some(scalar_result(flt(0)?.to_integer(), Constant::Int)),
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),

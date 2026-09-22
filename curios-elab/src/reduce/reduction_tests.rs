@@ -460,7 +460,7 @@ fn flt_folds_through_the_model() {
         Ok(flt(3.0)),
     );
 
-    // The cases the host would leave to itself, and the model does not: division by zero is a value, and `0.0 / 0.0` is the one NaN, whose sign `copysign` therefore cannot read.
+    // The cases the host would leave to itself, and the model does not: division by zero is a value, and `0.0 / 0.0` is the default NaN, positive, so `copysign` reads a `+`.
     assert_eq!(
         reduce(
             &mut context,

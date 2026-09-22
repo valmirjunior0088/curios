@@ -274,7 +274,7 @@ pub(super) fn elaborate_num_lit(
             }
             Subterm::Intrinsic(Intrinsic::FltType) => {
                 // Rounded by the model, as the decimal literal in `curios-text` is, so what a numeral means as a binary64 is stated once in this repository. A magnitude past the largest finite value rounds to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
-                let value = Floating::of_natural(magnitude);
+                let value = Floating::of_natural(magnitude, Rounding::TiesToEven);
                 if !value.is_finite() {
                     return Err(Error::FltLiteralOutOfRange {
                         value: magnitude.to_string(),

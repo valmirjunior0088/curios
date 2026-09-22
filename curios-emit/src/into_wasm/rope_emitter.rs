@@ -15,8 +15,9 @@ use force_walk::*;
 
 use {
     super::{
-        BigHelper, ImmediateLayout, RopeData, Table, block, br, br_if, call, cast, concrete_val,
-        either, field_get, field_set, get, i32_const, null, repeat, set,
+        BigHelper, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
+        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, null, repeat,
+        set,
     },
     curios_abi::{WireLeaf, WireType},
     curios_num::Grain,
@@ -33,7 +34,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         Self { table, module }
     }
 
-    /// Declare one helper: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
+    /// Declare one helper with these parameters and locals, answering `result`.
     fn add_helper(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -42,30 +43,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
         instrs: Vec<curios_wasm::Instr>,
     ) {
-        let type_name = curios_wasm::TypeName::from(func_name.as_str());
-
-        self.module.add_type(
-            type_name.clone(),
-            curios_wasm::SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
-                    inputs: curios_wasm::ResultType::from(
-                        params.iter().map(|(_, val_type)| val_type.clone()),
-                    ),
-                    outputs: curios_wasm::ResultType::from([result]),
-                }),
-            },
-        );
-
-        self.module.add_func(
+        declare_helper(
+            self.module,
             func_name,
-            curios_wasm::Func {
-                type_name,
-                params: params.into_iter().map(|(name, _)| name).collect(),
-                locals,
-                expr: instrs.into(),
-            },
+            Scope { params, locals },
+            result,
+            instrs,
         );
     }
 

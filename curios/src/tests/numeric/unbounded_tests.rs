@@ -68,20 +68,86 @@ fn folded_and_executed_scalar_ops_agree() {
         "Flt/to_str(Flt/max(Flt/neg(Nat/to_flt(n)), Nat/to_flt(n)))",
         "Flt/to_str(Flt/min(Flt/add(Flt/nan, Nat/to_flt(n)), 1.0))",
         "Flt/to_str(Flt/max(1.0, Flt/add(Flt/nan, Nat/to_flt(n))))",
-        // **The two canonicalizing sites**, and the only two operations whose non-NaN result can read a NaN's bits. The fold answers the one canonical NaN; without the emitter's canonicalization the engine answers whatever pattern it is holding, and these rows are what makes the two agree.
-        //
-        // The NaN is *assembled from bytes* rather than computed, and that is the whole design of these rows. A computed NaN — `0.0 / 0.0` — carries the hardware's default pattern, which on aarch64 is already `0x7ff8000000000000`, so a row built on one passes whether or not the canonicalization is emitted. Reinterpreting a byte pattern the program chose is bit-preserving on every engine, so a payload bit set here reaches the instruction on any architecture. The tainted byte is what keeps the executed side from folding; the folded side canonicalizes in `Floating::from_bits`, so the two disagree unless the emitter closes it.
-        //
-        // **Both halves of that were measured rather than argued**, 2026-08-24 on aarch64-apple-darwin, by neutering the two `select`s in `code_emitter` and re-running this test. On a computed NaN it still passed — the row proved nothing. On the assembled NaN below it failed, folded `:0:0:0:0:0:0:248:127` against executed `:1:0:0:0:0:0:248:127`, which is the payload surviving into a result the model says has none. Reproduce by deleting the two selects; that failure is what these rows are for.
-        "Bytes/fold(Flt/to_le_bytes(Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, \
-            0x00, 0xf8, 0x7f])), \"\", (b, acc) => Str/concat(Str/concat(acc, \":\"), \
-            Nat/to_str(Byte/to_nat(b))))",
-        // The sign operand is a *negative* non-canonical NaN, so an engine reading its sign bit answers `-1.0` where the model says `abs(1.0)`.
-        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
-            0x00, 0x00, 0xf8, 0xff])))",
-        "Flt/to_str(Flt/copysign(-1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
-            0x00, 0x00, 0xf8, 0xff])))",
     ]);
+}
+
+/// The NaN rule, folded and executed: an operation over NaN operands answers the greatest of their quieted patterns whatever their order, an invalid one over none answers the default NaN, and the sign operations and the byte conversions carry every pattern as it is. Each row prints the result's bytes, which is the one observation that reads a NaN's sign and payload.
+///
+/// The NaN operands are *assembled from bytes* rather than computed, with a runtime-tainted low byte, and that is the whole design of the table. A computed NaN carries whatever pattern the engine chose, so a row built on one could pass by coincidence of hardware; reinterpreting a pattern the program chose is bit-preserving on every engine, so a payload set here reaches the instruction on any architecture, and the tainted byte keeps the executed side from folding. The computed rows are the invalid operations, whose answer the model fixes as the default NaN where x86 and aarch64 disagree on the sign — so on an x86 host each is a row the check after the instruction has to win.
+///
+/// **Measured, not argued**, 2026-09-22 on x86_64-unknown-linux-gnu: with `emit_flt_checked`'s NaN arm replaced by the hardware result, the first row to fail was `add(signaling, quiet)` — the engine answered its first NaN operand quieted, `:1:0:0:0:0:0:248:127`, where the model answers the greater pattern, `:2:18:0:0:0:0:248:255`. Reproduce by making that arm `vec![get(&result)]`.
+#[test]
+fn folded_and_executed_nans_agree() {
+    let bytes = |term: &str| {
+        format!(
+            "Bytes/fold(Flt/to_le_bytes({term}), \"\", (b, acc) => \
+             Str/concat(Str/concat(acc, \":\"), Nat/to_str(Byte/to_nat(b))))"
+        )
+    };
+    // A signaling NaN with a payload of one, positive, and a quiet one with a wider payload, negative.
+    let signaling =
+        "Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
+    let quiet =
+        "Flt/of_le_bytes(x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
+    let zero = "Nat/to_flt(n)";
+
+    let rows = [
+        bytes(signaling),
+        bytes(&format!("Flt/of_le_bytes(Flt/to_le_bytes({quiet}))")),
+        bytes(&format!("Flt/add({signaling}, 1.0)")),
+        bytes(&format!("Flt/add(1.0, {quiet})")),
+        bytes(&format!("Flt/add({signaling}, {quiet})")),
+        bytes(&format!("Flt/add({quiet}, {signaling})")),
+        bytes(&format!("Flt/mul({signaling}, {quiet})")),
+        bytes(&format!("Flt/sub(1.0, {signaling})")),
+        bytes(&format!("Flt/sub({quiet}, 1.0)")),
+        bytes(&format!("Flt/div({signaling}, 2.0)")),
+        bytes(&format!("Flt/rem({signaling}, 3.0)")),
+        bytes(&format!("Flt/min({signaling}, {quiet})")),
+        bytes(&format!("Flt/max(1.0, {signaling})")),
+        bytes(&format!("Flt/sqrt({signaling})")),
+        bytes(&format!("Flt/floor({quiet})")),
+        bytes(&format!("Flt/nearest({signaling})")),
+        bytes(&format!("Flt/neg({signaling})")),
+        bytes(&format!("Flt/abs({quiet})")),
+        bytes(&format!("Flt/copysign({signaling}, -1.0)")),
+        bytes(&format!("Flt/div({zero}, {zero})")),
+        bytes(&format!("Flt/sub(Flt/pos_inf, Flt/add(Flt/pos_inf, {zero}))")),
+        bytes(&format!("Flt/mul(Flt/add(Flt/pos_inf, {zero}), 0.0)")),
+        bytes(&format!("Flt/sqrt(Flt/sub(-1.0, {zero}))")),
+        bytes(&format!("Flt/rem(1.0, {zero})")),
+        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
+            0x00, 0x00, 0xf8, 0xff])))"
+            .to_string(),
+    ];
+    let rows = rows.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let executed = folded_matches_runtime(&rows);
+    let quieted = b":1:0:0:0:0:0:248:127".as_slice();
+    let default = b":0:0:0:0:0:0:248:127".as_slice();
+
+    assert_eq!(
+        executed[0], b":1:0:0:0:0:0:240:127",
+        "a signaling NaN crosses its bytes unquieted"
+    );
+    assert_eq!(executed[2], quieted, "an operand NaN answers quieted");
+    assert_eq!(
+        executed[4], executed[5],
+        "the choice does not read the operands' order"
+    );
+    assert_eq!(
+        executed[4], b":2:18:0:0:0:0:248:255",
+        "the greater quieted pattern, read unsigned"
+    );
+    assert_eq!(
+        executed[7], b":1:0:0:0:0:0:248:255",
+        "a difference negates its subtrahend first"
+    );
+    assert_eq!(
+        executed[19], default,
+        "an invalid operation over no NaN answers the default NaN"
+    );
+    assert_eq!(executed[24], b"-1", "copysign reads a NaN's sign");
 }
 
 /// A reassociated product answers what the written one does, however large its partial products grow.
@@ -292,7 +358,7 @@ fn bytes_of_nat_is_minimal_least_significant_first() {
     assert_eq!(output, b"0 1:1 1:255 2:0:1 3:0:0:1 3:1:0:1 ");
 }
 
-/// `0.0` and `-0.0` stay distinct terms — one NaN made bitwise identity *value* identity, and it did not merge the zeros. What the fold does make available is the IEEE comparison, which calls them numerically equal; conversion still refuses to identify the terms, which is what keeps `to_le_bytes` from telling apart two things the type level called the same.
+/// `0.0` and `-0.0` stay distinct terms — identity is the bit pattern, and the zeros are two. What the fold does make available is the IEEE comparison, which calls them numerically equal; conversion still refuses to identify the terms, which is what keeps `to_le_bytes` from telling apart two things the type level called the same.
 #[test]
 fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
     assert_eq!(

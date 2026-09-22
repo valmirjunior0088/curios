@@ -1,4 +1,4 @@
-//! The shorthands the helper emitters — the rope helpers and the big-number helpers — write wasm in: the reference-type constructors, the local get/set/tee trio, the cast, the struct field accessors, the typed null, the constants, the calls and the structured control.
+//! The shorthands the helper emitters — the rope, big-number and float helpers — write wasm in: the reference-type constructors, the local get/set/tee trio, the cast, the struct field accessors, the typed null, the constants, the calls and the structured control, with the splice every sequence is written in and the declaration every helper ends in.
 //!
 //! Nothing here decides anything — each is one `curios_wasm` value spelled in one line instead of four. They live apart from the emitters only so the emitters read as the instruction sequences they are.
 
@@ -135,4 +135,108 @@ pub(super) fn either(
         then_instructions,
         else_instructions,
     }
+}
+
+/// One piece of an instruction sequence: a single instruction or a run of them, so [`wasm!`] can splice either.
+pub(super) trait Chunk {
+    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>);
+}
+
+impl Chunk for curios_wasm::Instr {
+    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>) {
+        instrs.push(self);
+    }
+}
+
+impl Chunk for Vec<curios_wasm::Instr> {
+    fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>) {
+        instrs.extend(self);
+    }
+}
+
+/// An instruction sequence spliced from [`Chunk`]s, in stack order.
+macro_rules! wasm {
+    ($($chunk:expr),* $(,)?) => {{
+        let mut instrs = Vec::new();
+        $(Chunk::push_into($chunk, &mut instrs);)*
+        instrs
+    }};
+}
+
+pub(super) use wasm;
+
+/// One helper's parameters and locals, declared as its body names them.
+#[derive(Default)]
+pub(super) struct Scope {
+    pub(super) params: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
+    pub(super) locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
+}
+
+impl Scope {
+    pub(super) fn param(
+        &mut self,
+        name: &str,
+        val_type: curios_wasm::ValType,
+    ) -> curios_wasm::LocalName {
+        let local = curios_wasm::LocalName::from(name);
+        self.params.push((local.clone(), val_type));
+        local
+    }
+
+    pub(super) fn local(
+        &mut self,
+        name: &str,
+        val_type: curios_wasm::ValType,
+    ) -> curios_wasm::LocalName {
+        let local = curios_wasm::LocalName::from(name);
+        self.locals.push((local.clone(), val_type));
+        local
+    }
+}
+
+pub(super) fn i32_type() -> curios_wasm::ValType {
+    curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+}
+
+pub(super) fn i64_type() -> curios_wasm::ValType {
+    curios_wasm::ValType::Num(curios_wasm::NumType::I64)
+}
+
+pub(super) fn f64_type() -> curios_wasm::ValType {
+    curios_wasm::ValType::Num(curios_wasm::NumType::F64)
+}
+
+/// Declare one helper: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
+pub(super) fn declare_helper(
+    module: &mut curios_wasm::Module,
+    func_name: curios_wasm::FuncName,
+    scope: Scope,
+    result: curios_wasm::ValType,
+    instrs: Vec<curios_wasm::Instr>,
+) {
+    let type_name = curios_wasm::TypeName::from(func_name.as_str());
+
+    module.add_type(
+        type_name.clone(),
+        curios_wasm::SubType {
+            is_final: true,
+            super_types: vec![],
+            comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                inputs: curios_wasm::ResultType::from(
+                    scope.params.iter().map(|(_, val_type)| val_type.clone()),
+                ),
+                outputs: curios_wasm::ResultType::from([result]),
+            }),
+        },
+    );
+
+    module.add_func(
+        func_name,
+        curios_wasm::Func {
+            type_name,
+            params: scope.params.into_iter().map(|(name, _)| name).collect(),
+            locals: scope.locals,
+            expr: instrs.into(),
+        },
+    );
 }

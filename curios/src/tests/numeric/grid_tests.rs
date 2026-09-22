@@ -2,7 +2,7 @@
 
 use {
     crate::tests::run_text,
-    curios_num::{Floating, Integer, Natural},
+    curios_num::{Floating, Integer, Natural, Rounding},
     curios_runtime::MockHost,
 };
 
@@ -103,7 +103,7 @@ fn expected(x: &Integer, y: &Integer) -> String {
     let flag = |b: bool| String::from(if b { "1" } else { "0" });
     let quotient = |result: Result<Integer, _>| result.map_or("-".into(), |q| signed(&q));
     let natural = |result: Result<Natural, _>| result.map_or("-".into(), |q| format!("{q:?}"));
-    let float = Floating::of_integer(x);
+    let float = Floating::of_integer(x, Rounding::TiesToEven);
     let bytes = float
         .to_bits()
         .to_le_bytes()

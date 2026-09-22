@@ -2,10 +2,10 @@ use {
     super::{
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
-        ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type, cell_sub_type,
-        elems_sub_type, flt_sub_type, longs_sub_type, refusal_data_name, refusal_message,
-        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
-        words_sub_type,
+        FltEmitter, FltHelper, ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type,
+        cell_sub_type, elems_sub_type, flt_sub_type, longs_sub_type, refusal_data_name,
+        refusal_message, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
+        rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_num::{Binary, Grain},
@@ -940,6 +940,17 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    /// Add the float helpers the emitted code referenced, in [`FltHelper::ALL`]'s order.
+    fn emit_flt_funcs(&mut self) {
+        let mut flts = FltEmitter::new(self.module);
+
+        for helper in FltHelper::ALL {
+            if self.table.flt_used(helper) {
+                flts.emit_func(helper);
+            }
+        }
+    }
+
     pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_big_types();
@@ -977,6 +988,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.emit_rope_funcs();
         self.emit_big_funcs();
+        self.emit_flt_funcs();
         // After the rope and big-number helpers, whose bodies refuse too: only now is the set of reached classes complete.
         self.emit_refuse_funcs();
         self.emit_sys_imports();

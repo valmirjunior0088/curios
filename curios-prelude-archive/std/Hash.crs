@@ -98,7 +98,7 @@ satisfy Hash(Bool) {
     hash(b) = match b | true => x[0x1] | false => x[0x0] end,
 }
 
---- The little-endian bit pattern, so distinct floats encode distinctly and the one NaN encodes once.
+--- The little-endian bit pattern, so distinct floats encode distinctly, every NaN pattern among them.
 satisfy Hash(Flt) {
     hash = Flt/to_le_bytes,
 }

@@ -2,7 +2,7 @@ use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
         EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule,
-        EmissionValue, EmissionValueName, LoadAs, call, concrete_val, refuse_func_name,
+        EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, refuse_func_name,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireType},
     std::{
@@ -266,6 +266,8 @@ pub(crate) struct Table<'a> {
     refuse: [OnceCell<curios_wasm::FuncName>; curios_cont::Panic::ALL.len()],
     // One slot per big-number helper, in `BigHelper::ALL`'s order, minted lazily like `refuse`: a module declares the helpers its code and its other helpers reach and no others.
     big: [OnceCell<curios_wasm::FuncName>; BigHelper::ALL.len()],
+    // One slot per float helper, in `FltHelper::ALL`'s order, minted lazily like `big`.
+    flt: [OnceCell<curios_wasm::FuncName>; FltHelper::ALL.len()],
     // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
@@ -360,6 +362,7 @@ impl<'a> Table<'a> {
             panic: OnceCell::new(),
             refuse: Default::default(),
             big: Default::default(),
+            flt: Default::default(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
@@ -565,6 +568,17 @@ impl<'a> Table<'a> {
 
     pub(crate) fn big_used(&self, helper: BigHelper) -> bool {
         self.big[helper.slot()].get().is_some()
+    }
+
+    /// The float helper `helper`, marked for emission by this first use.
+    pub(crate) fn flt_func(&self, helper: FltHelper) -> curios_wasm::FuncName {
+        self.flt[helper.slot()]
+            .get_or_init(|| helper.func_name())
+            .clone()
+    }
+
+    pub(crate) fn flt_used(&self, helper: FltHelper) -> bool {
+        self.flt[helper.slot()].get().is_some()
     }
 
     pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {

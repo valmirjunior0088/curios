@@ -48,6 +48,9 @@ use rope_emitter::*;
 mod big_emitter;
 use big_emitter::*;
 
+mod flt_emitter;
+use flt_emitter::*;
+
 mod shorthand;
 use shorthand::*;
 

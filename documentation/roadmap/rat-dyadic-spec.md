@@ -52,7 +52,7 @@ Verified by normalizing zero, both signs and long powers of two; by the structur
 
 ## Stage 2 — binary64 conversion
 
-`Flt` is IEEE 754 binary64 with one NaN, computed exactly by `curios-num`'s model; `Flt/to_le_bytes` and `Flt/of_le_bytes` (the latter under `EightBytes`) fold through that model, so their round trip is a theorem of the model rather than a postulate. Do not add a conversion rule asserting it.
+`Flt` is IEEE 754 binary64, every bit pattern a distinct value, computed exactly by `curios-num`'s model; `Flt/to_le_bytes` and `Flt/of_le_bytes` (the latter under `EightBytes`) fold through that model, so their round trip is a theorem of the model rather than a postulate. Do not add a conversion rule asserting it.
 
 **Exactly, from binary64.** `Rat/of_flt_bytes : Bytes -> Option(Rat)` answers `none` unless the input is eight bytes, then reads the sign, the 11-bit exponent field `e` and the 52-bit fraction `f`:
 
