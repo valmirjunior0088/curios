@@ -40,7 +40,7 @@ const SCALARS: &[Row] = &[
         expr: r##"canon("neg = -9223372036854775808")"##,
         expected: "neg = -9223372036854775808\n",
     },
-    // The three non-finites TOML spells, on the *encode* side: `fbits` below decodes them and reads the bit pattern, which leaves `flt_str`'s three arms unasserted in the direction they are written for. `-nan` is the normalization row — it decodes to the same NaN and comes back with no sign, since a NaN's is not a fact the encoder reads.
+    // The four non-finites TOML spells, on the *encode* side: `fbits` below decodes them and reads the bit pattern, which leaves `flt_str`'s four arms unasserted in the direction they are written for. `-nan` is the sign row: it decodes to the NaN with its sign bit set and comes back signed, since every bit pattern is a distinct `Flt` and the codec keeps the one it read.
     Row {
         expr: r##"canon("f = inf")"##,
         expected: "f = inf\n",
@@ -55,7 +55,7 @@ const SCALARS: &[Row] = &[
     },
     Row {
         expr: r##"canon("f = -nan")"##,
-        expected: "f = nan\n",
+        expected: "f = -nan\n",
     },
     Row {
         expr: r##"canon("arr = [1, \"two\", 3.5]")"##,
@@ -251,7 +251,7 @@ const FLOAT_BITS: &[Row] = &[
     },
     Row {
         expr: r##"fbits("f = -nan")"##,
-        expected: "000000000000f87f",
+        expected: "000000000000f8ff",
     },
     Row {
         expr: r##"fbits("f = 1e309")"##,

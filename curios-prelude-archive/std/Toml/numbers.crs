@@ -189,7 +189,9 @@ pub let flt_special: Parse(Toml) =
         Parse/map(
             Parse/take_literal("inf"),
             (_) => Toml/flt(match negative | true => Flt/neg_inf | false => Flt/pos_inf end)),
-        Parse/map(Parse/take_literal("nan"), (_) => Toml/flt(Flt/nan)));
+        Parse/map(
+            Parse/take_literal("nan"),
+            (_) => Toml/flt(match negative | true => Flt/neg(Flt/nan) | false => Flt/nan end)));
 
 let frac_fields(sig0: Nat, count0: Nat) -> Parse({Nat, Nat, Nat, Bool}) =
     let (sig, count, down) = flt_digits(sig0, count0, true)!;

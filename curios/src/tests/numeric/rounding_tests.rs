@@ -243,3 +243,352 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
         assert_eq!(a, e, "case {index}: executed {a:#018x}, model {e:#018x}");
     }
 }
+
+/// A number as an exact rational, `numerator / denominator` with a positive denominator: the flags oracle's value, computed with no rounding anywhere, so what it concludes reads nothing of the code under test.
+#[derive(Clone)]
+struct Exact {
+    numerator: Integer,
+    denominator: Integer,
+}
+
+impl Exact {
+    fn integer(value: Integer) -> Self {
+        Self {
+            numerator: value,
+            denominator: Integer::from(1u32),
+        }
+    }
+
+    fn power_of_two(exponent: i32) -> Self {
+        let power = Integer::from(
+            Natural::one()
+                .shl_within(&Natural::from(exponent.unsigned_abs()), u64::MAX)
+                .expect("a shift that fits"),
+        );
+        match exponent >= 0 {
+            true => Self::integer(power),
+            false => Self {
+                numerator: Integer::from(1u32),
+                denominator: power,
+            },
+        }
+    }
+
+    /// A finite float's value, `None` for an infinity or a NaN.
+    fn of(value: Floating) -> Option<Self> {
+        let bits = value.to_bits();
+        let field = ((bits >> 52) & 0x7ff) as i32;
+        let fraction = bits & 0x000f_ffff_ffff_ffff;
+        let (magnitude, exponent) = match field {
+            0x7ff => return None,
+            0 => (fraction, -1074),
+            _ => (fraction | (1 << 52), field - 1075),
+        };
+        let magnitude = Self::integer(Integer::from(Natural::from(magnitude)));
+        let magnitude = magnitude.mul(&Self::power_of_two(exponent));
+        Some(match bits >> 63 == 1 {
+            true => magnitude.negated(),
+            false => magnitude,
+        })
+    }
+
+    fn negated(&self) -> Self {
+        Self {
+            numerator: -self.numerator.clone(),
+            denominator: self.denominator.clone(),
+        }
+    }
+
+    fn abs(&self) -> Self {
+        Self {
+            numerator: Integer::from(self.numerator.magnitude()),
+            denominator: self.denominator.clone(),
+        }
+    }
+
+    fn add(&self, other: &Self) -> Self {
+        Self {
+            numerator: self.numerator.clone() * other.denominator.clone()
+                + other.numerator.clone() * self.denominator.clone(),
+            denominator: self.denominator.clone() * other.denominator.clone(),
+        }
+    }
+
+    fn mul(&self, other: &Self) -> Self {
+        Self {
+            numerator: self.numerator.clone() * other.numerator.clone(),
+            denominator: self.denominator.clone() * other.denominator.clone(),
+        }
+    }
+
+    /// `self / other`, `other` nonzero.
+    fn div(&self, other: &Self) -> Self {
+        let sign = match other.numerator < Integer::from(0u32) {
+            true => Integer::from(-1i32),
+            false => Integer::from(1u32),
+        };
+        Self {
+            numerator: self.numerator.clone() * other.denominator.clone() * sign,
+            denominator: self.denominator.clone() * Integer::from(other.numerator.magnitude()),
+        }
+    }
+
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.numerator.clone() * other.denominator.clone())
+            .cmp(&(other.numerator.clone() * self.denominator.clone()))
+    }
+
+    fn is_zero(&self) -> bool {
+        self.numerator.is_zero()
+    }
+}
+
+const INVALID: u8 = 16;
+const DIVISION_BY_ZERO: u8 = 8;
+const OVERFLOW: u8 = 4;
+const UNDERFLOW: u8 = 2;
+const INEXACT: u8 = 1;
+
+/// The exceptions rounding the exact value `exact` to `result` in `rounding` raises, by IEEE's definitions read directly. Overflow: the value rounded with an unbounded exponent exceeds the largest finite one — which to nearest is the value reaching the midpoint between it and `2^1024`, toward the infinity of its own sign is exceeding it at all, and otherwise is reaching `2^1024` (§7.4). Inexact: the result's value differs, or it overflowed. Underflow: a nonzero value below `2^-1022` that is also inexact (§7.5).
+fn raised_by_rounding(rounding: Rounding, exact: &Exact, result: Floating) -> u8 {
+    let magnitude = exact.abs();
+    let largest = Exact::of(Floating::from(f64::MAX)).expect("finite");
+    let ceiling = Exact::power_of_two(1024);
+    let midpoint = ceiling.add(&Exact::power_of_two(970).negated());
+    let negative = exact.numerator < Integer::from(0u32);
+    let overflow = match rounding {
+        Rounding::TiesToEven | Rounding::TiesToAway => magnitude.cmp(&midpoint).is_ge(),
+        Rounding::TowardPositive if !negative => magnitude.cmp(&largest).is_gt(),
+        Rounding::TowardNegative if negative => magnitude.cmp(&largest).is_gt(),
+        _ => magnitude.cmp(&ceiling).is_ge(),
+    };
+    let inexact = overflow || Exact::of(result).is_none_or(|value| value.cmp(exact).is_ne());
+    let tiny = !exact.is_zero() && magnitude.cmp(&Exact::power_of_two(-1022)).is_lt();
+
+    u8::from(overflow) * OVERFLOW
+        + u8::from(tiny && inexact) * UNDERFLOW
+        + u8::from(inexact) * INEXACT
+}
+
+fn is_signaling(f: Floating) -> bool {
+    f.is_nan() && f.to_bits() & (1 << 51) == 0
+}
+
+fn is_infinite(f: Floating) -> bool {
+    !f.is_nan() && !f.is_finite()
+}
+
+fn is_zero(f: Floating) -> bool {
+    f.to_bits() << 1 == 0
+}
+
+/// The scalings `scale` is taken over: far below the subnormal floor, a small step each way, and far past the overflow threshold.
+const SCALINGS: [i32; 4] = [-1100, -60, 60, 1100];
+
+/// Every exception `signals` computes, over the operand grid and a signaling NaN, in every direction, against the oracle above. The operands run through the emitted program as the other tables do; the signaling NaN is assembled from bytes with a runtime byte, since scaling one by `1.0` would quiet it.
+#[test]
+fn every_exception_is_raised_as_ieee_defines_it() {
+    let spell = |bits: u64| {
+        let bytes = bits
+            .to_le_bytes()
+            .iter()
+            .map(|byte| format!("0x{byte:02X}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Flt/of_le_bytes(x[{bytes}])")
+    };
+    let operands = OPERANDS.map(spell).join(",\n            ");
+    let scalings = SCALINGS.map(|n| format!("{n:+}")).join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Nat, Int, Flt, Bytes, Byte, List, Io, Bool}};
+        use /std/Flt/{{Rounding, Exceptions, signals}};
+        let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
+        let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
+        let signaling = Flt/of_le_bytes(x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
+        let operands = [..List/map([
+            {operands},
+        ], (v) => v * one), signaling];
+        let scalings: List(Int) = [{scalings}];
+        let flag(set: Bool, weight: Nat) -> Nat = match set | true => weight | false => 0 end;
+        let code(e: Exceptions) -> Byte =
+            Nat/to_byte((flag(e.invalid, 16) + flag(e.division_by_zero, 8) + flag(e.overflow, 4)
+                + flag(e.underflow, 2) + flag(e.inexact, 1)) % 256);
+        let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
+        let direction(r: Rounding) -> List(Exceptions) =
+            let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
+                signals/add(r, a, b),
+                signals/sub(r, a, b),
+                signals/mul(r, a, b),
+                signals/div(r, a, b),
+                ..List/map(addends(a, b), (c) => signals/fma(r, a, b, c)),
+            ]));
+            let unary = List/concat_map(operands, (a) => [
+                signals/sqrt(r, a),
+                signals/to_integral_exact(r, a),
+                ..List/map(scalings, (n) => signals/scale(r, a, n)),
+            ]);
+            [..pairs, ..unary];
+        let results = List/concat_map([
+            Rounding/ties_to_even(),
+            Rounding/ties_to_away(),
+            Rounding/toward_zero(),
+            Rounding/toward_positive(),
+            Rounding/toward_negative(),
+        ], direction);
+        let _ = Io/write(Io/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)])))!;
+        Io/pure(())
+        "#
+    );
+
+    let mut operands = OPERANDS.map(Floating::from_bits).to_vec();
+    operands.push(Floating::from_bits(0x7ff0_0000_0000_0001));
+    let numeric = |rounding: Rounding, exact: Option<Exact>, result: Floating| {
+        exact.map_or(0, |exact| raised_by_rounding(rounding, &exact, result))
+    };
+
+    let mut expected = Vec::new();
+    for rounding in Rounding::ALL {
+        for &a in &operands {
+            for &b in &operands {
+                let (x, y) = (Exact::of(a), Exact::of(b));
+                let nan = a.is_nan() || b.is_nan();
+                let signaling = is_signaling(a) || is_signaling(b);
+
+                // A sum and a difference.
+                for b in [b, -b] {
+                    expected.push(match () {
+                        _ if signaling => INVALID,
+                        _ if nan => 0,
+                        _ if is_infinite(a) || is_infinite(b) => {
+                            u8::from(a.sum(b, rounding).is_nan()) * INVALID
+                        }
+                        _ => numeric(
+                            rounding,
+                            Some(x.clone().unwrap().add(&Exact::of(b).unwrap())),
+                            a.sum(b, rounding),
+                        ),
+                    });
+                }
+                expected.push(match () {
+                    _ if signaling => INVALID,
+                    _ if nan => 0,
+                    _ if (is_infinite(a) && is_zero(b)) || (is_zero(a) && is_infinite(b)) => {
+                        INVALID
+                    }
+                    _ if is_infinite(a) || is_infinite(b) => 0,
+                    _ => numeric(
+                        rounding,
+                        Some(x.clone().unwrap().mul(y.as_ref().unwrap())),
+                        a.product(b, rounding),
+                    ),
+                });
+                expected.push(match () {
+                    _ if signaling => INVALID,
+                    _ if nan => 0,
+                    _ if (is_zero(a) && is_zero(b)) || (is_infinite(a) && is_infinite(b)) => {
+                        INVALID
+                    }
+                    // Only a finite dividend: `∞ / 0` is an exact infinity no finite operand divided into (§7.3).
+                    _ if is_zero(b) && !is_infinite(a) => DIVISION_BY_ZERO,
+                    _ if is_infinite(a) || is_infinite(b) => 0,
+                    _ => numeric(
+                        rounding,
+                        Some(x.clone().unwrap().div(y.as_ref().unwrap())),
+                        a.quotient(b, rounding),
+                    ),
+                });
+                for c in [
+                    Floating::from(0.0),
+                    Floating::from(1.0),
+                    Floating::from(1.0e-300),
+                    -(a * b),
+                ] {
+                    let zero_times_infinity =
+                        (is_infinite(a) && is_zero(b)) || (is_zero(a) && is_infinite(b));
+                    expected.push(match () {
+                        _ if signaling || is_signaling(c) => INVALID,
+                        _ if zero_times_infinity && !c.is_nan() => INVALID,
+                        _ if nan || c.is_nan() => 0,
+                        _ if is_infinite(a) || is_infinite(b) || is_infinite(c) => {
+                            u8::from(a.fma(b, c, rounding).is_nan()) * INVALID
+                        }
+                        _ => numeric(
+                            rounding,
+                            Some(
+                                x.clone()
+                                    .unwrap()
+                                    .mul(y.as_ref().unwrap())
+                                    .add(&Exact::of(c).unwrap()),
+                            ),
+                            a.fma(b, c, rounding),
+                        ),
+                    });
+                }
+            }
+        }
+        for &a in &operands {
+            let x = Exact::of(a);
+            // A square root: invalid below `-0`, and otherwise inexact exactly when the root does not square back; a root is never tiny, and never overflows.
+            expected.push(match () {
+                _ if is_signaling(a) => INVALID,
+                _ if a.is_nan() => 0,
+                _ if a.lt(Floating::from(0.0)) => INVALID,
+                _ if is_zero(a) || is_infinite(a) => 0,
+                _ => {
+                    let root = Exact::of(a.sqrt(rounding)).unwrap();
+                    u8::from(root.mul(&root).cmp(x.as_ref().unwrap()).is_ne()) * INEXACT
+                }
+            });
+            expected.push(match () {
+                _ if is_signaling(a) => INVALID,
+                _ if a.is_nan() => 0,
+                _ => u8::from(a.round_integral(rounding).neq(a)) * INEXACT,
+            });
+            for n in SCALINGS {
+                expected.push(match () {
+                    _ if is_signaling(a) => INVALID,
+                    _ if a.is_nan() || is_infinite(a) || is_zero(a) => 0,
+                    _ => {
+                        let exact = x.clone().unwrap().mul(&Exact::power_of_two(n));
+                        let bits = a.to_bits();
+                        let field = ((bits >> 52) & 0x7ff) as i32;
+                        let fraction = bits & 0x000f_ffff_ffff_ffff;
+                        let (magnitude, exponent) = match field {
+                            0 => (fraction, -1074),
+                            _ => (fraction | (1 << 52), field - 1075),
+                        };
+                        let result = Floating::of_dyadic(
+                            bits >> 63 == 1,
+                            &Natural::from(magnitude),
+                            exponent + n,
+                            rounding,
+                        );
+                        raised_by_rounding(rounding, &exact, result)
+                    }
+                });
+            }
+        }
+    }
+
+    let actual = run(&source);
+    assert_eq!(actual.len(), expected.len(), "one result per case");
+    let mismatches = actual
+        .iter()
+        .zip(&expected)
+        .enumerate()
+        .filter(|(_, (a, e))| a != e)
+        .map(|(index, (a, e))| format!("case {index}: raised {a:05b}, IEEE {e:05b}"))
+        .collect::<Vec<_>>();
+    assert!(
+        mismatches.is_empty(),
+        "{} mismatches:\n{}",
+        mismatches.len(),
+        mismatches
+            .iter()
+            .take(40)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

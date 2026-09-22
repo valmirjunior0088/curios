@@ -1,0 +1,40 @@
+use /std/{Spell, Hash, Show};
+use /std/ops/{Eql};
+
+--- Which of IEEE 754's ten classes a float falls in (§5.7.2): the kind of NaN, and for everything else its sign and whether it is an infinity, normal, subnormal or zero.
+pub induct Class: pub Type
+| signaling_nan()
+| quiet_nan()
+| negative_infinity()
+| negative_normal()
+| negative_subnormal()
+| negative_zero()
+| positive_zero()
+| positive_subnormal()
+| positive_normal()
+| positive_infinity()
+end
+
+pub use Class/*;
+
+satisfy Eql(Class);
+
+satisfy Spell(Class);
+
+satisfy Hash(Class);
+
+satisfy Show(Class) {
+    show(c) =
+        match c
+        | signaling_nan() => "signaling_nan"
+        | quiet_nan() => "quiet_nan"
+        | negative_infinity() => "negative_infinity"
+        | negative_normal() => "negative_normal"
+        | negative_subnormal() => "negative_subnormal"
+        | negative_zero() => "negative_zero"
+        | positive_zero() => "positive_zero"
+        | positive_subnormal() => "positive_subnormal"
+        | positive_normal() => "positive_normal"
+        | positive_infinity() => "positive_infinity"
+        end,
+}

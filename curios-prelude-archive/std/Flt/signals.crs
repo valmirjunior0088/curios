@@ -1,0 +1,150 @@
+use /std/{Flt, Nat, Int, Bool, Option};
+use /std/Flt/{Rounding, Exceptions, rounded, exact};
+use /std/Flt/exact/{Dyadic};
+
+--- Only the invalid operation.
+let invalid: Exceptions =
+    Exceptions { ..Exceptions/none, invalid = true };
+
+--- Only division by zero.
+let division_by_zero: Exceptions =
+    Exceptions { ..Exceptions/none, division_by_zero = true };
+
+--- The exact value of a finite `f`. Every caller has ruled out the infinities and the NaNs first.
+let value(f: Flt) -> Dyadic =
+    Option/unwrap_or(exact/of_flt(f), Dyadic { negative = false, magnitude = 0, exponent = +0 });
+
+--- What rounding the exact value `e` — or one above it by less than a unit in its last place, when `sticky` — to `result` in `r` raises: overflow when the rounding with an unbounded exponent passes the largest finite value (§7.4), inexact when `result` differs from the exact value, and underflow when the exact value is tiny before rounding and the result is inexact (§7.5).
+let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions =
+    let overflow = exact/overflows(r, e.negative, e.magnitude, e.exponent, sticky);
+    let inexact =
+        sticky || overflow
+        || (match exact/of_flt(result)
+            | some(d) => Bool/not(exact/same_value(d, e))
+            | none() => true
+            end);
+    Exceptions {
+        ..Exceptions/none,
+        overflow = overflow,
+        underflow = exact/tiny(e.magnitude, e.exponent) && inexact,
+        inexact = inexact,
+    };
+
+--- What `rounded/add(r, a, b)` raises: invalid for a signaling NaN or infinities of opposite signs, and otherwise what rounding the exact sum raises.
+pub let add(r: Rounding, a: Flt, b: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
+    | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
+    | Flt/is_infinite(a) || Flt/is_infinite(b) =>
+        match Flt/is_nan(rounded/add(r, a, b)) | true => invalid | false => Exceptions/none end
+    | _ => from_exact(r, exact/add(value(a), value(b)), false, rounded/add(r, a, b))
+    end;
+
+--- What `rounded/sub(r, a, b)` raises, which is what the sum with `b` negated does.
+pub let sub(r: Rounding, a: Flt, b: Flt) -> Exceptions =
+    add(r, a, Flt/neg(b));
+
+--- What `rounded/mul(r, a, b)` raises: invalid for a signaling NaN or a zero times an infinity, nothing for an infinity or a zero otherwise, and what rounding the exact product raises.
+pub let mul(r: Rounding, a: Flt, b: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
+    | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
+    | (Flt/is_infinite(a) && Flt/is_zero(b)) || (Flt/is_zero(a) && Flt/is_infinite(b)) => invalid
+    | Flt/is_infinite(a) || Flt/is_infinite(b) || Flt/is_zero(a) || Flt/is_zero(b) =>
+        Exceptions/none
+    | _ => from_exact(r, exact/mul(value(a), value(b)), false, rounded/mul(r, a, b))
+    end;
+
+--- What `rounded/div(r, a, b)` raises: invalid for a signaling NaN, `0 / 0` or `∞ / ∞`; division by zero for a finite nonzero value over a zero; nothing for the other exact cases; and otherwise what rounding the quotient raises, read from 64 quotient bits and whether a remainder was left.
+pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
+    | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
+    | (Flt/is_zero(a) && Flt/is_zero(b)) || (Flt/is_infinite(a) && Flt/is_infinite(b)) => invalid
+    | Flt/is_zero(b) && Flt/is_finite(a) => division_by_zero
+    | Flt/is_infinite(a) || Flt/is_infinite(b) || Flt/is_zero(a) => Exceptions/none
+    | _ =>
+        let (q, sticky) = exact/quotient(value(a), value(b));
+        from_exact(r, q, sticky, rounded/div(r, a, b))
+    end;
+
+--- What `rounded/fma(r, a, b, c)` raises: invalid for a signaling NaN, for a zero times an infinity unless `c` is a quiet NaN — IEEE leaves that case to the implementation, and here the NaN answers first as it does in the result — and for an infinite product meeting the infinity of the other sign; nothing for the other cases no rounding touches; and otherwise what rounding the exact `a · b + c` raises.
+pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
+    let zero_times_infinity =
+        (Flt/is_infinite(a) && Flt/is_zero(b)) || (Flt/is_zero(a) && Flt/is_infinite(b));
+    choose
+    | Flt/is_signaling(a) || Flt/is_signaling(b) || Flt/is_signaling(c) => invalid
+    | zero_times_infinity && Bool/not(Flt/is_nan(c)) => invalid
+    | Flt/is_nan(a) || Flt/is_nan(b) || Flt/is_nan(c) => Exceptions/none
+    | Flt/is_infinite(a) || Flt/is_infinite(b) || Flt/is_infinite(c) =>
+        match Flt/is_nan(rounded/fma(r, a, b, c)) | true => invalid | false => Exceptions/none end
+    | Flt/is_zero(a) || Flt/is_zero(b) => Exceptions/none
+    | _ =>
+        from_exact(
+            r,
+            exact/add(exact/mul(value(a), value(b)), value(c)),
+            false,
+            rounded/fma(r, a, b, c))
+    end;
+
+--- What `rounded/sqrt(r, a)` raises: invalid for a signaling NaN and for a negative value other than `-0`, and otherwise inexact exactly when the root squared is not `a`. No root of a finite value overflows or is tiny.
+pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(a) => invalid
+    | Flt/is_nan(a) => Exceptions/none
+    | a < +0.0 => invalid
+    | Flt/is_zero(a) || Flt/is_infinite(a) => Exceptions/none
+    | _ =>
+        let root = value(rounded/sqrt(r, a));
+        Exceptions {
+            ..Exceptions/none,
+            inexact = Bool/not(exact/same_value(exact/mul(root, root), value(a))),
+        }
+    end;
+
+--- What `rounded/of_nat(r, n)` raises: what rounding `n` does.
+pub let of_nat(r: Rounding, n: Nat) -> Exceptions =
+    from_exact(
+        r,
+        Dyadic { negative = false, magnitude = n, exponent = +0 },
+        false,
+        rounded/of_nat(r, n));
+
+--- What `rounded/of_int(r, n)` raises: what rounding `n` does.
+pub let of_int(r: Rounding, n: Int) -> Exceptions =
+    from_exact(
+        r,
+        Dyadic { negative = n < +0, magnitude = Int/abs(n), exponent = +0 },
+        false,
+        rounded/of_int(r, n));
+
+--- What `rounded/to_integral(r, a)` raises: invalid for a signaling NaN, and nothing else — IEEE's named roundings to an integral value never signal inexact (§5.3.1).
+pub let to_integral(_r: Rounding, a: Flt) -> Exceptions =
+    match Flt/is_signaling(a) | true => invalid | false => Exceptions/none end;
+
+--- What IEEE's `roundToIntegralExact` in the direction `r` raises (§5.3.1): invalid for a signaling NaN, and inexact when the integral value differs from `a`.
+pub let to_integral_exact(r: Rounding, a: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(a) => invalid
+    | Flt/is_nan(a) => Exceptions/none
+    | _ => Exceptions { ..Exceptions/none, inexact = rounded/to_integral(r, a) != a }
+    end;
+
+--- What `rounded/scale(r, f, n)` raises: invalid for a signaling NaN, nothing for a NaN, an infinity or a zero, and otherwise what rounding the exact `f · 2^n` raises.
+pub let scale(r: Rounding, f: Flt, n: Int) -> Exceptions =
+    choose
+    | Flt/is_signaling(f) => invalid
+    | Flt/is_nan(f) || Flt/is_infinite(f) || Flt/is_zero(f) => Exceptions/none
+    | _ =>
+        let d = value(f);
+        from_exact(r, Dyadic { ..d, exponent = d.exponent + n }, false, rounded/scale(r, f, n))
+    end;
+
+--- What `Flt/remainder(x, y)` raises: invalid for a signaling NaN, an infinite `x` or a zero `y`, and nothing else, since the remainder is exact.
+pub let remainder(x: Flt, y: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
+    | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
+    | Flt/is_infinite(x) || Flt/is_zero(y) => invalid
+    | _ => Exceptions/none
+    end;

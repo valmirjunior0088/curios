@@ -1,0 +1,66 @@
+use /std/{Bool, Spell, Hash};
+use /std/ops/{Eql};
+
+--- Which of IEEE 754's five exceptions an operation raised (§7), as a value: the exceptions an operation raises are computed beside its result rather than set in hidden state, so a type can say what raised them.
+pub struct Exceptions: pub Type {
+    --- An operation with no useful result: `0 / 0`, `∞ - ∞`, the root of a negative, anything given a signaling NaN.
+    invalid: Bool,
+    --- A finite nonzero value over a zero, and the other exact infinities §7.3 names.
+    division_by_zero: Bool,
+    --- The result rounded as if the exponent were unbounded exceeds the largest finite value.
+    overflow: Bool,
+    --- A nonzero result below the least normal value, detected before rounding, that was also inexact.
+    underflow: Bool,
+    --- The result differs from the exact one.
+    inexact: Bool,
+}
+
+--- Nothing raised.
+pub let none: Exceptions =
+    Exceptions {
+        invalid = false,
+        division_by_zero = false,
+        overflow = false,
+        underflow = false,
+        inexact = false,
+    };
+
+--- What either raised.
+pub let union(a: Exceptions, b: Exceptions) -> Exceptions =
+    Exceptions {
+        invalid = a.invalid || b.invalid,
+        division_by_zero = a.division_by_zero || b.division_by_zero,
+        overflow = a.overflow || b.overflow,
+        underflow = a.underflow || b.underflow,
+        inexact = a.inexact || b.inexact,
+    };
+
+--- What both raised.
+pub let intersection(a: Exceptions, b: Exceptions) -> Exceptions =
+    Exceptions {
+        invalid = a.invalid && b.invalid,
+        division_by_zero = a.division_by_zero && b.division_by_zero,
+        overflow = a.overflow && b.overflow,
+        underflow = a.underflow && b.underflow,
+        inexact = a.inexact && b.inexact,
+    };
+
+--- What `a` raised that `b` did not.
+pub let difference(a: Exceptions, b: Exceptions) -> Exceptions =
+    Exceptions {
+        invalid = a.invalid && Bool/not(b.invalid),
+        division_by_zero = a.division_by_zero && Bool/not(b.division_by_zero),
+        overflow = a.overflow && Bool/not(b.overflow),
+        underflow = a.underflow && Bool/not(b.underflow),
+        inexact = a.inexact && Bool/not(b.inexact),
+    };
+
+--- Whether anything was raised.
+pub let any(e: Exceptions) -> Bool =
+    e.invalid || e.division_by_zero || e.overflow || e.underflow || e.inexact;
+
+satisfy Eql(Exceptions);
+
+satisfy Spell(Exceptions);
+
+satisfy Hash(Exceptions);

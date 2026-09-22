@@ -1,6 +1,6 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
-use /std/{Flt, Ordering, List, Str, Option, Eq, Test};
-use /std/Flt/{Rounding, rounded};
+use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool};
+use /std/Flt/{Rounding, rounded, Exceptions, Env, Class};
 
 -- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
 let _renders_in_a_type: Eq(Flt/to_str(0.1), "+0.1") = Eq/refl();
@@ -118,3 +118,120 @@ test of_str_reads_back_what_to_str_writes =
             read("infx"),
             read("2.5e-3")],
         ["+inf", "-inf", "NaN", "+inf", "-inf", "NaN", "none", "+0.0025"]);
+
+-- IEEE's operations past the arithmetic hold in a type: the remainder is to the nearest quotient, `nextUp` steps a negative subnormal onto `-0`, the class tells the zeros apart, and a payload survives setting and reading it.
+let _the_remainder_takes_the_nearest_quotient: Eq(Flt/to_str(Flt/remainder(7.0, 2.0)), "-1") = Eq/refl();
+let _next_up_steps_onto_negative_zero: Eq(Flt/to_str(Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))), "-0") =
+    Eq/refl();
+let _log_b_reads_the_leading_bit: Eq(Flt/try_log_b(8.0), Option/some(+3)) = Eq/refl();
+let _the_class_of_negative_zero: Eq(Flt/class(-0.0), Class/negative_zero()) = Eq/refl();
+let _a_payload_reads_back: Eq(Flt/to_str(Flt/payload(Flt/quiet_nan(5.0))), "+5") = Eq/refl();
+let _a_scaling_rounds_once: Eq(Flt/to_str(Flt/scale(1.0, +1024)), "+inf") = Eq/refl();
+let _an_inexact_quotient_raises_inexact: Eq(Flt/signals/div(Rounding/ties_to_even(), 1.0, 3.0), Exceptions { ..Exceptions/none, inexact = true }) =
+    Eq/refl();
+
+let show(f: Flt) -> Str =
+    Flt/to_str(f);
+
+-- The remainder takes the integer nearest the quotient, ties to even, and keeps the dividend's sign on a zero; it is invalid for an infinite dividend or a zero divisor, and leaves the dividend under an infinite divisor.
+test remainder_is_to_the_nearest_quotient =
+    Test/equal(
+        List/map([
+            Flt/remainder(5.0, 3.0),
+            Flt/remainder(7.0, 2.0),
+            Flt/remainder(5.0, 2.0),
+            Flt/remainder(-4.0, 2.0),
+            Flt/remainder(1.0, Flt/pos_inf),
+            Flt/remainder(Flt/pos_inf, 1.0),
+            Flt/remainder(1.0, 0.0)], show),
+        ["-1", "-1", "+1", "-0", "+1", "NaN", "NaN"]);
+
+-- `nextUp` and `nextDown` at every place IEEE names: the zeros, the negative least subnormal, both infinities and the largest finite value.
+test next_up_and_down_at_the_edges =
+    let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
+    Test/equal(
+        List/map([
+            Flt/next_up(1.0),
+            Flt/next_up(+0.0),
+            Flt/next_up(-0.0),
+            Flt/next_up(Flt/pos_inf),
+            Flt/next_up(Flt/neg_inf),
+            Flt/next_down(+0.0),
+            Flt/next_up(largest)], Flt/to_le_bytes),
+        List/map([1.0000000000000002, least, least, Flt/pos_inf, Flt/neg(largest), Flt/neg(least), Flt/pos_inf], Flt/to_le_bytes));
+
+-- The six §9.6 variants: a NaN gives way to a number only in the `_number` forms, and the magnitude forms compare absolute values, breaking a tie as `min` and `max` do.
+test the_min_and_max_variants =
+    Test/equal(
+        List/map([
+            Flt/minimum_number(Flt/nan, 1.0),
+            Flt/maximum_number(1.0, Flt/nan),
+            Flt/minimum_magnitude(-3.0, 2.0),
+            Flt/maximum_magnitude(-3.0, 2.0),
+            Flt/minimum_magnitude(-2.0, 2.0),
+            Flt/maximum_magnitude_number(Flt/nan, -2.0),
+            Flt/minimum_magnitude(Flt/nan, 1.0)], show),
+        ["+1", "+1", "+2", "-3", "-2", "-2", "NaN"]);
+
+-- The payload operations: a quiet and a signaling NaN built from a payload read it back, an inadmissible payload builds `+0`, and anything but a NaN has payload `-1`.
+test payloads_are_set_and_read =
+    Test/all([
+        Test/equal(List/map([Flt/payload(Flt/quiet_nan(5.0)), Flt/payload(Flt/signaling_nan(1.0)), Flt/payload(1.0), Flt/signaling_nan(0.0), Flt/quiet_nan(0.5)], show), ["+5", "+1", "-1", "+0", "+0"]),
+        Test/assert(Flt/is_signaling(Flt/signaling_nan(1.0))),
+        Test/assert(Bool/not(Flt/is_signaling(Flt/quiet_nan(1.0))))]);
+
+-- Every class IEEE names, and the predicates that answer it.
+test the_ten_classes =
+    Test/equal(
+        List/map([Flt/signaling_nan(1.0), Flt/nan, Flt/neg_inf, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0, Flt/pos_inf], (f) => Spell/spell(Flt/class(f))),
+        ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()", "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()", "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()", "Class/positive_infinity()"]);
+
+-- Conversion to an integer in each direction, and `logB` where it is defined.
+test to_int_rounds_in_its_direction =
+    Test/all([
+        Test/equal(
+            List/map([Rounding/ties_to_even(), Rounding/ties_to_away(), Rounding/toward_zero(), Rounding/toward_positive(), Rounding/toward_negative()],
+                (r) => rounded/to_int(r, -2.5, @Bool/True/qed())),
+            [-2, -3, -2, -2, -3]),
+        Test/equal(Flt/try_log_b(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), Option/some(-1074)),
+        Test/equal(Flt/try_log_b(Flt/pos_inf), Option/none())]);
+
+-- The environment rounds in its direction, restores the one before a block, and accumulates what every operation raised; a `State` over its status sequences in it.
+let rounds_and_records: Env(Flt) =
+    let third = Env/with_rounding(Rounding/toward_positive(), Env/div(1.0, 3.0))!;
+    let after = Env/rounding!;
+    let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), 2.0)!;
+    let status = State/get()!;
+    Env/pure(match after == status.rounding | true => third | false => Flt/nan end);
+
+test the_environment_rounds_and_records =
+    let (third, raised) = Env/run(rounds_and_records);
+    Test/all([
+        Test/equal(show(third), show(rounded/div(Rounding/toward_positive(), 1.0, 3.0))),
+        Test/equal(raised, Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
+
+-- IEEE's comparison table (§5.11): a quiet comparison is invalid only at a signaling NaN, a signaling one at any NaN; the saved flags test as they were.
+test comparisons_signal_as_ieee_tabulates =
+    let raised(m: Env(Bool)) -> Exceptions = Env/run(m).1;
+    let invalid = Exceptions { ..Exceptions/none, invalid = true };
+    Test/equal(
+        [
+            raised(Env/eql(Flt/nan, 1.0)),
+            raised(Env/lt(Flt/nan, 1.0)),
+            raised(Env/lt_quiet(Flt/nan, 1.0)),
+            raised(Env/eql(Flt/signaling_nan(1.0), 1.0)),
+            raised(Env/eql_signaling(Flt/nan, Flt/nan)),
+            raised(Env/lt(1.0, 2.0))],
+        [Exceptions/none, invalid, Exceptions/none, invalid, invalid, Exceptions/none]);
+
+-- A NaN other than the default spells as the bytes that build it, and TOML keeps a NaN's sign both ways.
+test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
+    let negative = Result/unwrap_or(Toml/decode("v = -nan"), Map/empty());
+    Test/all([
+        Test/equal(Spell/spell(Flt/quiet_nan(5.0)), "/std/Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127], @/std/Bool/True/qed())"),
+        Test/equal(Spell/spell(Flt/nan), "/std/Flt/nan"),
+        Test/equal(
+            match Map/get(negative, "v") | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f) | _ => false end,
+            true),
+        Test/equal(Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(Flt/neg(Flt/nan)))), ""), "v = -nan\n")]);

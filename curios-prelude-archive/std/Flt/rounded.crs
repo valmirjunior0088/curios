@@ -1,4 +1,4 @@
-use /std/{Flt, Nat, Int};
+use /std/{Flt, Nat, Int, Bool};
 use /std/Flt/{Rounding, exact};
 
 --- `a + b`, in the direction `r` names.
@@ -94,3 +94,48 @@ pub let to_integral(r: Rounding, a: Flt) -> Flt =
 --- `m · 2^e`, rounded once in the direction `r` names: the rounding every operation in this module performs, stated over the exact value rather than over operands. An exact zero is `+0.0`.
 pub let of_dyadic(r: Rounding, m: Int, e: Int) -> Flt =
     exact/round(r, m < +0, Int/abs(m), e, false);
+
+--- `f · 2^n`, rounded once in the direction `r` names (§5.3.3 `scaleB`). A NaN answers itself quieted; an infinity and a zero are their own scalings.
+pub let scale(r: Rounding, f: Flt, n: Int) -> Flt =
+    choose
+    | Flt/is_nan(f) => f + f
+    | Flt/is_infinite(f) || Flt/is_zero(f) => f
+    | _ =>
+        match exact/of_flt(f)
+        | some(d) => exact/round(r, d.negative, d.magnitude, d.exponent + n, false)
+        | none() => f
+        end
+    end;
+
+--- `f`'s value rounded to an integer in the direction `r` names, as a sign and a magnitude.
+let integral(r: Rounding, f: Flt) -> {Bool, Nat} =
+    match exact/of_flt(f)
+    | none() => (false, 0)
+    | some(d) =>
+        match d.exponent >= +0
+        | true => (d.negative, Nat/shl(d.magnitude, Int/abs(d.exponent)))
+        | false =>
+            let k = Int/abs(d.exponent);
+            let q = Nat/shr(d.magnitude, k);
+            let dropped = d.magnitude - Nat/shl(q, k);
+            let half = Nat/shl(1, k - 1);
+            let up =
+                exact/rounds_up(
+                    r,
+                    d.negative,
+                    dropped > half,
+                    dropped == half,
+                    Bool/not(Nat/is_even(q)),
+                    dropped != 0);
+            (d.negative, match up | true => q + 1 | false => q end)
+        end
+    end;
+
+--- IEEE's `convertToInteger` in the direction `r` names (§5.8): `f` rounded to an `Int`, exactly. The bound excludes an infinity and a NaN.
+pub let to_int(r: Rounding, f: Flt, @_ok: Flt/Finite(f)) -> Int =
+    let (negative, magnitude) = integral(r, f);
+    match negative | true => Int/sub(+0, Nat/to_int(magnitude)) | false => Nat/to_int(magnitude) end;
+
+--- `to_int` for a non-negative `f`, as a `Nat`.
+pub let to_nat(r: Rounding, f: Flt, @_ok: Flt/NonNeg(f)) -> Nat =
+    integral(r, f).1;

@@ -91,7 +91,13 @@ let int_str(n: Int) -> Str =
 
 let flt_str(f: Flt) -> Str =
     choose
-    | Bool/not(Flt/is_finite(f)) => choose | f > +0.0 => "inf" | f < +0.0 => "-inf" | _ => "nan" end
+    | Bool/not(Flt/is_finite(f)) =>
+        choose
+        | f > +0.0 => "inf"
+        | f < +0.0 => "-inf"
+        | Flt/is_sign_minus(f) => "-nan"
+        | _ => "nan"
+        end
     | _ =>
         let raw = Flt/to_str(f);
         let unsigned =
