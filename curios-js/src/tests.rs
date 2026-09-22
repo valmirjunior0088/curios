@@ -50,8 +50,10 @@ fn accessors_are_exported_with_their_shapes() {
         ("list_get", 2, 1),
         ("list_new", 1, 1),
         ("list_set", 3, 0),
-        ("nat_box", 1, 1),
-        ("nat_unbox", 1, 1),
+        ("words_len", 1, 1),
+        ("words_get", 2, 1),
+        ("words_new", 1, 1),
+        ("words_set", 3, 0),
     ] {
         let export = module
             .exports()
@@ -109,23 +111,50 @@ fn bridge_accessors_roundtrip() {
     }
 }
 
-/// A list built through the bridge holds what was set in it: an i31-boxed `Nat` comes back through the unbox, and the length is what `list_new` was asked for — the shape `handle_poll` builds its `revents` list in.
+/// A list built through the bridge holds what was set in it: a byte string comes back as the element it went in as, and the length is what `list_new` was asked for — the shape a `List(Bytes)` result is built in.
 #[test]
-fn list_accessors_roundtrip_an_i31_element() {
+fn list_accessors_roundtrip_an_element() {
     let mut bridge = bridge();
 
     let list = call(&mut bridge, "list_new", &[GuestValue::from_i32(2)]);
     assert_eq!(i32_of(call(&mut bridge, "list_len", &[list])), 2);
 
-    let boxed = call(&mut bridge, "nat_box", &[GuestValue::from_i32(5)]);
+    let bytes = call(&mut bridge, "bytes_new", &[GuestValue::from_i32(3)]);
     call_void(
         &mut bridge,
         "list_set",
-        &[list, GuestValue::from_i32(1), boxed],
+        &[list, GuestValue::from_i32(1), bytes],
     );
 
     let element = call(&mut bridge, "list_get", &[list, GuestValue::from_i32(1)]);
-    assert_eq!(i32_of(call(&mut bridge, "nat_unbox", &[element])), 5);
+    assert_eq!(i32_of(call(&mut bridge, "bytes_len", &[element])), 3);
+}
+
+/// A list of scalars built through the bridge holds the numbers set in it, whole: a word past the i31 and a negative one come back as they went in — the shape a `List(Nat)` or `List(Int)` result is built in, which the guest boxes after the call.
+#[test]
+fn words_accessors_roundtrip_a_word() {
+    let mut bridge = bridge();
+
+    let words = call(&mut bridge, "words_new", &[GuestValue::from_i32(2)]);
+    assert_eq!(i32_of(call(&mut bridge, "words_len", &[words])), 2);
+
+    for (index, word) in [(0, 1 << 30), (1, -7)] {
+        call_void(
+            &mut bridge,
+            "words_set",
+            &[
+                words,
+                GuestValue::from_i32(index),
+                GuestValue::from_i32(word),
+            ],
+        );
+        let read = call(
+            &mut bridge,
+            "words_get",
+            &[words, GuestValue::from_i32(index)],
+        );
+        assert_eq!(i32_of(read), word);
+    }
 }
 
 /// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, and the two `sys` imports that are not rows, `exit` and `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.

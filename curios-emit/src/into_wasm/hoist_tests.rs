@@ -33,7 +33,7 @@ fn constant_bin_literals_hoist_into_a_start_initialized_global() {
 #[test]
 fn big_scalars_and_their_aggregates_hoist_into_start_initialized_globals() {
     let wat = wat(&big_tuple());
-    assert_contains(&wat, "array.new_data $limbs $const/");
+    assert_contains(&wat, "array.new_data $words $const/");
     assert_contains(&wat, "struct.new $big");
     assert_contains(&wat, "global.set $const/");
     assert_eq!(refusals_besides_the_exit(&wat), 0);

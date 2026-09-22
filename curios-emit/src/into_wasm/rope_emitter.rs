@@ -8,15 +8,17 @@
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
 //! - `$list/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
 //!
-//! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
+//! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back. A list of scalars crosses as `$words`, one word per element: `$list/<leaf>/to_words` narrows each element on the way out and `$list/<leaf>/of_words` boxes each on the way back, so a host never builds or reads a guest box.
 
 mod force_walk;
 use force_walk::*;
 
 use {
     super::{
-        ImmediateLayout, RopeData, Table, cast, concrete_val, field_get, field_set, get, null, set,
+        BigHelper, ImmediateLayout, RopeData, Table, block, br, br_if, call, cast, concrete_val,
+        either, field_get, field_set, get, i32_const, null, repeat, set,
     },
+    curios_abi::{WireLeaf, WireType},
     curios_utilities::Grain,
 };
 
@@ -1943,6 +1945,151 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$list/<leaf>/to_words (ref $rope/list) -> (ref $words)`: a list of scalars as a host reads it, one word per element. The list is forced to its elements and each is narrowed as a host argument of its type is — a `Nat` or `Int` read off its i31, or handed to its wire helper, which refuses one past the wire — and a `Bool` is its word.
+    pub(crate) fn emit_words_force_func(
+        &mut self,
+        leaf: WireLeaf,
+        func_name: curios_wasm::FuncName,
+    ) {
+        let rope = self.table.list_rope();
+        let words = self.table.big().words;
+        let r = curios_wasm::LocalName::from("r");
+        let elems = curios_wasm::LocalName::from("elems");
+        let out = curios_wasm::LocalName::from("out");
+        let i = curios_wasm::LocalName::from("i");
+        let x = curios_wasm::LocalName::from("x");
+        let i31 = || curios_wasm::Instr::RefCast {
+            ref_type: Table::int_type(false),
+        };
+
+        let narrow = match leaf {
+            WireLeaf::Bool => vec![get(&x), i31(), curios_wasm::Instr::I31GetS],
+            WireLeaf::Nat | WireLeaf::Int => {
+                let wire = self.table.big_func(match leaf {
+                    WireLeaf::Nat => BigHelper::NatWire,
+                    _ => BigHelper::IntWire,
+                });
+                vec![
+                    get(&x),
+                    curios_wasm::Instr::RefTest {
+                        ref_type: Table::int_type(false),
+                    },
+                    either(
+                        curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                        vec![get(&x), i31(), curios_wasm::Instr::I31GetS],
+                        vec![get(&x), call(&wire)],
+                    ),
+                ]
+            }
+            WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
+                unreachable!("a list of `{leaf:?}` crosses as its payloads, never as words")
+            }
+        };
+
+        let body = [
+            get(&out),
+            get(&i),
+            get(&elems),
+            get(&i),
+            curios_wasm::Instr::ArrayGet {
+                type_name: rope.payload.clone(),
+            },
+            set(&x),
+        ]
+        .into_iter()
+        .chain(narrow)
+        .chain([curios_wasm::Instr::ArraySet {
+            type_name: words.clone(),
+        }])
+        .collect();
+
+        let instrs = [
+            get(&r),
+            call(&self.table.list_force_func()),
+            set(&elems),
+            get(&elems),
+            curios_wasm::Instr::ArrayLen,
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: words.clone(),
+            },
+            set(&out),
+        ]
+        .into_iter()
+        .chain(each(&i, &elems, body))
+        .chain([get(&out), curios_wasm::Instr::RefAsNonNull])
+        .collect();
+
+        self.add_helper(
+            func_name,
+            vec![(r, concrete_val(rope.base.clone(), false))],
+            concrete_val(words.clone(), false),
+            vec![
+                (elems, concrete_val(rope.payload.clone(), true)),
+                (out, concrete_val(words, true)),
+                (i, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
+                (x, Table::top_type(true)),
+            ],
+            instrs,
+        );
+    }
+
+    /// `$list/<leaf>/of_words (ref $words) -> (ref $rope/list)`: a host's list of scalars back as a list, each word boxed as a scalar result is (`Table::box_word_instrs`) into a fresh payload the list's own embed places in a leaf.
+    pub(crate) fn emit_words_embed_func(
+        &mut self,
+        leaf: WireLeaf,
+        func_name: curios_wasm::FuncName,
+    ) {
+        let rope = self.table.list_rope();
+        let words = self.table.big().words;
+        let w = curios_wasm::LocalName::from("w");
+        let elems = curios_wasm::LocalName::from("elems");
+        let i = curios_wasm::LocalName::from("i");
+
+        let body = [
+            get(&elems),
+            get(&i),
+            get(&w),
+            get(&i),
+            curios_wasm::Instr::ArrayGet {
+                type_name: words.clone(),
+            },
+        ]
+        .into_iter()
+        .chain(self.table.box_word_instrs(&WireType::from(leaf)))
+        .chain([curios_wasm::Instr::ArraySet {
+            type_name: rope.payload.clone(),
+        }])
+        .collect();
+
+        let instrs = [
+            get(&w),
+            curios_wasm::Instr::ArrayLen,
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: rope.payload.clone(),
+            },
+            set(&elems),
+        ]
+        .into_iter()
+        .chain(each(&i, &w, body))
+        .chain([
+            get(&elems),
+            curios_wasm::Instr::RefAsNonNull,
+            call(&self.table.list_embed_func()),
+        ])
+        .collect();
+
+        self.add_helper(
+            func_name,
+            vec![(w, concrete_val(words, false))],
+            concrete_val(rope.base.clone(), false),
+            vec![
+                (elems, concrete_val(rope.payload.clone(), true)),
+                (i, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
+            ],
+            instrs,
+        );
+    }
+
     /// `$bits/embed (ref $bytes) -> (ref $rope/bin)`: one fresh leaf sealed at eight times the payload's byte count.
     ///
     /// **The length is the payload's, scaled — not a bit count the host sent**, because the wire has no slot for one: a `Bits` row means "read these bytes as 8n bits", so a host with a 20-bit datum sends its own length in band. One `struct.new`, the same the byte grain pays; only the scale of the length field differs.
@@ -2084,4 +2231,35 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             instrs,
         );
     }
+}
+
+/// Run `body` once for every index `i` below the length of the array in `over`.
+fn each(
+    i: &curios_wasm::LocalName,
+    over: &curios_wasm::LocalName,
+    body: Vec<curios_wasm::Instr>,
+) -> Vec<curios_wasm::Instr> {
+    let step = [
+        get(i),
+        get(over),
+        curios_wasm::Instr::ArrayLen,
+        curios_wasm::Instr::I32GeU,
+        br_if("done"),
+    ]
+    .into_iter()
+    .chain(body)
+    .chain([
+        get(i),
+        i32_const(1),
+        curios_wasm::Instr::I32Add,
+        set(i),
+        br("each"),
+    ])
+    .collect();
+
+    vec![
+        i32_const(0),
+        set(i),
+        block("done", vec![repeat("each", step)]),
+    ]
 }

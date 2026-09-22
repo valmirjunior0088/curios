@@ -1,6 +1,6 @@
 //! The big-number helper functions: the boxed half of every `Nat` and `Int` operation, which the inline fast path in `code_emitter` calls whenever an operand is not an i31 or a result leaves it.
 //!
-//! A `Nat` and an `Int` share one runtime form, which is a reference: an i31 read signed when the value lies in `[-2³⁰, 2³⁰)`, and otherwise a `$big` — a sign and a trimmed little-endian `$limbs` array of 32-bit limbs — which is never in that range, so every value has one spelling. The helpers are the `big/` library over that form, serving both carriers, with the few whose meaning is one carrier's named after it: `nat/sub` is monus, and `nat/wire` and `int/wire` narrow to the host wire each carrier crosses. Each helper producing a value answers through `big/norm`, which is what keeps the spelling unique. The algorithms are the schoolbook ones over 32-bit limbs with 64-bit intermediates — division is Knuth's algorithm D as Hacker's Delight's `divmnu` spells it — and every one is a loop rather than a recursion, so an operand's size never reaches the wasm stack.
+//! A `Nat` and an `Int` share one runtime form, which is a reference: an i31 read signed when the value lies in `[-2³⁰, 2³⁰)`, and otherwise a `$big` — a sign and a trimmed little-endian `$words` array of 32-bit limbs — which is never in that range, so every value has one spelling. The helpers are the `big/` library over that form, serving both carriers, with the few whose meaning is one carrier's named after it: `nat/sub` is monus, and `nat/wire` and `int/wire` narrow to the host wire each carrier crosses. Each helper producing a value answers through `big/norm`, which is what keeps the spelling unique. The algorithms are the schoolbook ones over 32-bit limbs with 64-bit intermediates — division is Knuth's algorithm D as Hacker's Delight's `divmnu` spells it — and every one is a loop rather than a recursion, so an operand's size never reaches the wasm stack.
 //!
 //! The helpers work in two layers. The `big/` layer takes and gives values in the runtime form, reading the sign; it widens an i31 operand to the boxed shape first, which costs an allocation the slow path can afford. The `mag/` layer, in [`magnitude`], takes and gives bare limb arrays and knows nothing of signs.
 //!
@@ -72,27 +72,27 @@ pub(crate) enum BigHelper {
     NatWire,
     /// `(anyref) -> i32`: a boxed `Int` narrowed to the host wire, refusing one outside `[-2³¹, 2³¹)`.
     IntWire,
-    /// `(ref null $big, i32 width) -> (ref $limbs)`: the two's complement of the value in `width` limbs.
+    /// `(ref null $big, i32 width) -> (ref $words)`: the two's complement of the value in `width` limbs.
     Twos,
     /// `(i64) -> (ref any)`: a machine integer in the runtime form.
     OfI64,
     /// `(anyref) -> (ref $big)`: a value in the boxed shape, an i31 widened into a fresh one.
     Widen,
-    /// `(i32 sign, ref null $limbs) -> (ref any)`: the canonical value with this sign and magnitude — an i31 when it fits, a trimmed boxed magnitude otherwise, and zero never negative.
+    /// `(i32 sign, ref null $words) -> (ref any)`: the canonical value with this sign and magnitude — an i31 when it fits, a trimmed boxed magnitude otherwise, and zero never negative.
     Norm,
-    /// `(ref null $limbs, ref null $limbs, i32 want_rem) -> (ref $limbs)`: the quotient of two magnitudes, or their remainder.
+    /// `(ref null $words, ref null $words, i32 want_rem) -> (ref $words)`: the quotient of two magnitudes, or their remainder.
     MagDivRem,
-    /// `(ref null $limbs, ref null $limbs) -> (ref $limbs)`: the product of two magnitudes.
+    /// `(ref null $words, ref null $words) -> (ref $words)`: the product of two magnitudes.
     MagMul,
-    /// `(ref null $limbs, ref null $limbs) -> (ref $limbs)`: the sum of two magnitudes.
+    /// `(ref null $words, ref null $words) -> (ref $words)`: the sum of two magnitudes.
     MagAdd,
-    /// `(ref null $limbs, ref null $limbs) -> (ref $limbs)`: the difference of two magnitudes, the first the larger.
+    /// `(ref null $words, ref null $words) -> (ref $words)`: the difference of two magnitudes, the first the larger.
     MagSub,
-    /// `(ref null $limbs, i32 count) -> (ref $limbs)`: a magnitude times `2^count`.
+    /// `(ref null $words, i32 count) -> (ref $words)`: a magnitude times `2^count`.
     MagShl,
-    /// `(ref null $limbs) -> (ref $limbs)`: the array negated in place as a two's-complement number, and handed back.
+    /// `(ref null $words) -> (ref $words)`: the array negated in place as a two's-complement number, and handed back.
     MagNegate,
-    /// `(ref null $limbs, ref null $limbs) -> i32`: the order of two trimmed magnitudes, as [`BigHelper::Cmp`] answers it.
+    /// `(ref null $words, ref null $words) -> i32`: the order of two trimmed magnitudes, as [`BigHelper::Cmp`] answers it.
     MagCmp,
 }
 
@@ -361,13 +361,13 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     }
 
     /// A limb array, admitting null as every local and parameter holding one does.
-    fn limbs_type(&self) -> curios_wasm::ValType {
-        concrete_val(self.big.limbs.clone(), true)
+    fn words_type(&self) -> curios_wasm::ValType {
+        concrete_val(self.big.words.clone(), true)
     }
 
     /// A limb array that is there, as every helper hands one back.
-    fn limbs_result(&self) -> curios_wasm::ValType {
-        concrete_val(self.big.limbs.clone(), false)
+    fn words_result(&self) -> curios_wasm::ValType {
+        concrete_val(self.big.words.clone(), false)
     }
 
     fn big_type(&self) -> curios_wasm::ValType {
@@ -383,7 +383,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             get(limbs),
             index,
             curios_wasm::Instr::ArrayGet {
-                type_name: self.big.limbs.clone(),
+                type_name: self.big.words.clone(),
             },
         ]
     }
@@ -408,7 +408,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             index,
             value,
             curios_wasm::Instr::ArraySet {
-                type_name: self.big.limbs.clone(),
+                type_name: self.big.words.clone(),
             },
         ]
     }
@@ -418,7 +418,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         wasm![
             length,
             curios_wasm::Instr::ArrayNewDefault {
-                type_name: self.big.limbs.clone(),
+                type_name: self.big.words.clone(),
             },
         ]
     }
@@ -426,7 +426,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     /// A fixed limb array of the values already on the stack.
     fn fixed_limbs(&self, length: u32) -> curios_wasm::Instr {
         curios_wasm::Instr::ArrayNewFixed {
-            type_name: self.big.limbs.clone(),
+            type_name: self.big.words.clone(),
             length,
         }
     }
@@ -509,8 +509,8 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
         let sa = scope.local("sa", i32_type());
         let sb = scope.local("sb", i32_type());
-        let ma = scope.local("ma", self.limbs_type());
-        let mb = scope.local("mb", self.limbs_type());
+        let ma = scope.local("ma", self.words_type());
+        let mb = scope.local("mb", self.words_type());
         let order = scope.local("order", i32_type());
         let norm = self.helper(BigHelper::Norm);
 
@@ -637,9 +637,9 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let la = scope.local("la", i32_type());
         let lb = scope.local("lb", i32_type());
         let width = scope.local("width", i32_type());
-        let ta = scope.local("ta", self.limbs_type());
-        let tb = scope.local("tb", self.limbs_type());
-        let r = scope.local("r", self.limbs_type());
+        let ta = scope.local("ta", self.words_type());
+        let tb = scope.local("tb", self.words_type());
+        let r = scope.local("r", self.words_type());
         let i = scope.local("i", i32_type());
         let p = scope.local("p", i32_type());
         let q = scope.local("q", i32_type());
@@ -730,8 +730,8 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let mut scope = Scope::default();
         let big = scope.param("big", self.big_type());
         let width = scope.param("width", i32_type());
-        let t = scope.local("t", self.limbs_type());
-        let m = scope.local("m", self.limbs_type());
+        let t = scope.local("t", self.words_type());
+        let m = scope.local("m", self.words_type());
         let instrs = wasm![
             self.new_limbs(vec![get(&width)]),
             set(&t),
@@ -743,8 +743,8 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             i32_const(0),
             len(&m),
             curios_wasm::Instr::ArrayCopy {
-                target_name: self.big.limbs.clone(),
-                source_name: self.big.limbs.clone(),
+                target_name: self.big.words.clone(),
+                source_name: self.big.words.clone(),
             },
             self.sign(&big),
             when(vec![
@@ -756,7 +756,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::Twos, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::Twos, scope, self.words_result(), instrs);
     }
 
     /// `big/shl`: the magnitude shifted, the sign kept — multiplying by a power of two moves no sign. Zero answers itself before a count could size an allocation.
@@ -765,7 +765,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let x = scope.param("x", Table::top_type(true));
         let count = scope.param("count", i32_type());
         let a = scope.local("a", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let instrs = wasm![
             get(&x),
             self.helper(BigHelper::Widen),
@@ -789,13 +789,13 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let x = scope.param("x", Table::top_type(true));
         let count = scope.param("count", i32_type());
         let a = scope.local("a", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let sa = scope.local("sa", i32_type());
         let la = scope.local("la", i32_type());
         let skip = scope.local("skip", i32_type());
         let bits = scope.local("bits", i32_type());
         let width = scope.local("width", i32_type());
-        let r = scope.local("r", self.limbs_type());
+        let r = scope.local("r", self.words_type());
         let i = scope.local("i", i32_type());
         let dropped = scope.local("dropped", i32_type());
 
@@ -909,7 +909,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
         let b = scope.local("b", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let la = scope.local("la", i32_type());
         let width = scope.local("width", i32_type());
         let shift = scope.local("shift", i32_type());
@@ -1150,7 +1150,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
         let b = scope.local("b", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let instrs = wasm![
             get(&x),
             cast(&self.big.big),
@@ -1178,7 +1178,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
         let b = scope.local("b", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let instrs = wasm![
             get(&x),
             cast(&self.big.big),
@@ -1211,7 +1211,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
         let b = scope.local("b", self.big_type());
-        let m = scope.local("m", self.limbs_type());
+        let m = scope.local("m", self.words_type());
         let v = scope.local("v", i32_type());
         let instrs = wasm![
             get(&x),
@@ -1299,7 +1299,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     get(&high),
                     curios_wasm::Instr::I32Eqz,
                     either(
-                        self.limbs_result(),
+                        self.words_result(),
                         vec![get(&m), curios_wasm::Instr::I32WrapI64, self.fixed_limbs(1)],
                         vec![
                             get(&m),
@@ -1366,10 +1366,10 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     fn emit_big_norm(&mut self) {
         let mut scope = Scope::default();
         let sign = scope.param("sign", i32_type());
-        let a = scope.param("a", self.limbs_type());
+        let a = scope.param("a", self.words_type());
         let n = scope.local("n", i32_type());
         let m = scope.local("m", i32_type());
-        let t = scope.local("t", self.limbs_type());
+        let t = scope.local("t", self.words_type());
         let bound = i32_const(1 << (curios_cont::ENVELOPE_BITS - 1));
         let instrs = wasm![
             len(&a),
@@ -1438,8 +1438,8 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                 i32_const(0),
                 get(&n),
                 curios_wasm::Instr::ArrayCopy {
-                    target_name: self.big.limbs.clone(),
-                    source_name: self.big.limbs.clone(),
+                    target_name: self.big.words.clone(),
+                    source_name: self.big.words.clone(),
                 },
                 get(&t),
                 set(&a),

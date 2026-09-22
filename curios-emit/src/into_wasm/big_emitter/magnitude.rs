@@ -1,4 +1,4 @@
-//! The `mag/` layer: arithmetic over bare magnitudes — `$limbs` arrays, least significant limb first — with no sign anywhere. Each helper allocates the array it answers and never writes one it was handed, which is what lets a literal's array be shared by every use of it.
+//! The `mag/` layer: arithmetic over bare magnitudes — `$words` arrays, least significant limb first — with no sign anywhere. Each helper allocates the array it answers and never writes one it was handed, which is what lets a literal's array be shared by every use of it.
 //!
 //! Inputs are trimmed wherever an order is read (`mag/cmp`, and `mag/divrem` through it) and may carry zero top limbs elsewhere; outputs are sized for the worst case and left untrimmed, since the `big/norm` every result passes through trims once.
 
@@ -13,8 +13,8 @@ const BASE: i64 = 1 << 32;
 impl BigEmitter<'_, '_> {
     fn magnitude_pair(&self) -> (Scope, curios_wasm::LocalName, curios_wasm::LocalName) {
         let mut scope = Scope::default();
-        let a = scope.param("a", self.limbs_type());
-        let b = scope.param("b", self.limbs_type());
+        let a = scope.param("a", self.words_type());
+        let b = scope.param("b", self.words_type());
 
         (scope, a, b)
     }
@@ -69,11 +69,11 @@ impl BigEmitter<'_, '_> {
     /// `mag/add`: one pass over the longer operand, carrying into a limb past it.
     pub(super) fn emit_mag_add(&mut self) {
         let (mut scope, a, b) = self.magnitude_pair();
-        let t = scope.local("t", self.limbs_type());
+        let t = scope.local("t", self.words_type());
         let la = scope.local("la", i32_type());
         let lb = scope.local("lb", i32_type());
         let i = scope.local("i", i32_type());
-        let r = scope.local("r", self.limbs_type());
+        let r = scope.local("r", self.words_type());
         let carry = scope.local("carry", i64_type());
         let sum = scope.local("sum", i64_type());
         let instrs = wasm![
@@ -129,7 +129,7 @@ impl BigEmitter<'_, '_> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::MagAdd, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagAdd, scope, self.words_result(), instrs);
     }
 
     /// `mag/sub`: one pass over the larger operand, borrowing out of the next limb whenever a difference goes negative.
@@ -138,7 +138,7 @@ impl BigEmitter<'_, '_> {
         let la = scope.local("la", i32_type());
         let lb = scope.local("lb", i32_type());
         let i = scope.local("i", i32_type());
-        let r = scope.local("r", self.limbs_type());
+        let r = scope.local("r", self.words_type());
         let borrow = scope.local("borrow", i64_type());
         let difference = scope.local("difference", i64_type());
         let instrs = wasm![
@@ -185,7 +185,7 @@ impl BigEmitter<'_, '_> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::MagSub, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagSub, scope, self.words_result(), instrs);
     }
 
     /// `mag/mul`: the schoolbook product, one row per limb of the first operand. A limb product plus a limb plus a carry is at most `2⁶⁴ - 1`, so a row never overflows its 64-bit accumulator.
@@ -195,7 +195,7 @@ impl BigEmitter<'_, '_> {
         let lb = scope.local("lb", i32_type());
         let i = scope.local("i", i32_type());
         let j = scope.local("j", i32_type());
-        let r = scope.local("r", self.limbs_type());
+        let r = scope.local("r", self.words_type());
         let carry = scope.local("carry", i64_type());
         let factor = scope.local("factor", i64_type());
         let t = scope.local("t", i64_type());
@@ -249,19 +249,19 @@ impl BigEmitter<'_, '_> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::MagMul, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagMul, scope, self.words_result(), instrs);
     }
 
     /// `mag/shl`: whole limbs of the count become an offset and the rest a shift within a limb, each limb spilling its high bits into the next.
     pub(super) fn emit_mag_shl(&mut self) {
         let mut scope = Scope::default();
-        let a = scope.param("a", self.limbs_type());
+        let a = scope.param("a", self.words_type());
         let count = scope.param("count", i32_type());
         let la = scope.local("la", i32_type());
         let skip = scope.local("skip", i32_type());
         let bits = scope.local("bits", i32_type());
         let i = scope.local("i", i32_type());
-        let r = scope.local("r", self.limbs_type());
+        let r = scope.local("r", self.words_type());
         let v = scope.local("v", i64_type());
         let at = |offset: i32| {
             vec![
@@ -329,13 +329,13 @@ impl BigEmitter<'_, '_> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::MagShl, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagShl, scope, self.words_result(), instrs);
     }
 
     /// `mag/negate`: invert every limb and add one, in place — the two's-complement negation `big/bitwise` reads its operands and its result through.
     pub(super) fn emit_mag_negate(&mut self) {
         let mut scope = Scope::default();
-        let a = scope.param("a", self.limbs_type());
+        let a = scope.param("a", self.words_type());
         let i = scope.local("i", i32_type());
         let carry = scope.local("carry", i64_type());
         let t = scope.local("t", i64_type());
@@ -371,7 +371,7 @@ impl BigEmitter<'_, '_> {
             curios_wasm::Instr::RefAsNonNull,
         ];
 
-        self.add_helper(BigHelper::MagNegate, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagNegate, scope, self.words_result(), instrs);
     }
 
     /// `mag/divrem`: the quotient of two magnitudes, or with `want_rem` their remainder.
@@ -385,10 +385,10 @@ impl BigEmitter<'_, '_> {
         let s = scope.local("s", i32_type());
         let i = scope.local("i", i32_type());
         let j = scope.local("j", i32_type());
-        let q = scope.local("q", self.limbs_type());
-        let r = scope.local("r", self.limbs_type());
-        let vn = scope.local("vn", self.limbs_type());
-        let un = scope.local("un", self.limbs_type());
+        let q = scope.local("q", self.words_type());
+        let r = scope.local("r", self.words_type());
+        let vn = scope.local("vn", self.words_type());
+        let un = scope.local("un", self.words_type());
         let d = scope.local("d", i64_type());
         let t = scope.local("t", i64_type());
         let num = scope.local("num", i64_type());
@@ -511,7 +511,7 @@ impl BigEmitter<'_, '_> {
             ),
             get(&want),
             either(
-                self.limbs_result(),
+                self.words_result(),
                 vec![get(&t), curios_wasm::Instr::I32WrapI64, self.fixed_limbs(1)],
                 vec![get(&q), curios_wasm::Instr::RefAsNonNull],
             ),
@@ -742,7 +742,7 @@ impl BigEmitter<'_, '_> {
                 vec![
                     get(&want),
                     either(
-                        self.limbs_result(),
+                        self.words_result(),
                         vec![get(&a), curios_wasm::Instr::RefAsNonNull],
                         self.new_limbs(vec![i32_const(0)]),
                     ),
@@ -799,7 +799,7 @@ impl BigEmitter<'_, '_> {
             unnormalize,
         ];
 
-        self.add_helper(BigHelper::MagDivRem, scope, self.limbs_result(), instrs);
+        self.add_helper(BigHelper::MagDivRem, scope, self.words_result(), instrs);
     }
 }
 

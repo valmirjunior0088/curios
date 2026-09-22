@@ -3,7 +3,7 @@ use {
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Table, call, get, set,
+        LocalData, Table, get, set,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_utilities::{Entropy, Grain},
@@ -767,19 +767,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// Box one scalar host result: a `Nat` read unsigned and an `Int` signed, each widened and handed to `big/of_i64`, which answers the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cont` offers that parameter at its carrier.
-    fn box_result_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
-        let widen = match wire_type {
-            WireType::Nat => curios_wasm::Instr::I64ExtendI32U,
-            WireType::Int => curios_wasm::Instr::I64ExtendI32S,
-            WireType::Bool => return vec![curios_wasm::Instr::RefI31],
-            _ => return vec![],
-        };
-
-        vec![widen, call(&self.table().big_func(BigHelper::OfI64))]
-    }
-
-    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`.
+    /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$words` for a list of scalars, each element narrowed as a lone argument is.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
@@ -789,14 +777,16 @@ impl<'a, 'b> Context<'a, 'b> {
             WireType::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
                 WireLeaf::Bits => self.table().list_bits_force_func(),
-                WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_force_func(),
+                leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
+                    self.table().words_force_func(*leaf)
+                }
             },
         };
 
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
+    /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`, and out of `$words` for a list of scalars, each word boxed as a lone result is. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
     fn wire_embed_instrs(&self, reference: WireReference) -> Vec<curios_wasm::Instr> {
         let embed = match reference {
             WireReference::Bytes | WireReference::Handle => {
@@ -822,7 +812,9 @@ impl<'a, 'b> Context<'a, 'b> {
             WireReference::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Bits => self.table().list_bits_embed_func(),
-                WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_embed_func(),
+                leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
+                    self.table().words_embed_func(leaf)
+                }
             },
         };
 
@@ -888,7 +880,7 @@ impl<'a, 'b> Context<'a, 'b> {
                                 output.push(curios_wasm::Instr::RefAsNonNull);
                                 output.extend(self.wire_embed_instrs(reference));
                             }
-                            _ => output.extend(self.box_result_instrs(wire_type)),
+                            _ => output.extend(self.table().box_word_instrs(wire_type)),
                         }
                     }
                 } else if let Some(reference) = reference {

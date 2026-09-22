@@ -98,7 +98,7 @@ pub(crate) fn i8_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8))
 }
 
-/// The GC array type the uniform `List` shape allocates under — a `(mut (ref null any))` element array, shared by every `List` lowering regardless of what its elements themselves are (`Vec<Poll>`'s i31s, `Vec<Vec<u8>>`'s `Bytes`), and by `engine.rs`'s `host_func_type` for the same reason.
+/// The GC array type a list of references allocates under — a `(mut (ref null any))` element array, shared by `Vec<Vec<u8>>`'s `Bytes` and `Vec<Handle>`'s tokens, and by `engine.rs`'s `host_func_type` for the same reason. A list of scalars crosses as [`words_array_type`] instead.
 pub(crate) fn anyref_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(
         engine,
@@ -107,6 +107,64 @@ pub(crate) fn anyref_array_type(engine: &Engine) -> ArrayType {
             StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
         ),
     )
+}
+
+/// The GC array type a list of scalars crosses as, `(mut i32)` — one word per element, the guest's `$words` — and `engine.rs`'s `host_func_type` describes the same shape. The guest narrows each element into a word on the way out and boxes each on the way back, so neither side reads the other's representation of a number.
+pub(crate) fn words_array_type(engine: &Engine) -> ArrayType {
+    ArrayType::new(
+        engine,
+        FieldType::new(Mutability::Var, StorageType::ValType(ValType::I32)),
+    )
+}
+
+/// Lower `words` as the guest's `$words` array.
+fn lower_words(
+    caller: &mut Caller<'_, ()>,
+    words: impl IntoIterator<Item = i32>,
+    results: &mut [Val],
+) -> Result<(), wasmtime::Error> {
+    let array_type = words_array_type(caller.engine());
+    let array_ref_pre = ArrayRefPre::new(&mut *caller, array_type);
+    let words = words.into_iter().map(Val::I32).collect::<Vec<_>>();
+
+    results[0] = Val::AnyRef(Some(
+        ArrayRef::new_fixed(&mut *caller, &array_ref_pre, &words)?.to_anyref(),
+    ));
+
+    Ok(())
+}
+
+/// `List(Nat)`: each element's bits as a word, which the guest reads unsigned.
+impl Lower for Vec<u32> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        lower_words(caller, self.into_iter().map(u32::cast_signed), results)
+    }
+}
+
+/// `List(Int)`: each element as the word it is.
+impl Lower for Vec<i32> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        lower_words(caller, self, results)
+    }
+}
+
+/// `List(Bool)`: each element as the word `0` or `1`.
+impl Lower for Vec<bool> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        lower_words(caller, self.into_iter().map(i32::from), results)
+    }
 }
 
 impl Lower for Vec<u8> {

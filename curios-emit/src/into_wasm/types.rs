@@ -176,8 +176,8 @@ pub fn rope_view_sub_type(
     }
 }
 
-/// `$limbs` — a boxed `Nat` or `Int`'s magnitude: `array (mut i32)`, 32-bit limbs least significant first. Mutable because a helper fills the array it allocates in place; no helper ever writes one it was handed.
-pub fn limbs_sub_type() -> curios_wasm::SubType {
+/// `$words` — `array (mut i32)`: a boxed `Nat` or `Int`'s magnitude in 32-bit limbs, least significant first, and the flat payload a list of scalars crosses the host boundary as, one word per element. Mutable because a helper fills the array it allocates in place; no helper ever writes one it was handed.
+pub fn words_sub_type() -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
@@ -192,11 +192,11 @@ pub fn limbs_sub_type() -> curios_wasm::SubType {
     }
 }
 
-/// `$big` — a `Nat` or `Int` the i31 does not hold, the two carriers sharing one form: `struct (field $sign (i32)) (field $limbs (ref $limbs))`, the sign `1` for a negative value and `0` otherwise. Final, so telling it apart from every other reference is one exact cast, and canonical: its magnitude is trimmed, never zero, and never inside the i31's range, so a value has one spelling and an i31 and a boxed magnitude are never equal.
+/// `$big` — a `Nat` or `Int` the i31 does not hold, the two carriers sharing one form: `struct (field $sign (i32)) (field $limbs (ref $words))`, the sign `1` for a negative value and `0` otherwise. Final, so telling it apart from every other reference is one exact cast, and canonical: its magnitude is trimmed, never zero, and never inside the i31's range, so a value has one spelling and an i31 and a boxed magnitude are never equal.
 pub fn big_sub_type(
     sign_field: curios_wasm::FieldName,
     limbs_field: curios_wasm::FieldName,
-    limbs_type: curios_wasm::TypeName,
+    words_type: curios_wasm::TypeName,
 ) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
@@ -205,7 +205,7 @@ pub fn big_sub_type(
             (sign_field, i32_const_field()),
             (
                 limbs_field,
-                ref_field(limbs_type, false, curios_wasm::Mutability::Const),
+                ref_field(words_type, false, curios_wasm::Mutability::Const),
             ),
         ])),
     }

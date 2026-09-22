@@ -379,3 +379,78 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
 
     assert_eq!(code, 5, "both runs came back as they went in");
 }
+
+/// A list of scalars crosses one word per element, narrowed on the way out and boxed on the way back as a lone scalar is, so the host reads and answers plain numbers: a `Nat` the host doubles past `2³¹` comes back whole, an `Int` crosses zero both ways, and a `Bool` list keeps its order.
+#[test]
+fn a_list_of_scalars_crosses_as_words_in_both_directions() {
+    let source = r#"
+        foreign nats : (List(Nat)) -> List(Nat);
+        foreign ints : (List(Int)) -> List(Int);
+        foreign flags : (List(Bool)) -> List(Bool);
+        let n = nats([1, 2000000000])!;
+        let i = ints([-5, +7])!;
+        let f = flags([true, false])!;
+        let matched = n == [2, 4000000000] && i == [+5, -7] && f == [false, true];
+        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/nats", |xs: Vec<u32>| {
+        xs.into_iter().map(|x| x * 2).collect::<Vec<u32>>()
+    });
+    bindings.define("/ints", |xs: Vec<i32>| {
+        xs.into_iter().map(|x| -x).collect::<Vec<i32>>()
+    });
+    bindings.define("/flags", |xs: Vec<bool>| {
+        xs.into_iter().rev().collect::<Vec<bool>>()
+    });
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 7, "every list came back as the host answered it");
+}
+
+/// An element past the wire stops the program, as a lone argument does: the guest narrows each one before the call, so the host never sees a number it would have to read as something else.
+#[test]
+fn a_list_element_past_the_wire_is_refused() {
+    let source = r#"
+        use /std/{Nat, Bytes, Option, Io};
+        foreign nats : (List(Nat)) -> List(Nat);
+        let v = /std/proc/env("CURIOS_UNSET_LIST")!;
+        let _ = nats([1, Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[]))])!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/nats", |xs: Vec<u32>| xs);
+
+    let (system, _io) = MockHost::builder().build();
+    let refusal =
+        crate::run_wasm(&module, system, bindings).expect_err("the element is past the wire");
+    assert!(
+        refusal.contains("past what the wire carries"),
+        "stopped, but not on the wire:\n{refusal}"
+    );
+}

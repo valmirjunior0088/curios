@@ -3,8 +3,8 @@ use {
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
         ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type, cell_sub_type,
-        elems_sub_type, flt_sub_type, limbs_sub_type, refusal_data_name, refusal_message,
-        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
+        elems_sub_type, flt_sub_type, refusal_data_name, refusal_message, rope_base_sub_type,
+        rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_utilities::{Grain, PackedBin},
@@ -199,14 +199,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The boxed form a `Nat` or `Int` outside the i31 takes: the `$limbs` magnitude array, then the `$big` struct naming it, each its own group as the rope types are.
+    /// The boxed form a `Nat` or `Int` outside the i31 takes: the `$words` magnitude array, then the `$big` struct naming it, each its own group as the rope types are.
     fn emit_big_types(&mut self) {
         let big = self.table.big();
 
-        self.module.add_type(big.limbs.clone(), limbs_sub_type());
+        self.module.add_type(big.words.clone(), words_sub_type());
         self.module.add_type(
             big.big,
-            big_sub_type(big.sign_field, big.limbs_field, big.limbs),
+            big_sub_type(big.sign_field, big.limbs_field, big.words),
         );
     }
 
@@ -747,6 +747,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
+
+        // First, since each calls the list's own force or embed, which the checks below then find marked.
+        for leaf in self.table.words_forces() {
+            ropes.emit_words_force_func(leaf, self.table.words_force_func(leaf));
+        }
+
+        for leaf in self.table.words_embeds() {
+            ropes.emit_words_embed_func(leaf, self.table.words_embed_func(leaf));
+        }
 
         if self.table.list_bytes_force_used() {
             ropes.emit_list_bin_force_func(Grain::X, self.table.list_bytes_force_func());

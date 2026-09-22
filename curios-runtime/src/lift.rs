@@ -72,6 +72,54 @@ lift_tuple!(A 0, B 1, C 2, D 3, E 4);
 lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
 lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
 
+/// Read a list of scalars: the guest's `$words` array, one word per element, each already narrowed by the guest to what the wire carries.
+fn lift_words(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<i32>, wasmtime::Error> {
+    let Val::AnyRef(Some(anyref)) = param else {
+        return Err(wasmtime::Error::msg("expected non-null anyref"));
+    };
+
+    let array_ref = anyref
+        .as_array(&*caller)?
+        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+
+    let len = array_ref.len(&*caller)?;
+
+    (0..len)
+        .map(|index| {
+            array_ref
+                .get(&mut *caller, index)
+                .map(|value| value.unwrap_i32())
+        })
+        .collect()
+}
+
+/// `List(Nat)`: each word read unsigned, as a `Nat` argument is.
+impl Lift for Vec<u32> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(lift_words(caller, &params[0])?
+            .into_iter()
+            .map(i32::cast_unsigned)
+            .collect())
+    }
+}
+
+/// `List(Int)`: each word as the `Int` it is.
+impl Lift for Vec<i32> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        lift_words(caller, &params[0])
+    }
+}
+
+/// `List(Bool)`: each word as `false` for `0` and `true` otherwise.
+impl Lift for Vec<bool> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(lift_words(caller, &params[0])?
+            .into_iter()
+            .map(|word| word != 0)
+            .collect())
+    }
+}
+
 impl Lift for Vec<u8> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {

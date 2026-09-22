@@ -229,7 +229,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::I32Const { value: limbs },
             curios_wasm::Instr::ArrayNewData {
-                type_name: big.limbs,
+                type_name: big.words,
                 data_name,
             },
             curios_wasm::Instr::StructNew { type_name: big.big },

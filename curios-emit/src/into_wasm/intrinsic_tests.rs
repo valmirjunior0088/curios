@@ -117,7 +117,7 @@ fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
         curios_cont::Intrinsic::NatAdd,
         vec![nat(0x8000_0000), nat(1)],
     ));
-    assert_contains(&wat, "array.new_data $limbs");
+    assert_contains(&wat, "array.new_data $words");
     assert_contains(&wat, "struct.new $big");
     assert_refuses_nothing(&wat);
 }
