@@ -416,6 +416,32 @@ pub fn int_cancel_common(left: &Term, right: &Term) -> (Term, Term) {
         return (left.clone(), right.clone());
     }
 
+    int_split(
+        constant_left - constant_right,
+        combination_left,
+        combination_right,
+    )
+}
+
+/// The difference of two reduced terms split by sign for every pair, where [`int_cancel_common`] splits it only once something cancels: every monomial on the side that keeps its coefficient positive, the constant likewise, so two pairs with one difference are one pair — `0 < j - i` and `i < j`, `-i < -j` and `j < i`.
+///
+/// **Conversion's spelling, never the fold's.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` records for swapped operands. So the one reader is `align_comparisons`, probe-side, where respelling records nothing.
+pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
+    let (constant_left, summands_left) = int_terms(left);
+    let (constant_right, summands_right) = int_terms(right);
+    int_split(
+        constant_left - constant_right,
+        int_linear(summands_left),
+        int_linear(summands_right),
+    )
+}
+
+/// `left - right` over a constant, split by sign into the two sides it is spelled as.
+fn int_split(
+    constant: Integer,
+    combination_left: Vec<Monomial>,
+    combination_right: Vec<Monomial>,
+) -> (Term, Term) {
     let mut difference = combination_left;
     difference.extend(
         combination_right
@@ -427,7 +453,6 @@ pub fn int_cancel_common(left: &Term, right: &Term) -> (Term, Term) {
             .into_iter()
             .map(|(coefficient, factors)| int_scaled(coefficient, &factors)),
     );
-    let constant = constant_left - constant_right;
 
     let mut kept_left = Vec::new();
     let mut kept_right = Vec::new();

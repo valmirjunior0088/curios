@@ -97,6 +97,29 @@ fn cancellation_splits_the_difference_by_sign() {
     assert!(int_is_zero(&nothing_left) && int_is_zero(&nothing_right));
 }
 
+// The split is taken whatever cancels, so two pairs with one difference are one pair — `0` against `j - i` and `i` against `j`, `-i` against `-j` and `j` against `i` — and a pair already split is its own split.
+#[test]
+fn the_split_spells_one_difference_one_way() {
+    let (i, j) = (sym(0, "i"), sym(1, "j"));
+
+    let j_less_i = int_sum(&j, &int_negate(&i));
+    assert_eq!(
+        int_split_by_sign(&int(0), &j_less_i),
+        (i.clone(), j.clone())
+    );
+    assert_eq!(
+        int_split_by_sign(&int_negate(&i), &int_negate(&j)),
+        (j.clone(), i.clone())
+    );
+
+    let split = int_split_by_sign(&add(i.clone(), int(3)), &j);
+    assert_eq!(
+        int_split_by_sign(&split.0, &split.1),
+        split,
+        "a split pair is its own split"
+    );
+}
+
 // A pair sharing no monomial and at most one nonzero constant comes back identically, not merely equivalently — the stability a stuck comparison's spelling rests on.
 #[test]
 fn cancellation_is_stable_when_nothing_is_shared() {

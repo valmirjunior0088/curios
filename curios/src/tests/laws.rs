@@ -268,6 +268,12 @@ const CARRIERS: &[Carrier] = &[
             "Eq(i <= j, i < j + 1)",
             "Eq(i < j && j <= i, false)",
             "Eq(i <= j || j < i, true)",
+            // Two comparisons of one relation meet through their difference, whatever cancels: the one-sided spelling, the successor across the `<`/`<=` seam, reversal under negation, and equality.
+            "Eq(i < j, +0 < j - i)",
+            "Eq(i < j, j - i - 1 >= +0)",
+            "Eq(i + 1 <= j, i < j)",
+            "Eq(+0 - i < +0 - j, j < i)",
+            "Eq(i == j, i - j == +0)",
             // A left shift by a literal count is the coefficient `2ᵏ`, as on `Nat`, and below zero too.
             "Eq(Int/shl(i, 1), i * 2)",
             "Eq(Int/shl(i, 3), 8 * i)",

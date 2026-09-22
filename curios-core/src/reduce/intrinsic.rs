@@ -26,8 +26,8 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Peel, Subterm, Telescope, Term,
-        int_cancel_common, int_negate, int_product, int_sum, int_terms, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem, project_erased_universes,
+        int_cancel_common, int_negate, int_product, int_split_by_sign, int_sum, int_terms,
+        normalize_concat, peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -147,13 +147,47 @@ pub fn align_comparisons(
         )),
         _ => None,
     };
-    match aligned {
-        Some(pair) => {
+    let (this, that, moved) = match aligned {
+        Some((this, that)) => {
             reducer.spend(Cost::term(2))?;
-            Ok(Some(pair))
+            (this, that, true)
         }
-        None => Ok(moved.then_some((this, that))),
+        None => (this, that, moved),
+    };
+
+    // Two `Int` comparisons of one relation meet through their difference, which only a split taken whether or not anything cancels can see: `0 < j - i` is `i < j`, and `-i < -j` is `j < i`. See `int_split_by_sign` for why this is the judgment's spelling and never the fold's.
+    if std::mem::discriminant(&this) == std::mem::discriminant(&that)
+        && let (Some(this_split), Some(that_split)) =
+            (int_split_comparison(&this), int_split_comparison(&that))
+        && (this_split != this || that_split != that)
+    {
+        reducer.spend(Cost::term(2))?;
+        return Ok(Some((this_split, that_split)));
     }
+    Ok(moved.then_some((this, that)))
+}
+
+/// An `Int` ordering or equality with its operands split by sign, through `int_split_by_sign`; `None` for any other intrinsic.
+fn int_split_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
+    Some(match comparison {
+        Intrinsic::IntLt(a, b) => {
+            let (left, right) = int_split_by_sign(a, b);
+            Intrinsic::IntLt(left, right)
+        }
+        Intrinsic::IntLe(a, b) => {
+            let (left, right) = int_split_by_sign(a, b);
+            Intrinsic::IntLe(left, right)
+        }
+        Intrinsic::IntEql(a, b) => {
+            let (left, right) = int_split_by_sign(a, b);
+            Intrinsic::IntEql(left, right)
+        }
+        Intrinsic::IntNeq(a, b) => {
+            let (left, right) = int_split_by_sign(a, b);
+            Intrinsic::IntNeq(left, right)
+        }
+        _ => return None,
+    })
 }
 
 /// The dual of a negated comparison: an `xor` with a `true` operand whose other operand forces to an ordered or equality comparison on a total order, read as the comparison that is true exactly when it is false. `None` for anything else, the `Flt` comparisons included.
