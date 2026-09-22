@@ -89,9 +89,17 @@ pub let log2(n: Nat) -> Nat =
     match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
 
 --- The floor of the square root. General recursion, so a type may not mention it.
+---
+--- Newton's iteration from a power of two above the root, so the cost is the root's bit width rather than the root: counting up to it, as this once did, takes `2⁶⁴` steps for a 128-bit `n`, which the machine word used to make unreachable and an unbounded `Nat` does not.
 pub let sqrt(n: Nat) -> Nat =
-    let go(r: Nat) -> Nat = match (r + 1) * (r + 1) <= n | true => go(r + 1) | false => r end;
-    go(0);
+    let go(x: Nat) -> Nat =
+        match x
+        | 0 => 0
+        | xp + 1 =>
+            let y = (x + n / (xp + 1)) / 2;
+            match y < x | true => go(y) | false => x end
+        end;
+    go(shl(1, log2(n) / 2 + 1));
 
 --- Whether `n` is even.
 pub let is_even(n: Nat) -> Bool =

@@ -21,11 +21,14 @@ test nat_div_and_rem_by_a_multi_limb_divisor =
             1267650600228229401496703205376 % 18446744073709551617],
         [68719476735, 18446744004990074881]);
 
--- The library's arithmetic beyond the operators answers at any width: a logarithm and a divisor of numbers past 128 bits.
-test nat_logarithms_and_divisors_past_every_width =
+-- The library's arithmetic beyond the operators answers at any width: a root, a logarithm and a divisor of numbers past 128 bits. The root is the row that once ran for hours, when `Nat/sqrt` counted up to its answer.
+test nat_roots_logarithms_and_divisors_past_every_width =
     Test/equal(
-        [Nat/log2(Nat/pow(2, 200)), Nat/gcd(Nat/pow(2, 64) * Nat/pow(3, 20), Nat/pow(2, 40) * Nat/pow(3, 30))],
-        [200, 3833759992447475122176]);
+        [
+            Nat/sqrt(340282366920938463463374607431768223801),
+            Nat/log2(Nat/pow(2, 200)),
+            Nat/gcd(Nat/pow(2, 64) * Nat/pow(3, 20), Nat/pow(2, 40) * Nat/pow(3, 30))],
+        [18446744073709551616, 200, 3833759992447475122176]);
 
 -- The decimal renderer and parser are inverses at any width.
 test nat_renders_and_parses_past_every_width =
