@@ -84,9 +84,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Intrinsics as orthogonal builtins _(uniform `/sys` builtin declarations)_
   - [x] `Bool` (conjunction, disjunction, exclusive or, and both equalities)
-  - [x] `Nat`
+  - [x] `Nat`, unbounded at run time as in the theory — an i31 while small and a boxed magnitude past it, with no arbitrary-precision library beside it ([Nat and Int are an i31 until they outgrow it](design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md))
+    - [x] Certified division with remainder and divisibility (`/std/Nat/div_mod` and `/std/Nat/Divides`)
+    - [ ] [The Euclidean remainder past them, and the unsigned binary scale](roadmap/nat-laws-spec.md)
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
-  - [x] `Int`
+  - [x] `Int`, unbounded at run time as `Nat` is
+    - [x] Order carried from `Nat` along the embedding (a sign view, trichotomy, and the laws of `/std/Int/Lt` and `/std/Int/Le`)
+    - [ ] [Cancellation, sign and absolute value, and the signed scale](roadmap/int-laws-spec.md)
   - [x] `Flt` (bit-preserving binary64 identity, with the full arithmetic and comparison family)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
   - [x] `Flt` specified by a hardware-independent model, stated in this repository
@@ -97,6 +101,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A bound is read off the node that carries it, and the oracle closed on a criterion
 - [x] A fact is stated once, or the copies are checked — the fold arms' grain twins, the decomposition's carriers and its two measures, and a key's encoding
 - [x] [A law is decided where it neither respells nor invents](design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md) — a left shift by a literal count, parity, a position inside a window, a map by a function convertible to the identity, and De Morgan with absorption, each moved from the law grid's refused rows to its held ones
+- [x] [Euclid's identity, a comparison split by sign, `Nat/to_int` as an ordered-semiring embedding, and a shift by a symbolic count](soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), each decided by both checkers and moved from the law grid's refused rows to its held ones
 
 ## Module System
 
@@ -239,7 +244,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
 - [x] JSON codec (`std/Json`; numbers are binary64 `Flt`, which is RFC 8259's interoperability recommendation, so only integers past 2⁵³ fail to round-trip)
-- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`std/Toml`; conforming on floats, not on 64-bit integers)
+- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`std/Toml`; conforming on floats and on the full 64-bit integer range)
 - [x] Structured concurrency in `/std/Async`
   - [x] `map`, and `sleep`/`timeout`
   - [x] Concurrent `race`/`first` over spawned tasks, `select` over offers, and `join_all` over a list of tasks
@@ -256,24 +261,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
-- [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
-  - [x] Machine-checked additive, multiplicative, cancellation and order laws
-- [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
-- [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/BigPos`)
-- [ ] Dyadic `BigFlt` sequence
-  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
-  - [ ] [Exact binary64 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary64-spec.md)
-  - [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic/03-big-int-laws-spec.md)
-  - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic/04-laws-spec.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary64](roadmap/big-flt-dyadic/05-ratio-narrowing-spec.md)
-  - [ ] [Binary64 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic/06-boundary-proofs-spec.md)
-- [ ] General rational `BigFlt` sequence _(after `curios wonder`)_
-  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big-flt-general/01-big-nat-euclidean-spec.md)
-  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big-flt-general/02-core-spec.md)
-  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big-flt-general/03-laws-spec.md)
-  - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
-  - [ ] [General rational binary64 boundaries](roadmap/big-flt-general/05-binary64-spec.md)
-  - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
+- [ ] Exact rationals (`/std/Rat`)
+  - [ ] [Dyadic: exact binary rationals and correctly rounded `Flt` boundaries](roadmap/rat-dyadic-spec.md)
+  - [ ] [General: every rational, division, and exact decimals](roadmap/rat-general-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, deferred to a consumer
   - [x] `Key(Nat)`, `Key(Byte)` and `Key(Bool)`, over the encodings `/std/Hash` already gave them

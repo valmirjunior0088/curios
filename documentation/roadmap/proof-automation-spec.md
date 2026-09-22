@@ -16,7 +16,7 @@ The thesis this specification holds to is that reflection over `Holds` plus a ma
 
 Release build, one process at a time on an idle machine, 2026-09-14 at `7bed2216`. Units are found by bisecting `--budget` and are exact to about one percent; they are machine-independent. A first run of the wall-clock figures overlapped a build on the same machine and was discarded; the 512-bit row is the only figure not retaken.
 
-**Reflection is production, and its price is known.** A `BigNat` product compared against its literal result by `Eq/refl()`, at top level:
+**Reflection is production, and its price is known.** A `BigNat` product compared against its literal result by `Eq/refl()`, at top level — `/std/BigNat` was the library's arbitrary-precision natural over `Bits`, a decider defined in the library rather than folded by the kernel, which is what these rows price; it has since been retired for an unbounded `Nat`, and its proofs are kept as the `big_nat` corpus fixture:
 
 | Operands | Wall | Units |
 | --- | --- | --- |
@@ -90,16 +90,16 @@ First, with no engine change: `wonder diagnostics` gains a flag that emits one J
 
 Derived from the constraints, not invented, and to be recorded with the standard library once the first decider written under it lands.
 
-1. Define the data and the operations in the library over `Bits`, never through intrinsic `/` or `%`: intrinsic arithmetic evaluates but cannot be reasoned about symbolically — the bounds oracle decides a stuck comparison only against a literal (`curios-core/src/reduce/intrinsic/compare.rs`, `compare_nat`; `nat_bound`), `/std` states no law about `%`, and [the binary64 conversion specification](big-flt-dyadic/02-binary64-spec.md) says so. `Nat/gcd` and `Nat/sqrt` are general recursion and cannot appear in a type; `BigNat/to_str` recurses on a computed quotient and cannot either.
-2. Recurse structurally on a `Bits`, `List` or `Nat` argument, or on a literal fuel, or through an `Accessible` payload with a *provable* decrease. Fuel is no obstacle at closed instances — a fuelled decider passes totality on its fuel and reflects today — and becomes one only in a universally quantified lemma, where sufficiency must be proved. Euclidean division over `BigNat` is structural in the dividend read least-significant bit first; GCD is not structural in either form and needs `WellFounded(BigNat/lt)`, which `/std` lacks, or fuel from `bit_len` with a sufficiency lemma, as [the Euclidean specification](big-flt-general/01-big-nat-euclidean-spec.md) already demands.
+1. Define the data and the operations over `Nat`, `Int`, `Bits` and `List`, and reach `Nat`'s `/` and `%` through `/std/Nat/div_mod` wherever a law about them is wanted: the kernel reasons about intrinsic arithmetic as far as its laws reach — sums and products in normal form, Euclid's identity, the remainder's bound, `Nat/to_int` as an embedding — and past them decides a stuck comparison only against a literal (`curios-core/src/reduce/intrinsic/compare.rs`, `compare_nat`; `nat_bound`). `Nat/gcd` and `Nat/sqrt` are general recursion and cannot appear in a type, and neither can `Nat/to_str`, which recurses on a computed quotient.
+2. Recurse structurally on a `Bits`, `List` or `Nat` argument, or on a literal fuel, or through an `Accessible` payload with a *provable* decrease. Fuel is no obstacle at closed instances — a fuelled decider passes totality on its fuel and reflects today — and becomes one only in a universally quantified lemma, where sufficiency must be proved. Euclidean division is `Nat`'s own, certified by `div_mod`; GCD is not structural and recurses on the remainder's bound through `Nat/Lt/strong`, course-of-values induction, as [the `Nat` laws specification](nat-laws-spec.md) demands of the certified one.
 3. Return `Bool`, state the claim as `Bool/Holds(decider(args))`, discharge with `Bool/True/qed()` at closed instances.
 4. Put every heavy discharge in its own top-level `let` with a closed type, and consume it by name. Until Phase 0 lands, never discharge inside a match arm.
-5. Write the soundness lemma as `Bool/Holds(decider(x)) -> Claim(x)` by matching on the decision and reading `h` through the arm's case equation, handing the true arm to the library's bridge lemma. `sound(d, q, n, h: Bool/Holds(cmp/eql(mul(d, q), n))) -> Eq(mul(d, q), n)` is three arms over `BigNat/cmp` and `cmp/to_eq`, and divisibility's transitivity follows from `mul/assoc`; both were written in one attempt against the current corpus.
+5. Write the soundness lemma as `Bool/Holds(decider(x)) -> Claim(x)` by matching on the decision and reading `h` through the arm's case equation, handing the true arm to the library's bridge lemma. `sound(d, q, n, h: Bool/Holds(d * q == n)) -> Eq(d * q, n)` has the shape `/std/Int/eq_of_eql` already has, and divisibility's transitivity is `/std/Nat/Divides/trans`, where associativity by reduction leaves nothing to prove; against `/std/BigNat`, both were written in one attempt over `BigNat/cmp`, `cmp/to_eq` and `mul/assoc`.
 6. For an external solver, make the answer a literal certificate argument to the soundness lemma. It is data with no authority: the checker runs in both checkers, `Bool/Holds(false)` is `Bool/False`, the checker is total by obligation T, and the lemma is kernel-checked. It reaches the Ersd rung as a retained top-level value, because a top-level item runs whatever its result's sort ([Erased positions are non-strict](../design/language/erased-positions-are-non-strict.md)), and is gone from `ersd-optm` onward by unreachable-item pruning; verify with `wonder stage ersd-optm`.
 7. Keep a margin under the budget: a partial walk runs in a different cache state and can move a marginal declaration either way, which the incremental specification says of itself.
 8. Plan by time, budget by units: about a microsecond per unit here, and 128 bits is two seconds per turn while the fact is the item under edit.
 
-The library work this names: `WellFounded(BigNat/lt)`, and a `bit_len`-fuelled reformulation of `to_str` if a decimal conversion is ever wanted in a type.
+The library work this names: a `Nat/to_str` recursing on its quotient through `Nat/Lt/strong`, if a decimal conversion is ever wanted in a type.
 
 ## What constrains any answer
 
@@ -123,7 +123,6 @@ The library work this names: `WellFounded(BigNat/lt)`, and a `bit_len`-fuelled r
 - Which budget fix, with Phase 2's recommendation and the declaration-local form as the alternative.
 - The wording of the exhaustion diagnostic and of a poisoned skip.
 - Whether the JSON is newline-delimited objects or one array, and whether `GoalReport`'s terms cross as strings; strings are recommended, since the spelling exists only where the report is built.
-- How `WellFounded(BigNat/lt)` is proved: through `bit_len` and strong induction, or through the order laws.
 
 ## Deliberately not specified
 
@@ -134,7 +133,7 @@ The library work this names: `WellFounded(BigNat/lt)`, and a `bit_len`-fuelled r
 
 ## How to retake the measurements
 
-The cliff, with the operands generated so the literals are exact:
+The rows above were taken at `7bed2216`, where `/std/BigNat` still existed, and the two programs below retake them there. The cliff itself is a property of where a discharge is written rather than of the decider, so a library-defined decider of similar cost stands in for `BigNat` in the current tree. The cliff, with the operands generated so the literals are exact:
 
 ```sh
 A=$(python3 -c "print(2**128 - 1)"); B=$(python3 -c "print(2**128 - 3)"); P=$(python3 -c "print((2**128 - 1) * (2**128 - 3))")
