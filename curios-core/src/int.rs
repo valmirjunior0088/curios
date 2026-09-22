@@ -7,7 +7,7 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    super::{Cost, Intrinsic, Recombination, ReduceError, Reducer, Subterm, Term},
     curios_num::Integer,
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -134,7 +134,144 @@ pub fn int_sum(left: &Term, right: &Term) -> Term {
     let (constant_left, mut summands) = int_terms(left);
     let (constant_right, summands_right) = int_terms(right);
     summands.extend(summands_right);
-    int_from_linear(constant_left + constant_right, int_linear(summands))
+    int_merged(constant_left + constant_right, summands)
+}
+
+/// A constant and its summands merged into the normal form, a remainder beside its multiple recombined on the way — what every sum this module builds goes through, as `Nat::sum_over_floor` is for `Nat`.
+fn int_merged(constant: Integer, summands: Vec<Term>) -> Term {
+    let (constant, combination) = int_recombine(constant, int_linear(summands));
+    int_from_linear(constant, combination)
+}
+
+/// Euclid's identity over ℤ, `Nat::recombine`'s twin: `k` remainders `x % d` beside `k` copies of `d · (x / d)` are `k · x`. Truncated division satisfies the identity exactly as flooring does, for every `x` and every nonzero `d`, so it is unconditional here too.
+///
+/// **A copy counts only where every coefficient agrees in sign with it.** A group lets any combination be rewritten around `x`, but a recombination that left a negative remainder of a multiple behind would trade one spelling for a longer one; taking only the copies the combination actually holds is what keeps the rewrite a shrinking one, and keeps `x - d · (x / d)` and `x % d` the two terms they were — an incompleteness, never a false equation.
+fn int_recombine(
+    mut constant: Integer,
+    mut combination: Vec<Monomial>,
+) -> (Integer, Vec<Monomial>) {
+    while let Some(Recombination {
+        dividend,
+        copies,
+        spent,
+    }) = int_euclid_pair(&combination)
+    {
+        for (index, amount) in spent {
+            combination[index].0 = combination[index].0.clone() - amount;
+        }
+        let (dividend_constant, dividend_summands) = int_terms(&dividend);
+        constant = constant + copies.clone() * dividend_constant;
+        let mut summands = combination
+            .iter()
+            .map(|(coefficient, factors)| int_scaled(coefficient.clone(), factors))
+            .collect::<Vec<_>>();
+        summands.extend(
+            int_linear(dividend_summands)
+                .into_iter()
+                .map(|(coefficient, factors)| int_scaled(copies.clone() * coefficient, &factors)),
+        );
+        combination = int_linear(summands);
+    }
+    (constant, combination)
+}
+
+/// The first remainder in `combination` held beside at least one copy of its multiple, signs agreeing: the dividend it recombines to, the signed number of copies, and what each monomial gives up.
+fn int_euclid_pair(combination: &[Monomial]) -> Option<Recombination<Integer>> {
+    combination
+        .iter()
+        .enumerate()
+        .find_map(|(index, (held, factors))| {
+            let [factor] = factors.as_slice() else {
+                return None;
+            };
+            let Subterm::Intrinsic(Intrinsic::IntRem {
+                dividend,
+                divisor,
+                non_zero,
+            }) = &**factor
+            else {
+                return None;
+            };
+            let quotient = Term::intrinsic(Intrinsic::IntDiv {
+                dividend: dividend.clone(),
+                divisor: divisor.clone(),
+                non_zero: non_zero.clone(),
+            });
+            let (_, multiple) = int_terms(&int_multiply(divisor, &quotient));
+
+            let positive = *held > zero();
+            let mut copies = held.magnitude();
+            let mut matched = Vec::new();
+            for (per_copy, monomial) in int_linear(multiple) {
+                let (at, (available, _)) = combination
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (_, factors))| int_same_factors(factors, &monomial))?;
+                if (*available > zero()) != (positive == (per_copy > zero())) {
+                    return None;
+                }
+                copies = copies.min(available.magnitude() / per_copy.magnitude());
+                matched.push((at, per_copy));
+            }
+            if copies.is_zero() {
+                return None;
+            }
+
+            let copies = match positive {
+                true => Integer::from(copies),
+                false => -Integer::from(copies),
+            };
+            let mut spent = vec![(index, copies.clone())];
+            spent.extend(
+                matched
+                    .into_iter()
+                    .map(|(at, per_copy)| (at, per_copy * copies.clone())),
+            );
+            Some(Recombination {
+                dividend: dividend.clone(),
+                copies,
+                spent,
+            })
+        })
+}
+
+/// Whether two monomials' factors are one multiset, a quotient matching a quotient on its dividend and divisor alone, as `Nat::same_monomial` compares them.
+fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
+    let project = crate::project_erased_universes::<Term>;
+    let same = |left: &Term, right: &Term| match (&**left, &**right) {
+        (
+            Subterm::Intrinsic(Intrinsic::IntDiv {
+                dividend: left_dividend,
+                divisor: left_divisor,
+                ..
+            }),
+            Subterm::Intrinsic(Intrinsic::IntDiv {
+                dividend: right_dividend,
+                divisor: right_divisor,
+                ..
+            }),
+        ) => {
+            project(left_dividend) == project(right_dividend)
+                && project(left_divisor) == project(right_divisor)
+        }
+        _ => project(left) == project(right),
+    };
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut unmatched = right.to_vec();
+    left.iter().all(|factor| {
+        match unmatched
+            .iter()
+            .position(|candidate| same(factor, candidate))
+        {
+            Some(position) => {
+                unmatched.swap_remove(position);
+                true
+            }
+            None => false,
+        }
+    })
 }
 
 /// `-term`, in normal form: every coefficient and the constant negated. What `IntSub` folds through, so no subtraction node survives reduction.
@@ -176,7 +313,7 @@ pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
             summands.push(int_scaled(coefficient, &factors));
         }
     }
-    int_from_linear(constant, int_linear(summands))
+    int_merged(constant, summands)
 }
 
 /// The product as the fold takes it: distributed when either operand is a constant or a single monomial, and left as a stuck `IntMul` of the two reduced operands otherwise — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
@@ -245,7 +382,7 @@ fn int_normalize_within(
                     .into_iter()
                     .map(|summand| int_normalize_within(reducer, summand, memo))
                     .collect::<Result<Vec<_>, _>>()?;
-                int_from_linear(constant, int_linear(summands))
+                int_merged(constant, summands)
             }
             _ => reduced,
         };

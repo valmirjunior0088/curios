@@ -939,6 +939,34 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
 
     let sub = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_sub(left, right));
     let mul = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_mul(left, right));
+    let nat_div = |dividend: Term, divisor: Term, non_zero: Term| {
+        Term::intrinsic(Intrinsic::NatDiv {
+            dividend,
+            divisor,
+            non_zero,
+        })
+    };
+    let nat_rem = |dividend: Term, divisor: Term, non_zero: Term| {
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend,
+            divisor,
+            non_zero,
+        })
+    };
+    let int_div = |dividend: Term, divisor: Term| {
+        Term::intrinsic(Intrinsic::IntDiv {
+            dividend,
+            divisor,
+            non_zero: qed(),
+        })
+    };
+    let int_rem = |dividend: Term, divisor: Term| {
+        Term::intrinsic(Intrinsic::IntRem {
+            dividend,
+            divisor,
+            non_zero: qed(),
+        })
+    };
     let cat = |parts: Vec<Term>| {
         Term::intrinsic(Intrinsic::BinConcat {
             grain: Grain::X,
@@ -1557,6 +1585,119 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             }),
             lit(0),
             nats(),
+        ),
+        // Euclid's identity, recombined: a remainder beside the divisor times the matching quotient is the dividend — at a literal divisor, at a symbolic one whose multiple the product fold has distributed, at multiplicity two beside an unrelated summand, after the floor law has rewritten both halves, with the quotient and the remainder carrying different proofs, and over ℤ at both signs of the divisor and of the copies.
+        (
+            "(x / 3) * 3 + x % 3 = x",
+            plus(
+                mul(nat_div(x.clone(), lit(3), qed()), lit(3)),
+                nat_rem(x.clone(), lit(3), qed()),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0))],
+                vec![(&nat_x, lit(2))],
+                vec![(&nat_x, lit(3))],
+                vec![(&nat_x, lit(11))],
+            ],
+        ),
+        (
+            "x % (y + 1) + (x / (y + 1)) * (y + 1) = x",
+            plus(
+                nat_rem(x.clone(), plus(y.clone(), lit(1)), qed()),
+                mul(
+                    nat_div(x.clone(), plus(y.clone(), lit(1)), qed()),
+                    plus(y.clone(), lit(1)),
+                ),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+            ],
+        ),
+        (
+            "2 * ((x / 3) * 3) + y + 2 * (x % 3) = y + 2 * x",
+            plus(
+                plus(
+                    mul(lit(2), mul(nat_div(x.clone(), lit(3), qed()), lit(3))),
+                    y.clone(),
+                ),
+                mul(lit(2), nat_rem(x.clone(), lit(3), qed())),
+            ),
+            plus(y.clone(), mul(lit(2), x.clone())),
+            vec![
+                vec![(&nat_x, lit(5)), (&nat_y, lit(1))],
+                vec![(&nat_x, lit(9)), (&nat_y, lit(0))],
+            ],
+        ),
+        (
+            "((x + 5) / 3) * 3 + (x + 5) % 3 = x + 5",
+            plus(
+                mul(nat_div(plus(x.clone(), lit(5)), lit(3), qed()), lit(3)),
+                nat_rem(plus(x.clone(), lit(5)), lit(3), qed()),
+            ),
+            plus(x.clone(), lit(5)),
+            nats(),
+        ),
+        (
+            "(x / 3) * 3 + x % 3 = x, the two proofs apart",
+            plus(
+                mul(nat_div(x.clone(), lit(3), qed()), lit(3)),
+                nat_rem(x.clone(), lit(3), symbol(9_998, "other")),
+            ),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "(i / 3) * 3 + i % 3 = i",
+            int_add(
+                int_mul(int_div(i.clone(), integer(3)), integer(3)),
+                int_rem(i.clone(), integer(3)),
+            ),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "i % -3 + (i / -3) * -3 = i",
+            int_add(
+                int_rem(i.clone(), integer(-3)),
+                int_mul(int_div(i.clone(), integer(-3)), integer(-3)),
+            ),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "-(i % 3) - (i / 3) * 3 = -i",
+            int_sub(
+                int_sub(integer(0), int_rem(i.clone(), integer(3))),
+                int_mul(int_div(i.clone(), integer(3)), integer(3)),
+            ),
+            int_sub(integer(0), i.clone()),
+            ints(),
+        ),
+        (
+            "(i / (j * j + 1)) * (j * j + 1) + i % (j * j + 1) = i",
+            int_add(
+                int_mul(
+                    int_div(
+                        i.clone(),
+                        int_add(int_mul(j.clone(), j.clone()), integer(1)),
+                    ),
+                    int_add(int_mul(j.clone(), j.clone()), integer(1)),
+                ),
+                int_rem(
+                    i.clone(),
+                    int_add(int_mul(j.clone(), j.clone()), integer(1)),
+                ),
+            ),
+            i.clone(),
+            vec![
+                vec![(&int_i, integer(-7)), (&int_j, integer(2))],
+                vec![(&int_i, integer(9)), (&int_j, integer(0))],
+                vec![(&int_i, integer(4)), (&int_j, integer(-3))],
+            ],
         ),
         // The free monoid's seam windows over symbolic operands, and the measure through a map.
         (

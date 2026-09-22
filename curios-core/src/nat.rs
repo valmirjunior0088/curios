@@ -15,6 +15,13 @@ pub enum Nat {
     Succ(Natural, Term),
 }
 
+/// One application of Euclid's identity to a linear combination: the dividend the pair recombines to, the copies of the pair taken, and what each entry of the combination gives up. `C` is the carrier's coefficient — a count on `Nat`, a signed count on `Int`.
+pub(crate) struct Recombination<C> {
+    pub(crate) dividend: Term,
+    pub(crate) copies: C,
+    pub(crate) spent: Vec<(usize, C)>,
+}
+
 impl Nat {
     /// A closed literal in canonical form: zero is `Zero`, anything positive is a single `Succ` floor over the literal-zero tail — never a unary chain.
     pub fn new(value: impl Into<Natural>) -> Self {
@@ -299,10 +306,140 @@ impl Nat {
         combination
     }
 
-    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, each spelled by [`Nat::scaled`], folded left-to-right.
+    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`], folded left-to-right.
     pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
         curios_profile::profile!("nat::sum_over_floor");
-        Self::from_linear(Self::linear(summands), floor)
+        let (combination, floor) = Self::recombine(Self::linear(summands), floor);
+        Self::from_linear(combination, floor)
+    }
+
+    /// Euclid's identity read in the direction that shrinks a sum: `k` remainders `x % d` beside `k` copies of the divisor times the matching quotient, `d · (x / d)`, are `k · x`.
+    ///
+    /// **Unconditional, which is what admits it.** `d · (x / d) + x % d = x` holds for every `x` and every nonzero `d`, and a division node exists only over its proof that the divisor is nonzero, so no value of a symbolic part can falsify a recombination. It is the recombining twin of the split `reduce_nat_division` takes: the split reads a quotient and a remainder *off* a sum, and this reads the sum back.
+    ///
+    /// **The multiple is matched in the form the fold leaves it in.** A quotient is one symbolic summand, so `d · (x / d)` is always distributed by the product fold — `(x / (y + 1)) · (y + 1)` is `y · (x / (y + 1)) + x / (y + 1)` — and the wanted monomials are computed the same way, through [`Nat::multiply`], so the two spellings meet. A quotient and a remainder pair on their dividend and divisor and never on their proofs, which each division carries as written and which proof irrelevance makes unobservable; a monomial is compared as a multiset of factors, because the factor order is a structural hash that sees the proof.
+    ///
+    /// Each recombination removes a remainder and adds the summands of its dividend, a strict subterm, so the loop terminates; a combination with nothing to recombine comes back untouched, which keeps read-then-rebuild the identity on a sum already in normal form.
+    fn recombine(
+        mut combination: Vec<(Natural, Term)>,
+        mut floor: Natural,
+    ) -> (Vec<(Natural, Term)>, Natural) {
+        while let Some(Recombination {
+            dividend,
+            copies,
+            spent,
+        }) = Self::euclid_pair(&combination)
+        {
+            for (index, amount) in spent {
+                combination[index].0 = &combination[index].0 - amount;
+            }
+            let (dividend_floor, dividend_inner) = Self::decompose(&dividend);
+            floor += &copies * dividend_floor;
+            let mut summands = combination
+                .into_iter()
+                .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
+                .collect::<Vec<_>>();
+            summands.extend(
+                Self::linear(Self::summands(&dividend_inner))
+                    .into_iter()
+                    .map(|(coefficient, factor)| Self::scaled(&copies * coefficient, factor)),
+            );
+            combination = Self::linear(summands);
+        }
+        (combination, floor)
+    }
+
+    /// The first remainder in `combination` held beside at least one copy of its multiple: the dividend it recombines to, how many copies of the pair the combination holds, and what each entry gives up.
+    fn euclid_pair(combination: &[(Natural, Term)]) -> Option<Recombination<Natural>> {
+        combination
+            .iter()
+            .enumerate()
+            .find_map(|(index, (held, factor))| {
+                let Subterm::Intrinsic(Intrinsic::NatRem {
+                    dividend,
+                    divisor,
+                    non_zero,
+                }) = &**factor
+                else {
+                    return None;
+                };
+                let quotient = Term::intrinsic(Intrinsic::NatDiv {
+                    dividend: dividend.clone(),
+                    divisor: divisor.clone(),
+                    non_zero: non_zero.clone(),
+                });
+                let (_, multiple) = Self::decompose(&Self::multiply(divisor, &quotient));
+
+                let mut copies = held.clone();
+                let mut matched = Vec::new();
+                for (per_copy, monomial) in Self::linear(Self::summands(&multiple)) {
+                    let (at, (available, _)) = combination
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (_, factor))| Self::same_monomial(factor, &monomial))?;
+                    copies = copies.min(available / &per_copy);
+                    matched.push((at, per_copy));
+                }
+                if copies.is_zero() {
+                    return None;
+                }
+
+                let mut spent = vec![(index, copies.clone())];
+                spent.extend(
+                    matched
+                        .into_iter()
+                        .map(|(at, per_copy)| (at, per_copy * &copies)),
+                );
+                Some(Recombination {
+                    dividend: dividend.clone(),
+                    copies,
+                    spent,
+                })
+            })
+    }
+
+    /// Whether two monomials have one coefficient and one multiset of factors, a quotient matching a quotient on its dividend and divisor alone — the proof it carries is not part of the number.
+    fn same_monomial(left: &Term, right: &Term) -> bool {
+        let (left_coefficient, left_factors) = Self::monomial(left);
+        let (right_coefficient, mut right_factors) = Self::monomial(right);
+        if left_coefficient != right_coefficient || left_factors.len() != right_factors.len() {
+            return false;
+        }
+        left_factors.iter().all(|factor| {
+            match right_factors
+                .iter()
+                .position(|candidate| Self::same_factor(factor, candidate))
+            {
+                Some(position) => {
+                    right_factors.swap_remove(position);
+                    true
+                }
+                None => false,
+            }
+        })
+    }
+
+    /// One factor against another up to universe instances, as [`Nat::linear`] keys them, and a quotient against a quotient up to its proof.
+    fn same_factor(left: &Term, right: &Term) -> bool {
+        let project = crate::project_erased_universes::<Term>;
+        match (&**left, &**right) {
+            (
+                Subterm::Intrinsic(Intrinsic::NatDiv {
+                    dividend: left_dividend,
+                    divisor: left_divisor,
+                    ..
+                }),
+                Subterm::Intrinsic(Intrinsic::NatDiv {
+                    dividend: right_dividend,
+                    divisor: right_divisor,
+                    ..
+                }),
+            ) => {
+                project(left_dividend) == project(right_dividend)
+                    && project(left_divisor) == project(right_divisor)
+            }
+            _ => project(left) == project(right),
+        }
     }
 
     /// [`Nat::sum_over_floor`] from a combination already merged.

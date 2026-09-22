@@ -84,7 +84,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Nat under / and %",
-        binders: "x: Nat",
+        binders: "x: Nat, y: Nat, d: Nat, p: Nat/Lt(0, d)",
         held: &[
             "Eq((x * 2) / 2, x)",
             "Eq((x * 2) % 2, 0)",
@@ -95,8 +95,23 @@ const CARRIERS: &[Carrier] = &[
             "Eq(0 % (x + 1), 0)",
             "Eq((x + 1) / (x + 1), 1)",
             "Eq((x + 1) % (x + 1), 0)",
+            // A remainder is below its divisor and a quotient no larger than its dividend, whatever the divisor is, on the division's own proof.
+            "Eq(Nat/rem(x, d, @p) < d, true)",
+            "Eq(Nat/div(x, d, @p) <= x, true)",
+            // Euclid's identity: a remainder beside the divisor times the matching quotient is the dividend, at a literal divisor, at a symbolic one, at multiplicity two beside an unrelated summand, and through the floor law.
+            "Eq((x / 10) * 10 + x % 10, x)",
+            "Eq(x % 10 + 10 * (x / 10), x)",
+            "Eq((x / (y + 1)) * (y + 1) + x % (y + 1), x)",
+            "Eq(Nat/div(x, d, @p) * d + Nat/rem(x, d, @p), x)",
+            "Eq(2 * ((x / 3) * 3) + y + 2 * (x % 3), 2 * x + y)",
+            "Eq(((x + 5) / 3) * 3 + (x + 5) % 3, x + 5)",
         ],
-        refused: &[],
+        refused: &[
+            // Controls, and none is a law: the multiple without its remainder, the wrong multiple of the quotient, and a remainder of another dividend.
+            "Eq((x / 3) * 3, x)",
+            "Eq((x / 3) * 2 + x % 3, x)",
+            "Eq((x / 3) * 3 + y % 3, x)",
+        ],
     },
     Carrier {
         name: "Nat comparisons",
@@ -260,9 +275,17 @@ const CARRIERS: &[Carrier] = &[
             // Divisibility, as on `Nat`: the argument needs integers and nothing more.
             "Eq(i * 2 + 1 == j * 2, false)",
             "Eq(i * 2 + 1 != j * 2, true)",
+            // Euclid's identity over truncated division, at both signs of the divisor and of the copies taken.
+            "Eq((i / 3) * 3 + i % 3, i)",
+            "Eq(i % -3 + (i / -3) * -3, i)",
+            "Eq(+0 - i % 3 - (i / 3) * 3, +0 - i)",
         ],
-        // The control, and not a law: constants that agree modulo the gcd meet at `i = j + 1`.
-        refused: &["Eq(i * 2 == j * 2 + 2, false)"],
+        refused: &[
+            // The control, and not a law: constants that agree modulo the gcd meet at `i = j + 1`.
+            "Eq(i * 2 == j * 2 + 2, false)",
+            // A candidate, declined on purpose: true over truncated division, but reading it would rewrite a difference into a remainder where the recombination only ever shrinks a sum, so `i - d · (i / d)` and `i % d` stay two spellings.
+            "Eq(i - (i / 3) * 3, i % 3)",
+        ],
     },
     Carrier {
         name: "Int against Nat",
