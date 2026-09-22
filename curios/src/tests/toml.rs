@@ -37,8 +37,8 @@ const SCALARS: &[Row] = &[
         expected: "f = 3.5\n",
     },
     Row {
-        expr: r##"canon("neg = -1073741824")"##,
-        expected: "neg = -1073741824\n",
+        expr: r##"canon("neg = -9223372036854775808")"##,
+        expected: "neg = -9223372036854775808\n",
     },
     // The three non-finites TOML spells, on the *encode* side: `fbits` below decodes them and reads the bit pattern, which leaves `flt_str`'s three arms unasserted in the direction they are written for. `-nan` is the normalization row — it decodes to the same NaN and comes back with no sign, since a NaN's is not a fact the encoder reads.
     Row {
@@ -143,27 +143,27 @@ const DATE_TIMES: &[Row] = &[
     },
 ];
 
-/// The i31 envelope in every radix, and the first value past it on each side, rejected.
+/// The 64-bit signed range TOML 1.0 states, in every radix, and the first value past it on each side, rejected.
 const INTEGERS: &[Row] = &[
     Row {
-        expr: r##"decoded("i = 1073741823")"##,
-        expected: "i = 1073741823\n",
+        expr: r##"decoded("i = 9223372036854775807")"##,
+        expected: "i = 9223372036854775807\n",
     },
     Row {
-        expr: r##"decoded("i = -1073741824")"##,
-        expected: "i = -1073741824\n",
+        expr: r##"decoded("i = -9223372036854775808")"##,
+        expected: "i = -9223372036854775808\n",
     },
     Row {
-        expr: r##"decoded("i = 0x3fff_ffff")"##,
-        expected: "i = 1073741823\n",
+        expr: r##"decoded("i = 0x7fff_ffff_ffff_ffff")"##,
+        expected: "i = 9223372036854775807\n",
     },
     Row {
-        expr: r##"decoded("i = 0o7777777777")"##,
-        expected: "i = 1073741823\n",
+        expr: r##"decoded("i = 0o777777777777777777777")"##,
+        expected: "i = 9223372036854775807\n",
     },
     Row {
-        expr: r##"decoded(Str/concat("i = 0b", run_of("1", opaque_n(30))))"##,
-        expected: "i = 1073741823\n",
+        expr: r##"decoded(Str/concat("i = 0b", run_of("1", opaque_n(63))))"##,
+        expected: "i = 9223372036854775807\n",
     },
     Row {
         expr: r##"decoded("i = 0x0000_0001")"##,
@@ -178,28 +178,28 @@ const INTEGERS: &[Row] = &[
         expected: "i = 0\n",
     },
     Row {
-        expr: r##"decoded("i = 1073741824")"##,
+        expr: r##"decoded("i = 9223372036854775808")"##,
         expected: "reject",
     },
     Row {
-        expr: r##"decoded("i = -1073741825")"##,
+        expr: r##"decoded("i = -9223372036854775809")"##,
         expected: "reject",
     },
     Row {
-        expr: r##"decoded("i = 0x40000000")"##,
+        expr: r##"decoded("i = 0x8000000000000000")"##,
         expected: "reject",
     },
     Row {
-        expr: r##"decoded("i = 0o10000000000")"##,
+        expr: r##"decoded("i = 0o1000000000000000000000")"##,
         expected: "reject",
     },
     Row {
-        expr: r##"decoded(Str/concat("i = 0b1", run_of("0", opaque_n(30))))"##,
+        expr: r##"decoded(Str/concat("i = 0b1", run_of("0", opaque_n(63))))"##,
         expected: "reject",
     },
     Row {
         expr: r##"decoded("i = 42949672960")"##,
-        expected: "reject",
+        expected: "i = 42949672960\n",
     },
     Row {
         expr: r##"decoded("i = 9999999999999999999")"##,
