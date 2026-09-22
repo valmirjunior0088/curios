@@ -2,7 +2,7 @@
 //!
 //! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the `host_ops` wire store and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
 //!
-//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
+//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `Polls`, `ListBytes`, `ListHandle`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
 //!
 //! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket_open`, `clock`).
 
@@ -62,8 +62,8 @@ macro_rules! host_ops {
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
             socket_set_reuseaddr as socket/set_reuseaddr [h: Handle, on: Bool] [status: Status];
 
-            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle.
-            handle_poll as Handle/poll [handles: ListHandle, events: ListPoll, timeout: Int] [revents: ListPoll];
+            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle. A mask is a byte of flags, so the masks cross as one `Bytes` whose byte `i` is handle `i`'s.
+            handle_poll as Handle/poll [handles: ListHandle, events: Polls, timeout: Int] [revents: Polls];
 
             /// Close `h`. Closing an unknown handle is a no-op.
             handle_close as Handle/close [h: Handle] [];
@@ -160,8 +160,8 @@ macro_rules! wire_of {
     (ListHandle) => {
         WireType::List(WireLeaf::Handle)
     };
-    (ListPoll) => {
-        WireType::List(WireLeaf::Nat)
+    (Polls) => {
+        WireType::Bytes
     };
 }
 
@@ -195,8 +195,8 @@ macro_rules! last_of {
     (ListHandle) => {
         WireShape::Reference(WireReference::List(WireLeaf::Handle))
     };
-    (ListPoll) => {
-        WireShape::Reference(WireReference::List(WireLeaf::Nat))
+    (Polls) => {
+        WireShape::Reference(WireReference::Bytes)
     };
     ($scalar:ident) => {
         WireShape::Scalar(scalar_of!($scalar))
@@ -245,7 +245,7 @@ macro_rules! trait_param_of {
     (ListHandle) => {
         &[Handle]
     };
-    (ListPoll) => {
+    (Polls) => {
         &[Poll]
     };
 }
@@ -257,7 +257,7 @@ macro_rules! trait_result_of {
     (Bytes) => { Vec<u8> };
     (Status) => { Status };
     (ListBytes) => { Vec<Vec<u8>> };
-    (ListPoll) => { Vec<Poll> };
+    (Polls) => { Vec<Poll> };
 }
 
 /// A method's result slots → its Rust return type, following the same arity rule the guest shape does: no results is the unit `()`, one is the bare type, two or more is a tuple.

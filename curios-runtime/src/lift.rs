@@ -94,34 +94,10 @@ impl Lift for Vec<u8> {
     }
 }
 
-/// Read a `List(Nat)`/`List(Handle)` host-import argument: a `params[0]` anyref array whose elements are i31-boxed scalars (the module's uniform `List` shape, not `Bytes`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
-fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, wasmtime::Error> {
-    let Val::AnyRef(Some(anyref)) = param else {
-        return Err(wasmtime::Error::msg("expected non-null anyref"));
-    };
-
-    let array_ref = anyref
-        .as_array(&*caller)?
-        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
-
-    let len = array_ref.len(&*caller)?;
-
-    (0..len)
-        .map(|index| {
-            let Val::AnyRef(Some(element)) = array_ref.get(&mut *caller, index)? else {
-                return Err(wasmtime::Error::msg("expected non-null anyref element"));
-            };
-
-            // An element is a `Nat` the guest built, an i31 below `2³⁰` or a boxed magnitude past it; a mask is always the first, and a boxed one is refused by the unwrap rather than read as a number.
-            Ok(element.unwrap_i31(&*caller)?.get_u32())
-        })
-        .collect()
-}
-
-/// `List(Nat)` lifts to the per-handle interest masks — `handle_poll`'s `events` array.
+/// `handle_poll`'s `events`: a `Bytes` with one interest mask per handle.
 impl Lift for Vec<Poll> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(lift_i31_array(caller, &params[0])?
+        Ok(Vec::<u8>::lift(caller, params)?
             .into_iter()
             .map(Poll::from_bits)
             .collect())

@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
-use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async};
+use /std/{Bool, Byte, Bytes, Nat, Int, List, Result, Io, Async};
 
 --- What a park asks to be woken for.
 pub mod Interest;
@@ -10,15 +10,15 @@ pub use Interest/{let Interest};
 pub mod Readiness;
 pub use Readiness/{let Readiness};
 
-let to_mask(i: Interest) -> Nat =
-    Nat/or(
+let to_mask(i: Interest) -> Byte =
+    Byte/or(
         match i.readable | true => /sys/event/read | false => 0 end,
         match i.writable | true => /sys/event/write | false => 0 end);
 
-let flagged(mask: Nat, flag: Nat) -> Bool =
-    Nat/and(mask, flag) > 0;
+let flagged(mask: Byte, flag: Byte) -> Bool =
+    Byte/to_nat(Byte/and(mask, flag)) > 0;
 
-let of_mask(mask: Nat) -> Readiness =
+let of_mask(mask: Byte) -> Readiness =
     Readiness {
         fired =
             Interest {
@@ -29,11 +29,12 @@ let of_mask(mask: Nat) -> Readiness =
         hung_up = flagged(mask, /sys/event/hup),
     };
 
-let to_masks(interests: List(Interest)) -> List(Nat) =
-    match interests | [] => [] | [i, ..rest] => [to_mask(i), ..to_masks(rest)] end;
+--- A poll's masks cross as one byte per handle, in the handles' order.
+let to_masks(interests: List(Interest)) -> Bytes =
+    match interests | [] => x[] | [i, ..rest] => x[to_mask(i), ..to_masks(rest)] end;
 
-let of_masks(masks: List(Nat)) -> List(Readiness) =
-    match masks | [] => [] | [m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
+let of_masks(masks: Bytes) -> List(Readiness) =
+    match masks | x[] => [] | x[m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
 
 --- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
 pub let poll(

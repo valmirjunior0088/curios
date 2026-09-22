@@ -28,16 +28,16 @@ pub mod status {
     pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
 }
 
-/// `handle_poll` interest/readiness flags — a bitmask, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
+/// `handle_poll` interest/readiness flags — a bitmask of one byte, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
 pub mod event {
     /// The handle is (or should be watched to become) readable.
-    pub const READ: u32 = 0b0001;
+    pub const READ: u8 = 0b0001;
     /// The handle is (or should be watched to become) writable.
-    pub const WRITE: u32 = 0b0010;
+    pub const WRITE: u8 = 0b0010;
     /// The handle is in an error state. Result-only: reported even when never requested.
-    pub const ERR: u32 = 0b0100;
+    pub const ERR: u8 = 0b0100;
     /// The peer hung up. Result-only, like `ERR`.
-    pub const HUP: u32 = 0b1000;
+    pub const HUP: u8 = 0b1000;
 }
 
 /// `file_open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.

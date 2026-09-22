@@ -97,9 +97,9 @@ impl Default for TokenMint {
     }
 }
 
-/// A `handle_poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a `u32`, mirroring the guest's per-handle `Nat` mask. Lifts from / lowers to the raw `Nat` bits; [`Status`] lowers to its code the same way. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
+/// A `handle_poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a byte, mirroring the guest's per-handle `Byte`, so the masks for a call cross as one `Bytes` with a byte per handle. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Poll(u32);
+pub struct Poll(u8);
 
 impl Poll {
     /// The empty mask — no interest, or no readiness.
@@ -107,13 +107,13 @@ impl Poll {
         Self(0)
     }
 
-    /// Lift the raw `Nat` bits the guest marshals into a mask.
-    pub fn from_bits(bits: u32) -> Self {
+    /// The mask a byte of the guest's `Bytes` holds.
+    pub fn from_bits(bits: u8) -> Self {
         Self(bits)
     }
 
-    /// The raw bits, to lower back to the guest's `Nat`.
-    pub fn bits(self) -> u32 {
+    /// The raw bits, one byte of the `Bytes` lowered back to the guest.
+    pub fn bits(self) -> u8 {
         self.0
     }
 }

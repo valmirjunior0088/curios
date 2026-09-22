@@ -1163,10 +1163,10 @@ fn code_modules() -> Vec<SysModule> {
         SysModule::ops(
             "event",
             vec![
-                pub_let("read", nat(), nat_lit(event::READ)),
-                pub_let("write", nat(), nat_lit(event::WRITE)),
-                pub_let("err", nat(), nat_lit(event::ERR)),
-                pub_let("hup", nat(), nat_lit(event::HUP)),
+                pub_let("read", byte(), byte_lit(event::READ)),
+                pub_let("write", byte(), byte_lit(event::WRITE)),
+                pub_let("err", byte(), byte_lit(event::ERR)),
+                pub_let("hup", byte(), byte_lit(event::HUP)),
             ],
         ),
         SysModule::ops(

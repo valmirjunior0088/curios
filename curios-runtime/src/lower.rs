@@ -1,8 +1,8 @@
 use {
     super::{Handle, Poll, Status},
     wasmtime::{
-        AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, I31,
-        Mutability, RefType, StorageType, Val, ValType,
+        ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
+        StorageType, Val, ValType,
     },
 };
 
@@ -39,18 +39,6 @@ impl Lower for Handle {
     ) -> Result<(), wasmtime::Error> {
         self.bytes().lower(caller, results)
     }
-}
-
-/// Box `value` as the i31 ref an element of a `List(Nat)` crosses in, refusing a value the box cannot hold rather than wrapping one.
-///
-/// A scalar result crosses raw and the guest boxes it, but a list's elements are built here, inside the array the guest receives, so an element is boxed on this side. The guest reads a box signed — a `Nat` and an `Int` share one runtime form, an i31 below `2³⁰` in magnitude and a boxed magnitude past it — so an unsigned element crosses through the signed door, which admits `0..2^30`, and the boxed form's layout is `curios-emit`'s to mint. `I31::wrapping_u32` would drop bits and report nothing; the one element that crosses, a poll mask, is a handful of bits.
-fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Error> {
-    let boxed = i32::try_from(value)
-        .ok()
-        .and_then(I31::new_i32)
-        .ok_or_else(|| wasmtime::Error::msg(format!("host result {value} leaves the i31")))?;
-
-    Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
 }
 
 /// An `Int` result, as the raw `i32` it is: the guest boxes it after the call, into the i31 or past it into the boxed magnitude, neither of which this side needs to know.
@@ -146,26 +134,17 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `List(Nat)`: `handle_poll`'s parallel `revents` masks, lowered as an array of i31-boxed bits. Same uniform `List` shape as `Vec<Vec<u8>>` below (anyref elements over the codegen's `list_type`), only the elements are i31s rather than `Bytes` — the outbound dual of `lift.rs`'s `lift_i31_array`.
+/// `handle_poll`'s `revents`: a `Bytes` with one readiness mask per handle.
 impl Lower for Vec<Poll> {
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        let outer_type = anyref_array_type(caller.engine());
-        let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
-
-        let elements = self
-            .into_iter()
-            .map(|mask| i31_ref(&mut *caller, mask.bits()))
-            .collect::<Result<Vec<_>, wasmtime::Error>>()?;
-
-        results[0] = Val::AnyRef(Some(
-            ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
-        ));
-
-        Ok(())
+        self.into_iter()
+            .map(Poll::bits)
+            .collect::<Vec<u8>>()
+            .lower(caller, results)
     }
 }
 

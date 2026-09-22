@@ -133,20 +133,21 @@ export async function run(config) {
     tls_start_server: denied,
     socket_set_reuseaddr: reuseaddr,
     // Readiness in the playground: the three standard streams are always ready — stdin is at its end, which reads at once, and the output streams accept everything — and no other handle exists here, so anything else reports nothing. The timeout is ignored, since nothing can become ready later; a fiber parked on stdin therefore resumes at once and reads `EOF`.
+    // The masks cross as one byte per handle, in the handles' order.
     handle_poll: (handles, events, _timeout) => {
       const count = bridge.list_len(handles);
-      const ready = bridge.list_new(count);
+      const interest = decodeBytes(events);
+      const ready = new Uint8Array(count);
 
       for (let i = 0; i < count; i += 1) {
         const token = tokenOf(bridge.list_get(handles, i));
         const stdio =
           token === config.stdio.STDIN || token === config.stdio.STDOUT || token === config.stdio.STDERR;
-        const bits = stdio ? bridge.nat_unbox(bridge.list_get(events, i)) : 0;
 
-        bridge.list_set(ready, i, bridge.nat_box(bits));
+        ready[i] = stdio ? interest[i] : 0;
       }
 
-      return ready;
+      return encodeBytes(ready);
     },
     handle_close: () => {},
     clock_wall: () => {

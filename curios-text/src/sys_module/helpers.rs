@@ -56,6 +56,11 @@ pub(super) fn byte() -> Term {
     intrinsic(Intrinsic::ByteType)
 }
 
+// A `Byte` literal value term, for a wire code that is a byte on both sides.
+pub(super) fn byte_lit(n: u8) -> Term {
+    intrinsic(Intrinsic::Byte(n))
+}
+
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow` and `serial_op`) into the `/sys` code modules.
 pub(super) fn nat_lit(n: u32) -> Term {
     match n {
