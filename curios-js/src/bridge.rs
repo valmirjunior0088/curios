@@ -177,7 +177,7 @@ pub(crate) fn bridge_module() -> Module {
                 type_name: elems.clone(),
             }],
         ),
-        // A `Nat` element crosses as an i31 inside the list's `anyref` slot; boxing and unboxing through the bridge keeps JS from relying on the JS API's own number-to-reference conversion for an `anyref` parameter.
+        // A `Nat` element crosses as an i31 inside the list's `anyref` slot, read signed as the guest reads every one; boxing and unboxing through the bridge keeps JS from relying on the JS API's own number-to-reference conversion for an `anyref` parameter.
         (
             "nat_box",
             vec![("v", i32_val.clone())],
@@ -195,7 +195,7 @@ pub(crate) fn bridge_module() -> Module {
                         heap_type: HeapType::Abstract(AbsHeapType::I31),
                     },
                 },
-                Instr::I31GetU,
+                Instr::I31GetS,
             ],
         ),
     ];

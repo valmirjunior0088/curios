@@ -51,12 +51,12 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
     );
 }
 
-/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import, and a checked operation's overflow branch calls its class's helper before the `unreachable` — never a bare trap. The helper builds the sentence from its data segment where the refusal fires, so the module carries the one class its code can reach and allocates no message at start-up.
+/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import, and a checked operation's guard calls its class's helper before the `unreachable` — never a bare trap. The helper builds the sentence from its data segment where the refusal fires, so the module carries the one class its code can reach and allocates no message at start-up.
 #[test]
 fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatAdd,
-        vec![nat(1), nat(2)],
+        curios_cont::Intrinsic::FltToNat,
+        vec![flt(1.0)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
     assert_eq!(
@@ -66,10 +66,12 @@ fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
     );
     assert_eq!(count(&wat, "(data $refusal/"), 1);
     assert_absent(&wat, "(global $refusal/");
-    assert_contains(&wat, "call $refuse/nat");
+    assert_contains(&wat, "call $refuse/invariant");
 
-    let helper = &wat[wat.find("(func $refuse/nat").unwrap()..];
-    let build = helper.find("array.new_data $bytes $refusal/nat").unwrap();
+    let helper = &wat[wat.find("(func $refuse/invariant").unwrap()..];
+    let build = helper
+        .find("array.new_data $bytes $refusal/invariant")
+        .unwrap();
     let call = helper.find("call $panic").unwrap();
     assert!(build < call, "the message is built inside the helper");
     assert!(

@@ -1,9 +1,9 @@
 use {
     super::{
-        BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
+        BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Table,
+        LocalData, Table, get, set,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_utilities::{Entropy, Grain},
@@ -48,6 +48,8 @@ impl<'a, 'b> Context<'a, 'b> {
         data: &'a ClsrData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
+        locals.push(table.word_local());
+
         Self::Closure {
             table,
             data,
@@ -62,6 +64,8 @@ impl<'a, 'b> Context<'a, 'b> {
         data: &'a FuncData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
+        locals.push(table.word_local());
+
         Self::Function {
             table,
             data,
@@ -200,7 +204,10 @@ impl<'a, 'b> Context<'a, 'b> {
     ///
     /// A panic rather than a diagnostic, per this workspace's rule for invariants: a program's fault is reported to its author, but this crate's own broken contract is not something to emit code for.
     fn refuse_raw_aggregate(&self, value_name: &EmissionValueName, load_as: &LoadAs) {
-        let raw = matches!(load_as, LoadAs::Nat | LoadAs::Int | LoadAs::Flt);
+        let raw = matches!(
+            load_as,
+            LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt | LoadAs::Flt
+        );
 
         assert!(
             !(raw && self.is_aggregate(value_name)),
@@ -253,22 +260,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
-            LoadAs::Nat => {
-                vec![
-                    curios_wasm::Instr::RefCast {
-                        ref_type: Table::int_type(false),
-                    },
-                    curios_wasm::Instr::I31GetU,
-                ]
-            }
-            LoadAs::Int => {
-                vec![
-                    curios_wasm::Instr::RefCast {
-                        ref_type: Table::int_type(false),
-                    },
-                    curios_wasm::Instr::I31GetS,
-                ]
-            }
+            LoadAs::Nat => self.narrow_instrs(BigHelper::Word),
+            LoadAs::WireNat => self.narrow_instrs(BigHelper::NatWire),
+            LoadAs::WireInt => self.narrow_instrs(BigHelper::IntWire),
             LoadAs::Flt => {
                 vec![
                     curios_wasm::Instr::RefCast {
@@ -302,6 +296,38 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// Narrow the `Nat` or `Int` reference on the stack to a machine word: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating for a position, refusing for the host wire. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
+    fn narrow_instrs(&self, boxed: BigHelper) -> Vec<curios_wasm::Instr> {
+        let (word, _) = self.table().word_local();
+
+        vec![
+            set(&word),
+            get(&word),
+            curios_wasm::Instr::RefTest {
+                ref_type: Table::int_type(false),
+            },
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("narrow"),
+                block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(
+                    curios_wasm::NumType::I32,
+                )),
+                then_instructions: vec![
+                    get(&word),
+                    curios_wasm::Instr::RefCast {
+                        ref_type: Table::int_type(false),
+                    },
+                    curios_wasm::Instr::I31GetS,
+                ],
+                else_instructions: vec![
+                    get(&word),
+                    curios_wasm::Instr::Call {
+                        func_name: self.table().big_func(boxed),
+                    },
+                ],
+            },
+        ]
+    }
+
     /// Coerce a value already on the stack in the register carrier its local is declared at, to what the reading position demands.
     ///
     /// The positions the analysis decided the carrier *for* want exactly what the register holds, and cost nothing — that is the whole point of deciding it. Every other position boxes the value back and then reads it the ordinary way, which is the "coercion at the disagreeing use" the analysis is built around: one `ref.i31` or one `struct.new`, set against the `ref.cast` plus `i31.get_u` that holding it boxed would have cost at *every* arithmetic use.
@@ -311,11 +337,9 @@ impl<'a, 'b> Context<'a, 'b> {
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
-            (curios_cont::Repr::Nat, LoadAs::Nat)
-            | (curios_cont::Repr::Int, LoadAs::Int)
-            | (curios_cont::Repr::Flt, LoadAs::Flt) => {
-                vec![]
-            }
+            // A word is below `2³⁰`, so it is already its narrowing to any position and either wire.
+            (curios_cont::Repr::Nat, LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt)
+            | (curios_cont::Repr::Flt, LoadAs::Flt) => vec![],
             _ => box_instr(&carrier, self.table())
                 .into_iter()
                 .chain(self.load_as_instrs(load_as, false))
@@ -891,14 +915,18 @@ pub(crate) enum LoadAs {
     Concrete(curios_wasm::TypeName),
     /// The same cast, admitting null. A row slot its constructor does not write holds null, and a region split into its slots and rebuilt travels that null back through this store — so the position that fills a typed slot is the one position whose cast must not trap on it.
     ConcreteOrNull(curios_wasm::TypeName),
+    /// A machine word: a `Bool`, a byte, a tag, or a `Nat` narrowed where a position, a count or a key is asked for — exact below `2³² - 1`, saturating there.
     Nat,
-    Int,
+    /// A `Nat` narrowed to the host wire's `i32`, refusing one at or past `2³¹`.
+    WireNat,
+    /// An `Int` narrowed to the host wire's `i32`, refusing one outside `[-2³¹, 2³¹)`.
+    WireInt,
     Flt,
     Bin(Grain),
     List,
 }
 
-/// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f64`, and nothing at all for a representation that already names one.
+/// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
 ///
 /// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
 /// The zero of `carrier`, or the boxed zero when the destination holds a reference.
@@ -909,7 +937,7 @@ pub(crate) enum LoadAs {
 /// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
 pub(crate) fn slot_zero_instrs(slot: curios_cont::Slot) -> Vec<curios_wasm::Instr> {
     match slot {
-        curios_cont::Slot::Tag | curios_cont::Slot::Nat | curios_cont::Slot::Int => {
+        curios_cont::Slot::Tag | curios_cont::Slot::Nat => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
         curios_cont::Slot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
@@ -930,25 +958,28 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
 /// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
 pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
-        curios_cont::Repr::Nat | curios_cont::Repr::Int => {
-            vec![curios_wasm::Instr::I32Const { value: 0 }]
-        }
+        curios_cont::Repr::Nat => vec![curios_wasm::Instr::I32Const { value: 0 }],
         curios_cont::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
         curios_cont::Repr::Bin(_) => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
-        curios_cont::Repr::List | curios_cont::Repr::Ref => null_instrs(),
+        curios_cont::Repr::Number | curios_cont::Repr::List | curios_cont::Repr::Ref => {
+            null_instrs()
+        }
     }
 }
 
 pub(crate) fn box_instr(repr: &curios_cont::Repr, table: &Table) -> Option<curios_wasm::Instr> {
     match repr {
-        curios_cont::Repr::Nat | curios_cont::Repr::Int => Some(curios_wasm::Instr::RefI31),
+        curios_cont::Repr::Nat => Some(curios_wasm::Instr::RefI31),
         curios_cont::Repr::Flt => Some(curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }),
-        curios_cont::Repr::Bin(_) | curios_cont::Repr::List | curios_cont::Repr::Ref => None,
+        curios_cont::Repr::Number
+        | curios_cont::Repr::Bin(_)
+        | curios_cont::Repr::List
+        | curios_cont::Repr::Ref => None,
     }
 }
 
@@ -961,21 +992,22 @@ impl LoadAs {
     pub(crate) fn of(repr: &curios_cont::Repr) -> Self {
         match repr {
             curios_cont::Repr::Nat => Self::Nat,
-            curios_cont::Repr::Int => Self::Int,
             curios_cont::Repr::Flt => Self::Flt,
             curios_cont::Repr::Bin(grain) => Self::Bin(*grain),
             curios_cont::Repr::List => Self::List,
-            curios_cont::Repr::Ref => Self::Null,
+            // A `Nat` or `Int` operand is handed on as the reference it is; the lowering reading it tests and unboxes it itself, and takes a register-held word without this load.
+            curios_cont::Repr::Number | curios_cont::Repr::Ref => Self::Null,
         }
     }
 }
 
-/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), `Flt` reads the `f64` out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: a `Bool` as its word, a `Nat` or `Int` narrowed to the wire's `i32` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {
-            WireType::Nat | WireType::Bool => LoadAs::Nat,
-            WireType::Int => LoadAs::Int,
+            WireType::Bool => LoadAs::Nat,
+            WireType::Nat => LoadAs::WireNat,
+            WireType::Int => LoadAs::WireInt,
             WireType::Flt => LoadAs::Flt,
             WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
             WireType::Bits => LoadAs::Bin(Grain::B),

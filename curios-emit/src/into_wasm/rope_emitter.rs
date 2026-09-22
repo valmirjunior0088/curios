@@ -13,11 +13,10 @@
 mod force_walk;
 use force_walk::*;
 
-mod shorthand;
-use shorthand::*;
-
 use {
-    super::{ImmediateLayout, RopeData, Table},
+    super::{
+        ImmediateLayout, RopeData, Table, cast, concrete_val, field_get, field_set, get, null, set,
+    },
     curios_utilities::Grain,
 };
 

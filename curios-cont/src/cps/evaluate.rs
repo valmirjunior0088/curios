@@ -6,8 +6,8 @@ use {
     },
 };
 
-/// The allowance the growing folds take here: a result wider than the envelope cannot be materialized whatever it is, so building one buys nothing and folding it would let a literal count ask this pass for a numeral no machine holds.
-const FOLD_ALLOWANCE_BITS: u64 = ENVELOPE_BITS as u64;
+/// The allowance the growing folds take here: `curios-ersd`'s own bound on a folded scalar, since a folded `Nat` or `Int` past the i31 materializes as a boxed constant and one wider than that could not have come down from the stage above. A literal count may still ask for a numeral no machine holds, and past this the fold declines.
+const FOLD_ALLOWANCE_BITS: u64 = 65_536 * 8;
 
 /// Fold one intrinsic over literal operands, or decline.
 ///
@@ -116,7 +116,7 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
         Intrinsic::FltToNat => Some(Literal::Nat(flt_to_nat(flt(0)?).ok()?)),
         Intrinsic::FltToInt => Some(Literal::Int(flt_to_int(flt(0)?).ok()?)),
-        // Folds over the *runtime* representation, not the literal's kind: `Nat` and `Int` ride i31, while an `Flt` is a boxed struct and a `Bin` a rope reference, so both answer 0.
+        // Folds over the *runtime* representation, not the literal's kind: a `Nat` or `Int` is an i31 or a boxed magnitude, both of which the test admits, while an `Flt` is a boxed struct and a `Bin` a rope reference, so those answer 0.
         Intrinsic::IsImmediate => Some(Literal::Nat(Natural::from(match literals[0] {
             Literal::Nat(_) | Literal::Int(_) => 1u32,
             Literal::Flt(_) | Literal::Bin(_, _) => 0,

@@ -1,4 +1,4 @@
-//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program rows (`tuple/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-js's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
+//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, the boxed form of a `Nat` or `Int`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program rows (`tuple/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-js's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
 //!
 //! # The rope representation
 //!
@@ -172,6 +172,41 @@ pub fn rope_view_sub_type(
                 ref_field(base_type, false, curios_wasm::Mutability::Const),
             ),
             (offset_field, i32_const_field()),
+        ])),
+    }
+}
+
+/// `$limbs` — a boxed `Nat` or `Int`'s magnitude: `array (mut i32)`, 32-bit limbs least significant first. Mutable because a helper fills the array it allocates in place; no helper ever writes one it was handed.
+pub fn limbs_sub_type() -> curios_wasm::SubType {
+    curios_wasm::SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: curios_wasm::CompType::Array(curios_wasm::ArrayType {
+            field_type: curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
+                    curios_wasm::NumType::I32,
+                )),
+                mutability: curios_wasm::Mutability::Var,
+            },
+        }),
+    }
+}
+
+/// `$big` — a `Nat` or `Int` the i31 does not hold, the two carriers sharing one form: `struct (field $sign (i32)) (field $limbs (ref $limbs))`, the sign `1` for a negative value and `0` otherwise. Final, so telling it apart from every other reference is one exact cast, and canonical: its magnitude is trimmed, never zero, and never inside the i31's range, so a value has one spelling and an i31 and a boxed magnitude are never equal.
+pub fn big_sub_type(
+    sign_field: curios_wasm::FieldName,
+    limbs_field: curios_wasm::FieldName,
+    limbs_type: curios_wasm::TypeName,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
+            (sign_field, i32_const_field()),
+            (
+                limbs_field,
+                ref_field(limbs_type, false, curios_wasm::Mutability::Const),
+            ),
         ])),
     }
 }

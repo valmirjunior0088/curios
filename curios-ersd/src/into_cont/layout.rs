@@ -3,7 +3,7 @@
 //! One question, asked from every construction site and every match arm, whose answer has to be the same each time — so it is computed once per family or schema and memoized. [`lay_out`] is the packing rule the answers are built from: slots grouped by carrier rather than by field position, so two writers agreeing on a carrier share its slots and only a disagreement costs width.
 
 use {
-    super::{ConstructorId, FamilyId, FieldShape, Module, ProductId, Sign},
+    super::{ConstructorId, FamilyId, FieldShape, Module, ProductId},
     std::collections::BTreeMap,
 };
 
@@ -14,7 +14,7 @@ pub(super) enum FamilyEncoding {
     Tagged,
     /// A single-constructor family: nothing ever needs discriminating, so it encodes as the struct with the same relevant row would — one payload is the bare value, several are an untagged tuple, none is the `Nat` zero — and a match on it never dispatches.
     Collapsed,
-    /// A multi-constructor family whose one immediate-unary constructor rides as its bare payload; every other constructor keeps its tagged tuple. Discrimination is an `IsImmediate` test — the payload is always an immediate and every other constructor a struct, so the two answers are disjoint by construction, and exactly one such constructor is admitted because two would collide on the same immediates.
+    /// A multi-constructor family whose one immediate-unary or number-unary constructor rides as its bare payload; every other constructor keeps its tagged tuple. Discrimination is an `IsImmediate` test — the payload is an i31 or the boxed magnitude of a `Nat` or `Int`, and every other constructor a row struct, so the two answers are disjoint by construction, and exactly one such constructor is admitted because two would collide on the same immediates.
     Immediate { constructor: ConstructorId },
 }
 
@@ -114,8 +114,9 @@ impl<'a> Layout<'a> {
         family_typed: bool,
     ) -> curios_cont::Slot {
         match shape {
-            FieldShape::Immediate(Sign::Unsigned) => curios_cont::Slot::Nat,
-            FieldShape::Immediate(Sign::Signed) => curios_cont::Slot::Int,
+            FieldShape::Immediate => curios_cont::Slot::Nat,
+            // A `Nat` or `Int` is an i31 or a boxed magnitude, so no single heap type names it, as for a packed carrier.
+            FieldShape::Number => curios_cont::Slot::Opaque,
             FieldShape::Flt => curios_cont::Slot::Flt,
             FieldShape::List => curios_cont::Slot::List,
             FieldShape::Closure(arity) => curios_cont::Slot::Closure(arity),
@@ -189,7 +190,7 @@ impl<'a> Layout<'a> {
                 .constructor(constructor)
                 .expect("live constructor")
                 .fields;
-            matches!(fields.as_slice(), [field] if matches!(field.shape, FieldShape::Immediate(_)))
+            matches!(fields.as_slice(), [field] if matches!(field.shape, FieldShape::Immediate | FieldShape::Number))
         });
         match (immediate_unary.next(), immediate_unary.next()) {
             (Some(&constructor), None) => FamilyEncoding::Immediate { constructor },

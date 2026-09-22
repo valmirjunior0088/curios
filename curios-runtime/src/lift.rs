@@ -112,6 +112,7 @@ fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, 
                 return Err(wasmtime::Error::msg("expected non-null anyref element"));
             };
 
+            // An element is a `Nat` the guest built, an i31 below `2³⁰` or a boxed magnitude past it; a mask is always the first, and a boxed one is refused by the unwrap rather than read as a number.
             Ok(element.unwrap_i31(&*caller)?.get_u32())
         })
         .collect()

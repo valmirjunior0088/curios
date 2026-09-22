@@ -28,8 +28,8 @@ use {
     super::{
         Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
         FamilyId, FieldShape, FoldNatStep, FoldSequenceStep, Function, FunctionId, Module,
-        Operation, ProductId, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Sign,
-        Statement, StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        Operation, ProductId, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
+        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_utilities::grown,
 };

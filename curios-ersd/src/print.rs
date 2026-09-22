@@ -17,7 +17,7 @@ use {
     super::{
         Atom, BlockId, CellOperation, Constant, ConstructorId, FamilyId, Field, FieldShape,
         ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs, SequenceGrain,
-        SequenceOp, Sign, Statement, StatementId, Terminator, ValueId,
+        SequenceOp, Statement, StatementId, Terminator, ValueId,
     },
     curios_utilities::Grain,
     std::{
@@ -823,8 +823,8 @@ fn fields(row: &[Field]) -> String {
                 None => format!("{index}"),
             };
             match field.shape {
-                FieldShape::Immediate(Sign::Unsigned) => format!("{name}:immediate"),
-                FieldShape::Immediate(Sign::Signed) => format!("{name}:immediate/signed"),
+                FieldShape::Immediate => format!("{name}:immediate"),
+                FieldShape::Number => format!("{name}:number"),
                 FieldShape::Flt => format!("{name}:flt"),
                 FieldShape::Packed(Grain::X) => format!("{name}:bytes"),
                 FieldShape::Packed(Grain::B) => format!("{name}:bits"),

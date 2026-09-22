@@ -1,19 +1,21 @@
 //! Which values can be held in a machine register instead of an `i31`/`Flt` reference.
 //!
-//! Every value in an emitted module is a reference today, which is what lets one closure type serve an arity and one field shape serve a constructor. Inside a loop that uniformity buys nothing and costs a great deal: a `Nat` multiply widens both operands to 64 bits, multiplies, shifts and branches purely to check that the product still fits the 31 bits an `i31` holds, and every operand arrives through a `ref.cast` and an `i31.get_u` first.
+//! Every value in an emitted module is a reference by default, which is what lets one closure type serve an arity and one field shape serve a constructor. Inside a loop that uniformity buys nothing and costs a great deal: every `Flt` operation allocates its result's box, and every read of a `Bool`, a byte or a tag arrives through a type check and an unbox first. A `Nat` or `Int` is not among what a register holds — it is a reference whatever its size, an i31 or a boxed magnitude — so the words here are the bounded scalars and the floats.
 //!
 //! **The carrier is not in question; the storage is.** A value's carrier is fixed by whatever produced it, so the decision is whether to hold it raw or behind a reference — but the answer must *name* the carrier, because a local has to be declared `i32` or `f64` and a continuation parameter has no producer to read it from. Its carrier is only knowable from the demands its uses impose, which is why it is carried in the lattice rather than recovered afterwards.
 //!
-//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it", which was specified first and measured worthless: in the `lcg` kernel `x` is used by a multiply *and* jumped out on the loop-exit edge, so the conservative join answers boxed and the 64-bit multiply survives — the single largest cost in the loop. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31`, while boxed to raw is a `ref.cast` plus an `i31.get_u`, two instructions of which one is a runtime type check.
+//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it", which was specified first and measured worthless while `Nat` still rode a word: in the `lcg` kernel `x` was used by a multiply *and* jumped out on the loop-exit edge, so the conservative join answered boxed and the 64-bit multiply survived — the single largest cost in the loop. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31` or one `struct.new`, while boxed to raw is a runtime type check and an unbox.
 //!
 //! **An edge argument's demand is the storage of the parameter it feeds**, which is what makes this a fixpoint rather than a scan. Without that rule a loop's back-edge values have no raw use of their own — the decremented counter and the folded accumulator are *only* ever passed back round — so they would settle boxed and the loop would coerce on every iteration, losing exactly what the analysis exists to win.
+//!
+//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a continuation parameter coerced to a word loses what a bigger argument said. A parameter is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such parameter — which [`word_params`] decides before any demand is read. A `Flt` parameter needs no such test: unboxing a float loses nothing.
 //!
 //! **A use can only take what the definition can give**, which is what [`Offer`] states. Demands alone would raise a function parameter the moment its body did arithmetic on it — and a function parameter arrives through a `func/N` signature that is uniformly `anyref`, with no store site the analysis controls. The same holds of a value returning from a call, a host import or a cell read. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 
 use {
     super::{
         Atom, ContinuationId, Edge, Lattice, Literal, Module, Node, Repr, Solver, ValueExpr,
-        ValueId, analysis::free_values,
+        ValueId, analysis::free_values, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -66,8 +68,8 @@ impl Lattice for Storage {
 enum Offer {
     /// The definition produces exactly this carrier, so a use demanding it reads the register directly and every other use coerces at its own site.
     Fixed(Repr),
-    /// A continuation parameter, which has no producer of its own: it holds whatever its uses agree on, and each incoming edge coerces its argument to match. This is the only offer a `Conflict` can arise from.
-    Open,
+    /// A continuation parameter, which has no producer of its own: it holds whatever its uses agree on, and each incoming edge coerces its argument to match. This is the only offer a `Conflict` can arise from. `words` says whether the machine word is among what it may hold, which [`word_params`] decides from what reaches it.
+    Open { words: bool },
     /// Nothing. Either the value arrives through a position that is uniformly a reference — a function parameter, a call, host or cell result, a recursive shell — or its definition builds a heap shape, which a register cannot hold in the first place.
     Never,
 }
@@ -76,7 +78,7 @@ impl Offer {
     /// Whether this definition can hand `carrier` to a register.
     fn admits(&self, carrier: Repr) -> bool {
         match self {
-            Offer::Open => true,
+            Offer::Open { words } => carrier != Repr::Nat || *words,
             Offer::Fixed(fixed) => *fixed == carrier,
             Offer::Never => false,
         }
@@ -91,11 +93,11 @@ fn offer_of(repr: Repr) -> Offer {
     }
 }
 
-/// The representation a literal is materialised at.
+/// The representation a literal is materialised at: a small `Nat` rides a machine word, since every word a use may ask it for is its value; any other `Nat`, and every `Int`, is the reference either always is, an i31 or a boxed magnitude.
 fn literal_repr(literal: &Literal) -> Repr {
     match literal {
-        Literal::Nat(_) => Repr::Nat,
-        Literal::Int(_) => Repr::Int,
+        Literal::Nat(value) if nat_is_small(value) => Repr::Nat,
+        Literal::Nat(_) | Literal::Int(_) => Repr::Ref,
         Literal::Flt(_) => Repr::Flt,
         Literal::Bin(grain, _) => Repr::Bin(*grain),
     }
@@ -120,15 +122,22 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     for (_, continuation) in module.continuations.iter_live() {
         // A continuation parameter has no producer of its own, so it takes whatever its uses agree on.
         for &param in &continuation.params {
-            offers.insert(param, Offer::Open);
+            offers.insert(param, Offer::Open { words: true });
         }
     }
 
     for (_, node) in module.nodes.iter_live() {
         match node {
             // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
-            Node::LetIntrinsic { result, op, .. } => {
-                offers.insert(*result, offer_of(module.result_repr(op)));
+            // A result its literal operands bound below the i31 is offered the word its value fits.
+            Node::LetIntrinsic {
+                result, op, args, ..
+            } => {
+                let offer = match op.bounds_result(args) {
+                    true => Offer::Fixed(Repr::Nat),
+                    false => offer_of(module.result_repr(op)),
+                };
+                offers.insert(*result, offer);
             }
 
             Node::LetValue { result, value, .. } => {
@@ -193,24 +202,93 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
         offers.insert(value, Offer::Never);
     }
 
+    let words = word_params(module, &offers);
+    for (value, offer) in &mut offers {
+        if let Offer::Open { words: admitted } = offer {
+            *admitted = words.contains(value);
+        }
+    }
+
     offers
 }
 
-/// The raw carrier a representation names, or `None` when it names a reference.
+/// The continuation parameters a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, or another such parameter.
+///
+/// A greatest fixpoint, because a loop parameter reaches itself around its back edge: every open parameter starts admitted, one reached by anything else is dropped, and each drop drops the parameters it reaches in turn.
+fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
+    let open = |value: &ValueId| matches!(offers.get(value), Some(Offer::Open { .. }));
+    let mut words = offers.keys().copied().filter(open).collect::<BTreeSet<_>>();
+    let mut reaches = BTreeMap::<ValueId, Vec<ValueId>>::new();
+    let mut dropped = Vec::new();
+
+    let mut read_edge = |edge: &Edge| {
+        let Some(target) = module.continuation(edge.target) else {
+            return;
+        };
+
+        for (arg, &param) in edge.args.iter().zip(&target.params) {
+            match arg {
+                Atom::Value(value) if open(value) => reaches.entry(*value).or_default().push(param),
+                Atom::Value(value) if offers.get(value) == Some(&Offer::Fixed(Repr::Nat)) => {}
+                Atom::Literal(literal) if literal_repr(literal) == Repr::Nat => {}
+                Atom::Filler => {}
+                Atom::Value(_) | Atom::Literal(_) | Atom::Fun(_) => dropped.push(param),
+            }
+        }
+    };
+
+    for (_, node) in module.nodes.iter_live() {
+        match node {
+            Node::ApplyCont(edge) => read_edge(edge),
+            Node::Switch { cases, default, .. } => {
+                cases
+                    .values()
+                    .chain(default.iter())
+                    .for_each(&mut read_edge);
+            }
+            Node::LetIntrinsic { .. }
+            | Node::LetValue { .. }
+            | Node::ApplyFun { .. }
+            | Node::Cell { .. }
+            | Node::Intrinsic { .. }
+            | Node::Foreign { .. }
+            | Node::LetFun { .. }
+            | Node::LetCont { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
+        }
+    }
+
+    while let Some(param) = dropped.pop() {
+        if words.remove(&param) {
+            dropped.extend(reaches.get(&param).into_iter().flatten().copied());
+        }
+    }
+
+    words
+}
+
+/// The raw carrier a representation demands, or `None` when it names a reference. A `Nat` or `Int` operand demands the word, which only a definition offering one can meet: everything else stays the reference the operand reads by default.
 fn raw_carrier(repr: &Repr) -> Option<Repr> {
     match repr {
-        Repr::Nat | Repr::Int | Repr::Flt => Some(*repr),
+        Repr::Nat | Repr::Flt => Some(*repr),
+        Repr::Number => Some(Repr::Nat),
         Repr::Bin(_) | Repr::List | Repr::Ref => None,
     }
 }
 
-/// The raw carrier a host call reads this wire type at. Mirrors the `WireType`-to-`LoadAs` mapping the emitter already applies at foreign call sites, where `Bool` crosses as a `Nat`.
+/// The raw carrier a host call reads this wire type at. Mirrors the `WireType`-to-`LoadAs` mapping the emitter already applies at foreign call sites: a `Bool` crosses as its word, while a `Nat` or `Int` arrives as the reference it is and is narrowed to the wire at the call, refusing a value the wire cannot carry.
 fn wire_carrier(wire: &WireType) -> Option<Repr> {
     match wire {
-        WireType::Nat | WireType::Bool => Some(Repr::Nat),
-        WireType::Int => Some(Repr::Int),
+        WireType::Bool => Some(Repr::Nat),
         WireType::Flt => Some(Repr::Flt),
-        WireType::Bytes | WireType::Bits | WireType::Handle | WireType::List(_) => None,
+        WireType::Nat
+        | WireType::Int
+        | WireType::Bytes
+        | WireType::Bits
+        | WireType::Handle
+        | WireType::List(_) => None,
     }
 }
 

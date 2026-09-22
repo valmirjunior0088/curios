@@ -45,6 +45,12 @@ use module_emitter::*;
 mod rope_emitter;
 use rope_emitter::*;
 
+mod big_emitter;
+use big_emitter::*;
+
+mod shorthand;
+use shorthand::*;
+
 mod types;
 pub use types::*;
 

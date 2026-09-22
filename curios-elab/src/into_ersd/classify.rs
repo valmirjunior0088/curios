@@ -120,12 +120,13 @@ pub(crate) fn field_shape(
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
-        Subterm::Intrinsic(Intrinsic::NatType | Intrinsic::BoolType | Intrinsic::ByteType) => Ok(
-            curios_ersd::FieldShape::Immediate(curios_ersd::Sign::Unsigned),
-        ),
-        Subterm::Intrinsic(Intrinsic::IntType) => Ok(curios_ersd::FieldShape::Immediate(
-            curios_ersd::Sign::Signed,
-        )),
+        Subterm::Intrinsic(Intrinsic::BoolType | Intrinsic::ByteType) => {
+            Ok(curios_ersd::FieldShape::Immediate)
+        }
+        // A `Nat` or `Int` rides the i31 only while it is small and is a boxed magnitude past it, so it is sometimes an immediate: not `Immediate`, but a shape of its own the family encoding can still discriminate.
+        Subterm::Intrinsic(Intrinsic::NatType | Intrinsic::IntType) => {
+            Ok(curios_ersd::FieldShape::Number)
+        }
         Subterm::Intrinsic(Intrinsic::FltType) => Ok(curios_ersd::FieldShape::Flt),
         Subterm::Intrinsic(Intrinsic::BinType(grain)) => Ok(curios_ersd::FieldShape::Packed(grain)),
         Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Packed(Grain::X)),
@@ -184,9 +185,7 @@ pub(crate) fn field_shape(
             };
             match relevant_chain(context, telescope)? {
                 // No payload rides the interned `Nat` zero; one payload is the value itself; two or more are the family's own row, which the collapsed encoding lays out exactly as the equivalent struct.
-                Chain::None => Ok(curios_ersd::FieldShape::Immediate(
-                    curios_ersd::Sign::Unsigned,
-                )),
+                Chain::None => Ok(curios_ersd::FieldShape::Immediate),
                 Chain::One(domain) => field_shape(lowering, context, visited, &domain),
                 Chain::Many => Ok(curios_ersd::FieldShape::Family(
                     lowering.family_identity(context, &induct_type.name)?,

@@ -41,29 +41,27 @@ impl Lower for Handle {
     }
 }
 
-/// Box `value` as the i31 ref every scalar crosses this boundary in, refusing a value the carrier cannot hold rather than wrapping one.
+/// Box `value` as the i31 ref every scalar crosses this boundary in, refusing a value the box cannot hold rather than wrapping one.
 ///
-/// **The refusal is the point, and it is the guest half's rule stated on the host half.** `I31::wrapping_u32` drops bit 31 and reports nothing, while `into_wasm`'s literal materialization emits `unreachable` for exactly the values it would drop — so a wrapping host result would be the one direction across this boundary in which leaving the envelope changed a number instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `handle_write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
+/// The guest reads every scalar box signed — a `Nat` and an `Int` share one runtime form, an i31 below `2³⁰` in magnitude and a boxed magnitude past it — so an unsigned result crosses through the signed door, which admits `0..2^30`. A host cannot mint the boxed form, whose layout is `curios-emit`'s, so a result past the i31 is refused here: `I31::wrapping_u32` would drop bits and report nothing, the one direction across this boundary in which a number would change instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `handle_write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
 fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Error> {
-    let boxed = I31::new_u32(value).ok_or_else(|| {
-        wasmtime::Error::msg(format!("host result {value} leaves the i31 carrier"))
-    })?;
+    let boxed = i32::try_from(value)
+        .ok()
+        .and_then(I31::new_i32)
+        .ok_or_else(|| wasmtime::Error::msg(format!("host result {value} leaves the i31")))?;
 
     Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
 }
 
-/// Box `value` as the i31 ref a *signed* scalar crosses in, refusing one the carrier cannot hold for the reason [`i31_ref`] states.
-///
-/// Separate from [`i31_ref`] because the envelope is: `I31::new_u32` admits `0..2^31` and `I31::new_i32` admits `-2^30..2^30`, and which is right is decided by how the guest reads the box back — `Int` unboxes with `i31.get_s`, every other scalar with `i31.get_u`. Lowering a negative `Int` through the unsigned door would refuse a number that fits perfectly well.
+/// Box `value` as the i31 ref a *signed* scalar crosses in, refusing one the box cannot hold for the reason [`i31_ref`] states: `I31::new_i32` admits `-2^30..2^30`, which is exactly what the guest reads back signed.
 fn i31_ref_signed(caller: &mut Caller<'_, ()>, value: i32) -> Result<Val, wasmtime::Error> {
-    let boxed = I31::new_i32(value).ok_or_else(|| {
-        wasmtime::Error::msg(format!("host result {value} leaves the i31 carrier"))
-    })?;
+    let boxed = I31::new_i32(value)
+        .ok_or_else(|| wasmtime::Error::msg(format!("host result {value} leaves the i31")))?;
 
     Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
 }
 
-/// An `Int` result, which is the one scalar the guest unboxes signed.
+/// An `Int` result.
 impl Lower for i32 {
     fn lower(
         self,

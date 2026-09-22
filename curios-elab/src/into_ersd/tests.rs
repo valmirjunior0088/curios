@@ -1,7 +1,7 @@
 use crate::reduce::test_support::qed;
 use curios_core::Zonked;
 use curios_core::*;
-use curios_ersd::{FieldShape, Sign, test_support::shape};
+use curios_ersd::{FieldShape, test_support::shape};
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
@@ -628,7 +628,7 @@ entry
   Return ~v0
 "
     );
-    // The family the construction registered against, asked of the arena the header used to render: a nullary `none` and a `some` carrying one immediate, with `~t1` — the constructed one — the second.
+    // The family the construction registered against, asked of the arena the header used to render: a nullary `none` and a `some` carrying one `Nat`, with `~t1` — the constructed one — the second.
     let [family] = erased.families() else {
         panic!("the fixture registers one family");
     };
@@ -650,7 +650,7 @@ entry
             .iter()
             .map(|field| field.shape)
             .collect::<Vec<_>>(),
-        vec![FieldShape::Immediate(Sign::Unsigned)]
+        vec![FieldShape::Number]
     );
 }
 
@@ -1241,14 +1241,19 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let erased =
         erase_module(&mut context, &zonked(&fixture), &expected).expect("the module erases");
 
-    let immediate = FieldShape::Immediate(Sign::Unsigned);
-    assert_eq!(payload(&erased, "/Wrapped"), vec![("x", immediate)]);
+    assert_eq!(
+        payload(&erased, "/Wrapped"),
+        vec![("x", FieldShape::Number)]
+    );
     assert_eq!(
         payload(&erased, "/Knotted"),
         vec![("x", FieldShape::Opaque)]
     );
     // `Boxed` was this fixture's "not immediate" example; the full recorder now names its carrier instead of merely withholding `immediate`.
     assert_eq!(payload(&erased, "/Boxed"), vec![("x", FieldShape::Flt)]);
-    assert_eq!(payload(&erased, "/Chained"), vec![("x", immediate)]);
+    assert_eq!(
+        payload(&erased, "/Chained"),
+        vec![("x", FieldShape::Number)]
+    );
     assert_eq!(payload(&erased, "/Selfy"), vec![("x", FieldShape::Opaque)]);
 }

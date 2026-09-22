@@ -3,7 +3,7 @@
 use {
     super::map_wall::{cwasm_of, run, timed},
     crate::{tests::ersd_optm, wasm_optm},
-    curios_ersd::{FieldShape, Module, Sign},
+    curios_ersd::{FieldShape, Module},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Grain,
@@ -72,11 +72,7 @@ fn a_recorded_shape_survives_to_the_program_schema() {
             shapes["fork"]
         )
     };
-    assert_eq!(
-        *crit,
-        FieldShape::Immediate(Sign::Unsigned),
-        "fork: an unsigned Nat crit",
-    );
+    assert_eq!(*crit, FieldShape::Number, "fork: a Nat crit");
     // The children are the family's *own* identity, which is the case the recorder exists to reach: a shape that named only "some family" could not be spent on a declared field type, and a self-reference is where that matters most.
     let (FieldShape::Family(zero), FieldShape::Family(one)) = (zero, one) else {
         panic!("fork's children record their family, got {zero:?} and {one:?}")
@@ -96,8 +92,8 @@ fn a_recorded_shape_survives_to_the_program_schema() {
 /// The label a shape counts under in the census table.
 fn shape_class(shape: FieldShape) -> &'static str {
     match shape {
-        FieldShape::Immediate(Sign::Unsigned) => "immediate",
-        FieldShape::Immediate(Sign::Signed) => "immediate/signed",
+        FieldShape::Immediate => "immediate",
+        FieldShape::Number => "number",
         FieldShape::Flt => "flt",
         FieldShape::Packed(Grain::X) => "bytes",
         FieldShape::Packed(Grain::B) => "bits",
@@ -385,7 +381,7 @@ fn boxed_field_read_measurements() {
 fn family_slot_probe() {
     let module = ersd_optm(SPINES);
 
-    // Whether a value of this family is *always* the row struct. An immediate family's bare constructor rides the i31 instead, so no heap type names its population and a slot can never be declared at it.
+    // Whether a value of this family is *always* the row struct. An immediate family's bare constructor rides the i31 — or, for a `Nat` or `Int`, the boxed magnitude — instead, so no heap type names its population and a slot can never be declared at it.
     let always_a_row = |family: curios_ersd::FamilyId| -> bool {
         let rows: Vec<&curios_ersd::Constructor> = module
             .family(family)
@@ -397,7 +393,7 @@ fn family_slot_probe() {
         let bare = rows
             .iter()
             .filter(|constructor| {
-                matches!(constructor.fields.as_slice(), [field] if matches!(field.shape, FieldShape::Immediate(_)))
+                matches!(constructor.fields.as_slice(), [field] if matches!(field.shape, FieldShape::Immediate | FieldShape::Number))
             })
             .count();
         rows.len() < 2 || bare != 1
@@ -406,8 +402,7 @@ fn family_slot_probe() {
     // The carrier a shape occupies, mirroring the door's own rule. `family_typed` is the question this probe exists to answer: a family-typed reference field is the one shape whose typing can cost width.
     let class = |shape: FieldShape, family_typed: bool| -> Option<String> {
         match shape {
-            FieldShape::Immediate(Sign::Unsigned) => Some("nat".into()),
-            FieldShape::Immediate(Sign::Signed) => Some("int".into()),
+            FieldShape::Immediate => Some("nat".into()),
             FieldShape::Flt => Some("flt".into()),
             FieldShape::List => Some("list".into()),
             FieldShape::Closure(arity) => Some(format!("closure/{arity}")),
@@ -415,7 +410,10 @@ fn family_slot_probe() {
             FieldShape::Family(family) if family_typed && always_a_row(family) => {
                 Some(format!("family/{family}"))
             }
-            FieldShape::Packed(_) | FieldShape::Family(_) | FieldShape::Opaque => None,
+            FieldShape::Number
+            | FieldShape::Packed(_)
+            | FieldShape::Family(_)
+            | FieldShape::Opaque => None,
         }
     };
 
@@ -468,7 +466,7 @@ fn family_slot_probe() {
         let bare = rows
             .iter()
             .filter(|row| {
-                matches!(row.as_slice(), [shape] if matches!(shape, FieldShape::Immediate(_)))
+                matches!(row.as_slice(), [shape] if matches!(shape, FieldShape::Immediate | FieldShape::Number))
             })
             .count();
         if bare == 1 {

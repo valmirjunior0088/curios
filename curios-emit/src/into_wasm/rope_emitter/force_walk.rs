@@ -1,6 +1,6 @@
 //! The iterative flattening walk shared by the two grain-specific `force` emitters.
 
-use super::{RopeData, shorthand::*};
+use super::{RopeData, cast, concrete_val, field_get, field_set, get, null, set};
 
 /// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and [`RopeEmitter::emit_bits_force_func`](super::RopeEmitter::emit_bits_force_func): one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: destination sizing, the chunk-count source, and the copy body.
 pub(super) struct ForceWalk<'r> {

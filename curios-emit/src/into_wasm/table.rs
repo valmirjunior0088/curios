@@ -1,8 +1,8 @@
 use {
     super::{
-        EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
-        EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, LoadAs, refuse_func_name,
+        BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
+        EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule,
+        EmissionValue, EmissionValueName, LoadAs, refuse_func_name,
     },
     curios_abi::ForeignFunction,
     std::{
@@ -54,6 +54,15 @@ pub(crate) struct RopeData {
     pub cache_field: curios_wasm::FieldName,
     pub base_field: curios_wasm::FieldName,
     pub offset_field: curios_wasm::FieldName,
+}
+
+/// The name bundle for the boxed form a `Nat` or `Int` outside the i31 takes: the `$big` struct, the `$limbs` array holding its magnitude, and the struct's two fields — one handle for the big-number helpers and the literal materialization to share.
+#[derive(Debug, Clone)]
+pub(crate) struct BigData {
+    pub big: curios_wasm::TypeName,
+    pub limbs: curios_wasm::TypeName,
+    pub sign_field: curios_wasm::FieldName,
+    pub limbs_field: curios_wasm::FieldName,
 }
 
 #[derive(Debug, Clone)]
@@ -234,9 +243,12 @@ fn max_region_tuple_arity(region: &EmissionBody) -> usize {
 pub(crate) struct Table<'a> {
     special_field: curios_wasm::FieldName,
     special_local: curios_wasm::LocalName,
+    word_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
     clsr_tables: BTreeMap<usize, curios_wasm::TableName>,
     flt_type: curios_wasm::TypeName,
+    big_type: curios_wasm::TypeName,
+    limbs_type: curios_wasm::TypeName,
     bin_rope_type: curios_wasm::TypeName,
     list_rope_type: curios_wasm::TypeName,
     bytes_type: curios_wasm::TypeName,
@@ -252,6 +264,8 @@ pub(crate) struct Table<'a> {
     panic: OnceCell<curios_wasm::FuncName>,
     // One slot per class, in `Panic::ALL`'s order, minted lazily like `exit`: a module declares the refusals its code can reach and no others.
     refuse: [OnceCell<curios_wasm::FuncName>; curios_cont::Panic::ALL.len()],
+    // One slot per big-number helper, in `BigHelper::ALL`'s order, minted lazily like `refuse`: a module declares the helpers its code and its other helpers reach and no others.
+    big: [OnceCell<curios_wasm::FuncName>; BigHelper::ALL.len()],
     // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
@@ -312,6 +326,7 @@ impl<'a> Table<'a> {
             raw,
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
+            word_local: curios_wasm::LocalName::from("!word"),
             special_label: curios_wasm::LabelName::from("!"),
             clsr_tables: module
                 .clsr_arities()
@@ -324,6 +339,8 @@ impl<'a> Table<'a> {
                 })
                 .collect(),
             flt_type: curios_wasm::TypeName::from("flt"),
+            big_type: curios_wasm::TypeName::from("big"),
+            limbs_type: curios_wasm::TypeName::from("limbs"),
             bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
             list_rope_type: curios_wasm::TypeName::from("rope/list"),
             bytes_type: curios_wasm::TypeName::from("bytes"),
@@ -338,6 +355,7 @@ impl<'a> Table<'a> {
             exit: OnceCell::new(),
             panic: OnceCell::new(),
             refuse: Default::default(),
+            big: Default::default(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
@@ -492,6 +510,11 @@ impl<'a> Table<'a> {
         self.special_local.clone()
     }
 
+    /// The scratch local a reference is narrowed to a word through, declared by every function the emitter writes: the narrowing tests the value and then reads it, and a block cannot consume a value from outside itself, so the value waits here. One per function serves every narrowing in it, since each is a straight run that leaves nothing behind.
+    pub(crate) fn word_local(&self) -> (curios_wasm::LocalName, curios_wasm::ValType) {
+        (self.word_local.clone(), Table::top_type(true))
+    }
+
     pub(crate) fn special_label(&self) -> curios_wasm::LabelName {
         self.special_label.clone()
     }
@@ -520,6 +543,27 @@ impl<'a> Table<'a> {
 
     pub(crate) fn flt_type(&self) -> curios_wasm::TypeName {
         self.flt_type.clone()
+    }
+
+    /// The boxed form's name bundle.
+    pub(crate) fn big(&self) -> BigData {
+        BigData {
+            big: self.big_type.clone(),
+            limbs: self.limbs_type.clone(),
+            sign_field: curios_wasm::FieldName::from("sign"),
+            limbs_field: curios_wasm::FieldName::from("limbs"),
+        }
+    }
+
+    /// The big-number helper `helper`, marked for emission by this first use — from the emitted code or from another helper's body, which is why the roster is emitted callers first.
+    pub(crate) fn big_func(&self, helper: BigHelper) -> curios_wasm::FuncName {
+        self.big[helper.slot()]
+            .get_or_init(|| helper.func_name())
+            .clone()
+    }
+
+    pub(crate) fn big_used(&self, helper: BigHelper) -> bool {
+        self.big[helper.slot()].get().is_some()
     }
 
     pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {
@@ -1010,7 +1054,6 @@ impl<'a> Table<'a> {
     pub(crate) fn slot_load_as(&self, slot: curios_cont::Slot) -> LoadAs {
         match slot {
             curios_cont::Slot::Tag | curios_cont::Slot::Nat => LoadAs::Nat,
-            curios_cont::Slot::Int => LoadAs::Int,
             curios_cont::Slot::Flt => LoadAs::Flt,
             curios_cont::Slot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
             curios_cont::Slot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
@@ -1126,11 +1169,14 @@ impl<'a> Table<'a> {
     /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
     pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
-            Some(curios_cont::Repr::Nat | curios_cont::Repr::Int) => {
-                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
-            }
+            Some(curios_cont::Repr::Nat) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Some(curios_cont::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
-            Some(curios_cont::Repr::Bin(_) | curios_cont::Repr::List | curios_cont::Repr::Ref)
+            Some(
+                curios_cont::Repr::Number
+                | curios_cont::Repr::Bin(_)
+                | curios_cont::Repr::List
+                | curios_cont::Repr::Ref,
+            )
             | None => Table::top_type(true),
         }
     }

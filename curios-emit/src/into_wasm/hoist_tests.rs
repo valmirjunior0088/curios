@@ -29,9 +29,12 @@ fn constant_bin_literals_hoist_into_a_start_initialized_global() {
     assert_eq!(count(&wat, "array.new_data $bytes $const/"), 1);
 }
 
+/// A scalar past the i31 allocates its magnitude, so it hoists as a `Flt` does, and its limbs come from a data segment the start function reads — which is also where the aggregate over it is built.
 #[test]
-fn overflowing_scalars_and_their_aggregates_stay_inline() {
-    let wat = wat(&overflowing_tuple());
-    assert_absent(&wat, "const/");
-    assert_traps(&wat);
+fn big_scalars_and_their_aggregates_hoist_into_start_initialized_globals() {
+    let wat = wat(&big_tuple());
+    assert_contains(&wat, "array.new_data $limbs $const/");
+    assert_contains(&wat, "struct.new $big");
+    assert_contains(&wat, "global.set $const/");
+    assert_absent(&wat, "call $refuse/");
 }

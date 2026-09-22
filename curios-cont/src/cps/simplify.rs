@@ -202,7 +202,7 @@ enum IdentityFold {
 
 /// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts by zero.
 ///
-/// Trap discipline: `nat_add`/`nat_mul` wrap and `nat_sub` is monus, so the only runtime trap of the `MayTrap` members is the backend's i31 range check on the result. Every fold here returns either an operand that is already a live in-range value or a literal inside the envelope, and a `/ 1` or `% 1` divisor can never be the trapping zero, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
+/// Trap discipline: `Nat` and `Int` arithmetic is unbounded and `nat_sub` is monus, so the only trap among these operations is a zero divisor, which a `/ 1` or `% 1` can never be. Every fold here returns either an operand that is already a live value or a literal, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
 fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<IdentityFold> {
     let [left, right] = args else { return None };
     // The carriers are unbounded, so a law tests a literal against a value rather than reading a machine scalar out of it.

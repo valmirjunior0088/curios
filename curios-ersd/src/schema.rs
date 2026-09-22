@@ -65,7 +65,7 @@ impl Field {
     pub fn immediate(debug_name: Option<String>) -> Self {
         Self {
             debug_name,
-            shape: FieldShape::Immediate(Sign::Unsigned),
+            shape: FieldShape::Immediate,
         }
     }
 
@@ -78,13 +78,14 @@ impl Field {
     }
 }
 
-/// The erased carrier shape of one relevant field, recorded by erasure — the one walk that still holds the Core field types — for every constructor payload and product entry. One variant is *spent* today: `Immediate` is read by the lowering into Cont when it decides a family's encoding, and it means every runtime value of the field's declared type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses landing on one. Every other shaped variant is pure record: the census over these rows is what prices the typed-slot campaign, and a recorded shape must therefore be *true* rather than useful — `Opaque` covers polymorphic fields and everything unstated, and never misleads, where a wrong shape would.
+/// The erased carrier shape of one relevant field, recorded by erasure — the one walk that still holds the Core field types — for every constructor payload and product entry. Two variants are *spent* today, both read by the lowering into Cont when it decides a family's encoding: `Immediate` means every runtime value of the field's declared type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses landing on one — and `Number` that every one is a `Nat` or `Int`, an i31 or the boxed magnitude past it. Every other shaped variant is pure record: the census over these rows is what prices the typed-slot campaign, and a recorded shape must therefore be *true* rather than useful — `Opaque` covers polymorphic fields and everything unstated, and never misleads, where a wrong shape would.
 ///
-/// `Immediate` carries the raw carrier its population occupies ([`Sign`]), which the family encoding ignores and a typed slot spends. `Immediate` means *always*, never *sometimes*: since the map-wall campaign a small `Bytes` value rides the i31, so a packed carrier is sometimes-immediate — and sometimes is `Packed`, never `Immediate`, because the `Immediate` family encoding's discrimination is disjoint only while the bare payload can never box. `packed_unary_payload_declines_the_immediate_encoding`, in `curios`'s codegen tests, pins the consequence end to end. The same always-versus-sometimes line runs through the rest of the roster: `Flt` is the boxed `f64` struct, `Packed` a `Bytes`/`Bits` value at its grain (immediate inside the envelope, a rope past it — `Handle` tokens classify as byte-grain packed, the ABI's own encoding), `List` a list rope, `Closure` a function value at its erased arity, `Product` a boxed product row *named by its schema* (always two or more relevant — zero and one collapse through the newtype chain before this is recorded), and `Family` a value of the named variant family. The last two carry an identity rather than a width or a bare marker because a heap type keyed by a schema or a family is the only thing a slot can be declared at: a width names one type per arity and is therefore no type at all.
+/// `Immediate` is a word population — a `Bool`, a `Byte`, a payload-less constructor riding the zero — which a typed slot holds as an unsigned word. A `Nat` or `Int` is not one of them: either is an i31 only while it is small and a boxed magnitude otherwise, so it is sometimes-immediate and records `Number`, whose slot is a reference. `Immediate` means *always*, never *sometimes*: since the map-wall campaign a small `Bytes` value rides the i31, so a packed carrier is sometimes-immediate — and sometimes is `Packed`, never `Immediate`, because the `Immediate` family encoding's discrimination is disjoint only while the bare payload's boxed form is a type no row can be. A `Number` meets that — its boxed form is the final `$big`, which the discrimination admits beside the i31 — and a rope does not, so a `Number` payload rides bare and a `Packed` one never does. `packed_unary_payload_declines_the_immediate_encoding`, in `curios`'s codegen tests, pins the consequence end to end. The same always-versus-sometimes line runs through the rest of the roster: `Flt` is the boxed `f64` struct, `Packed` a `Bytes`/`Bits` value at its grain (immediate inside the envelope, a rope past it — `Handle` tokens classify as byte-grain packed, the ABI's own encoding), `List` a list rope, `Closure` a function value at its erased arity, `Product` a boxed product row *named by its schema* (always two or more relevant — zero and one collapse through the newtype chain before this is recorded), and `Family` a value of the named variant family. The last two carry an identity rather than a width or a bare marker because a heap type keyed by a schema or a family is the only thing a slot can be declared at: a width names one type per arity and is therefore no type at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum FieldShape {
-    Immediate(Sign),
+    Immediate,
+    Number,
     Flt,
     Packed(Grain),
     List,
@@ -92,14 +93,4 @@ pub enum FieldShape {
     Product(ProductId),
     Family(FamilyId),
     Opaque,
-}
-
-/// Which raw carrier an immediate field's values occupy once a slot holds them unboxed: the unsigned population — `Nat`, `Bool`, `Byte`, and the nullary constructor riding the interned zero — or the signed `Int` one.
-///
-/// Both ride the i31, so the family encoding's admission reads [`FieldShape::Immediate`] without looking here. The distinction is spent one step later, by the slot a typed heap field is declared at: a slot naming the wrong carrier is not a wrong answer — the bit pattern round-trips either way — but every read of it coerces, which is exactly the cost typing the slot exists to delete.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[curios_archive::archived]
-pub enum Sign {
-    Unsigned,
-    Signed,
 }

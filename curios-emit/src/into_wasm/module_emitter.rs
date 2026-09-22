@@ -1,10 +1,10 @@
 use {
     super::{
-        Context, EmissionClosure, EmissionClosureName, EmissionData, EmissionFunction,
-        EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, ImmediateLayout,
-        RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type,
-        refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
-        rope_node_sub_type, rope_view_sub_type,
+        BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
+        EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
+        ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type, cell_sub_type,
+        elems_sub_type, flt_sub_type, limbs_sub_type, refusal_data_name, refusal_message,
+        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_utilities::{Grain, PackedBin},
@@ -70,7 +70,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The wasm-level type of a host-import *parameter* of the given wire type: the integral scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), `Flt` as raw `f64` (`LoadAs::Flt` reads it out of its box), references as their concrete non-nullable heap type (a handle is its `Bytes` token).
+    /// The wasm-level type of a host-import *parameter* of the given wire type: the integral scalars cross as raw `i32` (the call site narrows a `Nat` or `Int` through `LoadAs::WireNat`/`LoadAs::WireInt`, refusing past the wire, and reads a `Bool` as its word), `Flt` as raw `f64` (`LoadAs::Flt` reads it out of its box), references as their concrete non-nullable heap type (a handle is its `Bytes` token).
     fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
@@ -90,7 +90,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The wasm-level type of a host-import *result*. A result re-enters in whatever form the host can produce without knowing a guest layout: the integral scalars pre-boxed as i31 refs, which a host mints for nothing and which land directly in anyref block params (no host op returns an `Int` today; mapping it like `Nat` keeps the function total), and references exactly as in parameter position.
+    /// The wasm-level type of a host-import *result*. A result re-enters in whatever form the host can produce without knowing a guest layout: the integral scalars pre-boxed as i31 refs, read signed and so below `2³⁰` in magnitude, which a host mints for nothing and which land directly in anyref block params as the `Nat` or `Int` they are (no host op returns an `Int` today; mapping it like `Nat` keeps the function total), and references exactly as in parameter position.
     ///
     /// **`Flt` is the one that re-enters raw**, as an `f64` the *guest* boxes after the call. Its carrier is the `$flt` struct this crate defines, so a host that returned one already boxed would be a second crate needing that layout — the drift a shape spelled in two places invites. Handing back a number and boxing it here is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded guest-side and never crosses as one.
     fn wire_result_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
@@ -232,6 +232,17 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// The boxed form a `Nat` or `Int` outside the i31 takes: the `$limbs` magnitude array, then the `$big` struct naming it, each its own group as the rope types are.
+    fn emit_big_types(&mut self) {
+        let big = self.table.big();
+
+        self.module.add_type(big.limbs.clone(), limbs_sub_type());
+        self.module.add_type(
+            big.big,
+            big_sub_type(big.sign_field, big.limbs_field, big.limbs),
+        );
+    }
+
     fn emit_cell_type(&mut self) {
         self.module.add_type(
             self.table.cell_type(),
@@ -322,7 +333,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         };
         match slot {
             curios_cont::Slot::Tag => curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
-            curios_cont::Slot::Nat | curios_cont::Slot::Int => {
+            curios_cont::Slot::Nat => {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::I32))
             }
             curios_cont::Slot::Flt => {
@@ -522,13 +533,24 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
-    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
+    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. An `Flt` and a small `Nat` or `Int` keep a self-contained const initializer (mutability is harmless when the init is constant); a boxed `Nat` or `Int`, `Bin` and the aggregates declare a placeholder init and build the real value in the start function, the boxed value because its limbs come from a data segment, which no constant expression reads. `Bin` is special-cased via [`Self::emit_let_bin_data`] for its immediate form.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
+        let constant = match value {
+            EmissionData::Nat(number) => curios_cont::nat_is_small(number),
+            EmissionData::Int(number) => curios_cont::int_is_small(number),
+            EmissionData::Flt(_) => true,
+            EmissionData::Bin(..)
+            | EmissionData::Tuple(_)
+            | EmissionData::Row(..)
+            | EmissionData::List(_)
+            | EmissionData::Closure(_, _) => false,
+        };
+
         match value {
             EmissionData::Bin(grain, value) => {
                 self.emit_let_bin_data(name, *grain, value);
             }
-            EmissionData::Nat(_) | EmissionData::Int(_) | EmissionData::Flt(_) => {
+            EmissionData::Nat(_) | EmissionData::Int(_) | EmissionData::Flt(_) if constant => {
                 let mut expr = Default::default();
                 ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
                     .emit_data(name, value);
@@ -543,7 +565,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     },
                 );
             }
-            EmissionData::Tuple(_)
+            EmissionData::Nat(_)
+            | EmissionData::Int(_)
+            | EmissionData::Flt(_)
+            | EmissionData::Tuple(_)
             | EmissionData::Row(..)
             | EmissionData::List(_)
             | EmissionData::Closure(_, _) => {
@@ -921,8 +946,20 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    /// Add the big-number helpers the emitted code referenced, in [`BigHelper::ALL`]'s order. The used flag is read as each helper is reached rather than up front, because a body built earlier in the walk marks the helpers it calls.
+    fn emit_big_funcs(&mut self) {
+        let mut bigs = BigEmitter::new(self.table, self.module);
+
+        for helper in BigHelper::ALL {
+            if self.table.big_used(helper) {
+                bigs.emit_func(helper);
+            }
+        }
+    }
+
     pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
+        self.emit_big_types();
         self.emit_bin_rope_types();
         self.emit_list_rope_types();
         self.emit_cell_type();
@@ -955,7 +992,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         self.emit_rope_funcs();
-        // After the rope helpers, whose bodies refuse too: only now is the set of reached classes complete.
+        self.emit_big_funcs();
+        // After the rope and big-number helpers, whose bodies refuse too: only now is the set of reached classes complete.
         self.emit_refuse_funcs();
         self.emit_sys_imports();
 
@@ -980,7 +1018,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             curios_wasm::Func {
                 type_name: start_type_name,
                 params: vec![],
-                locals: vec![],
+                // A constant row's word slot is filled through a narrowing, which the start function hosts like any other.
+                locals: vec![self.table.word_local()],
                 expr: self.start_expr.clone(),
             },
         );

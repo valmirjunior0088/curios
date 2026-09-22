@@ -13,22 +13,22 @@ use {
     },
 };
 
-/// How many value bits the scalar envelope holds — the width of an `i31ref`'s payload, and the one width in the whole pipeline that is a fact about the target rather than about the language.
+/// How many value bits a small `Nat` or `Int` holds — the width of an `i31ref`'s payload, read signed, and the one width in the whole pipeline that is a fact about the target rather than about the language.
 ///
-/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`Intrinsic::effect`] states *which* operations it makes partial, and `curios-emit`'s `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
+/// A `Nat` and an `Int` share one runtime form, and it is a reference: an i31 when the value lies in `[-2³⁰, 2³⁰)`, and a boxed magnitude otherwise, never both. This width is where the two meet, so it bounds the fast path every arithmetic lowering keeps inline and nothing else — no value refuses at it. Above this crate nothing knows the number: `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced.
 pub const ENVELOPE_BITS: i32 = 31;
 
-/// Whether `value` is a `Nat` the envelope can box.
+/// Whether `value` is a `Nat` the i31 holds: below `2³⁰`, since the i31 is read signed for both carriers.
 ///
-/// Stated here beside the width rather than at the materialization site, because two readers ask it — the emitter, which must raise a refusal instead of a constant, and constant hoisting, which must keep such a value out of the const table since a trap is no constant instruction.
-pub fn nat_fits_envelope(value: &Natural) -> bool {
+/// Stated here beside the width because two readers ask it — the emitter, which spells a small constant as an i31 and any other as a boxed magnitude, and the representation analysis, which lets only a small literal ride a machine word.
+pub fn nat_is_small(value: &Natural) -> bool {
     value
         .to_u32()
-        .is_some_and(|value| value >> ENVELOPE_BITS == 0)
+        .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == 0)
 }
 
-/// Whether `value` is an `Int` the envelope can box: in range exactly when the bit below the sign agrees with it.
-pub fn int_fits_envelope(value: &Integer) -> bool {
+/// Whether `value` is an `Int` the i31 holds: in range exactly when the bit below the sign agrees with it.
+pub fn int_is_small(value: &Integer) -> bool {
     value
         .to_i32()
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
@@ -172,7 +172,7 @@ pub enum Intrinsic {
     RowGet(RowId, usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
-    /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
+    /// Whether the operand is a bare payload — an i31, or the boxed magnitude of a `Nat` or `Int` past it — (1) or a row struct (0): the dispatch of a variant encoding whose one scalar-payload constructor rides bare. The boxed magnitude is its own final type, which no row shares, so admitting it keeps the two answers disjoint for a `Nat` or `Int` payload as for a word. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,
     /// `(value) -> value`: the bare payload of the constructor [`Intrinsic::IsImmediate`] just answered for, passed through unchanged.
     ///
@@ -182,15 +182,17 @@ pub enum Intrinsic {
 
 /// The representation a value is read or produced at — the carrier, not the type.
 ///
-/// This is the vocabulary the backend's `LoadAs`/`WrapAs` coercions translate: `Nat`, `Int`, and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
+/// This is the vocabulary the backend's `LoadAs`/`WrapAs` coercions translate: `Nat` and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
+///
+/// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`] — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` its literal operands bound below `2³⁰`, which [`Intrinsic::bounds_result`] names and a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is. A `Nat` becomes a word where a position, a count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repr {
-    /// A raw unsigned 32-bit carrier.
+    /// A raw unsigned 32-bit machine word.
     Nat,
-    /// A raw signed 32-bit carrier.
-    Int,
     /// A raw binary64 carrier.
     Flt,
+    /// A `Nat` or `Int` operand: a reference in general, and the word it is where the representation analysis holds one there — a small literal, a bounded result, or a parameter every argument reaching it is one of those. A demand, never a carrier: no value is held at it, and a use reading it tests a reference before unboxing and takes a word as it is.
+    Number,
     /// A packed-binary reference at the given grain: a small-canonical immediate or a rope. The grain rides the carrier because the two immediate layouts share no runtime discrimination — only the static type keeps them apart, so the coercion tables must be unable to confuse them.
     Bin(Grain),
     /// A list rope reference.
@@ -230,20 +232,15 @@ impl Intrinsic {
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
             (TupleGet(_) | RowGet(..), _) => Repr::Ref,
-            // A shift count is a `Nat` on both carriers; only the shifted value is signed.
-            (IntShl | IntShr, 1) => Repr::Nat,
 
+            // A `Nat` or `Int` is a reference whatever its size — an i31 or a boxed magnitude — and each lowering takes it apart itself, the small case inline, or takes the word it already is; a shift count is such a `Nat` too.
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatLe
-                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt,
+                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt | IntEql
+                | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe | IntAnd
+                | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt,
                 _,
-            ) => Repr::Nat,
-
-            (
-                IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe
-                | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt,
-                _,
-            ) => Repr::Int,
+            ) => Repr::Number,
 
             (
                 FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe
@@ -254,27 +251,55 @@ impl Intrinsic {
         }
     }
 
+    /// Whether this operation's result may be a `Nat` its literal operands bound below `2³⁰`: a remainder by a small divisor, a conjunction with a small mask, and a monus, quotient or right shift of a small dividend. [`Intrinsic::bounds_result`] reads the literals; this is the operation half, which the emitter checks a word-held result against.
+    pub fn may_bound_result(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::NatRem
+                | Intrinsic::NatAnd
+                | Intrinsic::NatSub
+                | Intrinsic::NatDiv
+                | Intrinsic::NatShr
+        )
+    }
+
+    /// Whether this operation over `args` produces a `Nat` below `2³⁰` whatever its other operands are, so the result may ride a machine word rather than the reference [`Intrinsic::result_repr`] names. The bound is read off a small literal: `x % k` and `x & k` lie below `k`, and `k - x`, `k / x` and `k >> x` at or below it.
+    pub fn bounds_result(&self, args: &[Atom]) -> bool {
+        let small =
+            |atom: &Atom| matches!(atom, Atom::Literal(Literal::Nat(value)) if nat_is_small(value));
+
+        self.may_bound_result()
+            && match (self, args) {
+                (Intrinsic::NatRem, [_, divisor]) => small(divisor),
+                (Intrinsic::NatAnd, [left, right]) => small(left) || small(right),
+                (Intrinsic::NatSub | Intrinsic::NatDiv | Intrinsic::NatShr, [value, _]) => {
+                    small(value)
+                }
+                _ => false,
+            }
+    }
+
     /// The representation this operation produces.
     pub fn result_repr(&self) -> Repr {
         use Intrinsic::*;
 
         match self {
-            // Every comparison and predicate answers a `Bool`, whose carrier is a `Nat`.
+            // Every comparison and predicate answers a `Bool`, whose carrier is a machine word.
             NatEql | NatNeq | NatLt | NatLe | NatEqz | IntEql | IntNeq | IntLt | IntLe | IntEqz
             | FltEql | FltNeq | FltLt | FltLe | BinEql(_) => Repr::Nat,
 
+            // Every `Nat` or `Int` an operation computes is a reference, since no operation bounds its result's size in general: a length and a window's checked extent included, which a sequence past the i31 would leave.
             NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
-            | NatShr | IntToNat | FltToNat | BinLen(_) | ListLen => Repr::Nat,
-
-            IntAdd | IntSub | IntMul | IntDiv | IntRem | IntAnd | IntOr | IntXor | IntShl
-            | IntShr | NatToInt | FltToInt => Repr::Int,
+            | NatShr | IntToNat | FltToNat | IntAdd | IntSub | IntMul | IntDiv | IntRem
+            | IntAnd | IntOr | IntXor | IntShl | IntShr | NatToInt | FltToInt | BinLen(_)
+            | ListLen | WindowExtent => Repr::Ref,
 
             FltAdd | FltSub | FltMul | FltDiv | FltRem | FltMin | FltMax | FltNeg | FltAbs
             | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
             | IntToFlt | FltOfLeBytes => Repr::Flt,
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
-            BinGet(_) | WindowExtent | IsImmediate => Repr::Nat,
+            BinGet(_) | IsImmediate => Repr::Nat,
             BinSlice(grain)
             | BinRest(grain)
             | BinAppend(grain)
@@ -395,12 +420,12 @@ impl Intrinsic {
 
     /// What this operation does beyond producing its result, *as emitted* — which is not what it means in the language.
     ///
-    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`. So every operation `curios-emit`'s `into_wasm` guards belongs here, and none of it may travel upward.
+    /// The `MayTrap` set is what is partial in the language — a division, a narrowing of an `Flt` to `Nat` or `Int`, an index and a projection — which `curios-ersd`'s `Semantics` says too. `Nat` and `Int` arithmetic is not in it: both are unbounded at run time, so a sum or a product that outgrows the i31 becomes a boxed magnitude rather than a failure, and allocating one is invisible, as an `Flt` box is.
     ///
     /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> IntrinsicEffect {
         match self {
-            // Partial in the language: a zero divisor, a signed-division overflow, a non-finite or out-of-range conversion, an index or a projection out of bounds, a decode of the wrong length.
+            // Partial in the language: a zero divisor, a non-finite conversion, an index or a projection out of bounds, a decode of the wrong length.
             Self::NatDiv
             | Self::NatRem
             | Self::IntDiv
@@ -416,17 +441,7 @@ impl Intrinsic {
             | Self::ListRest
             | Self::TupleGet(_)
             | Self::RowGet(..)
-            | Self::WindowExtent
-            // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
-            | Self::NatAdd
-            | Self::NatMul
-            | Self::NatShl
-            | Self::NatToInt
-            | Self::IntAdd
-            | Self::IntSub
-            | Self::IntMul
-            | Self::IntShl
-            | Self::IntToNat => IntrinsicEffect::MayTrap,
+            | Self::WindowExtent => IntrinsicEffect::MayTrap,
 
             // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
             Self::BinAppend(_)
@@ -445,7 +460,16 @@ impl Intrinsic {
 
             Self::NatEql
             | Self::NatNeq
+            | Self::NatAdd
             | Self::NatSub
+            | Self::NatMul
+            | Self::NatShl
+            | Self::NatToInt
+            | Self::IntAdd
+            | Self::IntSub
+            | Self::IntMul
+            | Self::IntShl
+            | Self::IntToNat
             | Self::NatLt
             | Self::NatLe
             | Self::NatAnd
@@ -629,13 +653,13 @@ pub enum Node {
     Unreachable,
 }
 
-/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
+/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
-    /// A `Nat` result or conversion the i31 carrier cannot hold.
-    NatCarrier,
-    /// An `Int` result or conversion the signed i31 carrier cannot hold.
-    IntCarrier,
+    /// A `Nat` argument to a host function the wire's `i32` cannot carry. The one place a `Nat` is narrowed by refusing: everywhere inside the program it is unbounded.
+    NatWire,
+    /// An `Int` argument to a host function the wire's `i32` cannot carry.
+    IntWire,
     /// A packed or list read, or a window, past the end of its value.
     OutOfBounds,
     /// A `Flt` decoded from a byte string that is not eight bytes long.
@@ -649,8 +673,8 @@ pub enum Panic {
 impl Panic {
     /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
     pub const ALL: [Panic; 6] = [
-        Panic::NatCarrier,
-        Panic::IntCarrier,
+        Panic::NatWire,
+        Panic::IntWire,
         Panic::OutOfBounds,
         Panic::FltDecode,
         Panic::Cycle,
@@ -661,8 +685,8 @@ impl Panic {
 impl fmt::Display for Panic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Panic::NatCarrier => "nat",
-            Panic::IntCarrier => "int",
+            Panic::NatWire => "nat_wire",
+            Panic::IntWire => "int_wire",
             Panic::OutOfBounds => "bounds",
             Panic::FltDecode => "flt",
             Panic::Cycle => "cycle",
@@ -874,10 +898,8 @@ impl Row {
 pub enum Slot {
     /// A variant family's discriminant, at slot zero. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies; a product row carries none.
     Tag,
-    /// A raw unsigned 32-bit payload.
+    /// A raw unsigned machine-word payload — a `Bool`, a `Byte`, or a payload-less constructor riding the zero. Never a `Nat` or `Int`, which is a reference and takes [`Slot::Opaque`].
     Nat,
-    /// A raw signed 32-bit payload.
-    Int,
     /// A raw binary64 payload — the one slot that deletes an allocation rather than a coercion, since the boxed `Flt` it replaces is a heap object of its own.
     Flt,
     /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
@@ -895,7 +917,6 @@ impl Slot {
     pub fn repr(self) -> Repr {
         match self {
             Slot::Tag | Slot::Nat => Repr::Nat,
-            Slot::Int => Repr::Int,
             Slot::Flt => Repr::Flt,
             Slot::List => Repr::List,
             Slot::Closure(_) | Slot::Row(_) | Slot::Opaque => Repr::Ref,
@@ -947,7 +968,6 @@ impl Module {
     pub fn pad(&self, row: Option<RowId>, index: usize) -> Atom {
         match row.map(|row| self.row(row).slots[index]) {
             Some(Slot::Tag | Slot::Nat) => Atom::Literal(Literal::Nat(Natural::zero())),
-            Some(Slot::Int) => Atom::Literal(Literal::Int(Integer::from(0u32))),
             Some(Slot::Flt) => Atom::Literal(Literal::Flt(Floating::zero(false))),
             Some(Slot::List | Slot::Closure(_) | Slot::Row(_) | Slot::Opaque) | None => {
                 Atom::Filler

@@ -4,6 +4,7 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
         LocalData, region_layout, slot_zero_instrs,
     },
+    curios_num::Natural,
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -59,46 +60,26 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
-            EmissionData::Nat(value) => {
-                // The carriers are unbounded from here up, so a value the envelope cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of it would have trapped.
-                let Some(value) = curios_cont::nat_fits_envelope(value)
-                    .then(|| value.to_u32())
-                    .flatten()
-                else {
-                    self.emit_instrs(
-                        self.context
-                            .table()
-                            .refuse_instrs(curios_cont::Panic::NatCarrier),
-                    );
-                    return;
-                };
-
-                self.emit_instrs([
+            EmissionData::Nat(value) => match curios_cont::nat_is_small(value) {
+                true => self.emit_instrs([
                     curios_wasm::Instr::I32Const {
-                        value: value as i32,
+                        value: value.to_u32().expect("a small `Nat` is a word") as i32,
                     },
                     curios_wasm::Instr::RefI31,
-                ])
-            }
-            EmissionData::Int(value) => {
-                // In range exactly when the bit below the sign agrees with it — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to the envelope.
-                let Some(value) = curios_cont::int_fits_envelope(value)
-                    .then(|| value.to_i32())
-                    .flatten()
-                else {
-                    self.emit_instrs(
-                        self.context
-                            .table()
-                            .refuse_instrs(curios_cont::Panic::IntCarrier),
-                    );
-                    return;
-                };
-
-                self.emit_instrs([
-                    curios_wasm::Instr::I32Const { value },
+                ]),
+                false => self.emit_big(value_name, false, value),
+            },
+            EmissionData::Int(value) => match curios_cont::int_is_small(value) {
+                true => self.emit_instrs([
+                    curios_wasm::Instr::I32Const {
+                        value: value.to_i32().expect("a small `Int` is a word"),
+                    },
                     curios_wasm::Instr::RefI31,
-                ])
-            }
+                ]),
+                false => {
+                    self.emit_big(value_name, value.to_natural().is_none(), &value.magnitude())
+                }
+            },
             &EmissionData::Flt(value) => self.emit_instrs([
                 curios_wasm::Instr::F64Const { value },
                 curios_wasm::Instr::StructNew {
@@ -223,39 +204,47 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Bind a constructed value to its local, materialising it in a register where that local is one.
-    ///
-    /// The range checks survive being moved onto this path, and that is deliberate: they are what keeps every register-held `Nat` inside the i31 envelope, so *boxing* one later — at a call argument, a constructor field, a jump to a boxed parameter — is a bare `ref.i31` that never has to re-check. Dropping them here would move the trap to the boxing coercion and change which programs trap.
+    /// A `Nat` or `Int` past the i31: a `$big` of this sign over the magnitude's limbs, which a passive data segment holds little-endian — a literal of any width is one `array.new_data`, where a fixed array would meet the format's cap on its operands.
+    fn emit_big(&mut self, value_name: &EmissionValueName, negative: bool, magnitude: &Natural) {
+        let big = self.context.table().big();
+        let mut bytes = magnitude.to_bytes_le();
+        bytes.resize(bytes.len().next_multiple_of(4), 0);
+        let limbs = (bytes.len() / 4) as i32;
+        let data_name = curios_wasm::DataName::from(format!(
+            "{}${}",
+            value_name.as_string(),
+            self.module.datas().len()
+        ));
+        self.module.add_data(
+            data_name.clone(),
+            curios_wasm::DataSegment {
+                mode: curios_wasm::DataMode::Passive,
+                bytes,
+            },
+        );
+        self.emit_instrs([
+            curios_wasm::Instr::I32Const {
+                value: i32::from(negative),
+            },
+            curios_wasm::Instr::I32Const { value: 0 },
+            curios_wasm::Instr::I32Const { value: limbs },
+            curios_wasm::Instr::ArrayNewData {
+                type_name: big.limbs,
+                data_name,
+            },
+            curios_wasm::Instr::StructNew { type_name: big.big },
+        ]);
+    }
+
+    /// Bind a constructed value to its local, materialising it in a register where that local is one. A `Nat` literal is offered a register only while it is small, so its word is its value.
     fn emit_let_pure(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match (self.context.table().raw_carrier(value_name), value) {
-            (Some(_), EmissionData::Nat(value)) => {
-                match curios_cont::nat_fits_envelope(value)
-                    .then(|| value.to_u32())
-                    .flatten()
-                {
-                    Some(value) => self.emit_instr(curios_wasm::Instr::I32Const {
-                        value: value as i32,
-                    }),
-                    None => self.emit_instrs(
-                        self.context
-                            .table()
-                            .refuse_instrs(curios_cont::Panic::NatCarrier),
-                    ),
-                }
-            }
-            (Some(_), EmissionData::Int(value)) => {
-                match curios_cont::int_fits_envelope(value)
-                    .then(|| value.to_i32())
-                    .flatten()
-                {
-                    Some(value) => self.emit_instr(curios_wasm::Instr::I32Const { value }),
-                    None => self.emit_instrs(
-                        self.context
-                            .table()
-                            .refuse_instrs(curios_cont::Panic::IntCarrier),
-                    ),
-                }
-            }
+            (Some(_), EmissionData::Nat(value)) => self.emit_instr(curios_wasm::Instr::I32Const {
+                value: value
+                    .to_u32()
+                    .filter(|_| curios_cont::nat_is_small(value))
+                    .expect("a register-held `Nat` literal is small") as i32,
+            }),
             (Some(_), &EmissionData::Flt(value)) => {
                 self.emit_instr(curios_wasm::Instr::F64Const { value })
             }

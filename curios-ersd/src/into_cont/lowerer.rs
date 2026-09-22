@@ -879,6 +879,8 @@ impl Lowerer<'_> {
     }
 
     /// Lower a scalar switch: each `(key, block)` arm and the optional default becomes a parameterless continuation into the join, selected by one `Switch`.
+    ///
+    /// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly only below the i31, saturating past it — so a key the i31 does not hold is not a table slot at all. Each such key is decided by an equality test on the default path instead, in key order, which leaves the table indexing only words and the saturated value matching no key.
     #[allow(clippy::too_many_arguments)]
     fn lower_switch(
         &mut self,
@@ -893,18 +895,24 @@ impl Lowerer<'_> {
         let (join, fresh) = self.open_join(result, rest, terminator, target);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
+        let mut tested = Vec::new();
         for (key, block) in arms {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            cases.insert(
-                key,
-                curios_cont::Edge {
-                    target: continuation,
-                    args: Vec::new(),
-                },
-            );
+            match curios_cont::nat_is_small(&Natural::from(key)) {
+                true => {
+                    cases.insert(
+                        key,
+                        curios_cont::Edge {
+                            target: continuation,
+                            args: Vec::new(),
+                        },
+                    );
+                }
+                false => tested.push((key, continuation)),
+            }
         }
-        let default = default.map(|block| {
+        let mut default = default.map(|block| {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
             curios_cont::Edge {
@@ -912,6 +920,14 @@ impl Lowerer<'_> {
                 args: Vec::new(),
             }
         });
+        for (key, continuation) in tested.into_iter().rev() {
+            let test = self.key_test(&scrutinee, key, continuation, default);
+            continuations.push(test);
+            default = Some(curios_cont::Edge {
+                target: test,
+                args: Vec::new(),
+            });
+        }
         let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
             scrutinee,
             cases,
@@ -921,6 +937,50 @@ impl Lowerer<'_> {
             continuations,
             body: switch,
         })
+    }
+
+    /// A parameterless continuation deciding one switch key by equality: `arm` when `scrutinee` is `key`, and `otherwise` — the next test or the switch's own default — when it is not.
+    fn key_test(
+        &mut self,
+        scrutinee: &curios_cont::Atom,
+        key: u32,
+        arm: curios_cont::ContinuationId,
+        otherwise: Option<curios_cont::Edge>,
+    ) -> curios_cont::ContinuationId {
+        let equal = self.emitter.module.add_value(None);
+        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
+            scrutinee: curios_cont::Atom::Value(equal),
+            cases: BTreeMap::from([(
+                1,
+                curios_cont::Edge {
+                    target: arm,
+                    args: Vec::new(),
+                },
+            )]),
+            default: otherwise,
+        });
+        let body = self
+            .emitter
+            .module
+            .add_node(curios_cont::Node::LetIntrinsic {
+                result: equal,
+                op: curios_cont::Intrinsic::NatEql,
+                args: vec![
+                    scrutinee.clone(),
+                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(key))),
+                ],
+                next: switch,
+            });
+        let continuation = self.emitter.module.reserve_continuation();
+        self.emitter.module.define_continuation(
+            continuation,
+            curios_cont::Continuation {
+                debug_name: Some("key".into()),
+                params: Vec::new(),
+                body,
+            },
+        );
+        continuation
     }
 
     /// Lower a variant match: the tag (`TupleGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TupleGet(1 + i)`) and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.

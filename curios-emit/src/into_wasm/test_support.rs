@@ -33,24 +33,6 @@ pub(super) fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// Every `main` ends by diverging into `exit`, which the emitter follows with one `unreachable`. A trapping intrinsic adds another `unreachable` in its overflow/range guard, so the count distinguishes guarded ops from total ones without matching exact bytes.
-#[track_caller]
-pub(super) fn assert_traps(wat: &str) {
-    assert!(
-        count(wat, "unreachable") >= 2,
-        "expected a trap guard beyond the exit divergence",
-    );
-}
-
-#[track_caller]
-pub(super) fn assert_total(wat: &str) {
-    assert_eq!(
-        count(wat, "unreachable"),
-        1,
-        "expected no trap guard beyond the exit divergence",
-    );
-}
-
 pub(super) fn nat(value: u32) -> curios_cont::Atom {
     curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(value)))
 }
@@ -717,8 +699,8 @@ pub(super) fn runtime_tuple() -> curios_cont::Module {
     module
 }
 
-/// A tuple over an i31-overflowing scalar — its materialization is a trap, which must stay at its execution point instead of failing validation inside a global initializer.
-pub(super) fn overflowing_tuple() -> curios_cont::Module {
+/// A tuple over a scalar past the i31 — a boxed magnitude, whose limbs no constant expression can read.
+pub(super) fn big_tuple() -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();

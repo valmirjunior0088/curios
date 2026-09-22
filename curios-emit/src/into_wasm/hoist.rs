@@ -1,6 +1,6 @@
 //! Constant-data hoisting: intern every body binding whose value is statically constant as a module const, so codegen materialises it once in a wasm global instead of allocating it at every execution.
 //!
-//! `Flt`, `Bin`, and the aggregates allocate on every construction, so every constant one hoists; a `Nat`/`Int` scalar is an i31 immediate that costs nothing inline, so it hoists only on demand — when a hoisted aggregate names it, because const emission resolves aggregate elements through the const table. Interning is structural, so equal constants share one global module-wide, and the const vector stays in discovery order, which is dependency order for the start function's initialisation. Use sites need only a rename to the interned name: value resolution already falls back to the const table when a name is neither a closure field nor a local.
+//! `Flt`, `Bin`, a `Nat` or `Int` past the i31, and the aggregates allocate on every construction, so every constant one hoists; a small `Nat` or `Int` is an i31 immediate that costs nothing inline, so it hoists only on demand — when a hoisted aggregate names it, because const emission resolves aggregate elements through the const table. Interning is structural, so equal constants share one global module-wide, and the const vector stays in discovery order, which is dependency order for the start function's initialisation. Use sites need only a rename to the interned name: value resolution already falls back to the const table when a name is neither a closure field nor a local.
 
 use {
     super::{
@@ -8,6 +8,7 @@ use {
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
         EmissionValueName,
     },
+    curios_num::{Integer, Natural},
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
 };
@@ -15,9 +16,8 @@ use {
 /// A structural identity for constant data, with element names already canonicalized to interned const names — so two aggregates of equal shape and equal constant elements collide however they were spelled.
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum ConstKey {
-    /// A machine scalar rather than the unbounded carrier: the guard above admits only what the envelope can box, so nothing wider ever reaches the const table.
-    Nat(u32),
-    Int(i32),
+    Nat(Natural),
+    Int(Integer),
     Flt(u64),
     /// The [`PackedBin`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
     Bin(Grain, PackedBin),
@@ -78,25 +78,28 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
             continue;
         };
         match data {
-            // An out-of-range scalar materialises as a trap, which is no constant instruction and must stay at its execution point rather than fail validation or trap at instantiation — so it is never a candidate, which also keeps every aggregate over it inline.
             EmissionData::Nat(value) => {
-                if let Some(value) = curios_cont::nat_fits_envelope(value)
-                    .then(|| value.to_u32())
-                    .flatten()
-                {
-                    consts
-                        .scalars
-                        .insert(name.clone(), (ConstKey::Nat(value), data.clone()));
+                let key = ConstKey::Nat(value.clone());
+                match curios_cont::nat_is_small(value) {
+                    true => {
+                        consts.scalars.insert(name.clone(), (key, data.clone()));
+                    }
+                    false => {
+                        let interned = interner.intern(key, data.clone());
+                        consts.renames.insert(name.clone(), interned);
+                    }
                 }
             }
             EmissionData::Int(value) => {
-                if let Some(value) = curios_cont::int_fits_envelope(value)
-                    .then(|| value.to_i32())
-                    .flatten()
-                {
-                    consts
-                        .scalars
-                        .insert(name.clone(), (ConstKey::Int(value), data.clone()));
+                let key = ConstKey::Int(value.clone());
+                match curios_cont::int_is_small(value) {
+                    true => {
+                        consts.scalars.insert(name.clone(), (key, data.clone()));
+                    }
+                    false => {
+                        let interned = interner.intern(key, data.clone());
+                        consts.renames.insert(name.clone(), interned);
+                    }
                 }
             }
             EmissionData::Flt(value) => {

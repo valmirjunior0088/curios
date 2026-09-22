@@ -1,9 +1,10 @@
 use {
     super::{
-        Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs, RopeData, Table,
-        box_instr,
+        BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs,
+        RopeData, Table, box_instr, call, either, get, set, tee, when,
     },
     curios_utilities::Grain,
+    std::iter,
 };
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.
@@ -20,36 +21,67 @@ struct WindowFuncs {
     norm: Option<curios_wasm::FuncName>,
 }
 
-/// What truncating a `Flt` into an integer carrier is held to: the open or closed floor and the open ceiling the float must sit between for its truncation to land inside the envelope, the truncation itself, and the refusal that names the carrier. Both bounds are read off `ENVELOPE_BITS` and are exact in binary64.
-struct FltNarrowing {
-    floor: (curios_wasm::Instr, f64),
-    ceiling: f64,
-    trunc: curios_wasm::Instr,
-    refusal: curios_cont::Panic,
+/// One `Nat` or `Int` operand as the inline fast path sees it: a word the representation analysis holds in a register — below `2³⁰`, so small by construction and never tested — or a reference parked in a scratch local, tested before it is unboxed.
+enum Operand {
+    Word(Vec<curios_wasm::Instr>),
+    Reference(curios_wasm::LocalName),
 }
 
-impl FltNarrowing {
-    /// `[0, 2^31)`: a negative float has no `Nat`, and `-0.0 >= +0.0` holds, so the negative zero truncates to `0` as the model says.
-    fn nat() -> Self {
-        Self {
-            floor: (curios_wasm::Instr::F64Ge, 0.0),
-            ceiling: f64::from(1u32 << curios_cont::ENVELOPE_BITS),
-            trunc: curios_wasm::Instr::I32TruncF64U,
-            refusal: curios_cont::Panic::NatCarrier,
+impl Operand {
+    /// Whether it is an i31, or `None` when a word is small by construction.
+    fn test(&self) -> Option<Vec<curios_wasm::Instr>> {
+        match self {
+            Operand::Word(_) => None,
+            Operand::Reference(local) => Some(vec![
+                get(local),
+                curios_wasm::Instr::RefTest {
+                    ref_type: Table::int_type(false),
+                },
+            ]),
         }
     }
 
-    /// `(-2^30 - 1, 2^30)`: truncation is toward zero, so every float strictly above `-2^30 - 1` lands at `-2^30` or higher.
-    fn int() -> Self {
-        let ceiling = f64::from(1u32 << (curios_cont::ENVELOPE_BITS - 1));
-
-        Self {
-            floor: (curios_wasm::Instr::F64Gt, -ceiling - 1.0),
-            ceiling,
-            trunc: curios_wasm::Instr::I32TruncF64S,
-            refusal: curios_cont::Panic::IntCarrier,
+    /// Its value as an `i32`, read once the test has passed.
+    fn small(&self) -> Vec<curios_wasm::Instr> {
+        match self {
+            Operand::Word(load) => load.clone(),
+            Operand::Reference(local) => vec![
+                get(local),
+                curios_wasm::Instr::RefCast {
+                    ref_type: Table::int_type(false),
+                },
+                curios_wasm::Instr::I31GetS,
+            ],
         }
     }
+
+    /// It as the reference a big-number helper takes.
+    fn reference(&self) -> Vec<curios_wasm::Instr> {
+        match self {
+            Operand::Word(load) => load
+                .iter()
+                .cloned()
+                .chain([curios_wasm::Instr::RefI31])
+                .collect(),
+            Operand::Reference(local) => vec![get(local)],
+        }
+    }
+}
+
+/// How the fast path's machine result becomes a `Nat` or `Int`.
+#[derive(Clone, Copy)]
+enum Fast {
+    /// An `i32` that cannot have left the i31 — a remainder, a monus, a bitwise combination, a right shift — boxed as it is.
+    Small,
+    /// An `i32` that may have: a sum, a difference, or the one quotient that outgrows its dividend, `-2³⁰ / -1`.
+    Wide32,
+    /// An `i64` product or left shift.
+    Wide64,
+}
+
+/// The runs of instructions `parts` names, one after another.
+fn sequence<const N: usize>(parts: [Vec<curios_wasm::Instr>; N]) -> Vec<curios_wasm::Instr> {
+    parts.into_iter().flatten().collect()
 }
 
 #[derive(Debug)]
@@ -120,48 +152,62 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
-    /// Lower a `Flt`-to-integer conversion, deciding the envelope on the float before truncating.
+    /// Lower a `Flt`-to-`Nat` or `Flt`-to-`Int` narrowing: refuse outside the domain the carried evidence states, then truncate — through `i32.trunc_f64_s` into an i31 when the result lands inside it, and through `big/of_f64` when it does not.
     ///
-    /// `i32.trunc_f64_u` and `i32.trunc_f64_s` trap by themselves on an operand their result type cannot hold — from `2^32` and from `2^31` in magnitude — and that trap reaches the user as the engine's, naming no carrier. A test of the truncated integer therefore refuses only the band between the envelope and the instruction's own range; past it the instruction has already stopped the program. Every comparison is false at a NaN, so the same guard refuses one without leaning on the erased `NonNeg` or `Finite` evidence, as the bounds check on a packed read does not lean on its.
+    /// The domain is `[0, inf)` for a `Nat` and the finite floats for an `Int`. The evidence rules everything else out, so a refusal is the compiler's fault; it is kept because the truncating instructions would otherwise stop the program with the engine's trap, naming nothing. Every comparison is false at a NaN, so the same guard refuses one. Both carriers share the small window `(-2³⁰ - 1, 2³⁰)`, since a `Nat` in the domain already lies above its floor.
     fn emit_flt_narrowing(
         &mut self,
         dest: &Dest<'_>,
         intrinsic: &curios_cont::Intrinsic,
         operand: &EmissionValueName,
-        narrowing: FltNarrowing,
+        signed: bool,
     ) {
-        let FltNarrowing {
-            floor: (above_floor, floor),
-            ceiling,
-            trunc,
-            refusal,
-        } = narrowing;
-        let local_name = self.context.push_local(
+        let flt = self.context.push_local(
             "flt_narrowing",
             curios_wasm::ValType::Num(curios_wasm::NumType::F64),
         );
+        let (above_floor, floor) = match signed {
+            true => (curios_wasm::Instr::F64Gt, f64::NEG_INFINITY),
+            false => (curios_wasm::Instr::F64Ge, 0.0),
+        };
+        let bound = f64::from(1u32 << (curios_cont::ENVELOPE_BITS - 1));
 
         self.emit_operand(intrinsic, 0, operand);
-        self.emit_instr(curios_wasm::Instr::LocalTee {
-            local_name: local_name.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::F64Const { value: floor });
-        self.emit_instr(above_floor);
-        self.emit_instr(curios_wasm::Instr::LocalGet {
-            local_name: local_name.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::F64Const { value: ceiling });
-        self.emit_instr(curios_wasm::Instr::F64Lt);
-        self.emit_instr(curios_wasm::Instr::I32And);
-        self.emit_instr(curios_wasm::Instr::I32Eqz);
-        self.emit_instr(curios_wasm::Instr::If {
-            label_name: self.context.table().special_label(),
-            block_type: curios_wasm::BlockType::Empty,
-            then_instructions: self.context.table().refuse_instrs(refusal),
-            else_instructions: vec![],
-        });
-        self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-        self.emit_instr(trunc);
+        self.emit_instrs([
+            tee(&flt),
+            curios_wasm::Instr::F64Const { value: floor },
+            above_floor,
+            get(&flt),
+            curios_wasm::Instr::F64Const {
+                value: f64::INFINITY,
+            },
+            curios_wasm::Instr::F64Lt,
+            curios_wasm::Instr::I32And,
+            curios_wasm::Instr::I32Eqz,
+            when(
+                self.context
+                    .table()
+                    .refuse_instrs(curios_cont::Panic::Invariant),
+            ),
+            get(&flt),
+            curios_wasm::Instr::F64Const {
+                value: -bound - 1.0,
+            },
+            curios_wasm::Instr::F64Gt,
+            get(&flt),
+            curios_wasm::Instr::F64Const { value: bound },
+            curios_wasm::Instr::F64Lt,
+            curios_wasm::Instr::I32And,
+            either(
+                Table::top_type(false),
+                vec![
+                    get(&flt),
+                    curios_wasm::Instr::I32TruncF64S,
+                    curios_wasm::Instr::RefI31,
+                ],
+                vec![get(&flt), self.big(BigHelper::OfF64)],
+            ),
+        ]);
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
@@ -180,220 +226,382 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
-    /// Lower an unsigned-`Nat` binary op that may overflow the i31 carrier: apply `op`, trap (via the special label) if bit 31 of the result is set, else store.
-    ///
-    /// The check stays even when the result is held in a register, which an `i32` would have been wide enough to hold unchecked. It is what maintains the invariant that *every* register-held `Nat` is inside the i31 envelope — and that invariant is what lets `box_instr` be a bare `ref.i31` at each disagreeing use, and what keeps this from changing which programs trap.
-    fn emit_checked_nat_op(
-        &mut self,
-        dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
-        left: &EmissionValueName,
-        right: &EmissionValueName,
-        name: &str,
-        op: curios_wasm::Instr,
-    ) {
-        // A register-held result is its own scratch: the check reads the value back out of the local it is already destined for, so the op costs no extra local and no boxing.
-        let raw = self.context.table().raw_carrier(dest.value_name).is_some();
-        let local_name = match raw {
-            true => dest.local.clone(),
-            false => self
-                .context
-                .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
-        };
+    /// A call to the big-number helper `helper`, marking it for emission.
+    fn big(&self, helper: BigHelper) -> curios_wasm::Instr {
+        call(&self.context.table().big_func(helper))
+    }
 
-        self.emit_operand(intrinsic, 0, left);
-        self.emit_operand(intrinsic, 1, right);
-        self.emit_instr(op);
-        self.emit_instr(curios_wasm::Instr::LocalTee {
-            local_name: local_name.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::I32Const {
-            value: curios_cont::ENVELOPE_BITS,
-        });
-        self.emit_instr(curios_wasm::Instr::I32ShrU);
-        self.emit_instr(curios_wasm::Instr::If {
-            label_name: self.context.table().special_label(),
-            block_type: curios_wasm::BlockType::Empty,
-            then_instructions: self
-                .context
-                .table()
-                .refuse_instrs(curios_cont::Panic::NatCarrier),
-            else_instructions: vec![],
-        });
-
-        if !raw {
-            self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-            self.emit_store(dest, &intrinsic.result_repr());
+    /// Park one `Nat` or `Int` operand for the fast path: a register-held word as its load, anything else in a fresh scratch local.
+    fn operand(&mut self, name: &EmissionValueName) -> Operand {
+        match self.context.table().raw_carrier(name) {
+            Some(curios_cont::Repr::Nat) => {
+                Operand::Word(self.context.load_value_instrs(name, LoadAs::Nat))
+            }
+            _ => {
+                let local = self.context.push_local("operand", Table::top_type(true));
+                self.emit_instrs(self.context.load_value_instrs(name, LoadAs::Null));
+                self.emit_instr(set(&local));
+                Operand::Reference(local)
+            }
         }
     }
 
-    /// Lower a signed-`Int` binary op that may overflow the i31 carrier: apply `op`, trap (via the special label) if the result leaves the signed 31-bit range, else store. The check stays for a register-held result for the reason given on [`CodeEmitter::emit_checked_nat_op`].
-    fn emit_checked_int_op(
-        &mut self,
-        dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
-        left: &EmissionValueName,
-        right: &EmissionValueName,
-        name: &str,
-        op: curios_wasm::Instr,
-    ) {
-        let raw = self.context.table().raw_carrier(dest.value_name).is_some();
-        let local_name = match raw {
-            true => dest.local.clone(),
-            false => self
-                .context
-                .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
-        };
-
-        self.emit_operand(intrinsic, 0, left);
-        self.emit_operand(intrinsic, 1, right);
-        self.emit_instr(op);
-        self.emit_instr(curios_wasm::Instr::LocalTee {
-            local_name: local_name.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 1 });
-        self.emit_instr(curios_wasm::Instr::I32Shl);
-        self.emit_instr(curios_wasm::Instr::LocalGet {
-            local_name: local_name.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::I32Xor);
-        self.emit_instr(curios_wasm::Instr::I32Const {
-            value: curios_cont::ENVELOPE_BITS,
-        });
-        self.emit_instr(curios_wasm::Instr::I32ShrU);
-        self.emit_instr(curios_wasm::Instr::If {
-            label_name: self.context.table().special_label(),
-            block_type: curios_wasm::BlockType::Empty,
-            then_instructions: self
-                .context
-                .table()
-                .refuse_instrs(curios_cont::Panic::IntCarrier),
-            else_instructions: vec![],
-        });
-
-        if !raw {
-            self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-            self.emit_store(dest, &intrinsic.result_repr());
+    /// An operand narrowed to a word, as a shift count is: exact below `2³² - 1` and saturating there, which is past every count a shift could honour.
+    fn word(&self, operand: &Operand) -> Vec<curios_wasm::Instr> {
+        match operand {
+            Operand::Word(load) => load.clone(),
+            Operand::Reference(local) => iter::once(get(local))
+                .chain(self.context.load_as_instrs(LoadAs::Nat, true))
+                .collect(),
         }
     }
 
-    /// Push the shift count for a shift lowering, clamped to 31.
-    ///
-    /// **The clamp is what makes one test decide every count.** Wasm's shifts reduce their count modulo the operand width — `i32.shl` by 32, `i64.shl` by 64 — so a count of 40 becomes a count of 8 and the result is a value the program never asked for. Clamping instead of masking is sound because 31 is already past the envelope: any nonzero value shifted 31 places leaves it, so the check below reaches the same verdict for 31 as for any larger count, and zero shifted anywhere is still zero.
-    fn emit_clamped_shift(
+    /// Emit `fast` when every operand is an i31 and `slow` otherwise, each leaving one `result`. With no operand to test — every one a register-held word — `fast` is the whole lowering.
+    fn emit_split(
         &mut self,
-        intrinsic: &curios_cont::Intrinsic,
-        count: &EmissionValueName,
-        name: &str,
+        operands: &[&Operand],
+        result: curios_wasm::ValType,
+        fast: Vec<curios_wasm::Instr>,
+        slow: Vec<curios_wasm::Instr>,
     ) {
-        let count_local = self
-            .context
-            .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I32));
+        let tests = operands
+            .iter()
+            .filter_map(|operand| operand.test())
+            .collect::<Vec<_>>();
 
-        self.emit_operand(intrinsic, 1, count);
-        self.emit_instr(curios_wasm::Instr::LocalTee {
-            local_name: count_local.clone(),
-        });
-        self.emit_instr(curios_wasm::Instr::I32Const {
-            value: curios_cont::ENVELOPE_BITS,
-        });
-        self.emit_instr(curios_wasm::Instr::LocalGet {
-            local_name: count_local,
-        });
-        self.emit_instr(curios_wasm::Instr::I32Const {
-            value: curios_cont::ENVELOPE_BITS,
-        });
-        self.emit_instr(curios_wasm::Instr::I32LtU);
-        self.emit_instr(curios_wasm::Instr::Select {
-            val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I32)],
-        });
+        if tests.is_empty() {
+            self.emit_instrs(fast);
+            return;
+        }
+
+        for (index, test) in tests.into_iter().enumerate() {
+            self.emit_instrs(test);
+            if index > 0 {
+                self.emit_instr(curios_wasm::Instr::I32And);
+            }
+        }
+        self.emit_instr(either(result, fast, slow));
     }
 
-    /// Lower a left shift, trapping when the shifted value leaves the i31 envelope.
-    ///
-    /// **Widened for the reason `NatMul` is widened, and it is the same defect underneath.** Shifting in `i32` and testing the result's bit 31 afterwards cannot see bits the shift already discarded: `2³⁰ << 15` is `2⁴⁵`, truncates to zero, and reads as a perfectly good result. Sixty-four bits hold every product a clamped count can produce from a value inside the envelope, so the one test after the shift decides it.
-    ///
-    /// `signed` selects the sign extension and the range test: unsigned answers whether any bit at or above 31 survived, signed whether the value still sits in `[-2³⁰, 2³⁰)`, which is the same question `emit_checked_int_op` asks of an `i32`.
+    /// The instructions turning the fast path's machine result into a `Nat` or `Int`: a bare `ref.i31` when it cannot have left the i31, and otherwise a check that it sign-extends from bit 30, with `big/of_i64` for one that does not.
+    fn finish(&mut self, fast: Fast) -> Vec<curios_wasm::Instr> {
+        match fast {
+            Fast::Small => vec![curios_wasm::Instr::RefI31],
+            Fast::Wide32 => {
+                let value = self
+                    .context
+                    .push_local("wide", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
+                let spare = 32 - curios_cont::ENVELOPE_BITS;
+                vec![
+                    tee(&value),
+                    curios_wasm::Instr::I32Const { value: spare },
+                    curios_wasm::Instr::I32Shl,
+                    curios_wasm::Instr::I32Const { value: spare },
+                    curios_wasm::Instr::I32ShrS,
+                    get(&value),
+                    curios_wasm::Instr::I32Eq,
+                    either(
+                        Table::top_type(false),
+                        vec![get(&value), curios_wasm::Instr::RefI31],
+                        vec![
+                            get(&value),
+                            curios_wasm::Instr::I64ExtendI32S,
+                            self.big(BigHelper::OfI64),
+                        ],
+                    ),
+                ]
+            }
+            Fast::Wide64 => {
+                let value = self
+                    .context
+                    .push_local("wide", curios_wasm::ValType::Num(curios_wasm::NumType::I64));
+                let spare = i64::from(64 - curios_cont::ENVELOPE_BITS);
+                vec![
+                    tee(&value),
+                    curios_wasm::Instr::I64Const { value: spare },
+                    curios_wasm::Instr::I64Shl,
+                    curios_wasm::Instr::I64Const { value: spare },
+                    curios_wasm::Instr::I64ShrS,
+                    get(&value),
+                    curios_wasm::Instr::I64Eq,
+                    either(
+                        Table::top_type(false),
+                        vec![
+                            get(&value),
+                            curios_wasm::Instr::I32WrapI64,
+                            curios_wasm::Instr::RefI31,
+                        ],
+                        vec![get(&value), self.big(BigHelper::OfI64)],
+                    ),
+                ]
+            }
+        }
+    }
+
+    /// Lower a two-operand `Nat` or `Int` operation: `fast` computes on the two operands' `i32` values when both are i31s and `finish` boxes what it leaves; otherwise both references go to `slow`, which ends in the helper call.
+    fn emit_arith(
+        &mut self,
+        dest: &Dest<'_>,
+        (left, right): (&EmissionValueName, &EmissionValueName),
+        fast: impl FnOnce(Vec<curios_wasm::Instr>, Vec<curios_wasm::Instr>) -> Vec<curios_wasm::Instr>,
+        finish: Fast,
+        slow: Vec<curios_wasm::Instr>,
+    ) {
+        let left = self.operand(left);
+        let right = self.operand(right);
+        let fast = fast(left.small(), right.small());
+        let slow = left
+            .reference()
+            .into_iter()
+            .chain(right.reference())
+            .chain(slow)
+            .collect();
+
+        self.emit_settled(dest, &[&left, &right], fast, finish, slow);
+    }
+
+    /// Emit a `Nat` or `Int` result and store it: into a word when the representation analysis holds the destination in one — a result its literal operands bound, so the fast path's `i32` is already the value and a helper's answer is an i31 — and boxed through `finish` otherwise.
+    fn emit_settled(
+        &mut self,
+        dest: &Dest<'_>,
+        operands: &[&Operand],
+        fast: Vec<curios_wasm::Instr>,
+        finish: Fast,
+        slow: Vec<curios_wasm::Instr>,
+    ) {
+        match self.context.table().raw_carrier(dest.value_name) {
+            Some(curios_cont::Repr::Nat) => {
+                debug_assert!(
+                    matches!(finish, Fast::Small),
+                    "a word-held result is one its operands bound, which no fast path can outgrow",
+                );
+                let slow = slow
+                    .into_iter()
+                    .chain([
+                        curios_wasm::Instr::RefCast {
+                            ref_type: Table::int_type(false),
+                        },
+                        curios_wasm::Instr::I31GetS,
+                    ])
+                    .collect();
+                self.emit_split(
+                    operands,
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                    fast,
+                    slow,
+                );
+                self.emit_store(dest, &curios_cont::Repr::Nat);
+            }
+            _ => {
+                let fast = fast.into_iter().chain(self.finish(finish)).collect();
+                self.emit_split(operands, Table::top_type(false), fast, slow);
+                self.emit_store(dest, &curios_cont::Repr::Ref);
+            }
+        }
+    }
+
+    /// Lower a `Nat` or `Int` comparison: the machine comparison `fast` on two i31s, and otherwise `big/cmp`'s `-1`, `0` or `1` against zero through `against`. Signed on both carriers, since an i31 is read signed.
+    fn emit_compare(
+        &mut self,
+        dest: &Dest<'_>,
+        (left, right): (&EmissionValueName, &EmissionValueName),
+        fast: curios_wasm::Instr,
+        against: Vec<curios_wasm::Instr>,
+    ) {
+        let left = self.operand(left);
+        let right = self.operand(right);
+        let fast = left
+            .small()
+            .into_iter()
+            .chain(right.small())
+            .chain([fast])
+            .collect();
+        let slow = left
+            .reference()
+            .into_iter()
+            .chain(right.reference())
+            .chain([self.big(BigHelper::Cmp)])
+            .chain(against)
+            .collect();
+
+        self.emit_split(
+            &[&left, &right],
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            fast,
+            slow,
+        );
+        self.emit_store(dest, &curios_cont::Repr::Nat);
+    }
+
+    /// Lower a zero test: an i31 compares, and a boxed value is never zero.
+    fn emit_eqz(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
+        let operand = self.operand(operand);
+        let fast = operand
+            .small()
+            .into_iter()
+            .chain([curios_wasm::Instr::I32Eqz])
+            .collect();
+
+        self.emit_split(
+            &[&operand],
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            fast,
+            vec![curios_wasm::Instr::I32Const { value: 0 }],
+        );
+        self.emit_store(dest, &curios_cont::Repr::Nat);
+    }
+
+    /// Lower a conversion to `Flt`: an i31 converts exactly, and a boxed value through `big/to_f64`, which rounds to nearest as the model does.
+    fn emit_to_flt(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
+        let operand = self.operand(operand);
+        let fast = operand
+            .small()
+            .into_iter()
+            .chain([curios_wasm::Instr::F64ConvertI32S])
+            .collect();
+        let slow = operand
+            .reference()
+            .into_iter()
+            .chain([self.big(BigHelper::ToF64)])
+            .collect();
+
+        self.emit_split(
+            &[&operand],
+            curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            fast,
+            slow,
+        );
+        self.emit_store(dest, &curios_cont::Repr::Flt);
+    }
+
+    /// Lower a left shift. The fast path shifts in 64 bits when the count is below 32, where any i31 shifted stays inside an `i64`; a larger count, like a boxed operand, goes to `big/shl` with the count narrowed to a word.
     fn emit_shift_left(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
         value: &EmissionValueName,
         count: &EmissionValueName,
-        name: &str,
-        signed: bool,
     ) {
-        let wide_local = self
-            .context
-            .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I64));
-        let extend = match signed {
-            true => curios_wasm::Instr::I64ExtendI32S,
-            false => curios_wasm::Instr::I64ExtendI32U,
-        };
+        let value = self.operand(value);
+        let count = self.operand(count);
+        let slow: Vec<_> = value
+            .reference()
+            .into_iter()
+            .chain(self.word(&count))
+            .chain([self.big(BigHelper::Shl)])
+            .collect();
+        let shifted = value
+            .small()
+            .into_iter()
+            .chain([curios_wasm::Instr::I64ExtendI32S])
+            .chain(count.small())
+            .chain([
+                curios_wasm::Instr::I64ExtendI32U,
+                curios_wasm::Instr::I64Shl,
+            ])
+            .chain(self.finish(Fast::Wide64))
+            .collect();
+        let fast = count
+            .small()
+            .into_iter()
+            .chain([
+                curios_wasm::Instr::I32Const { value: 32 },
+                curios_wasm::Instr::I32LtU,
+                either(Table::top_type(false), shifted, slow.clone()),
+            ])
+            .collect();
 
-        self.emit_operand(intrinsic, 0, value);
-        self.emit_instr(extend.clone());
-        self.emit_clamped_shift(intrinsic, count, &format!("{name}_count"));
-        self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
-        self.emit_instr(curios_wasm::Instr::I64Shl);
-        self.emit_instr(curios_wasm::Instr::LocalTee {
-            local_name: wide_local.clone(),
-        });
-
-        match signed {
-            // Sign-extending from bit 30 and comparing is the `i64` spelling of `emit_checked_int_op`'s bit-30-agrees-with-bit-31 test. The shift is the envelope's complement in an `i64`, so it moves with the envelope rather than beside it.
-            true => {
-                let complement = i64::BITS as i64 - i64::from(curios_cont::ENVELOPE_BITS);
-
-                self.emit_instr(curios_wasm::Instr::I64Const { value: complement });
-                self.emit_instr(curios_wasm::Instr::I64Shl);
-                self.emit_instr(curios_wasm::Instr::I64Const { value: complement });
-                self.emit_instr(curios_wasm::Instr::I64ShrS);
-                self.emit_instr(curios_wasm::Instr::LocalGet {
-                    local_name: wide_local.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I64Ne);
-            }
-            false => {
-                self.emit_instr(curios_wasm::Instr::I64Const {
-                    value: i64::from(curios_cont::ENVELOPE_BITS),
-                });
-                self.emit_instr(curios_wasm::Instr::I64ShrU);
-                self.emit_instr(curios_wasm::Instr::I32WrapI64);
-            }
-        }
-
-        self.emit_instr(curios_wasm::Instr::If {
-            label_name: self.context.table().special_label(),
-            block_type: curios_wasm::BlockType::Empty,
-            then_instructions: self.context.table().refuse_instrs(match signed {
-                true => curios_cont::Panic::IntCarrier,
-                false => curios_cont::Panic::NatCarrier,
-            }),
-            else_instructions: vec![],
-        });
-
-        self.emit_instr(curios_wasm::Instr::LocalGet {
-            local_name: wide_local,
-        });
-        self.emit_instr(curios_wasm::Instr::I32WrapI64);
-        self.emit_store(dest, &intrinsic.result_repr());
+        self.emit_split(&[&value, &count], Table::top_type(false), fast, slow);
+        self.emit_store(dest, &curios_cont::Repr::Ref);
     }
 
-    /// Lower a right shift over a clamped count. A quotient of a value inside the envelope is inside it, so there is nothing to check.
+    /// Lower a right shift, the floor of the value over a power of two. On an i31 the count clamps to 31 — any i31 shifted that far is already its sign — so one `i32.shr_s` decides every count.
     fn emit_shift_right(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
         value: &EmissionValueName,
         count: &EmissionValueName,
-        name: &str,
-        op: curios_wasm::Instr,
     ) {
-        self.emit_operand(intrinsic, 0, value);
-        self.emit_clamped_shift(intrinsic, count, name);
-        self.emit_instr(op);
-        self.emit_store(dest, &intrinsic.result_repr());
+        let value = self.operand(value);
+        let count = self.operand(count);
+        let clamp = self.context.push_local(
+            "shr_count",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+        );
+        let fast = value
+            .small()
+            .into_iter()
+            .chain(count.small())
+            .chain([
+                tee(&clamp),
+                curios_wasm::Instr::I32Const { value: 31 },
+                get(&clamp),
+                curios_wasm::Instr::I32Const { value: 31 },
+                curios_wasm::Instr::I32LtU,
+                curios_wasm::Instr::Select { val_types: vec![] },
+                curios_wasm::Instr::I32ShrS,
+            ])
+            .collect();
+        let slow = value
+            .reference()
+            .into_iter()
+            .chain(self.word(&count))
+            .chain([self.big(BigHelper::Shr)])
+            .collect();
+
+        self.emit_settled(dest, &[&value, &count], fast, Fast::Small, slow);
+    }
+
+    /// Lower a bitwise combination: two i31s combine as machine words, since they agree on every bit above bit 30 and so does any combination of them, and anything else goes to `big/bitwise`.
+    fn emit_bitwise(
+        &mut self,
+        dest: &Dest<'_>,
+        operands: (&EmissionValueName, &EmissionValueName),
+        bitwise: Bitwise,
+    ) {
+        let instr = match bitwise {
+            Bitwise::And => curios_wasm::Instr::I32And,
+            Bitwise::Or => curios_wasm::Instr::I32Or,
+            Bitwise::Xor => curios_wasm::Instr::I32Xor,
+        };
+        let slow = vec![
+            curios_wasm::Instr::I32Const {
+                value: bitwise.code(),
+            },
+            self.big(BigHelper::Bitwise),
+        ];
+
+        self.emit_arith(
+            dest,
+            operands,
+            move |left, right| sequence([left, right, vec![instr]]),
+            Fast::Small,
+            slow,
+        );
+    }
+
+    /// Box the length on the stack as the `Nat` it is: an i31 below `2³⁰`, and through `big/of_i64` past it, which a sequence may reach.
+    fn emit_length_box(&mut self) {
+        let length = self.context.push_local(
+            "length",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+        );
+
+        self.emit_instrs([
+            tee(&length),
+            curios_wasm::Instr::I32Const {
+                value: curios_cont::ENVELOPE_BITS - 1,
+            },
+            curios_wasm::Instr::I32ShrU,
+            either(
+                Table::top_type(false),
+                vec![
+                    get(&length),
+                    curios_wasm::Instr::I64ExtendI32U,
+                    self.big(BigHelper::OfI64),
+                ],
+                vec![get(&length), curios_wasm::Instr::RefI31],
+            ),
+        ]);
     }
 
     /// `struct.get` on a rope base — the `len`/`tag` reads that never force.
@@ -1220,76 +1428,187 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             _ => op.result_repr(),
         };
+        // A result its literal operands bound is the one exception: the analysis may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word.
         debug_assert!(
             self.context
                 .table()
                 .raw_carrier(value_name)
-                .is_none_or(|carrier| carrier == result_repr),
+                .is_none_or(|carrier| carrier == result_repr
+                    || (carrier == curios_cont::Repr::Nat && op.may_bound_result())),
             "`{value_name}` is held as {:?} where {op:?} produces {result_repr:?}",
             self.context.table().raw_carrier(value_name),
         );
 
         match op {
-            curios_cont::Intrinsic::NatEql => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Eq)
-            }
-            curios_cont::Intrinsic::NatNeq => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Ne)
-            }
-            curios_cont::Intrinsic::NatAdd => self.emit_checked_nat_op(
+            curios_cont::Intrinsic::NatEql | curios_cont::Intrinsic::IntEql => self.emit_compare(
                 dest,
-                &op,
-                &args[0],
-                &args[1],
-                "nat_add",
-                curios_wasm::Instr::I32Add,
+                (&args[0], &args[1]),
+                curios_wasm::Instr::I32Eq,
+                vec![curios_wasm::Instr::I32Eqz],
             ),
-            curios_cont::Intrinsic::NatSub => {
-                let (left, right) = (&args[0], &args[1]);
-                // Monus: 0 if left < right, else left - right. select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I32Sub);
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I32LtU);
-                self.emit_instr(curios_wasm::Instr::Select { val_types: vec![] });
-                self.emit_store(dest, &op.result_repr());
-            }
-            curios_cont::Intrinsic::NatMul => {
-                let (left, right) = (&args[0], &args[1]);
-                let local_name = self.context.push_local(
-                    "nat_mul",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+            curios_cont::Intrinsic::NatNeq | curios_cont::Intrinsic::IntNeq => self.emit_compare(
+                dest,
+                (&args[0], &args[1]),
+                curios_wasm::Instr::I32Ne,
+                vec![
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    curios_wasm::Instr::I32Ne,
+                ],
+            ),
+            curios_cont::Intrinsic::NatLt | curios_cont::Intrinsic::IntLt => self.emit_compare(
+                dest,
+                (&args[0], &args[1]),
+                curios_wasm::Instr::I32LtS,
+                vec![
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    curios_wasm::Instr::I32LtS,
+                ],
+            ),
+            curios_cont::Intrinsic::NatLe | curios_cont::Intrinsic::IntLe => self.emit_compare(
+                dest,
+                (&args[0], &args[1]),
+                curios_wasm::Instr::I32LeS,
+                vec![
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    curios_wasm::Instr::I32LeS,
+                ],
+            ),
+            curios_cont::Intrinsic::NatAdd | curios_cont::Intrinsic::IntAdd => {
+                let slow = vec![
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    self.big(BigHelper::Add),
+                ];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32Add]]),
+                    Fast::Wide32,
+                    slow,
                 );
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
-                self.emit_instr(curios_wasm::Instr::I64Mul);
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I64Const {
-                    value: i64::from(curios_cont::ENVELOPE_BITS),
-                });
-                self.emit_instr(curios_wasm::Instr::I64ShrU);
-                self.emit_instr(curios_wasm::Instr::I32WrapI64);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::NatCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-                self.emit_instr(curios_wasm::Instr::I32WrapI64);
-                self.emit_store(dest, &op.result_repr());
             }
-            // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so the reversed range the `(start, end)` window also had to reject cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided.
+            curios_cont::Intrinsic::IntSub => {
+                let slow = vec![
+                    curios_wasm::Instr::I32Const { value: 1 },
+                    self.big(BigHelper::Add),
+                ];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32Sub]]),
+                    Fast::Wide32,
+                    slow,
+                );
+            }
+            // Monus: the difference of two i31 naturals lies in `(-2³⁰, 2³⁰)`, and a negative one clamps to zero.
+            curios_cont::Intrinsic::NatSub => {
+                let difference = self.context.push_local(
+                    "nat_sub",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                );
+                let slow = vec![self.big(BigHelper::NatSub)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            right,
+                            vec![
+                                curios_wasm::Instr::I32Sub,
+                                tee(&difference),
+                                curios_wasm::Instr::I32Const { value: 0 },
+                                get(&difference),
+                                curios_wasm::Instr::I32Const { value: 0 },
+                                curios_wasm::Instr::I32GtS,
+                                curios_wasm::Instr::Select { val_types: vec![] },
+                            ],
+                        ])
+                    },
+                    Fast::Small,
+                    slow,
+                );
+            }
+            // Sixty-four bits hold the product of any two i31s, so the one check after the multiply decides it.
+            curios_cont::Intrinsic::NatMul | curios_cont::Intrinsic::IntMul => {
+                let slow = vec![self.big(BigHelper::Mul)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            vec![curios_wasm::Instr::I64ExtendI32S],
+                            right,
+                            vec![
+                                curios_wasm::Instr::I64ExtendI32S,
+                                curios_wasm::Instr::I64Mul,
+                            ],
+                        ])
+                    },
+                    Fast::Wide64,
+                    slow,
+                );
+            }
+            // A zero divisor is ruled out by the evidence every division carries; were one to arrive, `i32.div_u` would trap on it.
+            curios_cont::Intrinsic::NatDiv => {
+                let slow = vec![self.big(BigHelper::Div)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32DivU]]),
+                    Fast::Small,
+                    slow,
+                );
+            }
+            curios_cont::Intrinsic::IntDiv => {
+                let slow = vec![self.big(BigHelper::Div)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32DivS]]),
+                    Fast::Wide32,
+                    slow,
+                );
+            }
+            curios_cont::Intrinsic::NatRem => {
+                let slow = vec![self.big(BigHelper::Rem)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32RemU]]),
+                    Fast::Small,
+                    slow,
+                );
+            }
+            curios_cont::Intrinsic::IntRem => {
+                let slow = vec![self.big(BigHelper::Rem)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32RemS]]),
+                    Fast::Small,
+                    slow,
+                );
+            }
+            curios_cont::Intrinsic::NatAnd | curios_cont::Intrinsic::IntAnd => {
+                self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::And)
+            }
+            curios_cont::Intrinsic::NatOr | curios_cont::Intrinsic::IntOr => {
+                self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Or)
+            }
+            curios_cont::Intrinsic::NatXor | curios_cont::Intrinsic::IntXor => {
+                self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Xor)
+            }
+            curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl => {
+                self.emit_shift_left(dest, &args[0], &args[1])
+            }
+            curios_cont::Intrinsic::NatShr | curios_cont::Intrinsic::IntShr => {
+                self.emit_shift_right(dest, &args[0], &args[1])
+            }
+            curios_cont::Intrinsic::NatEqz | curios_cont::Intrinsic::IntEqz => {
+                self.emit_eqz(dest, &args[0])
+            }
+            // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so the reversed range the `(start, end)` window also had to reject cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided. The words are narrowed, so a count no sequence holds saturates and fails the guard; what passes is handed on as the `Nat` it arrived as.
             curios_cont::Intrinsic::WindowExtent => {
                 let (start, count, len) = (&args[0], &args[1], &args[2]);
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
@@ -1310,140 +1629,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         .refuse_instrs(curios_cont::Panic::OutOfBounds),
                     else_instructions: vec![],
                 });
-                self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
-            }
-            curios_cont::Intrinsic::NatLt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtU)
-            }
-            curios_cont::Intrinsic::NatDiv => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32DivU)
-            }
-            curios_cont::Intrinsic::NatRem => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32RemU)
-            }
-            curios_cont::Intrinsic::NatLe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeU)
-            }
-            curios_cont::Intrinsic::IntEql => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Eq)
-            }
-            curios_cont::Intrinsic::IntNeq => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Ne)
-            }
-            curios_cont::Intrinsic::IntAdd => self.emit_checked_int_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_add",
-                curios_wasm::Instr::I32Add,
-            ),
-            curios_cont::Intrinsic::IntSub => self.emit_checked_int_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_sub",
-                curios_wasm::Instr::I32Sub,
-            ),
-            curios_cont::Intrinsic::IntMul => {
-                let (left, right) = (&args[0], &args[1]);
-                let local_name = self.context.push_local(
-                    "int_mul",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I64),
-                );
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instr(curios_wasm::Instr::I64ExtendI32S);
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(curios_wasm::Instr::I64ExtendI32S);
-                self.emit_instr(curios_wasm::Instr::I64Mul);
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 30 });
-                self.emit_instr(curios_wasm::Instr::I64ShrS);
-                self.emit_instr(curios_wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 63 });
-                self.emit_instr(curios_wasm::Instr::I64ShrS);
-                self.emit_instr(curios_wasm::Instr::I64Ne);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::IntCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-                self.emit_instr(curios_wasm::Instr::I32WrapI64);
-                self.emit_store(dest, &op.result_repr());
-            }
-            curios_cont::Intrinsic::IntDiv => self.emit_checked_int_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_div",
-                curios_wasm::Instr::I32DivS,
-            ),
-            curios_cont::Intrinsic::IntRem => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32RemS)
-            }
-            curios_cont::Intrinsic::IntLt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtS)
-            }
-            curios_cont::Intrinsic::IntLe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeS)
-            }
-            curios_cont::Intrinsic::NatAnd => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32And)
-            }
-            curios_cont::Intrinsic::NatOr => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Or)
-            }
-            curios_cont::Intrinsic::NatXor => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
-            }
-            curios_cont::Intrinsic::NatShl => {
-                self.emit_shift_left(dest, &op, &args[0], &args[1], "nat_shl", false)
-            }
-            curios_cont::Intrinsic::NatShr => self.emit_shift_right(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "nat_shr",
-                curios_wasm::Instr::I32ShrU,
-            ),
-            curios_cont::Intrinsic::NatEqz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
-            }
-            curios_cont::Intrinsic::IntAnd => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32And)
-            }
-            curios_cont::Intrinsic::IntOr => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Or)
-            }
-            curios_cont::Intrinsic::IntXor => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
-            }
-            curios_cont::Intrinsic::IntShl => {
-                self.emit_shift_left(dest, &op, &args[0], &args[1], "int_shl", true)
-            }
-            curios_cont::Intrinsic::IntShr => self.emit_shift_right(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_shr",
-                curios_wasm::Instr::I32ShrS,
-            ),
-            curios_cont::Intrinsic::IntEqz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
             curios_cont::Intrinsic::FltAdd => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Add)
@@ -1531,63 +1718,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::F64Copysign);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::NatToInt => {
-                let operand = &args[0];
-                // The conversion preserves the number: below 2^30 the i31 bits already spell the same value, and a `Nat` at or above it has no signed-i31 `Int` holding it, so it traps at the boundary rather than silently reloading negative.
-                let local_name = self.context.push_local(
-                    "nat_to_int",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                );
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 30 });
-                self.emit_instr(curios_wasm::Instr::I32ShrU);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::IntCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
+            // `Nat` and `Int` share one runtime form, so either conversion is the identity on the reference. `Int/to_nat` carries the evidence that its operand is not negative, and `Nat/to_int` needs none.
+            curios_cont::Intrinsic::NatToInt | curios_cont::Intrinsic::IntToNat => {
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::NatToFlt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32U)
-            }
-            curios_cont::Intrinsic::IntToNat => {
-                let operand = &args[0];
-                // The conversion preserves the number: a negative `Int` is a value no `Nat` holds, so it traps at the boundary rather than silently dropping the sign bit.
-                let local_name = self.context.push_local(
-                    "int_to_nat",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                );
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I32Const {
-                    value: curios_cont::ENVELOPE_BITS,
-                });
-                self.emit_instr(curios_wasm::Instr::I32ShrU);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::NatCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-                self.emit_store(dest, &op.result_repr());
-            }
-            curios_cont::Intrinsic::IntToFlt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32S)
+            curios_cont::Intrinsic::NatToFlt | curios_cont::Intrinsic::IntToFlt => {
+                self.emit_to_flt(dest, &args[0])
             }
             curios_cont::Intrinsic::FltToLeBytes => {
                 let operand = &args[0];
@@ -1686,14 +1823,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::F64ReinterpretI64);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::FltToNat => {
-                self.emit_flt_narrowing(dest, &op, &args[0], FltNarrowing::nat())
-            }
-            curios_cont::Intrinsic::FltToInt => {
-                self.emit_flt_narrowing(dest, &op, &args[0], FltNarrowing::int())
-            }
+            curios_cont::Intrinsic::FltToNat => self.emit_flt_narrowing(dest, &op, &args[0], false),
+            curios_cont::Intrinsic::FltToInt => self.emit_flt_narrowing(dest, &op, &args[0], true),
             curios_cont::Intrinsic::BinLen(grain) => {
                 self.emit_bin_len(grain, &args[0]);
+                self.emit_length_box();
                 self.emit_store(dest, &op.result_repr());
             }
             curios_cont::Intrinsic::BinEql(grain) => {
@@ -1896,7 +2030,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::ListLen => {
                 let rope = self.context.table().list_rope();
-                self.emit_unary_op(dest, &op, &args[0], Self::rope_get(&rope, &rope.len_field));
+                self.emit_operand(&op, 0, &args[0]);
+                self.emit_instr(Self::rope_get(&rope, &rope.len_field));
+                self.emit_length_box();
+                self.emit_store(dest, &op.result_repr());
             }
             curios_cont::Intrinsic::ListGet => {
                 let rope = self.context.table().list_rope();
@@ -2091,11 +2228,29 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &slot.repr());
             }
+            // An i31 answers at the first test; only a row or a boxed magnitude pays the second, which admits the magnitude as the bare payload it is.
             curios_cont::Intrinsic::IsImmediate => {
+                let big = self.context.table().big().big;
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
                 self.emit_instr(curios_wasm::Instr::RefTest {
                     ref_type: Table::int_type(false),
                 });
+                let boxed = self
+                    .context
+                    .load_value_instrs(&args[0], LoadAs::NonNull)
+                    .into_iter()
+                    .chain([curios_wasm::Instr::RefTest {
+                        ref_type: curios_wasm::RefType {
+                            is_nullable: false,
+                            heap_type: curios_wasm::HeapType::Concrete(big),
+                        },
+                    }])
+                    .collect();
+                self.emit_instr(either(
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                    vec![curios_wasm::Instr::I32Const { value: 1 }],
+                    boxed,
+                ));
                 self.emit_store(dest, &op.result_repr());
             }
             // The identity on the reference — it computes nothing, and exists so the payload has a definition of its own rather than aliasing the scrutinee. `LoadAs::Null` is what `Repr::Ref` resolves to: the value is handed on exactly as stored, and each use coerces at its own site.

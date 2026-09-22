@@ -624,7 +624,6 @@ fn slot_name(slot: Slot) -> String {
     match slot {
         Slot::Tag => "tag".into(),
         Slot::Nat => "nat".into(),
-        Slot::Int => "int".into(),
         Slot::Flt => "flt".into(),
         Slot::List => "list".into(),
         Slot::Closure(arity) => format!("closure/{arity}"),
