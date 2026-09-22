@@ -16,7 +16,7 @@ use {
     },
     curios_text::{PreparedText, prepare_prelude},
     curios_unit::{Record, Unit, framed},
-    curios_utilities::{Source, digest},
+    curios_utilities::{Report, Source, digest},
     std::{
         collections::BTreeSet,
         env, fs,
@@ -140,8 +140,10 @@ fn archive(
 ) -> Unit {
     let lowered = prepared.core().clone();
     let mut context = Context::with_default_budget(SYNTAX);
+    // An item the parser could not read is absent from `lowered`, so what names it is withheld as a refused item's dependent is, rather than reported unbound once per mention: the seeding the compile pipeline does before it elaborates a unit.
+    context.set_broken(prepared.broken_names());
     // Grown explicitly, where the whole-module spelling this replaced grew for its caller: a root is the deepest module the compiler ever elaborates, and a build script's thread is the smallest stack it is ever elaborated on.
-    let (core, _body_type) = curios_utilities::grown(|| {
+    let elaborated = curios_utilities::grown(|| {
         elaborate_and_zonk_unit(
             &mut context,
             established,
@@ -151,8 +153,23 @@ fn archive(
             Mode::Infer,
             Tail::Written,
         )
-    })
-    .unwrap_or_else(|error| {
+    });
+    // A broken item refuses the root whatever elaboration said of the rest, and its parse report comes first, with elaboration's beside it in the same build — the pipeline's `with_broken`, for the one unit it does not compile.
+    let broken = prepared.broken();
+    if !broken.is_empty() {
+        let parsed = Report::render_all(
+            &broken
+                .iter()
+                .map(|item| item.report.clone())
+                .collect::<Vec<_>>(),
+        );
+        let elaboration = match &elaborated {
+            Ok(_) => String::new(),
+            Err(error) => error.format_with(&lowered, scope, &SYNTAX),
+        };
+        panic!("/{root} failed to parse: {parsed}{elaboration}");
+    }
+    let (core, _body_type) = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
             error.format_with(&lowered, scope, &SYNTAX)
