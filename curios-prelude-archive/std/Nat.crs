@@ -162,3 +162,11 @@ pub mod Lt;
 ---
 --- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `Lt`'s do.
 pub mod Le;
+
+--- Division with remainder, certified: `div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
+pub mod div_mod;
+pub use div_mod/{let div_mod, DivMod};
+
+--- That `d` divides `n`, with its laws beneath.
+pub mod Divides;
+pub use Divides/{let Divides};

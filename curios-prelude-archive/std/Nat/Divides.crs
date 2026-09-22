@@ -1,0 +1,65 @@
+use /std/{Nat, Bool, Eq};
+use /std/Nat/{Lt};
+
+--- That `d` divides `n`: some multiple of `d` is `n`.
+pub induct Divides(d: Nat, n: Nat): pub Prop
+--- `n` is `k` copies of `d`.
+| intro(k: Nat, e: Eq(n, k * d))
+end
+
+--- `d` divides itself.
+pub let refl(d: Nat) -> Divides(d, d) =
+    Divides/intro(1, Eq/refl());
+
+--- Transitivity.
+pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Divides(a, b), q: Divides(b, c)) -> Divides(a, c) =
+    match p
+    | intro(k, e) =>
+        match q
+        | intro(m, f) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq(c, m * x), e, f))
+        end
+    end;
+
+--- Every number divides zero.
+pub let zero(d: Nat) -> Divides(d, 0) =
+    Divides/intro(0, Eq/refl());
+
+--- One divides every number.
+pub let one(n: Nat) -> Divides(1, n) =
+    Divides/intro(n, Eq/refl());
+
+--- A divisor of two numbers divides their sum.
+pub let add(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, a + b) =
+    match p
+    | intro(k, e) =>
+        match q
+        | intro(m, f) =>
+            let first: Eq(a + b, k * d + b) =
+                Eq/subst((x: Nat) => Eq(a + b, x + b), e, Eq/refl());
+            Divides/intro(k + m, Eq/subst((x: Nat) => Eq(a + b, k * d + x), f, first))
+        end
+    end;
+
+--- A divisor of a number divides its every multiple.
+pub let mul(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d, a * c) =
+    match p
+    | intro(k, e) => Divides/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    end;
+
+let zero_of_eql(x: Nat, h: Bool/Holds(x == 0)) -> Eq(x, 0) =
+    match x
+    | 0 => Eq/refl()
+    | _ + 1 => match h end
+    end;
+
+--- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
+pub let of_rem(n: Nat, d: Nat, @ok: Lt(0, d), h: Bool/Holds(Nat/rem(n, d, @ok) == 0)) -> Divides(d, n) =
+    let joined: Eq(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
+    Divides/intro(
+        Nat/div(n, d, @ok),
+        Eq/subst(
+            (r: Nat) => Eq(n, Nat/div(n, d, @ok) * d + r),
+            zero_of_eql(Nat/rem(n, d, @ok), h),
+            joined,
+        ),
+    );

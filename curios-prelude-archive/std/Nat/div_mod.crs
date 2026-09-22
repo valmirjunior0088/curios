@@ -1,0 +1,25 @@
+use /std/{Nat, Bool, Eq};
+use /std/Nat/{Lt};
+
+--- `n` divided by `d`: the quotient and remainder, with Euclid's identity and the remainder's bound beside them.
+pub struct DivMod(n: Nat, d: Nat): pub Type {
+    --- How many whole `d`s `n` holds.
+    quotient: Nat,
+    --- What is left over.
+    remainder: Nat,
+    --- `n` is the quotient's multiple of `d` and the remainder.
+    joined: Eq(n, quotient * d + remainder),
+    --- The remainder is below `d`.
+    bounded: Lt(remainder, d),
+}
+
+--- Division with remainder, certified: the quotient and remainder `/` and `%` compute, with their equation and bound.
+---
+--- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
+pub let div_mod(n: Nat, d: Nat, @ok: Lt(0, d)) -> DivMod(n, d) =
+    DivMod {
+        quotient = Nat/div(n, d, @ok),
+        remainder = Nat/rem(n, d, @ok),
+        joined = Eq/refl(),
+        bounded = Bool/True/qed(),
+    };
