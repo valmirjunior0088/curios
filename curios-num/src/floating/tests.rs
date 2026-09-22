@@ -189,7 +189,7 @@ fn a_conversion_agrees_with_the_host() {
     // Every tie at a 53-bit boundary, from where consecutive integers stop being representable to the top of the range, approached from both sides.
     for power in 53..1024u32 {
         let base = Natural::from(1u32)
-            .checked_shl(Natural::from(power))
+            .shl_within(&Natural::from(power), u64::MAX)
             .unwrap();
 
         for offset in [0u32, 1, 2, 3] {
@@ -223,22 +223,31 @@ fn a_conversion_agrees_with_the_host() {
         );
     }
 
-    // The narrowings answer the exact integer part on their domain and decline outside it. `to_natural(3.0e9)` is a value no runtime carrier holds and is refused downstream, not bent to fit here.
+    // The narrowings answer the exact integer part on their domain and refuse outside it. `to_natural(3.0e9)` is exact and unbounded, as the running program holds it.
     assert_eq!(
         Floating::from_f64(3.0e9)
             .to_natural()
             .map(|value| value.to_string()),
-        Some("3000000000".to_string()),
+        Ok("3000000000".to_string()),
     );
-    assert_eq!(Floating::from_f64(-0.0).to_natural(), Some(Natural::zero()));
-    assert_eq!(Floating::from_f64(-0.5).to_natural(), None);
-    assert_eq!(Floating::from_f64(f64::NAN).to_natural(), None);
-    assert_eq!(Floating::from_f64(f64::INFINITY).to_integer(), None);
+    assert_eq!(Floating::from_f64(-0.0).to_natural(), Ok(Natural::zero()));
+    assert_eq!(
+        Floating::from_f64(-0.5).to_natural(),
+        Err(ScalarTrap::ConversionRange)
+    );
+    assert_eq!(
+        Floating::from_f64(f64::NAN).to_natural(),
+        Err(ScalarTrap::ConversionRange)
+    );
+    assert_eq!(
+        Floating::from_f64(f64::INFINITY).to_integer(),
+        Err(ScalarTrap::ConversionRange)
+    );
     assert_eq!(
         Floating::from_f64(-2.5)
             .to_integer()
             .map(|value| value.to_string()),
-        Some("-2".to_string()),
+        Ok("-2".to_string()),
     );
 }
 

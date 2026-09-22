@@ -1,9 +1,6 @@
 use {
     super::*,
-    curios_num::{
-        Floating, Integer, Natural, flt_to_int, flt_to_nat, int_div, int_mul, int_rem, int_shl,
-        int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
-    },
+    curios_num::{Floating, Integer, Natural},
 };
 
 /// The allowance the growing folds take here: `curios-ersd`'s own bound on a folded scalar, since a folded `Nat` or `Int` past the i31 materializes as a boxed constant and one wider than that could not have come down from the stage above. A literal count may still ask for a numeral no machine holds, and past this the fold declines.
@@ -48,24 +45,20 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         }
         Intrinsic::NatNeq => bool_(nat(0)? != nat(1)?),
         Intrinsic::NatAdd => Some(Literal::Nat(nat(0)? + nat(1)?)),
-        Intrinsic::NatSub => Some(Literal::Nat(nat_sub(nat(0)?, nat(1)?))),
-        Intrinsic::NatMul => Some(Literal::Nat(nat_mul(
-            nat(0)?,
-            nat(1)?,
-            FOLD_ALLOWANCE_BITS,
-        )?)),
+        Intrinsic::NatSub => Some(Literal::Nat(nat(0)?.monus(nat(1)?))),
+        Intrinsic::NatMul => Some(Literal::Nat(
+            nat(0)?.mul_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
+        )),
         Intrinsic::NatLt => bool_(nat(0)? < nat(1)?),
-        Intrinsic::NatDiv => Some(Literal::Nat(nat_div(nat(0)?, nat(1)?).ok()?)),
-        Intrinsic::NatRem => Some(Literal::Nat(nat_rem(nat(0)?, nat(1)?).ok()?)),
+        Intrinsic::NatDiv => Some(Literal::Nat(nat(0)?.div(nat(1)?).ok()?)),
+        Intrinsic::NatRem => Some(Literal::Nat(nat(0)?.rem(nat(1)?).ok()?)),
         Intrinsic::NatLe => bool_(nat(0)? <= nat(1)?),
         Intrinsic::NatAnd => Some(Literal::Nat(nat(0)? & nat(1)?)),
         Intrinsic::NatOr => Some(Literal::Nat(nat(0)? | nat(1)?)),
         Intrinsic::NatXor => Some(Literal::Nat(nat(0)? ^ nat(1)?)),
-        Intrinsic::NatShl => Some(Literal::Nat(nat_shl(
-            nat(0)?,
-            nat(1)?,
-            FOLD_ALLOWANCE_BITS,
-        )?)),
+        Intrinsic::NatShl => Some(Literal::Nat(
+            nat(0)?.shl_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
+        )),
         Intrinsic::NatShr => Some(Literal::Nat(nat(0)? >> nat(1)?)),
         Intrinsic::NatEqz => bool_(nat(0)?.is_zero()),
         Intrinsic::NatToInt => Some(Literal::Int(Integer::from(nat(0)?.clone()))),
@@ -74,26 +67,22 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::IntNeq => bool_(int(0)? != int(1)?),
         Intrinsic::IntAdd => Some(Literal::Int(int(0)?.clone() + int(1)?.clone())),
         Intrinsic::IntSub => Some(Literal::Int(int(0)?.clone() - int(1)?.clone())),
-        Intrinsic::IntMul => Some(Literal::Int(int_mul(
-            int(0)?,
-            int(1)?,
-            FOLD_ALLOWANCE_BITS,
-        )?)),
-        Intrinsic::IntDiv => Some(Literal::Int(int_div(int(0)?, int(1)?).ok()?)),
-        Intrinsic::IntRem => Some(Literal::Int(int_rem(int(0)?, int(1)?).ok()?)),
+        Intrinsic::IntMul => Some(Literal::Int(
+            int(0)?.mul_within(int(1)?, FOLD_ALLOWANCE_BITS)?,
+        )),
+        Intrinsic::IntDiv => Some(Literal::Int(int(0)?.div(int(1)?).ok()?)),
+        Intrinsic::IntRem => Some(Literal::Int(int(0)?.rem(int(1)?).ok()?)),
         Intrinsic::IntLt => bool_(int(0)? < int(1)?),
         Intrinsic::IntLe => bool_(int(0)? <= int(1)?),
         Intrinsic::IntAnd => Some(Literal::Int(int(0)?.clone() & int(1)?.clone())),
         Intrinsic::IntOr => Some(Literal::Int(int(0)?.clone() | int(1)?.clone())),
         Intrinsic::IntXor => Some(Literal::Int(int(0)?.clone() ^ int(1)?.clone())),
-        Intrinsic::IntShl => Some(Literal::Int(int_shl(
-            int(0)?,
-            nat(1)?,
-            FOLD_ALLOWANCE_BITS,
-        )?)),
+        Intrinsic::IntShl => Some(Literal::Int(
+            int(0)?.shl_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
+        )),
         Intrinsic::IntShr => Some(Literal::Int(int(0)? >> nat(1)?)),
         Intrinsic::IntEqz => bool_(int(0)?.is_zero()),
-        Intrinsic::IntToNat => Some(Literal::Nat(int_to_nat(int(0)?).ok()?)),
+        Intrinsic::IntToNat => Some(Literal::Nat(int(0)?.to_natural().ok()?)),
         Intrinsic::IntToFlt => flt_(Floating::of_integer(int(0)?)),
         Intrinsic::FltAdd => flt_(flt(0)? + flt(1)?),
         Intrinsic::FltSub => flt_(flt(0)? - flt(1)?),
@@ -114,8 +103,8 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::FltTrunc => flt_(flt(0)?.trunc()),
         Intrinsic::FltNearest => flt_(flt(0)?.nearest()),
         Intrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
-        Intrinsic::FltToNat => Some(Literal::Nat(flt_to_nat(flt(0)?).ok()?)),
-        Intrinsic::FltToInt => Some(Literal::Int(flt_to_int(flt(0)?).ok()?)),
+        Intrinsic::FltToNat => Some(Literal::Nat(flt(0)?.to_natural().ok()?)),
+        Intrinsic::FltToInt => Some(Literal::Int(flt(0)?.to_integer().ok()?)),
         // Folds over the *runtime* representation, not the literal's kind: a `Nat` or `Int` is an i31 or a boxed magnitude, both of which the test admits, while an `Flt` is a boxed struct and a `Bin` a rope reference, so those answer 0.
         Intrinsic::IsImmediate => Some(Literal::Nat(Natural::from(match literals[0] {
             Literal::Nat(_) | Literal::Int(_) => 1u32,

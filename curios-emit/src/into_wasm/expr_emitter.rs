@@ -76,9 +76,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     },
                     curios_wasm::Instr::RefI31,
                 ]),
-                false => {
-                    self.emit_big(value_name, value.to_natural().is_none(), &value.magnitude())
-                }
+                false => self.emit_big(value_name, value.to_natural().is_err(), &value.magnitude()),
             },
             &EmissionData::Flt(value) => self.emit_instrs([
                 curios_wasm::Instr::F64Const { value },

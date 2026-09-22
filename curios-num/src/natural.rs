@@ -2,6 +2,7 @@
 mod tests;
 
 use {
+    crate::{ScalarTrap, within},
     num_bigint::BigUint,
     num_traits::{One, ToPrimitive, Zero},
     std::{
@@ -12,7 +13,7 @@ use {
 
 /// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 ///
-/// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The scalar semantics the *erased* stages share live in [`nat_mul`](crate::nat_mul) and its siblings, which impose no width either: a growing operation takes an allowance from its caller and declines past it, because how large a numeral is worth building is a fact about a stage's resources rather than about ℕ.
+/// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The operations the *erased* stages fold with — [`Natural::mul_within`] and its siblings — impose no width either: a growing operation takes an allowance from its caller and declines past it, because how large a numeral is worth building is a fact about a stage's resources rather than about ℕ.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Natural {
@@ -113,25 +114,59 @@ impl Natural {
         Self { value: larger }
     }
 
-    /// `None` on a zero divisor — the reducer reports that case before folding.
-    pub fn checked_div(self, other: Self) -> Option<Self> {
-        (!other.value.is_zero()).then(|| Self {
-            value: self.value / other.value,
+    /// `Nat` subtraction is monus: truncated at zero, never negative. A method rather than `-`, whose `num-bigint` meaning panics on underflow.
+    pub fn monus(&self, other: &Self) -> Self {
+        match self.value >= other.value {
+            true => Self {
+                value: &self.value - &other.value,
+            },
+            false => Self::zero(),
+        }
+    }
+
+    /// Multiplication, declining past `allowance` bits.
+    ///
+    /// Growing, and the reason is not the obvious one: a single product is at most the sum of its operands' widths, but a *chain* of them squares, so thirty nested multiplications take a machine word past any memory there is while costing thirty steps. A step budget cannot see that; a width can.
+    pub fn mul_within(&self, other: &Self, allowance: u64) -> Option<Self> {
+        within(self.bits().checked_add(other.bits()), allowance).then(|| Self {
+            value: &self.value * &other.value,
         })
     }
 
-    /// `None` on a zero divisor, like [`Natural::checked_div`].
-    pub fn checked_rem(self, other: Self) -> Option<Self> {
-        (!other.value.is_zero()).then(|| Self {
-            value: self.value % other.value,
-        })
+    /// `self · 2^shift`, declining past `allowance` bits. Zero is answered before the count is looked at, since `0 · 2^k` is zero at every count and a decline there would leave a fold undone for nothing. The right shift has no such case: it is the total `>>` below.
+    pub fn shl_within(&self, shift: &Self, allowance: u64) -> Option<Self> {
+        if self.is_zero() {
+            return Some(Self::zero());
+        }
+
+        let amount = shift.to_u64()?;
+
+        match within(self.bits().checked_add(amount), allowance) {
+            true => Some(Self {
+                value: &self.value << usize::try_from(amount).ok()?,
+            }),
+            false => None,
+        }
     }
 
-    /// `self << amount` as `self · 2^amount`, unbounded. `None` when `amount` is too large to be a shift count, leaving the op a neutral term rather than fabricating a value. The right shift has no such case: it is the total `>>` below.
-    pub fn checked_shl(self, amount: Self) -> Option<Self> {
-        Some(Self {
-            value: self.value << amount.value.to_usize()?,
-        })
+    /// Division, trapping on a zero divisor.
+    pub fn div(&self, other: &Self) -> Result<Self, ScalarTrap> {
+        match other.is_zero() {
+            true => Err(ScalarTrap::DivisionByZero),
+            false => Ok(Self {
+                value: &self.value / &other.value,
+            }),
+        }
+    }
+
+    /// The remainder, trapping on a zero divisor like [`Natural::div`].
+    pub fn rem(&self, other: &Self) -> Result<Self, ScalarTrap> {
+        match other.is_zero() {
+            true => Err(ScalarTrap::DivisionByZero),
+            false => Ok(Self {
+                value: &self.value % &other.value,
+            }),
+        }
     }
 
     /// The raw magnitude, for this crate's own conversions only — [`Integer`](crate::Integer)'s widening is the one caller. Crate-internal because the whole point of the newtype is that nothing above `curios-num` names a `BigUint`.
@@ -203,7 +238,7 @@ binary_op!(Mul, mul);
 // Subtraction is `num-bigint`'s: it **panics** on underflow rather than truncating, so every call site must already know the difference is a natural. The language-level monus that saturates at zero is `nat_sub` — a different operation at a different layer, and deliberately not spelled `-`.
 binary_op!(Sub, sub);
 
-// `/` and `%` **panic** on a zero divisor, like `num-bigint`'s, and are for call sites that have already established the divisor is nonzero — the euclidean split, where the divisor came from a checked fold. A fold that must *decline* rather than trust its operands uses `checked_div`/`checked_rem` instead, which is why both spellings exist.
+// `/` and `%` **panic** on a zero divisor, like `num-bigint`'s, and are for call sites that have already established the divisor is nonzero — the euclidean split, where the divisor came from a checked fold. A fold that must not trust its operands uses [`Natural::div`]/[`Natural::rem`] instead, which answer a zero divisor with its trap, which is why both spellings exist.
 binary_op!(Div, div);
 binary_op!(Rem, rem);
 

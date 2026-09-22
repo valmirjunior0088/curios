@@ -78,7 +78,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
         } => {
             let bound = nat_bound(dividend)?;
             match divisor.as_nat().and_then(|divisor| divisor.to_natural()) {
-                Some(divisor) => bound.checked_div(divisor),
+                Some(divisor) => bound.div(&divisor).ok(),
                 None => Some(bound),
             }
         }
@@ -323,7 +323,7 @@ pub(super) fn then_coefficient(
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
 
-    match Natural::one().checked_shl(exponent) {
+    match Natural::one().shl_within(&exponent, u64::MAX) {
         Some(coefficient) => Ok(Term::unwrap_or_clone(
             reducer.reduce_forced(product(coefficient, value.clone()))?,
         )),
@@ -355,7 +355,7 @@ pub(super) fn then_power(
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
 
-    match Natural::one().checked_shl(floor) {
+    match Natural::one().shl_within(&floor, u64::MAX) {
         Some(coefficient) => {
             let power = Term::intrinsic(rebuild(one, inner));
             Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(

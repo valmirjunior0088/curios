@@ -692,7 +692,7 @@ pub fn reduce_intrinsic(
             dividend,
             divisor,
             "Int/div",
-            Integer::checked_div,
+            |dividend: Integer, divisor: Integer| dividend.div(&divisor).ok(),
             |dividend, divisor| Intrinsic::IntDiv {
                 dividend,
                 divisor,
@@ -708,7 +708,7 @@ pub fn reduce_intrinsic(
             dividend,
             divisor,
             "Int/rem",
-            Integer::checked_rem,
+            |dividend: Integer, divisor: Integer| dividend.rem(&divisor).ok(),
             |dividend, divisor| Intrinsic::IntRem {
                 dividend,
                 divisor,
@@ -765,7 +765,7 @@ pub fn reduce_intrinsic(
                 left,
                 right,
                 shift_bound,
-                |value, amount| value.checked_shl(amount),
+                |value, amount| value.shl_within(&amount, u64::MAX),
                 Intrinsic::IntShl,
             )?;
             let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
@@ -1001,8 +1001,8 @@ pub fn reduce_intrinsic(
 
             match int.as_int() {
                 Some(value) => match value.to_natural() {
-                    Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
-                    None => Err(ReduceError::IntToNatNegative { value, span }),
+                    Ok(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
+                    Err(_) => Err(ReduceError::IntToNatNegative { value, span }),
                 },
                 None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat {
                     int,
@@ -1016,11 +1016,11 @@ pub fn reduce_intrinsic(
             |v| Some(Intrinsic::Flt(Floating::of_integer(&v))),
             Intrinsic::IntToFlt,
         ),
-        // The two narrowings truncate toward zero and answer the *exact* unbounded natural or integer: `to_nat(3.0e9)` is `3000000000`, a value no runtime carrier holds, refused downstream exactly as an overflowing `Nat` is rather than bent to fit here. Outside the domain each bound states, the model declines and the neutral is rebuilt, carrying the proof it was handed.
+        // The two narrowings truncate toward zero and answer the *exact* unbounded natural or integer: `to_nat(3.0e9)` is `3000000000`, which the running program holds as a boxed magnitude. Outside the domain each bound states, the model declines and the neutral is rebuilt, carrying the proof it was handed.
         Intrinsic::FltToNat { flt, non_neg } => reduce_flt_unary(
             reducer,
             flt,
-            |v| Some(Intrinsic::Nat(Nat::new(v.to_natural()?))),
+            |v| Some(Intrinsic::Nat(Nat::new(v.to_natural().ok()?))),
             |flt| Intrinsic::FltToNat {
                 flt,
                 non_neg: non_neg.clone(),
@@ -1029,7 +1029,7 @@ pub fn reduce_intrinsic(
         Intrinsic::FltToInt { flt, finite } => reduce_flt_unary(
             reducer,
             flt,
-            |v| Some(Intrinsic::Int(v.to_integer()?)),
+            |v| Some(Intrinsic::Int(v.to_integer().ok()?)),
             |flt| Intrinsic::FltToInt {
                 flt,
                 finite: finite.clone(),

@@ -65,8 +65,7 @@ enum Unpacked {
 /// `value · 2^amount`, exact. Shift counts here are bounded by the operands' own bit lengths, which the callers keep in the low hundreds, so a count that does not fit is this module's bug rather than an input's.
 fn shift_left(value: &Natural, amount: u32) -> Natural {
     value
-        .clone()
-        .checked_shl(Natural::from(amount))
+        .shl_within(&Natural::from(amount), u64::MAX)
         .expect("a shift count that fits")
 }
 
@@ -519,21 +518,19 @@ impl Floating {
     /// [`Floating::of_natural`]'s signed twin.
     pub fn of_integer(value: &Integer) -> Self {
         match value.to_natural() {
-            Some(magnitude) => round(false, &magnitude, 0, false),
-            None => {
-                let magnitude = (-value.clone())
-                    .to_natural()
-                    .expect("the negation of a negative integer is a natural");
-
-                round(true, &magnitude, 0, false)
-            }
+            Ok(magnitude) => round(false, &magnitude, 0, false),
+            Err(_) => round(true, &value.magnitude(), 0, false),
         }
     }
 
-    /// The exact natural this truncates toward zero to, or `None` outside the domain `/sys/Bound/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`.
+    /// The exact natural this truncates toward zero to, refusing outside the domain `/sys/Bound/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`. One refusal where there were two: the model decides what the truncation *is*, and no carrier adds a width on top of it.
     ///
-    /// Exact and unbounded: `to_natural(3.0e9)` is the natural `3000000000`, which no runtime carrier holds and which is refused downstream exactly as an overflowing `Nat` is, rather than being bent to fit here.
-    pub fn to_natural(self) -> Option<Natural> {
+    /// Exact and unbounded: `to_natural(3.0e9)` is the natural `3000000000`, which the running program holds as a boxed magnitude.
+    pub fn to_natural(self) -> Result<Natural, ScalarTrap> {
+        self.truncate_natural().ok_or(ScalarTrap::ConversionRange)
+    }
+
+    fn truncate_natural(self) -> Option<Natural> {
         match self.unpack() {
             Unpacked::Nan | Unpacked::Infinite { .. } => None,
             Unpacked::Zero { .. } => Some(Natural::zero()),
@@ -546,8 +543,12 @@ impl Floating {
         }
     }
 
-    /// The exact integer this truncates toward zero to, or `None` on a NaN or an infinity — the domain `/sys/Bound/Finite` states.
-    pub fn to_integer(self) -> Option<Integer> {
+    /// The exact integer this truncates toward zero to, refusing a NaN or an infinity — outside the domain `/sys/Bound/Finite` states.
+    pub fn to_integer(self) -> Result<Integer, ScalarTrap> {
+        self.truncate_integer().ok_or(ScalarTrap::ConversionRange)
+    }
+
+    fn truncate_integer(self) -> Option<Integer> {
         match self.unpack() {
             Unpacked::Nan | Unpacked::Infinite { .. } => None,
             Unpacked::Zero { .. } => Some(Integer::from(0u32)),

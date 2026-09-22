@@ -73,14 +73,14 @@ impl Nat {
     /// `None` on a symbolic operand *or* a zero divisor — never a panic; the reducer reports the zero-divisor case before folding.
     pub(crate) fn checked_div(self, other: Self) -> Option<Self> {
         Some(Self::new(
-            self.to_natural()?.checked_div(other.to_natural()?)?,
+            self.to_natural()?.div(&other.to_natural()?).ok()?,
         ))
     }
 
     /// `None` on a symbolic operand or a zero divisor, like [`Nat::checked_div`].
     pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
         Some(Self::new(
-            self.to_natural()?.checked_rem(other.to_natural()?)?,
+            self.to_natural()?.rem(&other.to_natural()?).ok()?,
         ))
     }
 
@@ -100,7 +100,8 @@ impl Nat {
     /// `self << amount` as `self * 2^amount`, unbounded. `None` on a symbolic operand or an `amount` too large to be a shift count.
     pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self::new(
-            self.to_natural()?.checked_shl(amount.to_natural()?)?,
+            self.to_natural()?
+                .shl_within(&amount.to_natural()?, u64::MAX)?,
         ))
     }
 

@@ -1,5 +1,5 @@
 use {
-    crate::Natural,
+    crate::{Natural, ScalarTrap, within},
     num_bigint::{BigInt, Sign},
     num_traits::{ToPrimitive, Zero},
     std::{
@@ -26,9 +26,12 @@ impl Integer {
         self.value.bits()
     }
 
-    /// The same number as a [`Natural`]; `None` on a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse.
-    pub fn to_natural(&self) -> Option<Natural> {
-        self.value.to_biguint().map(Natural::new)
+    /// The same number as a [`Natural`], refusing a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
+    pub fn to_natural(&self) -> Result<Natural, ScalarTrap> {
+        self.value
+            .to_biguint()
+            .map(Natural::new)
+            .ok_or(ScalarTrap::ConversionRange)
     }
 
     /// The absolute value as a [`Natural`] — total where [`Integer::to_natural`] is not, for a reader that asks what divides a number and not which side of zero it is on.
@@ -36,29 +39,51 @@ impl Integer {
         Natural::new(self.value.magnitude().clone())
     }
 
-    /// `self << amount` as `self * 2^amount`, unbounded. The count is a [`Natural`], as `/sys`'s `Int/shl` declares it, so there is no negative count to decline; `None` only when it is too large to be a shift count, leaving the op a neutral term rather than fabricating a value. The right shift has no such case: it is the total `>>` below.
-    pub fn checked_shl(self, amount: Natural) -> Option<Self> {
-        Some(Self {
-            value: self.value << amount.to_usize()?,
+    /// Multiplication, the signed twin of [`Natural::mul_within`] under the same allowance.
+    pub fn mul_within(&self, other: &Self, allowance: u64) -> Option<Self> {
+        within(self.bits().checked_add(other.bits()), allowance).then(|| Self {
+            value: &self.value * &other.value,
         })
+    }
+
+    /// `self · 2^shift`, the signed twin of [`Natural::shl_within`]. The count is a [`Natural`], as `/sys`'s `Int/shl` declares it, so there is no negative count to decline. The right shift has no such case: it is the total `>>` below.
+    pub fn shl_within(&self, shift: &Natural, allowance: u64) -> Option<Self> {
+        if self.is_zero() {
+            return Some(Self::from(0u32));
+        }
+
+        let amount = shift.to_u64()?;
+
+        match within(self.bits().checked_add(amount), allowance) {
+            true => Some(Self {
+                value: &self.value << usize::try_from(amount).ok()?,
+            }),
+            false => None,
+        }
     }
 
     pub fn is_zero(&self) -> bool {
         self.value.is_zero()
     }
 
-    /// `None` on a zero divisor — the reducer reports that case before folding. Truncates toward zero, like the runtime's `i32.div_s`.
-    pub fn checked_div(self, other: Self) -> Option<Self> {
-        (!other.value.is_zero()).then(|| Self {
-            value: self.value / other.value,
-        })
+    /// Division truncating toward zero, trapping on a zero divisor.
+    pub fn div(&self, other: &Self) -> Result<Self, ScalarTrap> {
+        match other.is_zero() {
+            true => Err(ScalarTrap::DivisionByZero),
+            false => Ok(Self {
+                value: &self.value / &other.value,
+            }),
+        }
     }
 
-    /// `None` on a zero divisor, like [`Integer::checked_div`]. The remainder takes the dividend's sign, like the runtime's `i32.rem_s`.
-    pub fn checked_rem(self, other: Self) -> Option<Self> {
-        (!other.value.is_zero()).then(|| Self {
-            value: self.value % other.value,
-        })
+    /// The remainder, taking the dividend's sign, and trapping on a zero divisor like [`Integer::div`].
+    pub fn rem(&self, other: &Self) -> Result<Self, ScalarTrap> {
+        match other.is_zero() {
+            true => Err(ScalarTrap::DivisionByZero),
+            false => Ok(Self {
+                value: &self.value % &other.value,
+            }),
+        }
     }
 }
 

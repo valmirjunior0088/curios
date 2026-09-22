@@ -1,10 +1,8 @@
-//! The differential grid: every `Nat` and `Int` operation, run by the compiled program across the i31, limb and sign boundaries, against `curios-num`'s `scalar`.
+//! The differential grid: every `Nat` and `Int` operation, run by the compiled program across the i31, limb and sign boundaries, against `curios-num`'s carrier arithmetic.
 
 use {
     crate::tests::run_text,
-    curios_num::{
-        Floating, Integer, Natural, int_div, int_rem, int_shl, nat_div, nat_rem, nat_shl, nat_sub,
-    },
+    curios_num::{Floating, Integer, Natural},
     curios_runtime::MockHost,
 };
 
@@ -66,7 +64,7 @@ end
 fn values() -> Vec<Integer> {
     let two = |k: u32| {
         Integer::from(1u32)
-            .checked_shl(Natural::from(k))
+            .shl_within(&Natural::from(k), u64::MAX)
             .expect("a power of two")
     };
     let magnitudes = [
@@ -97,11 +95,11 @@ fn signed(value: &Integer) -> String {
     format!("{value:+}")
 }
 
-/// What the program should print for one pair, by `curios-num`'s `scalar` — the semantics every folder shares.
+/// What the program should print for one pair, by `curios-num`'s carrier methods — the arithmetic every folder shares.
 fn expected(x: &Integer, y: &Integer) -> String {
     let n = x.magnitude();
     let m = y.magnitude();
-    let k = nat_rem(&m, &Natural::from(64u32)).expect("a nonzero divisor");
+    let k = m.rem(&Natural::from(64u32)).expect("a nonzero divisor");
     let flag = |b: bool| String::from(if b { "1" } else { "0" });
     let quotient = |result: Result<Integer, _>| result.map_or("-".into(), |q| signed(&q));
     let natural = |result: Result<Natural, _>| result.map_or("-".into(), |q| format!("{q:?}"));
@@ -117,30 +115,32 @@ fn expected(x: &Integer, y: &Integer) -> String {
         signed(&(x.clone() + y.clone())),
         signed(&(x.clone() - y.clone())),
         signed(&(x.clone() * y.clone())),
-        quotient(int_div(x, y)),
-        quotient(int_rem(x, y)),
+        quotient(x.div(y)),
+        quotient(x.rem(y)),
         signed(&(x.clone() & y.clone())),
         signed(&(x.clone() | y.clone())),
         signed(&(x.clone() ^ y.clone())),
-        signed(&int_shl(x, &k, u64::MAX).expect("an unlimited shift answers")),
+        signed(
+            &x.shl_within(&k, u64::MAX)
+                .expect("an unlimited shift answers"),
+        ),
         signed(&(x >> &k)),
         flag(x < y),
         flag(x <= y),
         flag(x == y),
-        format!("{:?}", nat_sub(&n, &m)),
-        natural(nat_div(&n, &m)),
-        natural(nat_rem(&n, &m)),
-        format!("{:?}", nat_shl_unlimited(&n, &k)),
+        format!("{:?}", n.monus(&m)),
+        natural(n.div(&m)),
+        natural(n.rem(&m)),
+        format!(
+            "{:?}",
+            n.shl_within(&k, u64::MAX)
+                .expect("an unlimited shift answers")
+        ),
         format!("{:?}", &n >> &k),
         bytes,
         signed(&float.to_integer().expect("a finite float truncates")),
     ]
     .join(" ")
-}
-
-/// A `Natural` prints as the number through `Debug`; it has no `Display` of its own.
-fn nat_shl_unlimited(value: &Natural, shift: &Natural) -> Natural {
-    nat_shl(value, shift, u64::MAX).expect("an unlimited shift answers")
 }
 
 /// Every operation agrees with `curios-num` on every pair of the grid's values.

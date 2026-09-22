@@ -9,10 +9,7 @@ mod tests;
 
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
-    curios_num::{
-        Binary, Floating, Grain, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_div,
-        int_mul, int_rem, int_shl, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
-    },
+    curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
 };
 
 /// What allocating a value commits a pass to. Immutable allocation is not language-observable and may be discarded or duplicated; mutable allocation (a cell) may not. Ordered by severity so [`join`](Allocation::join) is `max`.
@@ -366,18 +363,18 @@ impl Semantics {
                 BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
                 NatAdd => Constant::Nat(nat(0)? + nat(1)?),
-                NatSub => Constant::Nat(nat_sub(nat(0)?, nat(1)?)),
-                NatMul => Constant::Nat(nat_mul(nat(0)?, nat(1)?, allowance)?),
+                NatSub => Constant::Nat(nat(0)?.monus(nat(1)?)),
+                NatMul => Constant::Nat(nat(0)?.mul_within(nat(1)?, allowance)?),
                 NatDiv => {
-                    return Some(scalar_result(nat_div(nat(0)?, nat(1)?), Constant::Nat));
+                    return Some(scalar_result(nat(0)?.div(nat(1)?), Constant::Nat));
                 }
                 NatRem => {
-                    return Some(scalar_result(nat_rem(nat(0)?, nat(1)?), Constant::Nat));
+                    return Some(scalar_result(nat(0)?.rem(nat(1)?), Constant::Nat));
                 }
                 NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?, allowance)?),
+                NatShl => Constant::Nat(nat(0)?.shl_within(nat(1)?, allowance)?),
                 NatShr => Constant::Nat(nat(0)? >> nat(1)?),
                 NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
@@ -386,17 +383,17 @@ impl Semantics {
 
                 IntAdd => Constant::Int(int(0)?.clone() + int(1)?.clone()),
                 IntSub => Constant::Int(int(0)?.clone() - int(1)?.clone()),
-                IntMul => Constant::Int(int_mul(int(0)?, int(1)?, allowance)?),
+                IntMul => Constant::Int(int(0)?.mul_within(int(1)?, allowance)?),
                 IntDiv => {
-                    return Some(scalar_result(int_div(int(0)?, int(1)?), Constant::Int));
+                    return Some(scalar_result(int(0)?.div(int(1)?), Constant::Int));
                 }
                 IntRem => {
-                    return Some(scalar_result(int_rem(int(0)?, int(1)?), Constant::Int));
+                    return Some(scalar_result(int(0)?.rem(int(1)?), Constant::Int));
                 }
                 IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
                 IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
                 IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
-                IntShl => Constant::Int(int_shl(int(0)?, nat(1)?, allowance)?),
+                IntShl => Constant::Int(int(0)?.shl_within(nat(1)?, allowance)?),
                 IntShr => Constant::Int(int(0)? >> nat(1)?),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
@@ -425,10 +422,10 @@ impl Semantics {
 
                 NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
                 NatToFlt => Constant::Flt(Floating::of_natural(nat(0)?)),
-                IntToNat => return Some(scalar_result(int_to_nat(int(0)?), Constant::Nat)),
+                IntToNat => return Some(scalar_result(int(0)?.to_natural(), Constant::Nat)),
                 IntToFlt => Constant::Flt(Floating::of_integer(int(0)?)),
-                FltToNat => return Some(scalar_result(flt_to_nat(flt(0)?), Constant::Nat)),
-                FltToInt => return Some(scalar_result(flt_to_int(flt(0)?), Constant::Int)),
+                FltToNat => return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat)),
+                FltToInt => return Some(scalar_result(flt(0)?.to_integer(), Constant::Int)),
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
                 // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
                 NatToByte => Constant::Byte(u8::try_from(nat(0)?.to_u32()?).ok()?),
