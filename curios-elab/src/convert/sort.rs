@@ -57,32 +57,24 @@ impl Sort {
             },
             // A *non-empty* record of propositions is a proposition. The empty tuple `{}` is unit, not a prop: it is the result type of effects (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
-                // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong.
-                let mut tele = telescope.clone();
+                // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong. Each field is opened once, at every binder before it: opening binder by binder rewrote every later field, whose metavariable spines name every earlier one.
                 let mut levels = Vec::new();
                 let mark = opened.len();
-                let sort = loop {
-                    match tele {
-                        Telescope::Cons(ty, rest) => {
-                            if let Sort::Type(level) = Sort::of_in(context, opened, &ty)? {
-                                levels.push(level);
-                            }
-                            let binder = context.fresh(rest.first_hint());
-                            let v = Term::free_var(&binder);
-                            opened.push((binder, ty));
-                            tele = rest.open(&[&v]);
-                        }
-                        Telescope::Done(_) => {
-                            break if levels.is_empty() {
-                                Sort::Prop
-                            } else {
-                                Sort::Type(Level::max(levels))
-                            };
-                        }
+                telescope.walk_producing(|_, hint, ty| {
+                    if let Sort::Type(level) = Sort::of_in(context, opened, &ty)? {
+                        levels.push(level);
                     }
-                };
+                    let binder = context.fresh(hint);
+                    let variable = Term::free_var(&binder);
+                    opened.push((binder, ty));
+                    Ok(variable)
+                })?;
                 opened.truncate(mark);
-                sort
+
+                match levels.is_empty() {
+                    true => Sort::Prop,
+                    false => Sort::Type(Level::max(levels)),
+                }
             }
             // The empty tuple `{}` is unit — it quantifies over nothing, so level 0 is the answer rather than a default, and like `Prop` below it is not worth reporting as a fallback.
             Subterm::TupleType(_) => Sort::Type(Level::zero()),
@@ -216,29 +208,22 @@ impl Sort {
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 // Each opened binder must carry its domain type, not merely be substituted in. Opening with a free variable nothing can type leaves `synth_neutral` returning `None` for every occurrence of it in the codomain, and that `None` is read as level 0 — so the sort of every dependent codomain collapsed to `Type 0` regardless of the binder's real level. That silently under-generalized exactly the declarations whose codomain mentions a binder: every concept wrapper, and every higher-order polymorphic function.
-                let mut telescope = telescope.clone();
                 let mut domains = Vec::new();
                 let mark = opened.len();
-                let sort = loop {
-                    match telescope {
-                        Telescope::Cons(domain, rest) => {
-                            if let Sort::Type(level) = Sort::of_in(context, opened, &domain)? {
-                                domains.push(level);
-                            }
-                            let binder = context.fresh(rest.first_hint());
-                            let var = Term::free_var(&binder);
-                            opened.push((binder, domain));
-                            telescope = rest.open(&[&var]);
-                        }
-                        Telescope::Done(output) => {
-                            break match Sort::of_in(context, opened, &output)? {
-                                Sort::Prop => Sort::Prop,
-                                Sort::Type(output) => {
-                                    domains.push(output);
-                                    Sort::Type(Level::max(domains))
-                                }
-                            };
-                        }
+                let (_, output) = telescope.walk_producing(|_, hint, domain| {
+                    if let Sort::Type(level) = Sort::of_in(context, opened, &domain)? {
+                        domains.push(level);
+                    }
+                    let binder = context.fresh(hint);
+                    let variable = Term::free_var(&binder);
+                    opened.push((binder, domain));
+                    Ok(variable)
+                })?;
+                let sort = match Sort::of_in(context, opened, &output)? {
+                    Sort::Prop => Sort::Prop,
+                    Sort::Type(output) => {
+                        domains.push(output);
+                        Sort::Type(Level::max(domains))
                     }
                 };
                 opened.truncate(mark);

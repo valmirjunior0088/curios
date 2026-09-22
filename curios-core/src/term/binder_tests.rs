@@ -262,3 +262,137 @@ fn a_replacement_that_is_not_a_head_shape_dissolves_the_instance() {
 
     assert_eq!(scope.open(&[&value]), value);
 }
+
+/// Names and terms for the one-pass builders' tests: three binders whose later types and values name the earlier ones, and an outer loose index that every binder must shift past.
+fn dependent_block() -> (Vec<Free>, Vec<(Term, Term)>, Term) {
+    let binders = (0..3)
+        .map(|index| Free::local(index, Some("x")))
+        .collect::<Vec<_>>();
+    let head = Term::free_var(&Free::local(9, Some("f")));
+    let loose = Term::var(Var::bound(0));
+    let mention = |names: &[Free]| {
+        Term::apply(
+            head.clone(),
+            names.iter().map(Term::free_var).chain([loose.clone()]),
+        )
+    };
+
+    let entries = (0..binders.len())
+        .map(|index| (mention(&binders[..index]), mention(&binders[..index])))
+        .collect::<Vec<_>>();
+
+    (binders.clone(), entries, mention(&binders))
+}
+
+/// `let_block` builds the block that merging its bindings one at a time with `let_` builds — index for index and name for name — both over a plain tail and over a tail that is itself a block it must merge.
+#[test]
+fn a_let_block_is_the_block_merging_one_binding_at_a_time_builds() {
+    let (binders, entries, tail) = dependent_block();
+    let inner = Term::let_(
+        &Free::local(7, Some("y")),
+        tail.clone(),
+        tail.clone(),
+        tail.clone(),
+    );
+
+    for tail in [tail, inner] {
+        let items = binders
+            .iter()
+            .cloned()
+            .zip(entries.iter().cloned())
+            .map(|(binder, (type_, value))| (binder, type_, value))
+            .collect::<Vec<_>>();
+
+        let folded = items
+            .iter()
+            .rev()
+            .fold(tail.clone(), |tail, (binder, type_, value)| {
+                Term::let_(binder, type_.clone(), value.clone(), tail)
+            });
+        let block = Term::let_block(items, tail);
+
+        assert_eq!(block, folded);
+        assert_eq!(format!("{block:?}"), format!("{folded:?}"));
+    }
+}
+
+/// `Telescope::build` builds the telescope that closing each entry's scope over everything after it builds, index for index and name for name.
+#[test]
+fn a_telescope_builds_as_closing_each_entry_over_the_rest_would() {
+    let (binders, entries, body) = dependent_block();
+    let types = entries
+        .into_iter()
+        .map(|(type_, _)| type_)
+        .collect::<Vec<_>>();
+
+    let folded = binders
+        .iter()
+        .zip(&types)
+        .rev()
+        .fold(Telescope::done(body.clone()), |rest, (binder, type_)| {
+            Telescope::Cons(type_.clone(), Scope::close(One, &[binder], rest))
+        });
+    let built = Telescope::build(binders.iter().cloned().zip(types), body);
+
+    assert_eq!(built, folded);
+    assert_eq!(format!("{built:?}"), format!("{folded:?}"));
+}
+
+/// Opening a telescope once per entry at every argument before it reads each entry type, the residual and the payload as opening it one binder at a time does.
+#[test]
+fn a_telescope_opens_each_entry_as_opening_one_binder_at_a_time_would() {
+    let (binders, entries, body) = dependent_block();
+    let telescope = Telescope::build(
+        binders
+            .iter()
+            .cloned()
+            .zip(entries.into_iter().map(|(type_, _)| type_)),
+        body,
+    );
+    let args = (20..23)
+        .map(|index| Term::free_var(&Free::local(index, Some("a"))))
+        .collect::<Vec<_>>();
+
+    // The reference: open the head binder, then the next, reading each entry type as it is reached.
+    let mut expected_types = Vec::new();
+    let mut residuals = vec![telescope.clone()];
+    let mut current = telescope.clone();
+    let expected_body = loop {
+        match current {
+            Telescope::Done(body) => break *body,
+            Telescope::Cons(type_, rest) => {
+                expected_types.push(type_);
+                current = rest.open(&[&args[expected_types.len() - 1]]);
+                residuals.push(current.clone());
+            }
+        }
+    };
+
+    let mut seen = Vec::new();
+    let (produced, body) = telescope
+        .walk_producing(|index, _, type_| {
+            seen.push(type_);
+            Ok::<_, ()>(args[index].clone())
+        })
+        .unwrap();
+    assert_eq!(seen, expected_types);
+    assert_eq!(produced, args);
+    assert_eq!(body, expected_body);
+
+    let arg_refs = args.iter().collect::<Vec<_>>();
+    assert_eq!(telescope.open(&arg_refs), expected_body);
+
+    for (index, expected) in expected_types.iter().enumerate() {
+        assert_eq!(
+            telescope
+                .clone()
+                .nth(index, |position| args[position].clone())
+                .as_ref(),
+            Some(expected)
+        );
+        assert_eq!(
+            telescope.clone().open_params(&args[..index]),
+            residuals[index]
+        );
+    }
+}

@@ -1217,7 +1217,7 @@ impl Term {
 
                 Self::from(Subterm::Let(Let {
                     bindings: merged,
-                    tail: tail.prepend(binder),
+                    tail: tail.prepend(&[binder]),
                 }))
             }
             other => Self::from(Subterm::Let(Let {
@@ -1225,6 +1225,53 @@ impl Term {
                 tail: Scope::close(Many(1), &[binder], Term::from(other)),
             })),
         }
+    }
+
+    /// Build one flat [`Let`] block from `(binder, type, value)` items in binding order: each binding closed over the binders before it, the tail over all of them, and a `Let` tail merged in after them. The block [`Term::let_`] reaches merging the items one at a time from the last — reached in one walk per term.
+    ///
+    /// Merging a binding re-closes every binding after it, so building `k` of them one at a time walks the block `k` times over: quadratic in bindings whose terms are small, and cubic in the elaborator's rebuild, where each binding's type carries metavariable spines as long as the binders before it. A 400-binding block spent its whole 30-second elaboration there.
+    pub fn let_block(items: Vec<(Free, Term, Term)>, tail: Term) -> Self {
+        if items.is_empty() {
+            return tail;
+        }
+
+        let binders = items
+            .iter()
+            .map(|(binder, _, _)| binder)
+            .collect::<Vec<_>>();
+
+        // A binding's index `p` names the `p`-th binder of the block, outermost first, which is the order `capture` numbers a list in.
+        let mut bindings = items
+            .iter()
+            .enumerate()
+            .map(|(index, (_, type_, value))| match index {
+                0 => LetBinding::new(type_.clone(), value.clone()),
+                _ => LetBinding::new(
+                    type_.capture(&binders[..index]),
+                    value.capture(&binders[..index]),
+                ),
+            })
+            .collect::<Vec<_>>();
+
+        let tail = match Term::unwrap_or_clone(tail) {
+            Subterm::Let(Let {
+                bindings: inner,
+                tail,
+            }) => {
+                for binding in inner {
+                    let (binding_type, binding_value) = binding.into_parts();
+                    bindings.push(LetBinding::new(
+                        binding_type.capture(&binders),
+                        binding_value.capture(&binders),
+                    ));
+                }
+
+                tail.prepend(&binders)
+            }
+            other => Scope::close(Many(binders.len()), &binders, Term::from(other)),
+        };
+
+        Self::from(Subterm::Let(Let { bindings, tail }))
     }
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.

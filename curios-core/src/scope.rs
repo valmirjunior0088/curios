@@ -543,21 +543,22 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 }
 
 impl<B: Bound> Scope<Many, B> {
-    /// Prepend `binder` to the front of this scope: it becomes index 0 and every existing binder shifts up by one.
+    /// Prepend `binders` to the front of this scope, outermost first: `binders[0]` becomes index 0 and every existing binder shifts up by their count.
     ///
-    /// Done by a direct `capture` on the body — free occurrences of `binder` bind to the new index 0 while every existing bound index shifts by one — rather than an open/close round-trip through names, which would have to reopen inner binders into free occurrences and could not tell them from genuine outer references.
-    pub fn prepend(&self, binder: &Free) -> Self {
+    /// Done by one direct `capture` on the body — free occurrences of the binders bind to the new leading indices while every existing bound index shifts past them — rather than an open/close round-trip through names, which would have to reopen inner binders into free occurrences and could not tell them from genuine outer references. Taking the whole list at once is what lets a block of `k` bindings prepend in one walk rather than `k`.
+    pub fn prepend(&self, binders: &[&Free]) -> Self {
         let names = self.names.as_ref().map(|names| {
-            [binder.clone()]
-                .into_iter()
+            binders
+                .iter()
+                .map(|&binder| binder.clone())
                 .chain(names.iter().cloned())
                 .collect()
         });
 
         Self {
-            arity: Many(self.arity() + 1),
+            arity: Many(self.arity() + binders.len()),
             names,
-            body: self.body.capture(&[binder]).into(),
+            body: self.body.capture(binders).into(),
         }
     }
 }
@@ -611,27 +612,73 @@ impl<B: Bound> Telescope<B> {
         Telescope::Done(body.into())
     }
 
-    pub(crate) fn cons<T>(binder: &Free, ty: T, rest: Telescope<B>) -> Self
-    where
-        T: Into<Term>,
-    {
-        Telescope::Cons(ty.into(), Scope::close(One, &[binder], rest))
-    }
-
-    /// Build a telescope from `(binder, type)` entries in written order, right-folding so each entry's scope closes over everything after it — written order mirrors telescope order.
+    /// Build a telescope from `(binder, type)` entries in written order — written order mirrors telescope order — closing each entry once over the binders before it and the payload over all of them.
+    ///
+    /// This is the telescope a right fold reaches by closing each entry's scope over everything after it, reached in one walk per entry. The fold closes everything after an entry at every entry, so it walks the tail once per binder: quadratic in a telescope's length, and cubic in the elaborator's, whose entry types carry metavariable spines as long as the binders before them.
     pub fn build<I, T>(entries: I, body: B) -> Self
     where
         I: IntoIterator<Item = (Free, T)>,
         T: Into<Term>,
     {
-        entries
+        let entries = entries
             .into_iter()
-            .collect::<Vec<_>>()
-            .into_iter()
+            .map(|(binder, ty)| (binder, ty.into()))
+            .collect::<Vec<(Free, Term)>>();
+        // Beneath `j` one-binder scopes the nearest binder is index 0, so an entry closes over the binders before it innermost first: the last `j` of this list.
+        let innermost_first = entries
+            .iter()
             .rev()
-            .fold(Telescope::done(body), |rest, (binder, ty)| {
-                Telescope::cons(&binder, ty, rest)
-            })
+            .map(|(binder, _)| binder)
+            .collect::<Vec<_>>();
+        let before = |count: usize| &innermost_first[entries.len() - count..];
+
+        let mut telescope = Telescope::done(body.capture(before(entries.len())));
+
+        for (index, (binder, ty)) in entries.iter().enumerate().rev() {
+            let ty = match index {
+                0 => ty.clone(),
+                _ => ty.capture(before(index)),
+            };
+
+            telescope = Telescope::Cons(
+                ty,
+                Scope {
+                    arity: One,
+                    names: Some(vec![binder.clone()]),
+                    body: Box::new(telescope),
+                },
+            );
+        }
+
+        telescope
+    }
+
+    /// Each entry's type as it reads once every binder before it is opened at `args`, in order, handed to `visit`; then the payload with every binder opened. Each entry is opened once, at all its predecessors together, where opening binder by binder rewrites the whole tail at each — see [`Telescope::build`] for why that walk is cubic in practice.
+    ///
+    /// `visit` is handed the entry's position, its binder's hint and its type, and returns the argument that binder opens at: what a caller elaborated against the type — a dependent tuple, a telescope of arguments whose later types name earlier ones — or a fresh variable it minted from the hint to walk under the binder.
+    pub fn walk_producing<F, E>(&self, mut visit: F) -> Result<(Vec<Term>, B), E>
+    where
+        F: FnMut(usize, Option<&str>, Term) -> Result<Term, E>,
+    {
+        let mut args = Vec::new();
+        let mut current = self;
+
+        loop {
+            // Beneath `j` one-binder scopes the nearest binder is index 0, so a release takes the arguments so far innermost first.
+            let innermost_first = args.iter().rev().collect::<Vec<&Term>>();
+
+            match current {
+                Telescope::Done(body) => {
+                    let body = body.release(&innermost_first);
+                    return Ok((args, body));
+                }
+                Telescope::Cons(ty, rest) => {
+                    let arg = visit(args.len(), rest.first_hint(), ty.release(&innermost_first))?;
+                    args.push(arg);
+                    current = &rest.body;
+                }
+            }
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -713,32 +760,26 @@ impl<B: Bound> Telescope<B> {
             args.len()
         );
 
-        let mut cur = self.clone();
-        for arg in args {
-            cur = match cur {
-                Telescope::Cons(_, rest) => rest.open(&[arg]),
-                Telescope::Done(_) => unreachable!(),
-            };
-        }
-        match cur {
-            Telescope::Done(body) => *body,
-            Telescope::Cons(_, _) => unreachable!(),
-        }
+        // The payload beneath every binder, opened once at all of them — innermost first, since the nearest binder is index 0.
+        let innermost_first = args.iter().rev().copied().collect::<Vec<_>>();
+        self.terminal().release(&innermost_first)
     }
 
-    /// Open the leading binders at successive `params` — one binder per param — returning the residual telescope. Every caller's telescope leads with the type parameters (constructor payloads, struct fields, inductive indices all follow them), so a telescope that runs out early is an invariant violation.
+    /// Open the leading binders at successive `params` — one binder per param — returning the residual telescope. Every caller's telescope leads with the type parameters (constructor payloads, struct fields, inductive indices all follow them), so a telescope that runs out early is an invariant violation. The residual is opened once, at every param together.
     pub fn open_params(self, params: &[Term]) -> Telescope<B> {
-        let mut telescope = self;
-        for param in params {
-            telescope = match telescope {
-                Telescope::Cons(_, rest) => rest.open(&[param]),
+        let mut residual = &self;
+        for _ in params {
+            residual = match residual {
+                Telescope::Cons(_, rest) => &rest.body,
                 Telescope::Done(_) => unreachable!("telescope must lead with its parameters"),
             };
         }
-        telescope
+
+        let innermost_first = params.iter().rev().collect::<Vec<_>>();
+        residual.release(&innermost_first)
     }
 
-    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder before substituting that arg into the rest, and return the final `Done` body. The walk is infallible; the error type `E` belongs to the callback.
+    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder with its type opened at the args before it, and return the final `Done` body. The walk is infallible; the error type `E` belongs to the callback.
     pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
     where
         F: FnMut(usize, &Term, &Term) -> Result<(), E>,
@@ -750,39 +791,33 @@ impl<B: Bound> Telescope<B> {
             args.len()
         );
 
-        let mut tele = self;
-        let mut i = 0;
-        loop {
-            match tele {
-                Telescope::Done(body) => return Ok(*body),
-                Telescope::Cons(ty, rest) => {
-                    f(i, &args[i], &ty)?;
-                    tele = rest.open(&[&args[i]]);
-                    i += 1;
-                }
-            }
-        }
+        self.walk_producing(|index, _, ty| {
+            f(index, &args[index], &ty)?;
+            Ok(args[index].clone())
+        })
+        .map(|(_, body)| body)
     }
 
     /// The type at `index`, with each preceding binder opened at `sub` of its position. The general form; a field telescope read from a value wants [`Telescope::field_type_from`] instead.
-    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
+    pub fn nth<F>(self, index: usize, sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,
     {
-        let mut tele = self;
-        let mut j = 0;
-        loop {
-            match tele {
+        let mut current = &self;
+        for _ in 0..index {
+            current = match current {
+                Telescope::Cons(_, rest) => &rest.body,
                 Telescope::Done(_) => return None,
-                Telescope::Cons(ty, rest) => {
-                    if j == index {
-                        return Some(ty);
-                    }
-                    tele = rest.open(&[&sub(j)]);
-                    j += 1;
-                }
-            }
+            };
         }
+
+        let Telescope::Cons(ty, _) = current else {
+            return None;
+        };
+
+        let subs = (0..index).map(sub).collect::<Vec<_>>();
+        let innermost_first = subs.iter().rev().collect::<Vec<_>>();
+        Some(ty.release(&innermost_first))
     }
 
     /// The type of field `index` as seen from `value`: every preceding field is opened at its own projection off `value`, so a field type that names an earlier field names *that value's* earlier field rather than a loose binder.

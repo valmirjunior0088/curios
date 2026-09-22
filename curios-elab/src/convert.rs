@@ -1088,6 +1088,7 @@ impl Convert {
         metavar: &Metavar,
         t: &Term,
     ) -> Result<Solved, ReduceError> {
+        curios_profile::profile!("convert::solve");
         let id = metavar.id;
         if context.is_rec_slot(id) {
             return Ok(Solved::Postponed);

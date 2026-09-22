@@ -7,12 +7,13 @@ use {
     curios_utilities::Span,
 };
 
-/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding folds through `Term::let_`, which merges the bindings back into a single flat `Let`. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
+/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
 pub(super) fn elaborate_let(
     context: &mut Context,
     let_: &Let,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    curios_profile::profile!("binding::elaborate_let");
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
         let mut triples = Vec::<(Free, Term, Term)>::with_capacity(let_.bindings.len());
@@ -53,14 +54,8 @@ pub(super) fn elaborate_let(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        let rebuilt = triples
-            .into_iter()
-            .rev()
-            .fold(tail_elaborated, |tail, (binder, type_, body)| {
-                Term::let_(&binder, type_, body, tail)
-            });
-
-        Ok((rebuilt, tail_type))
+        // In one pass rather than merged a binding at a time: each binding's type carries metavariable spines as long as the binders before it, so re-closing every later binding at each earlier one was cubic in the block's length.
+        Ok((Term::let_block(triples, tail_elaborated), tail_type))
     })
 }
 

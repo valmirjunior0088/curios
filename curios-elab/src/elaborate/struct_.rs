@@ -120,30 +120,24 @@ pub(super) fn check_dependent_fields(
     origin: &Term,
     elaborated: &mut Vec<Term>,
 ) -> Result<(), Error> {
-    match tele {
-        Telescope::Done(_) => Ok(()),
-        Telescope::Cons(ty, rest) => {
-            let head = match &sources[0] {
-                FieldSource::Written(field) => check(context, field, ty)?,
-                FieldSource::Resolve { func, edge } => {
-                    let provenance = WitnessOrigin {
-                        func: func.clone(),
-                        binder: format!("its '{edge}' superclass"),
-                    };
-                    let (id, metavar) = context.fresh_witness_metavar(
-                        ty.clone(),
-                        origin.span(),
-                        provenance.clone(),
-                    );
-                    attempt_witness_goal(context, id, &ty, provenance, origin)?;
-                    metavar
-                }
+    curios_profile::profile!("struct::check_dependent_fields");
+    // One walk, each field type opened once at every field before it: reopening the rest after each field rewrote every later type, whose metavariable spines name every earlier field, which made a long literal cubic.
+    let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
+        FieldSource::Written(field) => check(context, field, ty),
+        FieldSource::Resolve { func, edge } => {
+            let provenance = WitnessOrigin {
+                func: func.clone(),
+                binder: format!("its '{edge}' superclass"),
             };
-            let rest = rest.open(&[&head]);
-            elaborated.push(head);
-            check_dependent_fields(context, rest, &sources[1..], origin, elaborated)
+            let (id, metavar) =
+                context.fresh_witness_metavar(ty.clone(), origin.span(), provenance.clone());
+            attempt_witness_goal(context, id, &ty, provenance, origin)?;
+            Ok(metavar)
         }
-    }
+    })?;
+
+    elaborated.extend(fields);
+    Ok(())
 }
 
 /// Type a struct literal against its registry entry. The struct's `name` makes it self-describing, so this synthesizes (like `elaborate_variant`, not the purely-checked `elaborate_tuple`): the parameters come from the written head — a bare-name head mints one fresh metavariable per parameter, solved by the field checks (and, in `Check` mode, the `expect` turnaround unifying the result `StructType` against the expected type) — and the fields are checked in declaration order through the (dependent) field telescope.

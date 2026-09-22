@@ -259,7 +259,7 @@ fn reach_basic_values() {
 
 #[test]
 fn reach_telescope_absorbs_arity() {
-    // body references bound index 2 (reach 3); each telescope binder absorbs one. `Scope::constant` places the body without capturing, so the bound index is preserved exactly (unlike `Telescope::cons`, which captures by label).
+    // body references bound index 2 (reach 3); each telescope binder absorbs one. `Scope::constant` places the body without capturing, so the bound index is preserved exactly (unlike `Telescope::build`, which captures by label).
     let f1 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
             Term::type_ground(),

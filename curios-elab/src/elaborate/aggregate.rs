@@ -5,25 +5,7 @@ pub(super) fn elaborate_tuple_type(
     context: &mut Context,
     tt: &TupleType,
 ) -> Result<(Term, Term), Error> {
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<()>,
-        fields: &mut Vec<(Free, Term)>,
-    ) -> Result<(), Error> {
-        match tele {
-            Telescope::Done(_) => Ok(()),
-            Telescope::Cons(ty, rest) => {
-                let field = crate::check_is_sort(context, &ty)?.0;
-                let name = context.fresh(rest.first_hint());
-                let x = Term::free_var(&name);
-                // The *rebuilt* field type, as in `elaborate_func_type`.
-                context.assume(&name, &field);
-                fields.push((name, field));
-                walk(context, rest.open(&[&x]), fields)
-            }
-        }
-    }
-
+    curios_profile::profile!("aggregate::elaborate_tuple_type");
     // Labels are part of the type's identity and the target of `.label` resolution, so they must be unique and survive the rebuild verbatim (the walk gensyms its binders to keep nested frames collision-free; `relabel` restores the written names afterwards).
     let source_labels = tt.telescope.labels();
     for (position, label) in source_labels.iter().enumerate() {
@@ -32,8 +14,19 @@ pub(super) fn elaborate_tuple_type(
         }
     }
 
+    // One walk, each field type opened once at the binders before it, rather than a recursion reopening the rest per field.
     let mut fields = Vec::new();
-    context.with_frame(|context| walk(context, tt.telescope.clone(), &mut fields))?;
+    context.with_frame(|context| {
+        tt.telescope.walk_producing(|_, hint, ty| {
+            let field = crate::check_is_sort(context, &ty)?.0;
+            let name = context.fresh(hint);
+            let x = Term::free_var(&name);
+            // The *rebuilt* field type, as in `elaborate_func_type`.
+            context.assume(&name, &field);
+            fields.push((name, field));
+            Ok::<_, Error>(x)
+        })
+    })?;
 
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 
@@ -50,6 +43,7 @@ pub(super) fn elaborate_tuple(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    curios_profile::profile!("aggregate::elaborate_tuple");
     let Tuple { fields, names } = tuple;
 
     let expected = match mode {
