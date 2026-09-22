@@ -1,7 +1,7 @@
 use /std/{Bool, Bits, Eq};
 use /std/Bits/{cong_cons2, cons_inj_head, cons_inj_tail, nonempty};
 use /std/Bool/{false_neq_true};
-use /std/BigNat/{BigNat, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, of_trimmed_bits,
+use /big_nat/{BigNat, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, of_trimmed_bits,
     refl_at, tail_is_trimmed};
 
 --- The successor of a word.

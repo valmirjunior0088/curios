@@ -45,7 +45,7 @@ pub use Ord/{let Ord};
 pub mod Hash;
 pub use Hash/{let Hash};
 
---- Natural numbers: unbounded in the language, carried on the machine's word at run time, so a value past the carrier refuses rather than wraps.
+--- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
 --- Subtraction truncates at zero. Division and remainder carry the precondition `Lt(0, b)`. `Lt` and `Le` beneath are the decided propositions every bound in the library is stated in.
 pub mod Nat;
@@ -55,7 +55,7 @@ pub use Nat/{let Nat};
 pub mod Byte;
 pub use Byte/{let Byte};
 
---- Signed integers on the machine's word, with `NonNeg` as the decided bound the narrowing to `Nat` carries.
+--- Signed integers, unbounded as `Nat` is, with `NonNeg` as the decided bound the narrowing to `Nat` carries.
 pub mod Int;
 pub use Int/{let Int};
 
@@ -128,20 +128,6 @@ pub use Option/{let Option};
 --- The three-way answer a comparison gives.
 pub mod Ordering;
 pub use Ordering/{let Ordering};
-
---- Arbitrary-precision naturals.
----
---- Each operation is a facade with its laws beneath it: `BigNat/add` adds and `BigNat/add/assoc` is its associativity.
-pub mod BigNat;
-pub use BigNat/{let BigNat};
-
---- Strictly positive arbitrary-precision naturals, the invariant carried as a proof.
-pub mod BigPos;
-pub use BigPos/{let BigPos};
-
---- Arbitrary-precision integers.
-pub mod BigInt;
-pub use BigInt/{let BigInt};
 
 --- A list that carries its length in its type.
 pub mod Vec;

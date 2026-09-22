@@ -219,7 +219,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         })
     }
 
-    /// The entry point for a match whose arm patterns may nest across constructors, tuples, and structs (see [`MatchPattern`]) — compiled down into the single-level core forms above, exactly what a person would get from hand-nesting matches today (proven end to end by `BigNat.crs`'s style of code). `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this compiler, mirroring every other `Match` arm's `term`/`region` split.
+    /// The entry point for a match whose arm patterns may nest across constructors, tuples, and structs (see [`MatchPattern`]) — compiled down into the single-level core forms above, exactly what a person would get from hand-nesting matches today (proven end to end by the style of code in the corpus fixture `big_nat.crs`). `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this compiler, mirroring every other `Match` arm's `term`/`region` split.
     ///
     /// Zero arms (a vacuous elimination, e.g. of `False`) needs no recursion at all — there is nothing to infer a dispatch kind from, so it goes straight to [`Self::induct_match`] exactly as today.
     ///

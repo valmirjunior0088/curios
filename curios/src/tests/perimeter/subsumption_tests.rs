@@ -6,7 +6,7 @@
 
 use crate::tests::{error, run};
 
-// The direction the language needs. `Bool/Holds` is `(b : Bool) -> Prop`, handed to a slot wanting `(Bool) -> Type`; `/std/BigNat`'s `canonical_of_is_trimmed` passes it to `Eq/subst` exactly so.
+// The direction the language needs. `Bool/Holds` is `(b : Bool) -> Prop`, handed to a slot wanting `(Bool) -> Type`; the corpus fixture `/big_nat`'s `canonical_of_is_trimmed` passes it to `Eq/subst` exactly so.
 #[test]
 fn a_function_types_codomain_is_cumulative() {
     let source = r#"

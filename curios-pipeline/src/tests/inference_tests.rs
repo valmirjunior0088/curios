@@ -107,7 +107,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
 #[test]
 fn a_packed_literal_decomposes_against_its_folded_spine() {
-    // The packed-literal view's acceptance shape, distilled from `BigNat/succ.crs`: `raw(b[])` folds to the literal `b[1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
+    // The packed-literal view's acceptance shape, distilled from the corpus fixture's `big_nat/succ.crs`: `raw(b[])` folds to the literal `b[1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
     let source = r#"
         use /std/{Bool, Bits, Eq, Io};
         use /std/Bool/{false_neq_true};

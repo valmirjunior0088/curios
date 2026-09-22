@@ -9,10 +9,11 @@ use {
 #[test]
 fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     let source = r#"
-        use /std/{BigNat, Nat, Str, Eq, Io};
-        let a : BigNat = BigNat/of_nat(6);
-        let b : BigNat = BigNat/of_nat(7);
-        let p : Eq(BigNat/add(a, b), BigNat/add(b, a)) = BigNat/add/comm(a, b);
+        use /std/{Nat, Eq};
+        use /std/Nat/{Le};
+        let a : Nat = 6;
+        let b : Nat = 7;
+        let p : Eq(a + (b - a), b) = Le/add_sub_cancel(a, b, Le/add_r(a, 1));
         /std/print("ok")
         "#;
     assert_eq!(run(source), b"ok");
@@ -105,11 +106,12 @@ fn a_let_bound_value_is_still_computed() {
 #[test]
 fn proof_in_an_erased_position_is_not_evaluated() {
     let source = r#"
-        use /std/{BigNat, Nat, Str, Eq, Io};
-        let a : BigNat = BigNat/of_nat(6);
-        let b : BigNat = BigNat/of_nat(7);
-        let consume(x : BigNat, y : BigNat, p : Eq(BigNat/add(x, y), BigNat/add(y, x))) -> Nat = 42;
-        /std/print(Nat/to_str(consume(a, b, BigNat/add/comm(a, b))))
+        use /std/{Nat, Eq};
+        use /std/Nat/{Le};
+        let a : Nat = 6;
+        let b : Nat = 7;
+        let consume(x : Nat, y : Nat, p : Eq(x + (y - x), y)) -> Nat = 42;
+        /std/print(Nat/to_str(consume(a, b, Le/add_sub_cancel(a, b, Le/add_r(a, 1)))))
         "#;
     assert_eq!(run(source), b"42");
 }

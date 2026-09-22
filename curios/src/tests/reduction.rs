@@ -10,15 +10,17 @@
 
 use {
     super::{
-        typecheck_within,
+        corpus, typecheck_within,
         unfolding::{Consumed, predicates},
     },
     curios_core::{Consumption, Cost},
     curios_pipeline::{
-        DEFAULT_STEP_BUDGET, recheck_with_prelude, recheck_with_prelude_measured,
+        DEFAULT_STEP_BUDGET, EntryTail, Fold, recheck_with_prelude, recheck_with_prelude_measured,
         typecheck_with_prelude, typecheck_with_prelude_measured,
     },
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::test_support::Temporary,
+    curios_verdicts::Verdicts,
     std::time::{Duration, Instant},
 };
 
@@ -969,13 +971,18 @@ fn paired_fold(width: usize, paired: bool) -> String {
     match paired {
         true => format!(
             r#"
-            use /std/{{Nat, Bool, Bits, BigNat}};
+            use /std/{{Nat, Bool, Bits}};
+            let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
+                match a
+                | true => match b | true => c | false => Bool/not(c) end
+                | false => match b | true => Bool/not(c) | false => c end
+                end;
             let go(x: Bits, c: Bool) -> {{Bits, Bool}} =
                 match x
                 | b[] => (b[], c)
                 | b[h, ..t] =>
-                    let (rest, out) = go(t, BigNat/xor3(h, c, c));
-                    (b[BigNat/xor3(h, c, c), ..rest], out)
+                    let (rest, out) = go(t, xor3(h, c, c));
+                    (b[xor3(h, c, c), ..rest], out)
                 end;
             let (bits, _) = go(Bits/slice(b[{ones}], 0, {width}), false);
             let n : Nat = Nat/div(100, Bits/len(bits) + 3);
@@ -984,11 +991,16 @@ fn paired_fold(width: usize, paired: bool) -> String {
         ),
         false => format!(
             r#"
-            use /std/{{Nat, Bool, Bits, BigNat}};
+            use /std/{{Nat, Bool, Bits}};
+            let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
+                match a
+                | true => match b | true => c | false => Bool/not(c) end
+                | false => match b | true => Bool/not(c) | false => c end
+                end;
             let go(x: Bits, c: Bool) -> Bits =
                 match x
                 | b[] => b[]
-                | b[h, ..t] => b[BigNat/xor3(h, c, c), ..go(t, BigNat/xor3(h, c, c))]
+                | b[h, ..t] => b[xor3(h, c, c), ..go(t, xor3(h, c, c))]
                 end;
             let n : Nat = Nat/div(100, Bits/len(go(Bits/slice(b[{ones}], 0, {width}), false)) + 3);
             /std/print("")
@@ -1047,7 +1059,7 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     );
 }
 
-/// **A bound over a computed `BigNat` subject is affordable, and stays affordable as the subject widens.**
+/// **A bound over a computed `BigNat` subject is affordable, and stays affordable as the subject widens.** `BigNat` is the corpus's `big_nat` fixture, `/std/BigNat` until `Nat` became unbounded at run time; it is compiled once and filed, so each measurement is the program's own elaboration and judgment.
 ///
 /// `compare_nat` matches two summands *up to universe instances*, which means projecting both through [`project_erased_universes`](curios_core) at every comparison. That projection rebuilds the term, and its traversal mode was the one memoizing mode's opposite: a reduct is a DAG whose tree expansion doubles per level, so each projection walked `2^n` while the *unit* counter — which prices transitions and constructions, not re-walks of one node — saw a linear program. A bound over `BigNat/sub` therefore had linear units and exponential wall clock, which no budget could refuse because no budget could see it.
 ///
@@ -1066,27 +1078,37 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
 /// ```
 #[test]
 fn a_bound_over_a_widening_subject_stays_affordable() {
+    let store = Temporary::new("reduction", "widening-subject");
+    let verdicts = Verdicts::at(store.to_path_buf());
+    let units = [corpus::mounted("big_nat")];
     let elapsed = |shift: usize| {
         let subject = match shift {
-            0 => "BigNat/of_nat(120) - BigNat/of_nat(10)".to_string(),
-            k => format!("BigNat/mul/pow2(BigNat/of_nat(120), {k}) - BigNat/of_nat(10)"),
+            0 => "of_nat(120) - of_nat(10)".to_string(),
+            k => format!("mul/pow2(of_nat(120), {k}) - of_nat(10)"),
         };
         let source = format!(
             r#"
-            use /std/{{Nat, Bool, BigNat}};
-            let n : Nat = Nat/div(100, BigNat/bit_len({subject}));
+            use /std/{{Nat}};
+            use /big_nat/{{bit_len, mul, of_nat}};
+            let n : Nat = Nat/div(100, bit_len({subject}));
             /std/print("")
             "#
         );
         let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
         let started = Instant::now();
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        Fold::new(DEFAULT_STEP_BUDGET, &units, Some(&verdicts))
+            .check(
+                &entrypoint,
+                &RootSource::none(),
+                EntryTail::Authored,
+                |_| {},
+            )
             .expect("the bound discharges within the default budget");
 
         started.elapsed()
     };
 
-    // The first call carries the run's warm-up, so the pair that is compared is taken after it.
+    // The first call compiles and files the fixture and carries the run's warm-up, so the pair that is compared is taken after it.
     let _ = elapsed(0);
     let narrow = elapsed(0);
     let wide = elapsed(16);

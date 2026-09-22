@@ -426,13 +426,13 @@ fn a_struct_field_over_a_total_application_still_compiles() {
     assert_eq!(run(&source), b"7");
 }
 
-// The corpus shapes the design is keyed to, exercised through the replay path rather than the prelude build. `BigNat`'s arithmetic rests on `add/raw`, which descends on *either* of two `Bits` depending on the arm — a shape only match refinement can see — and `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format.
+// A prelude shape the design is keyed to, exercised through the replay path rather than the prelude build: `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format. The other, recursion that descends on *either* of two `Bits` depending on the arm — a shape only match refinement can see — is the corpus fixture `big_nat`'s `add/raw`, which that unit's own compile exercises.
 #[test]
 fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
     let source = r#"
-        use /std/{BigNat, Fmt};
+        use /std/{Nat, Fmt};
 
-        Fmt/print("%-%")(BigNat/to_str(BigNat/of_nat(99999999) + BigNat/of_nat(1)))(3)
+        Fmt/print("%-%")(Nat/to_str(99999999 + 1))(3)
         "#;
     assert_eq!(run(source), b"100000000-3");
 }

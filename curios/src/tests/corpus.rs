@@ -24,17 +24,22 @@ fn root() -> PathBuf {
         .join("corpus")
 }
 
-/// Compile `unit` as its own test program — the synthesized `Test/main` tail over its registered tests, with an empty entry above it — and run every test it declares.
-///
-/// Failures are collected rather than raised at the first. Each test runs in an instantiation of its own, so one failing says nothing about the rest, and a run that stopped early would hide every test after it — which is the granularity a per-fixture Rust test used to give for free.
-fn run_unit(unit: &str) {
+/// `unit` mounted at its own name from its header and directory, as the corpus mounts it — for a test that compiles a program over a corpus unit rather than running the unit's tests.
+pub(super) fn mounted(unit: &str) -> RootSource {
     let root = root();
-    let mounted = RootSource::mounted(
+    RootSource::mounted(
         unit,
         RootKind::Ordinary,
         root.join(format!("{unit}.crs")),
         root.join(unit),
-    );
+    )
+}
+
+/// Compile `unit` as its own test program — the synthesized `Test/main` tail over its registered tests, with an empty entry above it — and run every test it declares.
+///
+/// Failures are collected rather than raised at the first. Each test runs in an instantiation of its own, so one failing says nothing about the rest, and a run that stopped early would hide every test after it — which is the granularity a per-fixture Rust test used to give for free.
+fn run_unit(unit: &str) {
+    let mounted = mounted(unit);
     let entrypoint = Entrypoint::trivial();
     let loader = RootSource::none();
 
@@ -103,7 +108,7 @@ macro_rules! corpus {
     };
 }
 
-corpus! { strings, data, aggregates, numeric, cli, tui }
+corpus! { strings, data, aggregates, numeric, cli, tui, big_nat }
 
 /// A unit header with no row in `corpus!` would be compiled by nothing and silently pass, which is the one failure mode this arrangement has that a per-fixture Rust test does not.
 #[test]

@@ -1133,7 +1133,7 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Pruning,
-            // **Measured twice as inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could. Installed anyway, `str_literal_cost_measurements` reported all ten rows byte-for-byte identical (2026-08-24), matching an earlier swap of `release` alone that moved a `BigNat/sub` ladder not at all. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
+            // **Measured twice as inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could. Installed anyway, `str_literal_cost_measurements` reported all ten rows byte-for-byte identical (2026-08-24), matching an earlier swap of `release` alone that moved a `/std/BigNat/sub` ladder — now the corpus fixture's `/big_nat/sub` — not at all. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
             memo: Memo::None,
         }
     }

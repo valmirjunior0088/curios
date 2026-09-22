@@ -76,7 +76,7 @@ fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static
 
 /// Whether every element of a packed literal is an atom — a plain numeral or a name — so that printing one flat costs nothing.
 ///
-/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. `/std/BigNat`'s proofs pack whole `Eq/trans(…)` chains into their literals and printed 545 columns that way. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
+/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. `/std/BigNat`'s proofs — now the corpus fixture `/big_nat` — pack whole `Eq/trans(…)` chains into their literals and printed 545 columns that way. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
 fn packs_atoms(segments: &[BinSegment]) -> bool {
     segments.iter().all(|segment| match segment {
         BinSegment::Atom(term) => {

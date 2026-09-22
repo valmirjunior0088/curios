@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Bits, Eq};
-use /std/BigNat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw, eq,
+use /big_nat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw, eq,
     is_trimmed, is_trimmed_of_canonical, maj3, of_bits, of_nat, of_trimmed_bits, trim,
     trim_is_trimmed, trim_of_trimmed, xor3, add};
 

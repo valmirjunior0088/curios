@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, Str, Char, Option, Show, Ord, Spell};
 use /std/ops/{Eql, Cmp, Sub, Mul};
-use /std/BigNat/{BigNat, add, ord, dbl, dbl_succ, is_zero, mul, of_nat, sub, view, zero};
+use /big_nat/{BigNat, add, ord, dbl, dbl_succ, is_zero, mul, of_nat, sub, view, zero};
 
 --- How many bits `a` takes, `0` at zero.
 pub let bit_len(a: BigNat) -> Nat =

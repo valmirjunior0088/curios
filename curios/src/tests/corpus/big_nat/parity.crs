@@ -1,5 +1,5 @@
 use /std/{Bool, Nat, Bits};
-use /std/BigNat/{BigNat, of_bits, view, zero};
+use /big_nat/{BigNat, of_bits, view, zero};
 
 --- Whether `a` is even.
 pub let is_even(a: BigNat) -> Bool =

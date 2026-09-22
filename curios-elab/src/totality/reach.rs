@@ -2,7 +2,7 @@
 //!
 //! **(T)** is seeded here, from every type position, and takes the *aggressive* reading: everything a type reaches must be total, not merely the values a type-level eliminator scrutinizes. The narrow reading is unsound, because a *total* type-level function applied to a *partial value* reties the negative knot that strict positivity exists to forbid.
 //!
-//! **(V) is not seeded here**, and the difference is the point. (T) asks a *syntactic* question — which written positions are types — and its aggressive reading deliberately answers more generously than any typing judgment would: it seeds the body of every definition whose type ends in a sort, which is how it reaches through `/std/BigNat/Canonical` into `is_trimmed`, a dependency no annotation records. A walk can answer that completely. (V) asks a *typing* question — which terms are propositions — and a walk can only re-derive it from the finished term, incompletely; elaboration already decided it for every term in the program. So (V) is seeded where that answer is known, by [`Context::record_checked`](crate::Context), and arrives here as positions rather than being reconstructed. See [`super::checked_proof_positions`].
+//! **(V) is not seeded here**, and the difference is the point. (T) asks a *syntactic* question — which written positions are types — and its aggressive reading deliberately answers more generously than any typing judgment would: it seeds the body of every definition whose type ends in a sort, which is how it reaches through the corpus fixture's `/big_nat/Canonical` into `is_trimmed`, a dependency no annotation records. A walk can answer that completely. (V) asks a *typing* question — which terms are propositions — and a walk can only re-derive it from the finished term, incompletely; elaboration already decided it for every term in the program. So (V) is seeded where that answer is known, by [`Context::record_checked`](crate::Context), and arrives here as positions rather than being reconstructed. See [`super::checked_proof_positions`].
 //!
 //! Neither obligation subsumes the other. The type-level `rec` route violates only (T); the partial-carrier and `exit` routes violate only (V).
 //!
@@ -40,7 +40,7 @@ fn push(positions: &mut Vec<Position>, site: &Rc<str>, term: &Term) {
 
 /// Every term in a type position.
 ///
-/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/BigNat/Canonical` into `is_trimmed`.
+/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/big_nat/Canonical` into `is_trimmed`.
 pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     let mut positions = Vec::new();
 

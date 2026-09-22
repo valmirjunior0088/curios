@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Bits, Eq};
+-- The binary naturals `/std/BigNat` was until `Nat` became unbounded at run time: a trimmed word of `Bits` beside its certificate, each operation a facade with its laws proved beneath it. Kept because its proofs are the heaviest the checkers meet — recursion that descends on either of two words, packed-literal views, a refinement over a packed carrier — and the tests at its end run the arithmetic those proofs are about.
+use /std/{Nat, Bool, Bits, Eq, Str, Option, Ordering, Test};
 use /std/Bits/{nonempty};
 use /std/Bool/{false_neq_true};
 
@@ -236,3 +237,56 @@ pub use parity/{is_even, div2, shr};
 
 mod convert;
 pub use convert/{to_str, bit_len, is_decimal, Decimal, of_decimal, of_str};
+
+-- `add` propagates carry along the binary numeral: 99_999_999 ends in eight set bits, so adding 1 ripples the carry through all of them — the `pos_add`/`pos_add_c` twin recursion — before it lands.
+test add_ripples_carry =
+    Test/equal(add(of_decimal("99999999"), of_nat(1)), of_decimal("100000000"));
+
+-- `sub` runs the mask-based borrow recursion: 100_000_000 ends in eight clear bits, so subtracting 1 borrows through all of them. The result is canonical by construction — no trailing-zero cleanup exists to get wrong.
+test sub_borrows =
+    Test/equal(sub(of_decimal("100000000"), of_nat(1)), of_decimal("99999999"));
+
+-- `mul/small` is `mul` against a decoded native operand: 9999 * 99999 crosses well past both inputs' bit widths, so every carry of the shift-and-add recursion has to land.
+test mul_small_propagates_carry =
+    Test/equal(mul/small(of_nat(9999), 99999), of_decimal("999890001"));
+
+-- Full big-by-big `mul`: the product needs 57 bits, so a correct result proves it lives in the numeral itself and never in a fixed-width intermediate.
+test mul_crosses_word_width =
+    Test/equal(mul(of_decimal("123456789"), of_decimal("987654321")), of_decimal("121932631112635269"));
+
+-- `mul/pow2` doubles by prepending low bits to the numeral: 2^40 is a run of forty zeros under a one.
+test mul_pow2_builds_large_powers =
+    Test/equal(mul/pow2(of_nat(1), 40), of_decimal("1099511627776"));
+
+-- `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and floor-halves to 50, which is even.
+test div2_and_parity =
+    let n = of_nat(101);
+    Test/all([
+        Test/equal(div2(n), of_nat(50)),
+        Test/assert(Bool/not(is_even(n))),
+        Test/assert(is_even(div2(n)))]);
+
+-- `bit_len` is the numeral's length: zero has no bits, 1 is a single bit, and the 255 → 256 step is where the count grows from 8 to 9.
+test bit_len_counts_binary_digits =
+    Test/equal(
+        [bit_len(zero), bit_len(of_nat(1)), bit_len(of_nat(255)), bit_len(of_nat(256))],
+        [0, 1, 8, 9]);
+
+-- `ord` lets the high bits decide — the recursion on the numeral tails — breaking ties on the low bit only afterward, so two values differing only in the lowest bit still order correctly.
+test ord_orders_by_magnitude =
+    let a = of_nat(12345678);
+    let b = of_nat(12345679);
+    Test/equal([ord(a, b), ord(a, a), ord(b, a)], [Ordering/lt(), Ordering/eq(), Ordering/gt()]);
+
+-- Zero is the empty word, which `to_str` renders as "0" and not the empty string, and a value with clear low bits round-trips through the binary long division that produces the decimal digits.
+test zero_renders_and_roundtrips =
+    Test/equal(Str/join("/", [to_str(zero), to_str(of_nat(70000))]), "0/70000");
+
+-- The decimal parser is the inverse of the renderer on everything the renderer writes.
+test of_str_inverts_to_str =
+    let big = mul(of_decimal("123456789"), of_decimal("987654321"));
+    Test/all([
+        Test/equal(of_str(to_str(big)), Option/some(big)),
+        Test/equal(of_str(to_str(zero)), Option/some(zero)),
+        Test/equal(of_str(""), Option/none()),
+        Test/equal(of_str("12x"), Option/none())]);

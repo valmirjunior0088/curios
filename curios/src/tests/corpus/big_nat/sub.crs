@@ -1,5 +1,5 @@
 use /std/{Bool, Bits};
-use /std/BigNat/{BigNat, of_bits, xor3, zero};
+use /big_nat/{BigNat, of_bits, xor3, zero};
 
 let borrow_out(a: Bool, b: Bool, bw: Bool) -> Bool =
     match a
