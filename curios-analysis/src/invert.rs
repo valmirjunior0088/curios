@@ -4,6 +4,9 @@
 //!
 //! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What each side supplies for itself is reduction and conversion, through [`Judge`] — see that module for the line, and for the concession borrowing conversion represents.
 
+#[cfg(test)]
+mod tests;
+
 use {
     crate::Judge,
     curios_core::{Free, Peel, Subterm, Telescope, Term, peel_intrinsic},
@@ -19,15 +22,38 @@ use {
 /// A constructor application reads like it should qualify, since constructors are injective, and this walk once descended into one. That rung is deliberately gone. It never ran: an elaborated target is stored as an application of the constructor's *function wrapper*, never as a saturated variant, so no declaration ever reached it. And had it run it would have been unsound at a `Prop`-sorted family, where irrelevance denies precisely the injectivity it assumes — `mk(a : Nat) : (Tag/t(a))` would report `a` as recovered although `Tag/t(0)` and `Tag/t(7)` are the same value, which is a payload a program can read out of a proposition and from there a closed inhabitant of `False`. Reinstating it needs the sort condition *and* targets normalized to variant form; until both, its absence is the stricter guard.
 ///
 /// Total by construction: a target this cannot decompose contributes nothing, so a shape nobody anticipated yields *fewer* determined binders and a stricter guard, never a looser one.
-pub fn pinned_by_targets(targets: &[Term]) -> Vec<Free> {
-    targets
-        .iter()
-        .filter_map(|target| match &**target {
-            Subterm::Var(var) => Some(var.unwrap().clone()),
-            // Anything else — an application, a constructor's included, as well as a projection, an intrinsic, or a stuck match — determines nothing.
-            _ => None,
-        })
-        .collect()
+///
+/// Each binder is answered with the first index position that pins it, because that is where a value of the family carries it. Both large-elimination guards ask only *whether* a binder is pinned; erasure asks *where*, since a `Prop` family's constructor is deleted and a pinned payload survives only as the scrutinee's index at that position.
+pub fn pinned_by_targets(targets: &[Term]) -> Pinned {
+    let mut pinned: Vec<(Free, usize)> = Vec::new();
+    for (position, target) in targets.iter().enumerate() {
+        // Anything but a bare binder — an application, a constructor's included, as well as a projection, an intrinsic, or a stuck match — determines nothing.
+        if let Subterm::Var(var) = &**target
+            && !pinned.iter().any(|(binder, _)| binder == var.unwrap())
+        {
+            pinned.push((var.unwrap().clone(), position));
+        }
+    }
+    Pinned(pinned)
+}
+
+/// The payload binders [`pinned_by_targets`] found determined, each at the first index position whose target it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pinned(Vec<(Free, usize)>);
+
+impl Pinned {
+    /// Whether the targets determine `binder`.
+    pub fn contains(&self, binder: &Free) -> bool {
+        self.position(binder).is_some()
+    }
+
+    /// The index position a value of the family carries `binder` at, when the targets determine it.
+    pub fn position(&self, binder: &Free) -> Option<usize> {
+        self.0
+            .iter()
+            .find(|(pinned, _)| pinned == binder)
+            .map(|(_, position)| *position)
+    }
 }
 
 /// The outcome of inversion: either every index position decomposed (or refused) cleanly, yielding the forced arm-binder solutions, or some position clashed definitely and the arm is unreachable.

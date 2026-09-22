@@ -11,6 +11,7 @@ use {
         Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_case_key, reduce_with,
         refine_head,
     },
+    curios_analysis::{case_target_indices, pinned_by_targets},
     curios_core::{Free, Level, MatchResult},
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
@@ -757,7 +758,7 @@ impl Lowering {
         self.open_arm(context, &expected, default)
     }
 
-    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. Every payload binder is erased and resolves to the unit constant; the head is never erased (it is a dropped value).
+    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. The head is never erased (it is a dropped value), and neither is the constructor it stood for, so a payload binder resolves to what the large-elimination guard let it be: the unit constant for a proof, and for a binder the index targets pin, the scrutinee's actual index at the position that pins it.
     fn erase_erasable_scrutinee(
         &mut self,
         context: &mut Context,
@@ -782,9 +783,21 @@ impl Lowering {
             .collect::<Vec<_>>();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
-        for label in &labels {
-            let unit = self.unit();
-            self.environment.bind(label, unit);
+        // The index is walked here, before the arm's frame: inside it the actual index is refined to its target, which is the very binder being bound.
+        let pinned = pinned_by_targets(&case_target_indices(telescope.clone(), &vars));
+        for (label, hint) in labels.iter().zip(scope.hint_iter()) {
+            let atom = match pinned.position(label) {
+                Some(position) => {
+                    let index = &m.actual_indices[position];
+                    let index_type = infer(context, index)?;
+                    match is_erasable(context, &index_type)? {
+                        true => self.unit(),
+                        false => emitted!(self.walk(context, index, &index_type, hint)?),
+                    }
+                }
+                None => self.unit(),
+            };
+            self.environment.bind(label, atom);
         }
 
         context.with_frame(|context| {
