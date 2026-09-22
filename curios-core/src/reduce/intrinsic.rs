@@ -593,23 +593,41 @@ pub fn reduce_intrinsic(
         )),
         Intrinsic::NatShl(left, right) => {
             let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, nat_shift_laws);
-            then_coefficient(reducer, shifted, |coefficient, value| {
+            let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
                 Term::intrinsic(Intrinsic::nat_mul(
                     Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
                     value,
                 ))
-            })
-        }
-        Intrinsic::NatShr(left, right) => Ok(then_laws(
-            reduce_nat_binary(
+            })?;
+            then_power(
                 reducer,
-                left,
-                right,
-                |l, r| l.checked_shr(r).map(Intrinsic::Nat),
-                Intrinsic::NatShr,
-            )?,
-            nat_shift_laws,
-        )),
+                shifted,
+                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                Intrinsic::NatShl,
+                |coefficient, value, power| {
+                    Term::intrinsic(Intrinsic::nat_mul(
+                        Term::intrinsic(Intrinsic::nat_mul(
+                            Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+                            value,
+                        )),
+                        power,
+                    ))
+                },
+            )
+        }
+        Intrinsic::NatShr(left, right) => {
+            let shifted = then_laws(
+                reduce_nat_binary(
+                    reducer,
+                    left,
+                    right,
+                    |l, r| l.checked_shr(r).map(Intrinsic::Nat),
+                    Intrinsic::NatShr,
+                )?,
+                nat_shift_laws,
+            );
+            then_split_shift(reducer, shifted, Intrinsic::NatShr)
+        }
         Intrinsic::IntType => Ok(Subterm::Intrinsic(Intrinsic::IntType)),
         Intrinsic::Int(value) => Ok(Subterm::Intrinsic(Intrinsic::Int(value.clone()))),
         // The signed comparisons read through the group's difference, as the `Nat` family reads through cancellation: `compare_int` moves what both sides share to one side by sign, and a pair whose residuals are two constants decides.
@@ -751,26 +769,44 @@ pub fn reduce_intrinsic(
                 |value, amount| value.checked_shl(amount),
                 Intrinsic::IntShl,
             )?;
-            then_coefficient(reducer, shifted, |coefficient, value| {
+            let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
                 Term::intrinsic(Intrinsic::IntMul(
                     Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
                     value,
                 ))
-            })
+            })?;
+            then_power(
+                reducer,
+                shifted,
+                Term::intrinsic(Intrinsic::Int(Integer::from(1i32))),
+                Intrinsic::IntShl,
+                |coefficient, value, power| {
+                    Term::intrinsic(Intrinsic::IntMul(
+                        Term::intrinsic(Intrinsic::IntMul(
+                            Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
+                            value,
+                        )),
+                        power,
+                    ))
+                },
+            )
         }
-        Intrinsic::IntShr(left, right) => reduce_int_shift(
-            reducer,
-            left,
-            right,
-            |value, amount| {
-                operand_bound(
-                    value,
-                    amount.map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
-                )
-            },
-            |value, amount| Some(&value >> &amount),
-            Intrinsic::IntShr,
-        ),
+        Intrinsic::IntShr(left, right) => {
+            let shifted = reduce_int_shift(
+                reducer,
+                left,
+                right,
+                |value, amount| {
+                    operand_bound(
+                        value,
+                        amount.map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
+                    )
+                },
+                |value, amount| Some(&value >> &amount),
+                Intrinsic::IntShr,
+            )?;
+            then_split_shift(reducer, shifted, Intrinsic::IntShr)
+        }
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
         Intrinsic::Flt(flt) => Ok(Subterm::Intrinsic(Intrinsic::Flt(*flt))),
         Intrinsic::FltAdd(left, right) => reduce_flt_binary(

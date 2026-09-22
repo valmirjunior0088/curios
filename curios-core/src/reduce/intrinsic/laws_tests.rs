@@ -1745,6 +1745,62 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 vec![(&nat_x, lit(4)), (&nat_y, lit(3))],
             ],
         ),
+        // A shift by a symbolic count: a left shift is its value times the power `shl(1, k)`, the count's literal floor peeled into the coefficient, and a right shift takes a floored count in two steps — at both carriers, and below zero for `Int`.
+        (
+            "shl(y, x + 1) = 2 * shl(y, x)",
+            Term::intrinsic(Intrinsic::NatShl(y.clone(), plus(x.clone(), lit(1)))),
+            mul(
+                lit(2),
+                Term::intrinsic(Intrinsic::NatShl(y.clone(), x.clone())),
+            ),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                vec![(&nat_x, lit(5)), (&nat_y, lit(7))],
+            ],
+        ),
+        (
+            "shl(2, x) = shl(1, x + 1)",
+            Term::intrinsic(Intrinsic::NatShl(lit(2), x.clone())),
+            Term::intrinsic(Intrinsic::NatShl(lit(1), plus(x.clone(), lit(1)))),
+            nats(),
+        ),
+        (
+            "shr(y, x + 1) = shr(shr(y, x), 1)",
+            Term::intrinsic(Intrinsic::NatShr(y.clone(), plus(x.clone(), lit(1)))),
+            Term::intrinsic(Intrinsic::NatShr(
+                Term::intrinsic(Intrinsic::NatShr(y.clone(), x.clone())),
+                lit(1),
+            )),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(9))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(29))],
+            ],
+        ),
+        (
+            "shl(i, x + 2) = 4 * shl(i, x)",
+            Term::intrinsic(Intrinsic::IntShl(i.clone(), plus(x.clone(), lit(2)))),
+            int_mul(
+                integer(4),
+                Term::intrinsic(Intrinsic::IntShl(i.clone(), x.clone())),
+            ),
+            vec![
+                vec![(&int_i, integer(-3)), (&nat_x, lit(0))],
+                vec![(&int_i, integer(5)), (&nat_x, lit(3))],
+            ],
+        ),
+        (
+            "shr(i, x + 1) = shr(shr(i, x), 1)",
+            Term::intrinsic(Intrinsic::IntShr(i.clone(), plus(x.clone(), lit(1)))),
+            Term::intrinsic(Intrinsic::IntShr(
+                Term::intrinsic(Intrinsic::IntShr(i.clone(), x.clone())),
+                lit(1),
+            )),
+            vec![
+                vec![(&int_i, integer(-7)), (&nat_x, lit(0))],
+                vec![(&int_i, integer(-29)), (&nat_x, lit(2))],
+                vec![(&int_i, integer(13)), (&nat_x, lit(1))],
+            ],
+        ),
         (
             "(i / (j * j + 1)) * (j * j + 1) + i % (j * j + 1) = i",
             int_add(

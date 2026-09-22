@@ -331,6 +331,67 @@ pub(super) fn then_coefficient(
     }
 }
 
+/// A left shift by a *symbolic* count, read as the product it is where [`then_coefficient`] reads a literal one: `shl(v, k) = v · 2ᵏ`, the power spelled as the atom `shl(1, k₀)` over the count's symbolic part and the count's literal floor peeled into the coefficient — `shl(v, k₀ + f) = 2ᶠ · v · shl(1, k₀)` — on `Nat` and on `Int`, where it holds below zero too.
+///
+/// **The floor is what makes a count inductive.** `shl(v, k + 1) = 2 · shl(v, k)` is this rule at `f = 1`, so a proof about a shift recurses on its count's successor as a proof about any `Nat` does, and the fast shift is the one reasoned about rather than a library power standing in for it. The value leaves the shift with its literal factors, so `shl(2, x)` and `shl(1, x + 1)` are one monomial. The coefficient is charged before it is built, under the same [`shift_bound`]; the atom itself — `shl(1, k₀)` over a floorless count — is its own normal form, which is what keeps the rule from re-entering.
+pub(super) fn then_power(
+    reducer: &mut impl Reducer,
+    result: Subterm,
+    one: Term,
+    rebuild: fn(Term, Term) -> Intrinsic,
+    product: impl FnOnce(Natural, Term, Term) -> Term,
+) -> Result<Subterm, ReduceError> {
+    let (Subterm::Intrinsic(Intrinsic::NatShl(value, count))
+    | Subterm::Intrinsic(Intrinsic::IntShl(value, count))) = &result
+    else {
+        return Ok(result);
+    };
+    let (floor, inner) = Nat::decompose(count);
+    if Nat::is_zero(&inner) || (floor.is_zero() && *value == one) {
+        return Ok(result);
+    }
+    let Some(amount) = floor.to_u64() else {
+        return Ok(result);
+    };
+    reducer.spend(shift_bound(1, Some(amount)))?;
+
+    match Natural::one().checked_shl(floor) {
+        Some(coefficient) => {
+            let power = Term::intrinsic(rebuild(one, inner));
+            Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(
+                coefficient,
+                value.clone(),
+                power,
+            ))?))
+        }
+        None => Ok(result),
+    }
+}
+
+/// A right shift whose count carries a literal floor over a symbolic part, taken in two steps — `shr(v, k₀ + f) = shr(shr(v, k₀), f)` — on `Nat` and on `Int`, since a floored quotient by `2ᵏ⁰` and then by `2ᶠ` is the floored quotient by their product, below zero as above it. The twin of [`then_power`] for the one direction a coefficient cannot carry: `shr(v, k₀ + 1)` is `shr(v, k₀) / 2`, and spelling it so would build a division node, which carries a proof that its divisor is nonzero that a reducer may not invent.
+pub(super) fn then_split_shift(
+    reducer: &mut impl Reducer,
+    result: Subterm,
+    rebuild: fn(Term, Term) -> Intrinsic,
+) -> Result<Subterm, ReduceError> {
+    let (Subterm::Intrinsic(Intrinsic::NatShr(value, count))
+    | Subterm::Intrinsic(Intrinsic::IntShr(value, count))) = &result
+    else {
+        return Ok(result);
+    };
+    let (floor, inner) = Nat::decompose(count);
+    if floor.is_zero() || Nat::is_zero(&inner) {
+        return Ok(result);
+    }
+    let peeled = rebuild(
+        Term::intrinsic(rebuild(value.clone(), inner)),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(floor))),
+    );
+    Ok(Term::unwrap_or_clone(
+        reducer.reduce_forced(Term::intrinsic(peeled))?,
+    ))
+}
+
 /// Reduce the operand of a `Nat` unary intrinsic, then either `fold` the literal or `rebuild` the neutral term from the reduced operand.
 pub(super) fn reduce_nat_unary(
     reducer: &mut impl Reducer,

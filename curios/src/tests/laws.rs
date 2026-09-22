@@ -194,10 +194,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Nat/shl(x, 3), 8 * x)",
             "Eq(Nat/shl(x + 1, 2), 4 * x + 4)",
             "Eq(Nat/shl(x, 1) + Nat/shl(y, 1), 2 * (x + y))",
+            // A symbolic count is the power `shl(1, k)` as an atom, the count's literal floor peeled into the coefficient — which is what lets a proof about a shift recurse on its count's successor — and a right shift takes a floored count in two steps.
+            "Eq(Nat/shl(y, x + 1), 2 * Nat/shl(y, x))",
+            "Eq(Nat/shl(y, x + 3), 8 * Nat/shl(y, x))",
+            "Eq(Nat/shl(2, x), Nat/shl(1, x + 1))",
+            "Eq(Nat/shl(y + 1, x), Nat/shl(y, x) + Nat/shl(1, x))",
+            "Eq(Nat/shr(y, x + 1), Nat/shr(Nat/shr(y, x), 1))",
         ],
         refused: &[
-            // A symbolic count is no coefficient: `2ˣ` is not a literal, and the normal form has no exponential to hold it.
-            "Eq(Nat/shl(2, x), Nat/shl(1, x + 1))",
+            // A candidate: the exponent law holds, and follows from the rows above by induction on `y`, but a count's *symbolic* summands stay one atom rather than splitting into a product of powers.
+            "Eq(Nat/shl(1, x + y), Nat/shl(1, x) * Nat/shl(1, y))",
             // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
             "Eq(Nat/shr(x * 4, 2), x)",
         ],
@@ -227,7 +233,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Int",
-        binders: "i: Int, j: Int, k: Int, h: (Int) -> Int",
+        binders: "i: Int, j: Int, k: Int, h: (Int) -> Int, n: Nat",
         held: &[
             // A summand meets its own spelling, as on `Nat`.
             "Eq(h(i + 1) + h(j + 1), h(j + 1) + h(i + 1))",
@@ -278,6 +284,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Int/shl(i, 1), i * 2)",
             "Eq(Int/shl(i, 3), 8 * i)",
             "Eq(Int/shl(i + j, 1), 2 * i + 2 * j)",
+            // And by a symbolic count, as on `Nat`: the power as an atom with the count's floor peeled, and a floored right shift in two steps.
+            "Eq(Int/shl(i, n + 1), 2 * Int/shl(i, n))",
+            "Eq(Int/shr(i, n + 1), Int/shr(Int/shr(i, n), 1))",
             // Divisibility, as on `Nat`: the argument needs integers and nothing more.
             "Eq(i * 2 + 1 == j * 2, false)",
             "Eq(i * 2 + 1 != j * 2, true)",
