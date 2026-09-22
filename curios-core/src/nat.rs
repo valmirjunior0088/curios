@@ -84,7 +84,7 @@ impl Nat {
         ))
     }
 
-    /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The type level pretends ℕ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend. `None` on a symbolic operand, like [`Nat::checked_div`].
+    /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. ℕ is unbounded at every layer, the running program included, so these impose no width. `None` on a symbolic operand, like [`Nat::checked_div`].
     pub(crate) fn checked_bitand(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_natural()? & other.to_natural()?))
     }

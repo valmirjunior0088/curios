@@ -229,9 +229,9 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a scalar operation. `IntDiv` may trap, the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly eight bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm must cover every operation whose fold reports a *language-partial* trap. It is deliberately narrower than [`Semantics::fold_operation`]'s whole `WouldTrap` set: the carrier-overflow refusals (add, multiply, left shift past `u32`/`i32`) do not appear here, because that runtime guard is the i31 envelope `curios-emit` materializes into — `curios-cont`'s `Intrinsic::effect` states the same split from the other side, and none of it may travel upward. Every other scalar operation is total and allocation-free.
+    /// The behavior of a scalar operation. `IntDiv` may trap, the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly eight bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm must cover every operation whose fold reports a *language-partial* trap. No size is refused among them: `Nat` and `Int` grow past the i31 fast path into a boxed magnitude, so add, multiply and left shift are total here, as `curios-cont`'s `Intrinsic::effect` states them from the other side. Every other scalar operation is total and allocation-free.
     ///
-    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` alone keeps the classification, and for the other half of its old note — signed overflow, which is `i32::MIN / -1` and is a *range* fact rather than a domain one, so the precondition says nothing about it and the width the emitter enforces is where it lives. `IntRem` sheds it because the remainder instruction traps only on the divisor.
+    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` alone keeps the classification, for the other half of its old note — signed overflow, `i32::MIN / -1`, a *range* fact rather than a domain one, so the precondition says nothing about it. The running program no longer has it, since a quotient past the i31 grows into a boxed magnitude, so the classification is conservative: it costs an optimization and never a wrong program. `IntRem` sheds it because the remainder instruction traps only on the divisor.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
@@ -325,7 +325,7 @@ pub enum TrapKind {
 }
 
 impl Semantics {
-    /// Constant-fold a scalar operation over its operands, under the numeric law: exact `u32`/`i32` — add, multiply, and left shift refuse a result past the carrier as a [`FoldOutcome::WouldTrap`], never wrapping it, while `Nat` subtraction is monus — and bit-preserving binary64. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
+    /// Constant-fold a scalar operation over its operands, under the numeric law: `Nat` and `Int` exact and unbounded — `Nat` subtraction is monus, and a product or left shift whose result would pass `allowance` bits is declined rather than built — and bit-preserving binary64. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
     pub fn fold_operation(
         operation: Operation,
         operands: &[Constant],

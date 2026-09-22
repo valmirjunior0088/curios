@@ -19,7 +19,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
         ),
         Some(Literal::Nat(Natural::from(42u32)))
     );
-    // The numeric law: the folder computes in exact u32; the i31 envelope is the backend's problem (an out-of-range literal traps at materialization).
+    // The numeric law: the folder computes exactly, past any machine width, and a result past the i31 materializes as a boxed magnitude.
     assert_eq!(
         evaluate(
             Intrinsic::NatAdd,

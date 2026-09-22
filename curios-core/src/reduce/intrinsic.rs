@@ -560,7 +560,7 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_lte,
         ),
-        // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The runtime's 31-bit carrier is imposed only in the backend, never here, and it narrows by refusing: a `shl` that leaves the carrier panics rather than truncating, and `shr` is logical.
+        // Bitwise ops fold on unbounded ℕ, which the running program computes too: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The backend's i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
         Intrinsic::NatAnd(left, right) => Ok(then_laws(
             reduce_nat_binary(
                 reducer,
@@ -738,7 +738,7 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::IntLe,
         ),
-        // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed 31-bit carrier is imposed only in the backend, never here, and it narrows by refusing: a `shl` that leaves the carrier panics rather than truncating, and `shr` is `shr_s`.
+        // Bitwise ops fold on unbounded ℤ, which the running program computes too: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The backend's signed i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
         Intrinsic::IntAnd(left, right) => reduce_int_binary(
             reducer,
             left,

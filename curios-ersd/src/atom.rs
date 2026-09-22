@@ -19,7 +19,7 @@ pub enum Atom {
 
 /// A leaf constant — the scalar and packed-binary domain of erased Core.
 ///
-/// Identity is exact and bitwise: `Nat` and `Int` are unbounded — whatever the theory computed, since no erased stage narrows and the emitter's envelope refuses at materialization — `Flt` compares by bit pattern (NaN payloads and signed zeros included), and `Bin` compares by logical bit content independent of its backing window. Interning in the module's constant arena keys on this identity, so equal constants share one [`ConstantId`]. There are no aggregate constants: products, variants, and lists with constant elements are built by construction statements over these leaves.
+/// Identity is exact and bitwise: `Nat` and `Int` are unbounded — whatever the theory computed, since no erased stage narrows and the emitter materializes a literal past the i31 as a boxed magnitude — `Flt` compares by bit pattern (NaN payloads and signed zeros included), and `Bin` compares by logical bit content independent of its backing window. Interning in the module's constant arena keys on this identity, so equal constants share one [`ConstantId`]. There are no aggregate constants: products, variants, and lists with constant elements are built by construction statements over these leaves.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Constant {

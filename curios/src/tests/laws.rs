@@ -189,7 +189,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Nat/shr(x, 0), x)",
             "Eq(Nat/shl(0, x), 0)",
             "Eq(Nat/shr(0, x), 0)",
-            // A left shift by a literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the emitter refuses a shift that leaves the carrier rather than truncating it. The coefficient is charged before it is built, and the product then distributes as any other does.
+            // A left shift by a literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the running program grows a shifted value into a boxed magnitude rather than truncating it. The coefficient is charged before it is built, and the product then distributes as any other does.
             "Eq(Nat/shl(x, 1), x * 2)",
             "Eq(Nat/shl(x, 3), 8 * x)",
             "Eq(Nat/shl(x + 1, 2), 4 * x + 4)",

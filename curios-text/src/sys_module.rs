@@ -391,7 +391,7 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             &["Whether `a` is above `b` or equal to it."],
             binary("ge", int(), bool_(), |a, b| Intrinsic::IntLe(b, a)),
         ),
-        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` refuses a result past the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). Both shifts count in `Nat`, as `Nat/shl` does, so a negative count — which the theory never defined — cannot be written. `not` is `/std/Int`'s `xor(x, -1)`.
+        // Bitwise ops on unbounded two's complement. `and`/`or`/`xor` are exact bit ops; `shl` is `· 2ⁿ` like `Nat/shl`; `shr` is arithmetic (sign-preserving). Both shifts count in `Nat`, as `Nat/shl` does, so a negative count — which the theory never defined — cannot be written. `not` is `/std/Int`'s `xor(x, -1)`.
         documented(
             &["Their bits, kept where both have one."],
             binary("and", int(), int(), Intrinsic::IntAnd),
