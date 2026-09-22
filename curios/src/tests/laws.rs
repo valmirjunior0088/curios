@@ -295,14 +295,29 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Int against Nat",
-        binders: "n: Nat, i: Int, p: Int/NonNeg(Nat/to_int(n)), q: Int/NonNeg(i)",
+        binders: "m: Nat, n: Nat, i: Int, p: Int/NonNeg(Nat/to_int(n)), q: Int/NonNeg(i), r: Int/NonNeg(Nat/to_int(m) + Nat/to_int(n))",
         held: &[
             // The transparency pair, as `Byte against Nat` states its own: `Int/to_nat` states `0 <= int`, so each conversion reduces back through the other, and a widened natural narrows back whatever proof it was handed.
             "Eq(Int/to_nat(Nat/to_int(n), @p), n)",
             "Eq(Nat/to_int(Int/to_nat(i, @q)), i)",
+            // `Nat/to_int` is an ordered-semiring embedding: it goes through a sum, a product and a floor, a non-negative combination of widened naturals narrows back to its preimage, and comparing two such combinations is comparing their preimages — which is what makes a widened natural's floor the one `Nat` already has.
+            "Eq(Nat/to_int(m + n), Nat/to_int(m) + Nat/to_int(n))",
+            "Eq(Nat/to_int(m * n), Nat/to_int(m) * Nat/to_int(n))",
+            "Eq(Nat/to_int(m + 3), Nat/to_int(m) + 3)",
+            "Eq(Int/to_nat(Nat/to_int(m) + Nat/to_int(n), @r), m + n)",
+            "Eq(Nat/to_int(n) >= +0, true)",
+            "Eq(Nat/to_int(m) + Nat/to_int(n) + 1 > +0, true)",
+            "Eq(Nat/to_int(m) <= Nat/to_int(m * n + m), true)",
+            // And a stuck comparison of widened naturals is the `Nat` comparison of the same relation.
+            "Eq(Nat/to_int(m) < Nat/to_int(n), m < n)",
+            "Eq(Nat/to_int(m) == Nat/to_int(n), m == n)",
         ],
-        // A candidate: a widened natural is never negative, but the comparison reads no floor off `Nat/to_int` as the oracle reads a ceiling off `Byte/to_nat`, so the first row above owes a proof its own reduction never consults.
-        refused: &["Eq(Nat/to_int(n) >= +0, true)"],
+        refused: &[
+            // Controls, and none is a law: a widened natural against an integer that may be negative, truncated subtraction as though it were the group's, and a difference of widened naturals as though it were one.
+            "Eq(Nat/to_int(n) <= i, true)",
+            "Eq(Nat/to_int(m - n), Nat/to_int(m) - Nat/to_int(n))",
+            "Eq(Nat/to_int(m) - Nat/to_int(n) >= +0, true)",
+        ],
     },
     Carrier {
         name: "Bool",

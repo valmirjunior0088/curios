@@ -967,6 +967,13 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             non_zero: qed(),
         })
     };
+    let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
+    let narrow = |int: Term| {
+        Term::intrinsic(Intrinsic::IntToNat {
+            int,
+            non_neg: qed(),
+        })
+    };
     let cat = |parts: Vec<Term>| {
         Term::intrinsic(Intrinsic::BinConcat {
             grain: Grain::X,
@@ -1676,6 +1683,67 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             ),
             int_sub(integer(0), i.clone()),
             ints(),
+        ),
+        // `Nat/to_int` as an ordered-semiring embedding: widening goes through a sum, a product and a floor; narrowing a non-negative combination of widened naturals reads its preimage back; and a comparison of two such combinations is decided by their preimages' — the floor `0 <= Nat/to_int(x)` being the one `Nat` already has.
+        (
+            "to_int(x + y) = to_int(x) + to_int(y)",
+            widen(plus(x.clone(), y.clone())),
+            int_add(widen(x.clone()), widen(y.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(4))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "to_int(x * y + 3) = to_int(x) * to_int(y) + 3",
+            widen(plus(mul(x.clone(), y.clone()), lit(3))),
+            int_add(int_mul(widen(x.clone()), widen(y.clone())), integer(3)),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(4))],
+                vec![(&nat_x, lit(5)), (&nat_y, lit(6))],
+            ],
+        ),
+        (
+            "to_nat(to_int(x) + to_int(y) + 2) = x + y + 2",
+            narrow(int_add(
+                int_add(widen(x.clone()), widen(y.clone())),
+                integer(2),
+            )),
+            plus(plus(x.clone(), y.clone()), lit(2)),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(8))],
+            ],
+        ),
+        (
+            "0 <= to_int(x) = true",
+            Term::intrinsic(Intrinsic::IntLe(integer(0), widen(x.clone()))),
+            boolean(true),
+            nats(),
+        ),
+        (
+            "0 < to_int(x) + to_int(y) + 1 = true",
+            Term::intrinsic(Intrinsic::IntLt(
+                integer(0),
+                int_add(int_add(widen(x.clone()), widen(y.clone())), integer(1)),
+            )),
+            boolean(true),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(9))],
+            ],
+        ),
+        (
+            "to_int(x) <= to_int(x * y + x) = true",
+            Term::intrinsic(Intrinsic::IntLe(
+                widen(x.clone()),
+                widen(plus(mul(x.clone(), y.clone()), x.clone())),
+            )),
+            boolean(true),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(4)), (&nat_y, lit(3))],
+            ],
         ),
         (
             "(i / (j * j + 1)) * (j * j + 1) + i % (j * j + 1) = i",

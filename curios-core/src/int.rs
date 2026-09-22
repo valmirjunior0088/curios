@@ -7,7 +7,7 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Cost, Intrinsic, Recombination, ReduceError, Reducer, Subterm, Term},
+    super::{Cost, Intrinsic, Nat, Recombination, ReduceError, Reducer, Subterm, Term},
     curios_num::Integer,
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -272,6 +272,46 @@ fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
             None => false,
         }
     })
+}
+
+/// `Nat/to_int` of a reduced `Nat`, pushed through its normal form: the successor floor becomes the constant, a sum the sum of the widened summands, a product the product of the widened factors, and anything else — a symbol, a truncated difference, a quotient, a remainder — the widened atom it is. ℕ → ℤ is a semiring homomorphism, so every step is an equation on values; it is what lets a sum of widened naturals cancel as `Int` sums do, and what [`int_preimage`] reads back.
+///
+/// A product of two symbolic sums stays the stuck product of their images, the line [`int_product`] draws for every `Int` product.
+pub fn int_of_nat(nat: &Term) -> Term {
+    recurse(|| match &**nat {
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => literal(zero()),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
+            int_sum(&int_of_nat(inner), &literal(Integer::from(floor.clone())))
+        }
+        Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
+            int_sum(&int_of_nat(left), &int_of_nat(right))
+        }
+        Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+            int_product(&int_of_nat(left), &int_of_nat(right))
+        }
+        _ => Term::intrinsic(Intrinsic::NatToInt(nat.clone())),
+    })
+}
+
+/// The natural a reduced `Int` is the image of when it is one by construction: a non-negative constant over monomials with positive coefficients whose every factor is a widened natural. `None` for anything else — a negative coefficient, or a factor that is not widened, can make the value negative, and this reads no bound.
+///
+/// The inverse of [`int_of_nat`] on its image, rebuilt in `Nat`'s normal form. Two readers: `Int/to_nat`, whose inversion arm is the one-atom case of this, and the comparison, which decides a pair of such terms by comparing their preimages — ℕ → ℤ preserves and reflects order.
+pub fn int_preimage(term: &Term) -> Option<Term> {
+    let (constant, summands) = int_terms(term);
+    let floor = constant.to_natural()?;
+    let mut preimages = Vec::new();
+    for (coefficient, factors) in int_linear(summands) {
+        let coefficient = coefficient.to_natural()?;
+        let mut product = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        for factor in &factors {
+            let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &**factor else {
+                return None;
+            };
+            product = Nat::multiply(&product, nat);
+        }
+        preimages.push(Nat::scaled(coefficient, product));
+    }
+    Some(Nat::sum_over_floor(preimages, floor))
 }
 
 /// `-term`, in normal form: every coefficient and the constant negated. What `IntSub` folds through, so no subtraction node survives reduction.

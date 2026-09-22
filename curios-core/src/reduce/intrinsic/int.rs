@@ -6,7 +6,7 @@ use {
     super::*,
     crate::{
         ReduceError, Reducer, Term, int_cancel_common, int_has_stuck_product, int_monomial,
-        int_normalize, int_terms,
+        int_normalize, int_preimage, int_split_by_sign, int_terms,
     },
     curios_num::Natural,
 };
@@ -29,7 +29,7 @@ pub(super) fn compare_int(
 
     let outcome = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => from_ordering(l.cmp(&r)),
-        // Divisibility, as `compare_nat` reads it: the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is.
+        // Two sound verdicts, intersected: the preimages' order when both sides are widened naturals, and divisibility as `compare_nat` reads it — the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is.
         _ => {
             let (constant_left, summands_left) = int_terms(&left);
             let (constant_right, summands_right) = int_terms(&right);
@@ -38,14 +38,30 @@ pub(super) fn compare_int(
                 .chain(&summands_right)
                 .map(|summand| int_monomial(summand).0.magnitude());
             let difference = (constant_left - constant_right).magnitude();
+            let pulled_back = compare_preimages(reducer, &left, &right)?;
             match apart_modulo((&difference, &Natural::zero()), coefficients) {
-                true => Comparison::Ne,
-                false => Comparison::Stuck,
+                true => pulled_back.unequal(),
+                false => pulled_back,
             }
         }
     };
 
     Ok((outcome, left, right))
+}
+
+/// The verdict on two `Int`s that are, once their difference is split by sign, both non-negative combinations of widened naturals: the `Nat` comparison of their preimages, which is sound because ℕ → ℤ preserves and reflects order. `Stuck` for any other pair. What makes `0 <= Nat/to_int(n)` true — the floor a widened natural carries is `Nat`'s own, read through the embedding rather than restated.
+///
+/// It only ever decides: the neutral term the caller rebuilds on `Stuck` is its own residual pair, so a stuck comparison keeps the spelling its guard recorded.
+fn compare_preimages(
+    reducer: &mut impl Reducer,
+    left: &Term,
+    right: &Term,
+) -> Result<Comparison, ReduceError> {
+    let (left, right) = int_split_by_sign(left, right);
+    match (int_preimage(&left), int_preimage(&right)) {
+        (Some(left), Some(right)) => Ok(compare_nat(reducer, left, right)?.0),
+        _ => Ok(Comparison::Stuck),
+    }
 }
 
 /// Reduce an `Int` comparison through [`compare_int`]: `read` projects the outcome to this op's boolean, or `None` when the operands do not decide it, in which case the neutral term is rebuilt from the cancelled operands.

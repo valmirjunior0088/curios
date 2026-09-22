@@ -26,8 +26,9 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Peel, Subterm, Telescope, Term,
-        int_cancel_common, int_negate, int_product, int_split_by_sign, int_sum, int_terms,
-        normalize_concat, peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
+        int_cancel_common, int_negate, int_of_nat, int_preimage, int_product, int_split_by_sign,
+        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
+        project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -155,6 +156,16 @@ pub fn align_comparisons(
         None => (this, that, moved),
     };
 
+    // An `Int` comparison of widened naturals meets the `Nat` comparison of their preimages — `Nat/to_int(m) < Nat/to_int(n)` is `m < n` — because ℕ → ℤ preserves and reflects order. Probe-side, for the reason the split below is.
+    if let Some(pulled) = nat_comparison_of_int(&this, &that) {
+        reducer.spend(Cost::term(2))?;
+        return Ok(Some((pulled, that)));
+    }
+    if let Some(pulled) = nat_comparison_of_int(&that, &this) {
+        reducer.spend(Cost::term(2))?;
+        return Ok(Some((this, pulled)));
+    }
+
     // Two `Int` comparisons of one relation meet through their difference, which only a split taken whether or not anything cancels can see: `0 < j - i` is `i < j`, and `-i < -j` is `j < i`. See `int_split_by_sign` for why this is the judgment's spelling and never the fold's.
     if std::mem::discriminant(&this) == std::mem::discriminant(&that)
         && let (Some(this_split), Some(that_split)) =
@@ -165,6 +176,19 @@ pub fn align_comparisons(
         return Ok(Some((this_split, that_split)));
     }
     Ok(moved.then_some((this, that)))
+}
+
+/// `int`, an `Int` ordering or equality, as the `Nat` comparison of the same relation over its preimages, when `nat` is that relation and both of `int`'s sides split by sign into widened naturals; `None` otherwise.
+fn nat_comparison_of_int(int: &Intrinsic, nat: &Intrinsic) -> Option<Intrinsic> {
+    let (a, b, rebuild): (_, _, fn(Term, Term) -> Intrinsic) = match (int, nat) {
+        (Intrinsic::IntLt(a, b), Intrinsic::NatLt(..)) => (a, b, Intrinsic::NatLt),
+        (Intrinsic::IntLe(a, b), Intrinsic::NatLe(..)) => (a, b, Intrinsic::NatLe),
+        (Intrinsic::IntEql(a, b), Intrinsic::NatEql(..)) => (a, b, Intrinsic::NatEql),
+        (Intrinsic::IntNeq(a, b), Intrinsic::NatNeq(..)) => (a, b, Intrinsic::NatNeq),
+        _ => return None,
+    };
+    let (left, right) = int_split_by_sign(a, b);
+    Some(rebuild(int_preimage(&left)?, int_preimage(&right)?))
 }
 
 /// An `Int` ordering or equality with its operands split by sign, through `int_split_by_sign`; `None` for any other intrinsic.
@@ -596,7 +620,7 @@ pub fn reduce_intrinsic(
             |c| match c {
                 Comparison::Eq => Some(true),
                 Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(false),
-                _ => None,
+                Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
             },
             Intrinsic::IntEql,
         ),
@@ -607,7 +631,7 @@ pub fn reduce_intrinsic(
             |c| match c {
                 Comparison::Eq => Some(false),
                 Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(true),
-                _ => None,
+                Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
             },
             Intrinsic::IntNeq,
         ),
@@ -680,8 +704,8 @@ pub fn reduce_intrinsic(
             right,
             |c| match c {
                 Comparison::Lt => Some(true),
-                Comparison::Eq | Comparison::Gt => Some(false),
-                _ => None,
+                Comparison::Eq | Comparison::Gt | Comparison::Ge => Some(false),
+                Comparison::Le | Comparison::Ne | Comparison::Stuck => None,
             },
             Intrinsic::IntLt,
         ),
@@ -690,9 +714,9 @@ pub fn reduce_intrinsic(
             left,
             right,
             |c| match c {
-                Comparison::Lt | Comparison::Eq => Some(true),
+                Comparison::Lt | Comparison::Eq | Comparison::Le => Some(true),
                 Comparison::Gt => Some(false),
-                _ => None,
+                Comparison::Ge | Comparison::Ne | Comparison::Stuck => None,
             },
             Intrinsic::IntLe,
         ),
@@ -921,12 +945,8 @@ pub fn reduce_intrinsic(
                 return reducer.reduce(int.clone()).map(Term::unwrap_or_clone);
             }
 
-            Ok(Subterm::Intrinsic(
-                match inner.as_nat().and_then(|v| v.to_natural()) {
-                    Some(value) => Intrinsic::Int(Integer::from(value)),
-                    None => Intrinsic::NatToInt(inner),
-                },
-            ))
+            // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
+            Ok(Term::unwrap_or_clone(int_of_nat(&inner)))
         }
         // Into `Flt` the conversions are total and take no proof: rounding to nearest is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, and a magnitude past the largest finite value answers the infinity of its sign.
         Intrinsic::NatToFlt(inner) => reduce_nat_unary(
@@ -940,9 +960,14 @@ pub fn reduce_intrinsic(
             let span = int.span();
             let int = reducer.reduce_forced(int.clone())?;
 
-            // The other half of the inversion: ℕ embeds in ℤ, so a natural widened to `Int` is non-negative and narrows back to itself whatever proof the narrowing was handed.
+            // The other half of the inversion: ℕ embeds in ℤ, so a natural widened to `Int` is non-negative and narrows back to itself whatever proof the narrowing was handed — and so does any non-negative combination of widened naturals, which is the image of its preimage. `int_preimage` reads it; a single widened atom is its one-summand case.
             if let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &*int {
                 return reducer.reduce(nat.clone()).map(Term::unwrap_or_clone);
+            }
+            if int.as_int().is_none()
+                && let Some(preimage) = int_preimage(&int)
+            {
+                return Ok(Term::unwrap_or_clone(preimage));
             }
 
             match int.as_int() {
