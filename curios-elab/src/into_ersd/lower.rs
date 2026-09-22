@@ -329,23 +329,21 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         mask: &[bool],
-        mut telescope: Telescope<B>,
+        telescope: Telescope<B>,
         values: &[Term],
     ) -> Result<Result<Vec<curios_ersd::Atom>, Outcome>, Error> {
         let mut atoms = Vec::with_capacity(values.len());
+        let mut cursor = telescope.cursor();
         for (index, value) in values.iter().enumerate() {
-            match telescope {
-                Telescope::Cons(type_, rest) => {
-                    if !mask[index] {
-                        match self.kept_operand(context, value, &type_, None)? {
-                            Outcome::Emitted(atom) => atoms.push(atom),
-                            diverged => return Ok(Err(diverged)),
-                        }
-                    }
-                    telescope = rest.open(&[value]);
+            // Only a kept slot reads its domain, so an erased one steps past without opening it.
+            if !mask[index] {
+                let (_, type_) = cursor.entry().expect("erase: arity checked by elaborate");
+                match self.kept_operand(context, value, &type_, None)? {
+                    Outcome::Emitted(atom) => atoms.push(atom),
+                    diverged => return Ok(Err(diverged)),
                 }
-                Telescope::Done(_) => unreachable!("erase: arity checked by elaborate"),
             }
+            cursor.advance(value.clone());
         }
         Ok(Ok(atoms))
     }

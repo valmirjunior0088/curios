@@ -816,21 +816,18 @@ fn refine_arm(
     vars: &[Term],
     telescope: Telescope<Vec<Term>>,
 ) -> Result<Term, Error> {
-    let mut telescope = telescope;
+    let mut cursor = telescope.cursor();
     for (label, var) in labels.iter().zip(vars) {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                context.assume(label, &type_);
-                telescope = rest.open(&[var]);
-            }
-            Telescope::Done(_) => unreachable!("erase: constructor arity checked by elaborate"),
-        }
+        let (_, type_) = cursor
+            .entry()
+            .expect("erase: constructor arity checked by elaborate");
+        context.assume(label, &type_);
+        cursor.advance(var.clone());
     }
 
-    let target_indices = match &telescope {
-        Telescope::Done(targets) => (**targets).clone(),
-        Telescope::Cons(..) => unreachable!("erase: constructor arity checked by elaborate"),
-    };
+    let target_indices = cursor
+        .body()
+        .expect("erase: constructor arity checked by elaborate");
 
     let constructor_value = Term::variant_at(
         m.name.clone(),

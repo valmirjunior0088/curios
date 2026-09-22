@@ -3,7 +3,7 @@ use {
     crate::{
         HeadKey, WitnessKey, convert::convert, typing::display_mismatch, zonk_solved_term_metas,
     },
-    curios_core::{CalleeId, Global},
+    curios_core::{Advance, CalleeId, Global},
     curios_utilities::Span,
 };
 
@@ -397,40 +397,39 @@ impl InfixMethod {
         right: &Term,
         origin: &Term,
     ) -> Result<(Vec<(Plicity, Term)>, Term), Error> {
-        let mut telescope = self.signature.clone();
+        let mut cursor = self.signature.cursor();
         let mut marks = self.plicities.iter().copied();
         let mut positions = SlotPositions::default();
         let mut arguments = Vec::new();
 
         for operand in [left, right] {
-            let Telescope::Cons(_, rest) = telescope else {
-                panic!("a syn operator concept declares its method over both operands");
-            };
+            assert!(
+                cursor.entry().is_some(),
+                "a syn operator concept declares its method over both operands"
+            );
             let plicity = marks.next().unwrap_or(Plicity::Explicit);
             positions.next(plicity);
             arguments.push((plicity, operand.clone()));
-            telescope = rest.open(&[operand]);
+            cursor.advance(operand.clone());
         }
 
-        loop {
-            match telescope {
-                Telescope::Done(terminal) => return Ok((arguments, *terminal)),
-                Telescope::Cons(domain, rest) => {
-                    let plicity = marks.next().unwrap_or(Plicity::Explicit);
-                    let filled = insert_auto_argument(
-                        context,
-                        plicity,
-                        &domain,
-                        None,
-                        &CalleeId::Operator(op),
-                        origin,
-                        positions.next(plicity),
-                    )?;
-                    telescope = rest.open(&[&filled]);
-                    arguments.push((plicity, filled));
-                }
-            }
+        while let Some((_, domain)) = cursor.entry() {
+            let plicity = marks.next().unwrap_or(Plicity::Explicit);
+            let filled = insert_auto_argument(
+                context,
+                plicity,
+                &domain,
+                None,
+                &CalleeId::Operator(op),
+                origin,
+                positions.next(plicity),
+            )?;
+            cursor.advance(filled.clone());
+            arguments.push((plicity, filled));
         }
+
+        let terminal = cursor.body().expect("a cursor past every entry");
+        Ok((arguments, terminal))
     }
 }
 
@@ -737,21 +736,15 @@ fn declared_result_shape(
             return None;
         }
         remaining = &remaining[explicit_count..];
-        let mut telescope = func_type.telescope.clone();
-        let mut position = 0;
-        let result = loop {
-            match telescope {
-                Telescope::Cons(binder_type, rest) => {
-                    let binder = context.fresh(rest.first_hint());
-                    if matches!(plicities.get(position), Some(Plicity::Explicit)) {
-                        explicit_binders.push((binder.clone(), binder_type.clone()));
-                    }
-                    position += 1;
-                    telescope = rest.open(&[&Term::free_var(&binder)]);
-                }
-                Telescope::Done(result) => break (*result).clone(),
+        let mut cursor = func_type.telescope.cursor();
+        while let Some((_, binder_type)) = cursor.entry() {
+            let explicit = matches!(plicities.get(cursor.args().len()), Some(Plicity::Explicit));
+            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+            if explicit {
+                explicit_binders.push((binder, binder_type));
             }
-        };
+        }
+        let result = cursor.body().expect("a cursor past every entry");
         whnf = reduce_with(context, &result).ok()?;
     }
     if !remaining.is_empty() {
@@ -979,18 +972,22 @@ pub(super) fn elaborate_func_check(
 
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
     let body = context.with_frame(|context| {
-        let mut written = telescope.clone();
         let e_plicities = ft.plicities().to_vec();
-        let mut expected_tele = ft.telescope;
-        let (mut w_idx, mut e_idx) = (0usize, 0usize);
+        let expected_telescope = ft.telescope;
+        let mut written = telescope.cursor();
+        let mut expecting = expected_telescope.cursor();
 
         loop {
-            match (written, expected_tele) {
-                (Telescope::Done(body), Telescope::Done(output)) => {
-                    break check(context, &body, *output);
+            let (w_idx, e_idx) = (written.args().len(), expecting.args().len());
+
+            match (written.entry(), expecting.entry()) {
+                (None, None) => {
+                    let body = written.body().expect("a cursor past every entry");
+                    let output = expecting.body().expect("a cursor past every entry");
+                    break check(context, &body, output);
                 }
                 // Written binders are exhausted: synthesize every remaining expected slot, which must be hidden — an explicit slot is never inserted (a missing-parameter arity error instead).
-                (Telescope::Done(body), Telescope::Cons(domain, rest)) => {
+                (None, Some((_, domain))) => {
                     let plicity = e_plicities[e_idx];
                     if plicity == Plicity::Explicit {
                         // Explicit slots against explicit binders, not the totals: the hidden slots are inserted rather than written, so a total names a count the author may not write — and did, pointing at the very spelling the surplus arm below refuses.
@@ -1003,41 +1000,35 @@ pub(super) fn elaborate_func_check(
                     let x = Term::free_var(&name);
                     assume_slot(context, &name, plicity, &domain);
                     domains.push((plicity, name, domain));
-                    written = Telescope::Done(body);
-                    expected_tele = rest.open(&[&x]);
-                    e_idx += 1;
+                    expecting.advance(x);
                 }
                 // Written binders remain but the expected telescope ended: every parameter is claimed and these claim nothing. No count pair says that — `(x, @A) => …` against `(x: Nat) -> Nat` agrees on totals *and* on explicit counts — so the surplus itself is the diagnosis.
-                (Telescope::Cons(..), Telescope::Done(_)) => {
+                (Some(_), None) => {
                     break Err(Error::surplus_func_binders(
                         telescope.len() - w_idx,
                         e_plicities.len(),
                     ));
                 }
-                (Telescope::Cons(w_domain, w_rest), Telescope::Cons(e_domain, e_rest)) => {
+                (Some((w_hint, w_domain)), Some((_, e_domain))) => {
                     let w_plicity = written_plicities[w_idx];
                     let e_plicity = e_plicities[e_idx];
                     if w_plicity == e_plicity {
                         // Consume both. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
                         let w_domain = crate::check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
-                        let name = context.fresh(w_rest.first_hint());
+                        let name = context.fresh(w_hint);
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);
                         domains.push((e_plicity, name, e_domain));
-                        written = w_rest.open(&[&x]);
-                        expected_tele = e_rest.open(&[&x]);
-                        w_idx += 1;
-                        e_idx += 1;
+                        written.advance(x.clone());
+                        expecting.advance(x);
                     } else if e_plicity != Plicity::Explicit {
                         // Insert this hidden expected slot; the written binder waits for the following expected slot.
                         let name = context.fresh(None);
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);
                         domains.push((e_plicity, name, e_domain));
-                        written = Telescope::Cons(w_domain, w_rest);
-                        expected_tele = e_rest.open(&[&x]);
-                        e_idx += 1;
+                        expecting.advance(x);
                     } else {
                         // A marked written binder reached an explicit slot.
                         break Err(Error::BinderPlicityMismatch {
@@ -1064,52 +1055,53 @@ pub(super) fn elaborate_func_infer(
     // The settle scope is captured before the walk assumes a single binder: every domain metavariable is born at the settling expectation's own frame, never under the lambda's, which is what the embedded-metavariable exemption in `solve` needs to commit the settled type.
     let scope = settle.map(|_| context.domain_scope());
 
+    // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
     fn walk(
         context: &mut Context,
-        body: Telescope<Term>,
+        telescope: &Telescope<Term>,
         plicities: &[Plicity],
         settle: Option<(&Term, &DomainScope)>,
         domains: &mut Vec<(Plicity, Free, Term)>,
     ) -> Result<(Term, Term), Error> {
-        match body {
-            Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
-            Telescope::Cons(domain, body_rest) => {
-                let domain = crate::check_is_sort(context, &domain)?.0;
+        let mut cursor = telescope.cursor();
 
-                // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A settle tier instead admits the hole as a named domain metavariable, per the function's contract above.
-                let reduced = reduce_with(context, &domain)?;
-                let domain = match &*reduced {
-                    Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
-                        None => return Err(Error::CannotInfer),
-                        Some((lambda, scope)) => {
-                            let result = context
-                                .metavar_entry(metavar.id)
-                                .map(|entry| entry.result.clone())
-                                .unwrap_or_else(Term::type_ground);
-                            let binder = body_rest.first_hint().unwrap_or("_").to_string();
-                            let named =
-                                context.fresh_domain_metavar(scope, result, lambda.span(), binder);
-                            context.solve_metavar(metavar.id, named.clone());
-                            named
-                        }
-                    },
-                    _ => domain,
-                };
+        while let Some((hint, domain)) = cursor.entry() {
+            let domain = crate::check_is_sort(context, &domain)?.0;
 
-                let plicity = plicities[domains.len()];
-                let name = context.fresh(body_rest.first_hint());
-                let x = Term::free_var(&name);
-                match plicity {
-                    Plicity::Witness => {
-                        check_witness_domain(context, &domain)?;
-                        context.assume_witness(&name, &domain);
+            // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A settle tier instead admits the hole as a named domain metavariable, per the function's contract above.
+            let reduced = reduce_with(context, &domain)?;
+            let domain = match &*reduced {
+                Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
+                    None => return Err(Error::CannotInfer),
+                    Some((lambda, scope)) => {
+                        let result = context
+                            .metavar_entry(metavar.id)
+                            .map(|entry| entry.result.clone())
+                            .unwrap_or_else(Term::type_ground);
+                        let binder = hint.unwrap_or("_").to_string();
+                        let named =
+                            context.fresh_domain_metavar(scope, result, lambda.span(), binder);
+                        context.solve_metavar(metavar.id, named.clone());
+                        named
                     }
-                    _ => context.assume(&name, &domain),
+                },
+                _ => domain,
+            };
+
+            let plicity = plicities[domains.len()];
+            let name = cursor.advance_fresh(|hint| context.fresh(hint));
+            match plicity {
+                Plicity::Witness => {
+                    check_witness_domain(context, &domain)?;
+                    context.assume_witness(&name, &domain);
                 }
-                domains.push((plicity, name, domain));
-                walk(context, body_rest.open(&[&x]), plicities, settle, domains)
+                _ => context.assume(&name, &domain),
             }
+            domains.push((plicity, name, domain));
         }
+
+        let body = cursor.body().expect("a cursor past every entry");
+        elaborate(context, &body, Mode::Infer)
     }
 
     let mut domains = Vec::new();
@@ -1117,8 +1109,8 @@ pub(super) fn elaborate_func_infer(
         (Some(lambda), Some(scope)) => Some((lambda, scope)),
         _ => None,
     };
-    let (body, output) = context
-        .with_frame(|context| walk(context, telescope.clone(), plicities, settle, &mut domains))?;
+    let (body, output) =
+        context.with_frame(|context| walk(context, telescope, plicities, settle, &mut domains))?;
 
     Ok((
         Term::func_marked(domains.clone(), body),

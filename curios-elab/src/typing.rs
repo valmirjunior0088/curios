@@ -3,10 +3,10 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
-    Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic, IntrinsicHead,
-    Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Spelling, Subterm,
-    Telescope, Term, Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
-    Visit,
+    Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
+    IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
+    Scope, Spelling, Step, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
+    UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use curios_utilities::Span;
 use std::{
@@ -249,12 +249,14 @@ fn subsume(
 fn subsume_telescope(
     context: &mut Context,
     term: &Term,
-    mut this: Telescope<Term>,
-    mut that: Telescope<Term>,
+    this: Telescope<Term>,
+    that: Telescope<Term>,
 ) -> Result<Option<Outcome>, Error> {
+    let mut walk = Lockstep::new(&this, &that);
+
     loop {
-        match (this, that) {
-            (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
+        match walk.step() {
+            Step::Entries { left, right, .. } => {
                 let outcome = super::convert_outcome(context, &Term::type_ground(), &left, &right)
                     .map_err(|error| {
                         Error::from_reduce(error, || {
@@ -267,22 +269,16 @@ fn subsume_telescope(
                     Outcome::Mismatch => return Ok(Some(Outcome::Mismatch)),
                     Outcome::Blocked(_) => return Ok(None),
                 }
-
-                let binder = context.fresh(left_rest.first_hint());
-                context.assume(&binder, &left);
-                let occurrence = Term::free_var(&binder);
-
-                this = left_rest.open(&[&occurrence]);
-                that = right_rest.open(&[&occurrence]);
+                context.advance_assumed(&mut walk, &left);
             }
-            (Telescope::Done(left), Telescope::Done(right)) => {
+            Step::Bodies(left, right) => {
                 return Ok(match subsume(context, term, &left, &right)? {
                     Outcome::Blocked(_) => None,
                     decided => Some(decided),
                 });
             }
             // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
-            _ => return Ok(Some(Outcome::Mismatch)),
+            Step::Mismatch => return Ok(Some(Outcome::Mismatch)),
         }
     }
 }
@@ -404,10 +400,10 @@ pub(crate) fn blocked_on_metavar(
                 Subterm::Func(func) => func.telescope.len(),
                 _ => 0,
             };
-            let mut walk = telescope.clone();
+            let mut walk = telescope.cursor();
             let mut domain_blocked = false;
             for _ in 0..arity {
-                let Telescope::Cons(domain, rest) = walk else {
+                let Some((_, domain)) = walk.entry() else {
                     break;
                 };
                 let reduced_domain = reduce_with(context, &domain)?;
@@ -415,7 +411,7 @@ pub(crate) fn blocked_on_metavar(
                     domain_blocked = true;
                     break;
                 }
-                walk = rest.open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);
+                walk.advance_fresh(|hint| context.fresh(hint));
             }
             // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
             domain_blocked
@@ -1001,26 +997,19 @@ impl MotiveShape<'_> {
                 params,
                 indices,
             } => {
-                let mut telescope = indices.clone();
-                let mut index_vars = Vec::with_capacity(index_binders.len());
+                let mut cursor = indices.cursor();
                 for binder in index_binders {
-                    let var = Term::free_var(binder);
-                    telescope = match telescope {
-                        Telescope::Cons(ty, rest) => {
-                            context.assume(binder, &ty);
-                            rest.open(&[&var])
-                        }
-                        Telescope::Done(_) => {
-                            unreachable!("index label count equals the index telescope's")
-                        }
-                    };
-                    index_vars.push(var);
+                    let (_, ty) = cursor
+                        .entry()
+                        .expect("index label count equals the index telescope's");
+                    context.assume(binder, &ty);
+                    cursor.advance(Term::free_var(binder));
                 }
                 Term::induct_type_at(
                     (*name).clone(),
                     universes.to_vec(),
                     params.to_vec(),
-                    index_vars,
+                    cursor.into_args(),
                 )
             }
         };
@@ -1041,15 +1030,11 @@ impl MotiveShape<'_> {
                 params,
                 indices,
             } => {
-                let mut telescope = indices.clone();
-                let mut index_vars = Vec::new();
-                while let Telescope::Cons(ty, rest) = telescope {
-                    let label = context.fresh(rest.first_hint());
-                    let var = Term::free_var(&label);
-                    telescope = rest.open(&[&var]);
-                    binders.push((label, ty));
-                    index_vars.push(var);
+                let mut cursor = indices.cursor();
+                while let Some((_, ty)) = cursor.entry() {
+                    binders.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
                 }
+                let index_vars = cursor.into_args();
                 Term::induct_type_at(
                     (*name).clone(),
                     universes.to_vec(),

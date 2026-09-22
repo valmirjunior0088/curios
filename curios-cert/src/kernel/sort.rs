@@ -234,23 +234,18 @@ fn sort_of_binders<B: Bound>(
     establish: Establish,
     terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, KernelError>,
 ) -> Result<Sort, KernelError> {
-    let mut telescope = telescope;
     let mut levels = Vec::new();
+    let mut cursor = telescope.cursor();
 
-    loop {
-        match telescope {
-            Telescope::Cons(domain, rest) => {
-                if let Sort::Type(level) = establish(kernel, &domain)? {
-                    levels.push(level);
-                }
-
-                let binder = kernel.fresh(rest.first_hint());
-                kernel.assume(&binder, &domain);
-                telescope = rest.open(&[&Term::free_var(&binder)]);
-            }
-            Telescope::Done(body) => return terminal(kernel, levels, *body),
+    while let Some((_, domain)) = cursor.entry() {
+        if let Sort::Type(level) = establish(kernel, &domain)? {
+            levels.push(level);
         }
+        kernel.advance_assumed(&mut cursor, &domain);
     }
+
+    let body = cursor.body().expect("a cursor past every entry");
+    terminal(kernel, levels, body)
 }
 
 /// The sort of an intrinsic type former.

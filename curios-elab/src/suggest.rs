@@ -16,9 +16,7 @@ use {
         zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
-    curios_core::{
-        Apply, Free, Global, InductType, Item, Module, StructType, Subterm, Telescope, Term, Var,
-    },
+    curios_core::{Apply, Free, Global, InductType, Item, Module, StructType, Subterm, Term, Var},
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -238,17 +236,13 @@ fn apply_fit(
 
     let mark = context.solution_mark();
     let mut args: Vec<(Term, Term)> = Vec::new();
-    let mut cursor = params.clone();
-    let output = loop {
-        match cursor {
-            Telescope::Done(output) => break *output,
-            Telescope::Cons(domain, rest) => {
-                let arg = context.fresh_hole_metavar(domain.clone(), None);
-                cursor = rest.open(&[&arg]);
-                args.push((arg, domain));
-            }
-        }
-    };
+    let mut cursor = params.cursor();
+    while let Some((_, domain)) = cursor.entry() {
+        let arg = context.fresh_hole_metavar(domain.clone(), None);
+        cursor.advance(arg.clone());
+        args.push((arg, domain));
+    }
+    let output = cursor.body().expect("a cursor past every entry");
 
     let fit = apply_fit_within(
         context, telescope, head, &args, plicities, &output, goal_type, hole,

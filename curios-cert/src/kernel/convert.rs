@@ -35,9 +35,9 @@ mod test_support;
 use {
     super::{Counted, Kernel, KernelError, Sort, infer, synth_neutral, unfold_spelling},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance,
-        InstanceHead, Level, Many, MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, decide_bool,
+        Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
+        InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, decide_bool,
         instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
     },
     curios_utilities::recurse,
@@ -216,21 +216,12 @@ fn eta_function(
     that: &Term,
 ) -> Result<bool, KernelError> {
     kernel.scoped(|kernel| {
-        let mut telescope = telescope;
-        let mut arguments = Vec::new();
-
-        let codomain = loop {
-            match telescope {
-                Telescope::Cons(domain, rest) => {
-                    let binder = kernel.fresh(rest.first_hint());
-                    kernel.assume(&binder, &domain);
-                    let occurrence = Term::free_var(&binder);
-                    telescope = rest.open(&[&occurrence]);
-                    arguments.push(occurrence);
-                }
-                Telescope::Done(codomain) => break *codomain,
-            }
-        };
+        let mut cursor = telescope.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            kernel.advance_assumed(&mut cursor, &domain);
+        }
+        let codomain = cursor.body().expect("a cursor past every entry");
+        let arguments = cursor.into_args();
 
         compare(
             kernel,
@@ -252,25 +243,21 @@ fn eta_tuple(
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
-    let mut telescope = telescope;
-    let mut index = 0;
+    let mut cursor = telescope.cursor();
 
-    loop {
-        match telescope {
-            Telescope::Cons(field, rest) => {
-                let left = Term::proj(this.clone(), index);
-                let right = Term::proj(that.clone(), index);
+    while let Some((_, field)) = cursor.entry() {
+        let index = cursor.args().len();
+        let left = Term::proj(this.clone(), index);
+        let right = Term::proj(that.clone(), index);
 
-                if !compare(kernel, history, &field, &left, &right)? {
-                    return Ok(false);
-                }
-
-                telescope = rest.open(&[&left]);
-                index += 1;
-            }
-            Telescope::Done(_) => return Ok(true),
+        if !compare(kernel, history, &field, &left, &right)? {
+            return Ok(false);
         }
+
+        cursor.advance(left);
     }
+
+    Ok(true)
 }
 
 /// Compare two weak-head normal forms by their heads.
@@ -537,18 +524,19 @@ fn params_at(
         return Ok(false);
     }
 
-    let Some(mut telescope) = telescope else {
+    let Some(telescope) = telescope else {
         return compare_each(kernel, history, this.iter(), that.iter());
     };
 
+    let mut cursor = telescope.cursor();
     for (left, right) in this.iter().zip(that) {
-        let Telescope::Cons(type_, rest) = telescope else {
+        let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
         if !compare(kernel, history, &type_, left, right)? {
             return Ok(false);
         }
-        telescope = rest.open(&[left]);
+        cursor.advance(left.clone());
     }
 
     Ok(true)
@@ -599,33 +587,34 @@ fn induct_type_args(
             );
         }
     };
-    let mut arity = instantiate_universe_levels_scoped(&arity, universes)?;
+    let arity = instantiate_universe_levels_scoped(&arity, universes)?;
 
-    // The parameters, against the outer telescope; each one opens the rest, because a later domain may name it.
+    // The parameters, against the outer telescope; each one opens what follows, because a later domain may name it.
+    let mut cursor = arity.cursor();
     for (left, right) in left_params.iter().zip(right_params) {
-        let Telescope::Cons(type_, rest) = arity else {
+        let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
         if !compare(kernel, history, &type_, left, right)? {
             return Ok(false);
         }
-        arity = rest.open(&[left]);
+        cursor.advance(left.clone());
     }
 
-    // Then the indices, which the parameter telescope terminates in — already scoped under the parameters just opened.
-    let Telescope::Done(indices) = arity else {
+    // Then the indices, which the parameter telescope terminates in — opened at the parameters just compared.
+    let Some(indices) = cursor.body() else {
         return Ok(false);
     };
-    let mut telescope = *indices;
 
+    let mut cursor = indices.cursor();
     for (left, right) in left_indices.iter().zip(right_indices) {
-        let Telescope::Cons(type_, rest) = telescope else {
+        let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
         if !compare(kernel, history, &type_, left, right)? {
             return Ok(false);
         }
-        telescope = rest.open(&[left]);
+        cursor.advance(left.clone());
     }
 
     Ok(true)
@@ -649,12 +638,13 @@ fn struct_eta(
         return Ok(false);
     };
 
-    let mut telescope = at.fields();
+    let fields = at.fields();
+    let mut cursor = fields.cursor();
     for (index, field) in literal.fields.iter().enumerate() {
-        let Telescope::Cons(type_, rest) = telescope else {
+        let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
         };
-        telescope = rest.open(&[field]);
+        cursor.advance(field.clone());
 
         if Sort::of(kernel, &type_)?.is_prop() {
             continue;
@@ -671,7 +661,7 @@ fn struct_eta(
     }
 
     // The walk is driven by the literal's fields, so a literal shorter than the declaration ends it early; whether the telescope was consumed is what says the walk covered the type. Anything left standing is a field the neutral was never asked about, and accepting there would equate a malformed literal with any neutral at all.
-    Ok(telescope.is_empty())
+    Ok(cursor.is_done())
 }
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
@@ -957,27 +947,19 @@ fn compare_binders<B: Bound>(
     terminal: impl FnOnce(&mut Kernel, &mut History, B, B) -> Result<bool, KernelError>,
 ) -> Result<bool, KernelError> {
     kernel.scoped(|kernel| {
-        let (mut this, mut that) = (this, that);
+        let mut walk = Lockstep::new(&this, &that);
 
         loop {
-            match (this, that) {
-                (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
+            match walk.step() {
+                Step::Entries { left, right, .. } => {
                     if !ground(kernel, history, &left, &right)? {
                         return Ok(false);
                     }
-
-                    let binder = kernel.fresh(left_rest.first_hint());
-                    kernel.assume(&binder, &left);
-                    let occurrence = Term::free_var(&binder);
-
-                    this = left_rest.open(&[&occurrence]);
-                    that = right_rest.open(&[&occurrence]);
+                    kernel.advance_assumed(&mut walk, &left);
                 }
-                (Telescope::Done(left), Telescope::Done(right)) => {
-                    return terminal(kernel, history, *left, *right);
-                }
+                Step::Bodies(left, right) => return terminal(kernel, history, left, right),
                 // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
-                _ => return Ok(false),
+                Step::Mismatch => return Ok(false),
             }
         }
     })
@@ -1088,7 +1070,7 @@ fn compare_each<'a>(
 fn compare_fields_at<B: Bound>(
     kernel: &mut Kernel,
     history: &mut History,
-    mut telescope: Option<Telescope<B>>,
+    telescope: Option<Telescope<B>>,
     this: &[Term],
     that: &[Term],
 ) -> Result<bool, KernelError> {
@@ -1096,10 +1078,12 @@ fn compare_fields_at<B: Bound>(
         return Ok(false);
     }
 
+    let mut cursor = telescope.as_ref().map(Telescope::cursor);
     for (left, right) in this.iter().zip(that) {
-        let type_ = match telescope.take() {
-            Some(Telescope::Cons(type_, rest)) => {
-                telescope = Some(rest.open(&[left]));
+        let entry = cursor.as_ref().and_then(Cursor::entry);
+        let type_ = match (entry, cursor.as_mut()) {
+            (Some((_, type_)), Some(cursor)) => {
+                cursor.advance(left.clone());
                 type_
             }
             _ => Term::type_ground(),

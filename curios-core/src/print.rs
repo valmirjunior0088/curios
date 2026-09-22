@@ -1123,38 +1123,32 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         }) => {
             let after = frame.deeper(telescope.len());
             let mut printers = Vec::with_capacity(telescope.len());
-            let mut cur = telescope;
+            let mut cursor = telescope.cursor();
             let mut minting = frame;
-            let mut idx = 0;
-            let output = loop {
-                match cur {
-                    Telescope::Done(body) => break *body,
-                    Telescope::Cons(ty, rest) => {
-                        let raw = rest.binder(0);
-                        let label = minting.label(raw);
-                        let mark = plicity_mark(plicities.get(idx));
-                        let typed = sub(ty, after);
-                        // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
-                        let named = match raw {
-                            Some(name) => name.hint().is_some() || rest.uses(0),
-                            None => false,
-                        };
-                        let printer = if named {
-                            flat([
-                                pure(mark),
-                                pure(frame.spelling.label(&label)),
-                                pure(": "),
-                                typed,
-                            ])
-                        } else {
-                            flat([pure(mark), typed])
-                        };
-                        printers.push(printer);
-                        cur = rest.open(&[&Term::free_var(&label)]);
-                        idx += 1;
-                    }
-                }
-            };
+            while let Some((_, ty)) = cursor.entry() {
+                let raw = cursor.binder();
+                let label = minting.label(raw);
+                let mark = plicity_mark(plicities.get(cursor.args().len()));
+                let typed = sub(ty, after);
+                // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
+                let named = match raw {
+                    Some(name) => name.hint().is_some() || cursor.binder_used(),
+                    None => false,
+                };
+                let printer = if named {
+                    flat([
+                        pure(mark),
+                        pure(frame.spelling.label(&label)),
+                        pure(": "),
+                        typed,
+                    ])
+                } else {
+                    flat([pure(mark), typed])
+                };
+                printers.push(printer);
+                cursor.advance(Term::free_var(&label));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
             flat([
                 listed("(".into(), false, printers, ")"),
                 pure(" -> "),
@@ -1171,26 +1165,20 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             }
             // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above. A parameter position cannot be elided, so an unnameable binder nothing references prints the way source spells it: `_`.
             let mut marked = Vec::with_capacity(telescope.len());
-            let mut cur = telescope;
+            let mut cursor = telescope.cursor();
             let mut minting = frame;
-            let mut idx = 0;
-            let body = loop {
-                match cur {
-                    Telescope::Done(body) => break *body,
-                    Telescope::Cons(_ty, rest) => {
-                        let label = minting.label(rest.binder(0));
-                        let mark = plicity_mark(plicities.get(idx));
-                        let shown = if label.hint().is_none() && !rest.uses(0) {
-                            "_".to_string()
-                        } else {
-                            frame.spelling.label(&label)
-                        };
-                        marked.push(format!("{mark}{shown}"));
-                        cur = rest.open(&[&Term::free_var(&label)]);
-                        idx += 1;
-                    }
-                }
-            };
+            while !cursor.is_done() {
+                let label = minting.label(cursor.binder());
+                let mark = plicity_mark(plicities.get(cursor.args().len()));
+                let shown = if label.hint().is_none() && !cursor.binder_used() {
+                    "_".to_string()
+                } else {
+                    frame.spelling.label(&label)
+                };
+                marked.push(format!("{mark}{shown}"));
+                cursor.advance(Term::free_var(&label));
+            }
+            let body = cursor.body().expect("a cursor past every entry");
             let param_str = if marked.len() == 1 && plicities.first() == Some(&Plicity::Explicit) {
                 marked.into_iter().next().unwrap()
             } else {
@@ -1224,14 +1212,14 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         Subterm::TupleType(TupleType { telescope, .. }) => {
             let after = frame.deeper(telescope.len());
             let mut items = Vec::with_capacity(telescope.len());
-            let mut cur = telescope;
+            let mut cursor = telescope.cursor();
             let mut minting = frame;
-            while let Telescope::Cons(ty, rest) = cur {
-                let raw = rest.binder(0);
+            while let Some((_, ty)) = cursor.entry() {
+                let raw = cursor.binder();
                 let label = minting.label(raw);
                 // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
                 let named = match raw {
-                    Some(name) => name.hint().is_some() || rest.uses(0),
+                    Some(name) => name.hint().is_some() || cursor.binder_used(),
                     None => false,
                 };
                 let typed = sub(ty, after);
@@ -1241,7 +1229,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                     typed
                 };
                 items.push(indent(printer));
-                cur = rest.open(&[&Term::free_var(&label)]);
+                cursor.advance(Term::free_var(&label));
             }
 
             // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/syntax.md` spells. Unspaced for the same reason the surface printer is.

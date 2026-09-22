@@ -1,42 +1,34 @@
 use {
     super::*,
     crate::{ArgumentSite, FrozenFrame, SettleTier, callee, exhausted_bound},
-    curios_core::{CalleeId, Spelling},
+    curios_core::{Advance, CalleeId, Cursor, Spelling},
 };
 
 pub(super) fn elaborate_func_type(
     context: &mut Context,
     ft: &FuncType,
 ) -> Result<(Term, Term), Error> {
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<Term>,
-        plicities: &[Plicity],
-        domains: &mut Vec<(Free, Term)>,
-    ) -> Result<Term, Error> {
-        match tele {
-            Telescope::Done(output) => crate::check_is_sort(context, &output).map(|(term, _)| term),
-            Telescope::Cons(ty, rest) => {
-                let domain = crate::check_is_sort(context, &ty)?.0;
-                let name = context.fresh(rest.first_hint());
-                let x = Term::free_var(&name);
-                // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
-                match plicities.get(domains.len()) {
-                    Some(Plicity::Witness) => {
-                        check_witness_domain(context, &domain)?;
-                        context.assume_witness(&name, &domain);
-                    }
-                    _ => context.assume(&name, &domain),
-                }
-                domains.push((name, domain));
-                walk(context, rest.open(&[&x]), plicities, domains)
-            }
-        }
-    }
-
+    // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
     let mut domains = Vec::new();
-    let output = context
-        .with_frame(|context| walk(context, ft.telescope.clone(), ft.plicities(), &mut domains))?;
+    let output = context.with_frame(|context| {
+        let mut cursor = ft.telescope.cursor();
+        while let Some((_, ty)) = cursor.entry() {
+            let domain = crate::check_is_sort(context, &ty)?.0;
+            let name = cursor.advance_fresh(|hint| context.fresh(hint));
+            // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
+            match ft.plicities().get(domains.len()) {
+                Some(Plicity::Witness) => {
+                    check_witness_domain(context, &domain)?;
+                    context.assume_witness(&name, &domain);
+                }
+                _ => context.assume(&name, &domain),
+            }
+            domains.push((name, domain));
+        }
+
+        let output = cursor.body().expect("a cursor past every entry");
+        crate::check_is_sort(context, &output).map(|(term, _)| term)
+    })?;
 
     let rebuilt = Term::func_type_marked(
         ft.plicities()
@@ -317,11 +309,9 @@ pub(super) fn elaborate_apply(
         }
 
         let mut args = Vec::with_capacity(ft.plicities().len());
-        let mut tele = ft.telescope.clone();
+        let mut cursor = ft.telescope.cursor();
         for (index, plicity) in ft.plicities().iter().enumerate() {
-            let Telescope::Cons(ty, rest) = tele else {
-                unreachable!("plicities parallel the telescope");
-            };
+            let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
             let position = positions.next(*plicity);
             let queue = match plicity {
                 Plicity::Implicit => &mut marked,
@@ -334,26 +324,18 @@ pub(super) fn elaborate_apply(
                         &func_label,
                         *plicity,
                         position,
-                        &rest,
+                        &opened_link(&cursor),
                         &ft.plicities()[index + 1..],
                     ))
                 })?,
-                None => insert_auto_argument(
-                    context,
-                    *plicity,
-                    &ty,
-                    rest.first_hint(),
-                    &func_label,
-                    term,
-                    position,
-                )?,
+                None => {
+                    insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
+                }
             };
-            tele = rest.open(&[&arg]);
+            cursor.advance(arg.clone());
             args.push((*plicity, arg));
         }
-        let Telescope::Done(output) = tele else {
-            unreachable!("plicities parallel the telescope");
-        };
+        let output = cursor.body().expect("plicities parallel the telescope");
 
         head = Term::apply_marked(head, args);
         head_type = reduce_with(context, &output)?;
@@ -403,11 +385,9 @@ pub(super) fn elaborate_apply(
     let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities().len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
     let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
-    let mut tele = original.clone();
+    let mut cursor = original.cursor();
     for (index, plicity) in ft.plicities().iter().enumerate() {
-        let Telescope::Cons(ty, rest) = tele else {
-            unreachable!("plicities parallel the telescope");
-        };
+        let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
         let position = positions.next(*plicity);
         let written = match plicity {
             Plicity::Explicit => Some(plain.pop_front().expect("arity checked above")),
@@ -424,7 +404,7 @@ pub(super) fn elaborate_apply(
                             | Subterm::Intrinsic(Intrinsic::List { .. })
                     )
                     && {
-                        let result_metavars = result_metavars_from(context, &rest);
+                        let result_metavars = result_metavars_from(context, &opened_link(&cursor));
                         blocked_on_metavar(
                             context,
                             &written,
@@ -452,29 +432,20 @@ pub(super) fn elaborate_apply(
                             &func_label,
                             *plicity,
                             position,
-                            &rest,
+                            &opened_link(&cursor),
                             &ft.plicities()[index + 1..],
                         ))
                     })?
                 }
             }
-            None => insert_auto_argument(
-                context,
-                *plicity,
-                &ty,
-                rest.first_hint(),
-                &func_label,
-                term,
-                position,
-            )?,
+            None => {
+                insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
+            }
         };
-        tele = rest.open(&[&arg]);
+        cursor.advance(arg.clone());
         elaborated.push(arg);
     }
-    let Telescope::Done(output) = tele else {
-        unreachable!("plicities parallel the telescope");
-    };
-    let output = *output;
+    let output = cursor.body().expect("plicities parallel the telescope");
 
     if let Mode::Check(expected) = &mode {
         // The output carries any pending's placeholder, which *blocks* rather than manufacturing the raw-substitution false mismatches the retired design had to bracket against — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
@@ -518,6 +489,14 @@ pub(super) fn elaborate_apply(
 /// Where the argument just checked sits: the parameter it filled, the mark it was written with and its position among the arguments written with that mark, and — for a plain argument — the next explicit parameter of function type, if any, the slot a lambda handed in here was likely meant for.
 ///
 /// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
+/// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
+fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
+    match cursor.rest() {
+        Telescope::Cons(_, link) => link,
+        Telescope::Done(_) => unreachable!("an entry stands at the cursor"),
+    }
+}
+
 fn argument_site(
     function: &CalleeId,
     plicity: Plicity,
@@ -561,17 +540,10 @@ fn result_metavars_from(
     context: &mut Context,
     rest: &Scope<One, Telescope<Term>>,
 ) -> BTreeSet<MetavarId> {
-    let mut tele = rest
-        .clone()
-        .open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);
-    loop {
-        match tele {
-            Telescope::Done(body) => return body.metavars(),
-            Telescope::Cons(_, next) => {
-                tele = next
-                    .clone()
-                    .open(&[&Term::free_var(&context.fresh(next.first_hint()))]);
-            }
-        }
+    let suffix = rest.open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);
+    let mut cursor = suffix.cursor();
+    while !cursor.is_done() {
+        cursor.advance_fresh(|hint| context.fresh(hint));
     }
+    cursor.body().expect("a cursor past every entry").metavars()
 }

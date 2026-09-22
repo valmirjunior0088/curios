@@ -16,9 +16,9 @@ use {
     },
     curios_analysis::group_totality,
     curios_core::{
-        Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType, Global,
-        InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
+        Global, InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl,
+        Subterm, Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Plicity, Qualifier, grown},
@@ -104,24 +104,18 @@ fn add_arity_sizing(
 /// **`plicity` says what each position binds as, and every caller states it.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope has always done for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it. A caller whose telescope has no witness entry says so by answering `Explicit` everywhere, rather than inheriting it from a default nobody restates.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
     plicity: impl Fn(usize) -> Plicity,
 ) -> Result<(Vec<(Free, Term)>, B), Error> {
     let mut entries = Vec::new();
-    let mut position = 0;
-    loop {
-        match telescope {
-            Telescope::Done(body) => break Ok((entries, *body)),
-            Telescope::Cons(ty, rest) => {
-                let rebuilt = crate::check_is_sort(context, &ty)?.0;
-                let label = context.fresh(rest.first_hint());
-                assume_entry(context, &label, &rebuilt, plicity(position));
-                telescope = rest.open(&[&Term::free_var(&label)]);
-                entries.push((label, rebuilt));
-                position += 1;
-            }
-        }
+    let mut cursor = telescope.cursor();
+    while let Some((_, ty)) = cursor.entry() {
+        let rebuilt = crate::check_is_sort(context, &ty)?.0;
+        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        assume_entry(context, &label, &rebuilt, plicity(entries.len()));
+        entries.push((label, rebuilt));
     }
+    Ok((entries, cursor.body().expect("a cursor past every entry")))
 }
 
 /// Assume one telescope entry, joining the witness scope when the entry is a `use` binder. The declaration-side twin of `super::binding`'s `assume_slot`.
@@ -137,23 +131,17 @@ fn assume_entry(context: &mut Context, label: &Free, type_: &Term, plicity: Plic
 /// The counterpart to [`check_telescope_entries`] for a telescope that has been through elaboration once already. Re-checking such a telescope is not merely wasted work — it elaborates terms that carry universe instances a *second* time, and what a caller then files is a set of instances no earlier check ever agreed to.
 fn assume_telescope_entries<B: Bound>(
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
     plicity: impl Fn(usize) -> Plicity,
 ) -> (Vec<(Free, Term)>, B) {
     let mut entries = Vec::new();
-    let mut position = 0;
-    loop {
-        match telescope {
-            Telescope::Done(body) => break (entries, *body),
-            Telescope::Cons(ty, rest) => {
-                let label = context.fresh(rest.first_hint());
-                assume_entry(context, &label, &ty, plicity(position));
-                telescope = rest.open(&[&Term::free_var(&label)]);
-                entries.push((label, ty));
-                position += 1;
-            }
-        }
+    let mut cursor = telescope.cursor();
+    while let Some((_, ty)) = cursor.entry() {
+        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        assume_entry(context, &label, &ty, plicity(entries.len()));
+        entries.push((label, ty));
     }
+    (entries, cursor.body().expect("a cursor past every entry"))
 }
 
 /// Record what a telescope's domains impose on `result_level`, in the caller's frame, and hand back the terminal opened under the binders assumed for them. The first `uniform_count` domains are parameters and get one rung of slack; the rest must fit under the result level itself. Split out of [`add_declaration_sizing`] so a nested arity can size its terminal inside its parameters' own scope.
@@ -165,13 +153,9 @@ fn telescope_sizing<B: Bound>(
     result_level: &Level,
     kind: &UniverseConstraintKind,
 ) -> Result<B, Error> {
-    let mut position = 0;
-    let mut telescope = telescope.clone();
-    loop {
-        let (domain, rest) = match telescope {
-            Telescope::Done(terminal) => break Ok(*terminal),
-            Telescope::Cons(domain, rest) => (domain, rest),
-        };
+    let mut cursor = telescope.cursor();
+    while let Some((hint, domain)) = cursor.entry() {
+        let position = cursor.args().len();
 
         let domain_sort = sort_term(context, &domain)?;
         let domain_sort = reduce_with(context, &domain_sort)?;
@@ -190,17 +174,16 @@ fn telescope_sizing<B: Bound>(
                         span: domain.span(),
                         kind: kind.clone(),
                         declaration: Some(declaration.to_string()),
-                        binder: rest.first_hint().map(str::to_string),
+                        binder: hint.map(str::to_string),
                     },
                 )
                 .map_err(Error::from)?;
         }
 
-        let label = context.fresh(rest.first_hint());
-        context.assume(&label, &domain);
-        telescope = rest.open(&[&Term::free_var(&label)]);
-        position += 1;
+        context.advance_assumed(&mut cursor, &domain);
     }
+
+    Ok(cursor.body().expect("a cursor past every entry"))
 }
 
 fn add_declaration_sizing<B: Bound>(
@@ -685,34 +668,32 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
         unreachable!("a parameterized struct's type-former is declared at a function type");
     };
 
-    let mut written = telescope.clone();
-    let mut lowered = struct_decl.arity.clone();
+    let mut written = telescope.cursor();
+    let mut lowered = struct_decl.arity.cursor();
     let mut params = Vec::with_capacity(count);
     for _ in 0..count {
-        let (Telescope::Cons(domain, written_rest), Telescope::Cons(_, lowered_rest)) =
-            (written, lowered)
-        else {
+        let (Some((_, domain)), Some((hint, _))) = (written.entry(), lowered.entry()) else {
             unreachable!(
                 "the former's telescope and the registry arity lower from one parameter list"
             );
         };
         // One binder opens both sides, so a later domain and the field telescope below refer to the same one.
-        let binder = context.fresh(lowered_rest.first_hint());
+        let binder = context.fresh(hint);
         let occurrence = Term::free_var(&binder);
-        written = written_rest.open(&[&occurrence]);
-        lowered = lowered_rest.open(&[&occurrence]);
+        written.advance(occurrence.clone());
+        lowered.advance(occurrence);
         params.push((binder, domain));
     }
 
-    let Telescope::Done(fields) = lowered else {
-        unreachable!("the arity's parameters are exactly `param_count` entries");
-    };
+    let fields = lowered
+        .body()
+        .expect("the arity's parameters are exactly `param_count` entries");
 
     context.update_struct(
         name,
         StructDecl {
             universe_context: struct_decl.universe_context,
-            arity: Telescope::build(params, *fields),
+            arity: Telescope::build(params, fields),
             result_sort: struct_decl.result_sort,
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,

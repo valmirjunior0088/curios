@@ -136,40 +136,36 @@ pub(super) fn insert_implicits_on_check(
     let mut head_args: Vec<(Plicity, Term)> = Vec::new();
     let mut binders: Vec<(Free, Term)> = Vec::new();
     let output = context.with_frame(|context| -> Result<Term, Error> {
-        let mut tele = ift.telescope.clone();
+        let mut cursor = ift.telescope.cursor();
         let mut plicities = ift.plicities().iter();
         let mut positions = SlotPositions::default();
-        loop {
-            match tele {
-                Telescope::Done(output) => break Ok(*output),
-                Telescope::Cons(domain, rest) => match plicities.next() {
-                    Some(&plicity @ (Plicity::Implicit | Plicity::Witness)) => {
-                        let position = positions.next(plicity);
-                        let arg = insert_auto_argument(
-                            context,
-                            plicity,
-                            &domain,
-                            rest.first_hint(),
-                            &func_label,
-                            term,
-                            position,
-                        )?;
-                        tele = rest.open(&[&arg]);
-                        head_args.push((plicity, arg));
-                    }
-                    Some(Plicity::Explicit) => {
-                        positions.next(Plicity::Explicit);
-                        let label = context.fresh(rest.first_hint());
-                        context.assume(&label, &domain);
-                        let var = Term::free_var(&label);
-                        tele = rest.open(&[&var]);
-                        binders.push((label, domain));
-                        head_args.push((Plicity::Explicit, var));
-                    }
-                    None => unreachable!("plicities parallel the telescope"),
-                },
+        while let Some((hint, domain)) = cursor.entry() {
+            match plicities.next() {
+                Some(&plicity @ (Plicity::Implicit | Plicity::Witness)) => {
+                    let position = positions.next(plicity);
+                    let arg = insert_auto_argument(
+                        context,
+                        plicity,
+                        &domain,
+                        hint,
+                        &func_label,
+                        term,
+                        position,
+                    )?;
+                    cursor.advance(arg.clone());
+                    head_args.push((plicity, arg));
+                }
+                Some(Plicity::Explicit) => {
+                    positions.next(Plicity::Explicit);
+                    let label = context.advance_assumed(&mut cursor, &domain);
+                    let var = Term::free_var(&label);
+                    binders.push((label, domain));
+                    head_args.push((Plicity::Explicit, var));
+                }
+                None => unreachable!("plicities parallel the telescope"),
             }
         }
+        Ok(cursor.body().expect("a cursor past every entry"))
     })?;
 
     let body = Term::apply_marked(rebuilt, head_args);

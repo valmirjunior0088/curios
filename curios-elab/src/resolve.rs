@@ -15,8 +15,8 @@ use {
         ParkedWork, ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
-        CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar,
-        MetavarId, StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
+        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar,
+        MetavarId, StructType, Subterm, Term, UniverseContext, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -538,13 +538,11 @@ fn instantiate(
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
             let mut bounds: Vec<(MetavarId, Term, ImplicitOrigin)> = Vec::new();
             let mut positions = crate::SlotPositions::default();
-            let mut tele = ft.telescope.clone();
+            let mut cursor = ft.telescope.cursor();
             for plicity in ft.plicities() {
-                let Telescope::Cons(ty, rest) = tele else {
-                    unreachable!("plicities parallel the telescope");
-                };
+                let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
                 let position = positions.next(*plicity);
-                let binder = rest.first_hint().unwrap_or("_").to_string();
+                let binder = hint.unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => {
                         let proposition = crate::is_prop(context, &ty).unwrap_or(false);
@@ -581,13 +579,11 @@ fn instantiate(
                         unreachable!("registration rejects explicit witness parameters")
                     }
                 };
-                tele = rest.open(&[&arg]);
+                cursor.advance(arg.clone());
                 args.push((*plicity, arg));
             }
-            let Telescope::Done(terminal) = tele else {
-                unreachable!("plicities parallel the telescope");
-            };
-            (args, premises, bounds, *terminal)
+            let terminal = cursor.body().expect("plicities parallel the telescope");
+            (args, premises, bounds, terminal)
         }
         _ => (Vec::new(), Vec::new(), Vec::new(), signature),
     };
@@ -854,22 +850,16 @@ pub(crate) fn read_witness_signature(
     let mut binders: Vec<(Plicity, Free, Term)> = Vec::new();
     let terminal = match &*reduced {
         Subterm::FuncType(ft) => {
-            let mut tele = ft.telescope.clone();
+            let mut cursor = ft.telescope.cursor();
             for plicity in ft.plicities() {
-                let Telescope::Cons(ty, rest) = tele else {
-                    unreachable!("plicities parallel the telescope");
-                };
+                let (_, ty) = cursor.entry().expect("plicities parallel the telescope");
                 if matches!(plicity, Plicity::Explicit) {
                     return Err(Error::ExplicitWitnessParam);
                 }
-                let binder = context.fresh(rest.first_hint());
-                tele = rest.open(&[&Term::free_var(&binder)]);
-                binders.push((*plicity, binder, ty.clone()));
+                let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+                binders.push((*plicity, binder, ty));
             }
-            let Telescope::Done(terminal) = tele else {
-                unreachable!("plicities parallel the telescope");
-            };
-            *terminal
+            cursor.body().expect("plicities parallel the telescope")
         }
         _ => reduced.clone(),
     };

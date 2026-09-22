@@ -6,11 +6,11 @@
 
 use {
     super::{
-        Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Telescope, Term,
-        emitted, erasure_mask, infer, is_erasable, reduce_with,
+        Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Term, emitted,
+        erasure_mask, infer, is_erasable, reduce_with,
     },
-    curios_core::DefinitionKind,
     curios_core::Global,
+    curios_core::{DefinitionKind, Lockstep, Step},
 };
 
 impl Lowering {
@@ -57,18 +57,18 @@ impl Lowering {
 
         let body = context.with_frame(|context| -> Result<_, Error> {
             // Walk the lambda's telescope (whose `Done` is the body) alongside the checked function type's telescope (whose `Done` is the output type), opening both with one fresh variable per binder.
-            let mut body_telescope = func.telescope.clone();
-            let mut type_telescope = ft.telescope;
+            let type_telescope = ft.telescope;
+            let mut walk = Lockstep::new(&func.telescope, &type_telescope);
             let (body, output) = loop {
-                match (body_telescope, type_telescope) {
-                    (Telescope::Done(body), Telescope::Done(output)) => break (*body, *output),
-                    (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
-                        let label = body_rest.first_hint().map(str::to_string);
-                        let name = context.fresh(label.as_deref());
-                        let variable = Term::free_var(&name);
+                match walk.step() {
+                    Step::Bodies(body, output) => break (body, output),
+                    Step::Entries {
+                        hint, right: type_, ..
+                    } => {
+                        let label = hint.map(str::to_string);
                         // The flag is read before the binder is assumed: a parameter's type never depends on the parameter.
                         let erasable = is_erasable(context, &type_)?;
-                        context.assume(&name, &type_);
+                        let name = context.advance_assumed(&mut walk, &type_);
                         if erasable {
                             self.environment.bind_dropped(&name);
                             dropped.push(name);
@@ -78,10 +78,8 @@ impl Lowering {
                                 .bind(&name, curios_ersd::Atom::Value(param));
                             params.push(param);
                         }
-                        body_telescope = body_rest.open(&[&variable]);
-                        type_telescope = type_rest.open(&[&variable]);
                     }
-                    _ => unreachable!("erase: function/type telescope arity mismatch"),
+                    Step::Mismatch => unreachable!("erase: function/type telescope arity mismatch"),
                 }
             };
 
@@ -183,22 +181,18 @@ impl Lowering {
         let mut params = Vec::new();
 
         let body = context.with_frame(|context| -> Result<_, Error> {
-            let mut telescope = ft.telescope;
-            let output = loop {
-                match telescope {
-                    Telescope::Done(output) => break *output,
-                    Telescope::Cons(domain, rest) => {
-                        let name = context.fresh(None);
-                        let variable = Term::free_var(&name);
-                        let erasable = is_erasable(context, &domain)?;
-                        context.assume(&name, &domain);
-                        if !erasable {
-                            params.push(self.builder.value(None));
-                        }
-                        telescope = rest.open(&[&variable]);
-                    }
+            let telescope = ft.telescope;
+            let mut cursor = telescope.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                let name = context.fresh(None);
+                let erasable = is_erasable(context, &domain)?;
+                context.assume(&name, &domain);
+                if !erasable {
+                    params.push(self.builder.value(None));
                 }
-            };
+                cursor.advance(Term::free_var(&name));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
 
             self.builder.open_block();
             let result = self.proof_stub(context, &output)?;

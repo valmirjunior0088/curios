@@ -62,13 +62,12 @@ pub(super) fn elaborate_struct_type(
         instantiate_struct_decl(context, struct_decl, explicit_universes)?;
 
     if params.is_empty() && struct_decl.param_count() != 0 {
-        let mut resolved = Vec::with_capacity(struct_decl.param_count());
-        let mut tele = struct_decl.arity.clone();
-        while let Telescope::Cons(ty, rest) = tele {
-            let binder = binder_name(rest.first_hint());
+        let mut cursor = struct_decl.arity.cursor();
+        while let Some((hint, ty)) = cursor.entry() {
+            let binder = binder_name(hint);
             let proposition = crate::is_prop(context, &ty).unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
-                ty.clone(),
+                ty,
                 term.span(),
                 ImplicitOrigin {
                     func: CalleeId::Function(Free::Global(name.clone())),
@@ -77,11 +76,10 @@ pub(super) fn elaborate_struct_type(
                 proposition,
                 None,
             );
-            tele = rest.open(&[&arg]);
-            resolved.push(arg);
+            cursor.advance(arg);
         }
         return Ok((
-            Term::struct_type_at(name.clone(), universes, resolved),
+            Term::struct_type_at(name.clone(), universes, cursor.into_args()),
             struct_decl.result_sort.clone(),
         ));
     }
@@ -321,13 +319,12 @@ pub(super) fn resolve_struct_params(
     term: &Term,
 ) -> Result<Vec<Term>, Error> {
     let mut written = params.iter();
-    let mut resolved = Vec::with_capacity(struct_decl.param_count());
-    let mut tele = struct_decl.arity.clone();
-    while let Telescope::Cons(ty, rest) = tele {
+    let mut cursor = struct_decl.arity.cursor();
+    while let Some((hint, ty)) = cursor.entry() {
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
             None => {
-                let binder = binder_name(rest.first_hint());
+                let binder = binder_name(hint);
                 let proposition = crate::is_prop(context, &ty).unwrap_or(false);
                 context
                     .fresh_metavar(
@@ -343,10 +340,9 @@ pub(super) fn resolve_struct_params(
                     .1
             }
         };
-        tele = rest.open(&[&arg]);
-        resolved.push(arg);
+        cursor.advance(arg);
     }
-    Ok(resolved)
+    Ok(cursor.into_args())
 }
 
 /// Seed omitted parameters from the checking expectation *before* the fields elaborate: a field checked against a type carrying an unsolved parameter metavariable can strand flex-flex constraints (e.g. a `match` tail's inferred motive against `Result(Str, {Nat, ?P})`) that nothing wakes. Only a same-named struct expectation seeds — anything else falls through to the dispatch-level `expect`, preserving implicit insertion and the ordinary mismatch diagnostics.

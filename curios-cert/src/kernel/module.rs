@@ -254,27 +254,17 @@ fn walk_arity<B: Bound>(
     mut terminal: impl FnMut(&mut Kernel, &Term) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
     kernel.scoped(|kernel| {
-        let mut arity = arity.clone();
+        let mut cursor = arity.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            parameter(kernel, &domain)?;
+            kernel.advance_assumed(&mut cursor, &domain);
+        }
 
-        let mut inner = loop {
-            match arity {
-                Telescope::Cons(domain, rest) => {
-                    parameter(kernel, &domain)?;
-
-                    let binder = kernel.fresh(rest.first_hint());
-                    kernel.assume(&binder, &domain);
-                    arity = rest.open(&[&Term::free_var(&binder)]);
-                }
-                Telescope::Done(inner) => break *inner,
-            }
-        };
-
-        while let Telescope::Cons(domain, rest) = inner {
+        let inner = cursor.body().expect("a cursor past every entry");
+        let mut cursor = inner.cursor();
+        while let Some((_, domain)) = cursor.entry() {
             terminal(kernel, &domain)?;
-
-            let binder = kernel.fresh(rest.first_hint());
-            kernel.assume(&binder, &domain);
-            inner = rest.open(&[&Term::free_var(&binder)]);
+            kernel.advance_assumed(&mut cursor, &domain);
         }
 
         Ok(())
@@ -301,13 +291,12 @@ fn check_constructed(
         });
     }
 
-    let mut arity = declaration.arity.clone();
-    let mut declared = Vec::with_capacity(declaration.param_count());
+    let mut cursor = declaration.arity.cursor();
 
     for (binder, domain) in entries.iter().take(declaration.param_count()) {
-        let Telescope::Cons(expected, rest) = arity else {
-            unreachable!("the arity holds exactly `param_count` binders")
-        };
+        let (_, expected) = cursor
+            .entry()
+            .expect("the arity holds exactly `param_count` binders");
         if !convert(kernel, &Term::type_ground(), domain, &expected)? {
             return Err(KernelError::Mismatch {
                 inferred: Box::new(domain.clone()),
@@ -315,10 +304,9 @@ fn check_constructed(
             });
         }
 
-        let occurrence = Term::free_var(binder);
-        arity = rest.open(&[&occurrence]);
-        declared.push(occurrence);
+        cursor.advance(Term::free_var(binder));
     }
+    let declared = cursor.into_args();
 
     let expected = declaration.index_count();
     if targets.len() != expected {
@@ -329,15 +317,16 @@ fn check_constructed(
         });
     }
 
-    let mut telescope = declaration.indices_at(&declared);
+    let telescope = declaration.indices_at(&declared);
+    let mut cursor = telescope.cursor();
     for target in targets {
         // Loud rather than a `break`, because the quiet exit fails open: every target past it would stand unchecked, and inversion and the arm rule read them.
-        let Telescope::Cons(domain, rest) = telescope else {
-            unreachable!("the index telescope holds exactly `index_count` binders")
-        };
+        let (_, domain) = cursor
+            .entry()
+            .expect("the index telescope holds exactly `index_count` binders");
 
         check(kernel, target, &domain)?;
-        telescope = rest.open(&[target]);
+        cursor.advance(target.clone());
     }
 
     Ok(())
@@ -422,9 +411,9 @@ fn check_signature<B: Bound + Clone>(
         };
 
         let mut entries: Vec<(Free, Term)> = Vec::new();
-        let mut telescope = telescope.clone();
+        let mut cursor = telescope.cursor();
 
-        while let Telescope::Cons(domain, rest) = telescope {
+        while let Some((_, domain)) = cursor.entry() {
             let sort = infer_type(kernel, &domain)?;
 
             if let Some((bound, raised)) = &sized
@@ -444,15 +433,11 @@ fn check_signature<B: Bound + Clone>(
                 }
             }
 
-            let binder = kernel.fresh(rest.first_hint());
-            kernel.assume(&binder, &domain);
-            telescope = rest.open(&[&Term::free_var(&binder)]);
+            let binder = kernel.advance_assumed(&mut cursor, &domain);
             entries.push((binder, domain));
         }
 
-        let Telescope::Done(body) = telescope else {
-            unreachable!("the loop exits only at the terminal")
-        };
+        let body = cursor.body().expect("the loop exits only at the terminal");
 
         terminal(kernel, &entries, &body)
     })

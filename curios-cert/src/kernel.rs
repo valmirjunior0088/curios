@@ -48,7 +48,7 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
+        Advance, Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
         LevelHead, Module, Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term,
         UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
     },
@@ -672,6 +672,13 @@ impl Kernel {
     /// Locals are a stack, and closing them is `Kernel::scoped`'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     pub fn assume(&mut self, name: &Free, type_: &Term) {
         self.scope.assume(name, type_);
+    }
+
+    /// Step `walk` past its next binder: mint one from the entry's hint, open it at `domain`, and hand it back for the caller's own capture.
+    pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
+        let binder = walk.advance_fresh(|hint| self.fresh(hint));
+        self.assume(&binder, domain);
+        binder
     }
 
     /// Run `walk` with every binder it opened — and every case equation it assumed — closed again afterwards, on the failing path as well as the succeeding one.

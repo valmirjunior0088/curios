@@ -284,23 +284,15 @@ fn open_payload<T, B: Bound>(
     signature: Telescope<B>,
     body: impl FnOnce(&mut Kernel, &[Free], &[Term], &B) -> Result<T, KernelError>,
 ) -> Result<T, KernelError> {
-    let mut signature = signature;
     let mut binders = Vec::new();
-    let mut payload = Vec::new();
+    let mut cursor = signature.cursor();
 
-    let constructed = loop {
-        match signature {
-            Telescope::Cons(field, rest) => {
-                let binder = kernel.fresh(rest.first_hint());
-                kernel.assume(&binder, &field);
-                let occurrence = Term::free_var(&binder);
-                signature = rest.open(&[&occurrence]);
-                binders.push(binder);
-                payload.push(occurrence);
-            }
-            Telescope::Done(constructed) => break *constructed,
-        }
-    };
+    while let Some((_, field)) = cursor.entry() {
+        binders.push(kernel.advance_assumed(&mut cursor, &field));
+    }
+
+    let constructed = cursor.body().expect("a cursor past every entry");
+    let payload = cursor.into_args();
 
     body(kernel, &binders, &payload, &constructed)
 }

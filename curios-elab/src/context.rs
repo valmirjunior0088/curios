@@ -19,8 +19,8 @@ use {
     },
     curios_core::ReduceError,
     curios_core::{
-        Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free,
-        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId,
+        Advance, Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind,
+        Free, Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId,
         MetavarOrigin, RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
@@ -645,6 +645,13 @@ impl Context {
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.caches.note_write();
         self.frames.assume(name, type_);
+    }
+
+    /// Step `walk` past its next binder: mint one from the entry's hint, assume it at `domain`, and hand it back for the caller's own capture.
+    pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
+        let binder = walk.advance_fresh(|hint| self.fresh(hint));
+        self.assume(&binder, domain);
+        binder
     }
 
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary assumption that additionally joins the witness scope, where resolution finds it (innermost-first).

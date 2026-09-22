@@ -14,20 +14,12 @@ use {
 };
 
 /// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
-fn open_opaque<B: Bound>(context: &mut Context, mut telescope: Telescope<B>) -> Vec<Term> {
-    let mut params = Vec::new();
-    loop {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                let name = context.fresh(rest.first_hint());
-                context.assume(&name, &type_);
-                let variable = Term::free_var(&name);
-                telescope = rest.open(&[&variable]);
-                params.push(variable);
-            }
-            Telescope::Done(_) => break params,
-        }
+fn open_opaque<B: Bound>(context: &mut Context, telescope: Telescope<B>) -> Vec<Term> {
+    let mut cursor = telescope.cursor();
+    while let Some((_, type_)) = cursor.entry() {
+        context.advance_assumed(&mut cursor, &type_);
     }
+    cursor.into_args()
 }
 
 impl Lowering {

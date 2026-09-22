@@ -29,9 +29,10 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Arity, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance,
-        Intrinsic, Layer, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Advance, Arity, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType,
+        Instance, Intrinsic, Layer, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two,
+        Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -109,20 +110,12 @@ impl Member {
         let mut body = group.member_body(index);
 
         while let Subterm::Func(Func { telescope, .. }) = &*body {
-            let mut telescope = telescope.clone();
-            loop {
-                match telescope {
-                    Telescope::Done(inner) => {
-                        body = *inner;
-                        break;
-                    }
-                    Telescope::Cons(_, rest) => {
-                        let binder = env.fresh(rest.first_hint());
-                        params.push(binder.clone());
-                        telescope = rest.open(&[&Term::free_var(&binder)]);
-                    }
-                }
+            let mut cursor = telescope.cursor();
+            while !cursor.is_done() {
+                params.push(cursor.advance_fresh(|hint| env.fresh(hint)));
             }
+            let inner = cursor.body().expect("a cursor past every entry");
+            body = inner;
         }
 
         Self { params, body }
@@ -562,53 +555,45 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Walk a lambda's telescope applied to `arguments`: each entry type, then the body with every binder standing for its argument. A binder past the last argument is minted fresh as `walk_terms` would; an argument past the last binder stays applied to the body, which may be a lambda in its turn.
-    fn walk_redex(&mut self, mut telescope: Telescope<Term>, arguments: &[Term]) {
+    fn walk_redex(&mut self, telescope: Telescope<Term>, arguments: &[Term]) {
         let mut remaining = arguments.iter();
-        loop {
-            match telescope {
-                Telescope::Done(body) => {
-                    let leftover = remaining.cloned().collect::<Vec<_>>();
-                    return match leftover.is_empty() {
-                        true => self.walk_term(&body),
-                        false => self.walk_term(&Term::apply(*body, leftover)),
-                    };
-                }
-                Telescope::Cons(entry, rest) => {
-                    self.walk_term(&entry);
-                    telescope = match remaining.next() {
-                        Some(argument) => rest.open(&[argument]),
-                        None => {
-                            let binder = self.env.fresh(rest.first_hint());
-                            rest.open(&[&Term::free_var(&binder)])
-                        }
-                    };
-                }
-            }
+        let mut cursor = telescope.cursor();
+        while let Some((hint, entry)) = cursor.entry() {
+            self.walk_term(&entry);
+            let argument = match remaining.next() {
+                Some(argument) => argument.clone(),
+                None => Term::free_var(&self.env.fresh(hint)),
+            };
+            cursor.advance(argument);
+        }
+
+        let body = cursor.body().expect("a cursor past every entry");
+        let leftover = remaining.cloned().collect::<Vec<_>>();
+        match leftover.is_empty() {
+            true => self.walk_term(&body),
+            false => self.walk_term(&Term::apply(body, leftover)),
         }
     }
 
     /// Walk a `Func`/`FuncType` telescope: each entry, then the terminal.
     ///
     /// A loop rather than a recursion, because a telescope is a list and this iterates it. Each binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
-    fn walk_terms(&mut self, mut telescope: Telescope<Term>) {
-        loop {
-            match telescope {
-                Telescope::Done(terminal) => return self.walk_term(&terminal),
-                Telescope::Cons(entry, rest) => {
-                    self.walk_term(&entry);
-                    let binder = self.env.fresh(rest.first_hint());
-                    telescope = rest.open(&[&Term::free_var(&binder)]);
-                }
-            }
+    fn walk_terms(&mut self, telescope: Telescope<Term>) {
+        let mut cursor = telescope.cursor();
+        while let Some((_, entry)) = cursor.entry() {
+            self.walk_term(&entry);
+            cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
+        let terminal = cursor.body().expect("a cursor past every entry");
+        self.walk_term(&terminal)
     }
 
     /// [`Walk::walk_terms`] for a `TupleType`, which has no terminal to walk — a tuple type's payload is its fields.
-    fn walk_units(&mut self, mut telescope: Telescope<()>) {
-        while let Telescope::Cons(entry, rest) = telescope {
+    fn walk_units(&mut self, telescope: Telescope<()>) {
+        let mut cursor = telescope.cursor();
+        while let Some((_, entry)) = cursor.entry() {
             self.walk_term(&entry);
-            let binder = self.env.fresh(rest.first_hint());
-            telescope = rest.open(&[&Term::free_var(&binder)]);
+            cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
     }
 
@@ -877,32 +862,21 @@ pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> bool {
         match &*reduced {
             Subterm::Type(_) | Subterm::Prop => return true,
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let mut telescope = telescope.clone();
-                type_ = loop {
-                    match telescope {
-                        Telescope::Done(body) => break *body,
-                        Telescope::Cons(_, rest) => {
-                            let binder = env.fresh(rest.first_hint());
-                            telescope = rest.open(&[&Term::free_var(&binder)]);
-                        }
-                    }
-                };
+                let mut cursor = telescope.cursor();
+                while !cursor.is_done() {
+                    cursor.advance_fresh(|hint| env.fresh(hint));
+                }
+                type_ = cursor.body().expect("a cursor past every entry");
             }
             Subterm::TupleType(tuple) => {
-                let mut telescope = tuple.telescope.clone();
-                return loop {
-                    match telescope {
-                        Telescope::Done(_) => break false,
-                        Telescope::Cons(entry, rest) => {
-                            if yields_a_sort(env, &entry) {
-                                break true;
-                            }
-
-                            let binder = env.fresh(rest.first_hint());
-                            telescope = rest.open(&[&Term::free_var(&binder)]);
-                        }
+                let mut cursor = tuple.telescope.cursor();
+                while let Some((_, entry)) = cursor.entry() {
+                    if yields_a_sort(env, &entry) {
+                        return true;
                     }
-                };
+                    cursor.advance_fresh(|hint| env.fresh(hint));
+                }
+                return false;
             }
             _ => return false,
         }

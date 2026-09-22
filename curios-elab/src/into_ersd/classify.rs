@@ -3,7 +3,9 @@
 use {
     super::Lowering,
     crate::{Context, Error, is_prop_in, reduce_with},
-    curios_core::{Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
+    curios_core::{
+        Advance, Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
+    },
     curios_num::Grain,
     std::collections::BTreeSet,
 };
@@ -29,18 +31,12 @@ fn is_erasable_in(
         // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
         Subterm::FuncType(FuncType { telescope, .. }) => {
             let mark = opened.len();
-            let mut telescope = telescope;
-            let result = loop {
-                match telescope {
-                    Telescope::Cons(domain, rest) => {
-                        let name = context.fresh(None);
-                        let variable = Term::free_var(&name);
-                        opened.push((name, domain));
-                        telescope = rest.open(&[&variable]);
-                    }
-                    Telescope::Done(output) => break is_erasable_in(context, opened, &output),
-                }
-            };
+            let mut cursor = telescope.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
+            let result = is_erasable_in(context, opened, &output);
             opened.truncate(mark);
             result
         }
@@ -51,24 +47,19 @@ fn is_erasable_in(
 /// The signature view of a telescope: one entry per binder — its label and whether it is erased — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what keeps a function's runtime arity fixed across every instantiation, so this is the only walk that computes it; the terminal body is ignored. Pairs with a concrete walk over the actual values: the signature decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types.
 pub(crate) fn signature_entries<B: Bound>(
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool)>, Error> {
     let mut entries = Vec::new();
     let mut opened = Vec::new();
-    loop {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                let label = rest.first_hint().map(str::to_string);
-                let erasable = is_erasable_in(context, &mut opened, &type_)?;
-                let name = context.fresh(label.as_deref());
-                let variable = Term::free_var(&name);
-                entries.push((label, erasable));
-                opened.push((name, type_));
-                telescope = rest.open(&[&variable]);
-            }
-            Telescope::Done(_) => break Ok(entries),
-        }
+    let mut cursor = telescope.cursor();
+    while let Some((hint, type_)) = cursor.entry() {
+        let label = hint.map(str::to_string);
+        let erasable = is_erasable_in(context, &mut opened, &type_)?;
+        let name = cursor.advance_fresh(|hint| context.fresh(hint));
+        entries.push((label, erasable));
+        opened.push((name, type_));
     }
+    Ok(entries)
 }
 
 /// The label-free reading of [`signature_entries`]: the per-binder erasability mask, for the sites that decide drops without naming the slots.
@@ -86,28 +77,23 @@ pub(crate) fn erasure_mask<B: Bound>(
 pub(crate) fn constructor_entries<B: Bound>(
     lowering: &mut Lowering,
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
     let mut entries = Vec::new();
     let mut opened = Vec::new();
-    loop {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                let label = rest.first_hint().map(str::to_string);
-                let erasable = is_erasable_in(context, &mut opened, &type_)?;
-                let shape = match erasable {
-                    true => curios_ersd::FieldShape::Opaque,
-                    false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
-                };
-                let name = context.fresh(label.as_deref());
-                let variable = Term::free_var(&name);
-                entries.push((label, erasable, shape));
-                opened.push((name, type_));
-                telescope = rest.open(&[&variable]);
-            }
-            Telescope::Done(_) => break Ok(entries),
-        }
+    let mut cursor = telescope.cursor();
+    while let Some((hint, type_)) = cursor.entry() {
+        let label = hint.map(str::to_string);
+        let erasable = is_erasable_in(context, &mut opened, &type_)?;
+        let shape = match erasable {
+            true => curios_ersd::FieldShape::Opaque,
+            false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
+        };
+        let name = cursor.advance_fresh(|hint| context.fresh(hint));
+        entries.push((label, erasable, shape));
+        opened.push((name, type_));
     }
+    Ok(entries)
 }
 
 /// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses (newtype structs, subset tuples) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed grain (a `Handle` token is its bytes at the byte grain, the ABI's encoding), a list rope, a closure at its kept arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
@@ -205,22 +191,20 @@ enum Chain {
 
 fn relevant_chain<B: Bound>(
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
 ) -> Result<Chain, Error> {
     let mut first = None;
     let mut relevant = 0;
     let mut opened = Vec::new();
-    while let Telescope::Cons(type_, rest) = telescope {
+    let mut cursor = telescope.cursor();
+    while let Some((_, type_)) = cursor.entry() {
         if !is_erasable_in(context, &mut opened, &type_)? {
             relevant += 1;
             if first.is_none() {
                 first = Some(type_.clone());
             }
         }
-        let name = context.fresh(None);
-        let variable = Term::free_var(&name);
-        opened.push((name, type_));
-        telescope = rest.open(&[&variable]);
+        opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), type_));
     }
     match (relevant, first) {
         (1, Some(domain)) => Ok(Chain::One(domain)),

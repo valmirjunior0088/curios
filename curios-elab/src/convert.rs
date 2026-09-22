@@ -29,11 +29,12 @@ use {
         unfold_rec_apply,
     },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
-        InstanceHead, Intrinsic, Level, Many, Match, MatchResult, Metavar, Proj, Rec, ReduceError,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variant, Visit,
-        decide_bool, instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
+        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Free, Func, FuncType,
+        InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
+        Metavar, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        Variant, Visit, decide_bool, instantiate_universe_levels_scoped, is_bool_connective,
+        strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
@@ -235,28 +236,21 @@ impl Convert {
         if this.plicities() != that.plicities() {
             return Ok(false);
         }
-        fn walk(
-            cmp: &mut Convert,
-            context: &mut Context,
-            this: &Telescope<Term>,
-            that: &Telescope<Term>,
-        ) -> Result<bool, ReduceError> {
-            match (this, that) {
-                (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(&cmp.opening(context, rest_a.first_hint()));
-                    let inner_a = rest_a.open(&[&v]);
-                    let inner_b = rest_b.open(&[&v]);
-                    walk(cmp, context, &inner_a, &inner_b)
+        // Both telescopes opened at one shared variable per binder, each entry once, so the dependent domains speak of the same binder without either side's tail being rewritten per binder.
+        let mut walk = Lockstep::new(&this.telescope, &that.telescope);
+        loop {
+            match walk.step() {
+                Step::Entries { left, right, .. } => {
+                    self.enqueue(Term::type_ground(), left, right);
+                    walk.advance_fresh(|hint| self.opening(context, hint));
                 }
-                (Telescope::Done(out_a), Telescope::Done(out_b)) => {
-                    cmp.enqueue(Term::type_ground(), (**out_a).clone(), (**out_b).clone());
-                    Ok(true)
+                Step::Bodies(left, right) => {
+                    self.enqueue(Term::type_ground(), left, right);
+                    return Ok(true);
                 }
-                _ => Ok(false),
+                Step::Mismatch => return Ok(false),
             }
         }
-        walk(self, context, &this.telescope, &that.telescope)
     }
 
     /// η-frame at a function type of arity `n`: mint `n` fresh argument variables (recorded openings — see [`Convert::history_key`]) and recover the codomain after instantiating them, falling back to `Type` when `type_` does not reduce to a function type.
@@ -466,31 +460,16 @@ impl Convert {
         this: TupleType,
         that: TupleType,
     ) -> Result<bool, ReduceError> {
-        fn walk(
-            cmp: &mut Convert,
-            context: &mut Context,
-            this: &Telescope<()>,
-            that: &Telescope<()>,
-        ) -> Result<bool, ReduceError> {
-            match (this, that) {
-                (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    // Field labels are part of a tuple type's identity: `{ a : Nat } ≢ { Nat } ≢ { b : Nat }` (the unlabeled "" is just another label). This is deliberately tuple-only — function-type parameter names stay alpha-convertible (see `compare_func_type`, where `first_hint` feeds freshness, never equality).
-                    if rest_a.first_hint().unwrap_or_default()
-                        != rest_b.first_hint().unwrap_or_default()
-                    {
-                        return Ok(false);
-                    }
-                    cmp.enqueue(Term::type_ground(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(&cmp.opening(context, rest_a.first_hint()));
-                    let inner_a = rest_a.open(&[&v]);
-                    let inner_b = rest_b.open(&[&v]);
-                    walk(cmp, context, &inner_a, &inner_b)
-                }
-                (Telescope::Done(_), Telescope::Done(_)) => Ok(true),
-                _ => Ok(false),
-            }
+        // Field labels are part of a tuple type's identity: `{ a : Nat } ≢ { Nat } ≢ { b : Nat }` (the unlabeled "" is just another label). This is deliberately tuple-only — function-type parameter names stay alpha-convertible (see `compare_func_type`, where the hint feeds freshness, never equality). Equal label lists also settle the arity, so the walk below never meets a mismatch.
+        if this.telescope.labels() != that.telescope.labels() {
+            return Ok(false);
         }
-        walk(self, context, &this.telescope, &that.telescope)
+        let mut walk = Lockstep::new(&this.telescope, &that.telescope);
+        while let Step::Entries { left, right, .. } = walk.step() {
+            self.enqueue(Term::type_ground(), left, right);
+            walk.advance_fresh(|hint| self.opening(context, hint));
+        }
+        Ok(true)
     }
 
     fn compare_tuple(
@@ -595,12 +574,14 @@ impl Convert {
         &mut self,
         this: Vec<Term>,
         that: Vec<Term>,
-        mut telescope: Option<Telescope<B>>,
+        telescope: Option<Telescope<B>>,
     ) {
+        let mut cursor = telescope.as_ref().map(Telescope::cursor);
         for (a, b) in this.into_iter().zip(that) {
-            let type_ = match telescope.take() {
-                Some(Telescope::Cons(ty, rest)) => {
-                    telescope = Some(rest.open(&[&a]));
+            let entry = cursor.as_ref().and_then(Cursor::entry);
+            let type_ = match (entry, cursor.as_mut()) {
+                (Some((_, ty)), Some(cursor)) => {
+                    cursor.advance(a.clone());
                     ty
                 }
                 _ => Term::type_ground(),
@@ -1459,14 +1440,11 @@ impl Convert {
 
         // The candidate copies `?m`'s birth function type's plicities so the imitation is convertible with that type (plicity is part of function identity — see `compare_func`).
         let mut domains: Vec<(Plicity, Free, Term)> = Vec::with_capacity(arity);
-        let mut telescope = func_type.telescope.clone();
+        let mut cursor = func_type.telescope.cursor();
         for plicity in func_type.plicities().iter().copied() {
-            let Telescope::Cons(ty, rest) = telescope else {
-                unreachable!("plicities parallel the telescope");
-            };
-            let binder = context.fresh(rest.first_hint());
-            telescope = rest.open(&[&Term::free_var(&binder)]);
-            domains.push((plicity, binder, ty.clone()));
+            let (_, ty) = cursor.entry().expect("plicities parallel the telescope");
+            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+            domains.push((plicity, binder, ty));
         }
 
         // The candidate body mirrors the rigid node's shape (for an inductive, its params/indices split — `elaborate_induct_type` re-checks the node against the full telescope during re-validation and rejects a wrong split).

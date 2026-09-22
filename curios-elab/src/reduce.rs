@@ -12,12 +12,13 @@ pub(crate) mod test_support;
 use {
     super::{Context, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     curios_core::{
-        Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
-        Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
-        Layer, Let, Match, MatchResult, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError,
-        Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Var, Variant, Visit, accelerable, dual_comparison, instantiate_universe_levels_scoped,
-        project_erased_universes, reduce_closed, reduce_intrinsic, successor_comparison,
+        Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
+        FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
+        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Var, Variant, Visit, accelerable, dual_comparison,
+        instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
+        reduce_intrinsic, successor_comparison,
     },
     curios_utilities::recurse,
 };
@@ -1075,34 +1076,36 @@ fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, Reduce
     })
 }
 
-/// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body opened under a fresh variable and re-closed under its label — the display-side counterpart of [`convert`](mod@crate::convert)'s `compare_func_type` walk.
+/// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body, every one opened under fresh variables standing for the binders before it and re-closed under their labels — the display-side counterpart of [`convert`](mod@crate::convert)'s `compare_func_type` walk.
 fn normalize_telescope(
     context: &mut Context,
     telescope: Telescope<Term>,
 ) -> Result<Telescope<Term>, ReduceError> {
-    match telescope {
-        Telescope::Done(body) => Ok(Telescope::Done(Box::new(normalize(context, *body)?))),
-        Telescope::Cons(ty, rest) => {
-            let ty = normalize(context, ty)?;
-            let label = context.fresh(rest.first_hint());
-            let inner = normalize_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
-            Ok(Telescope::Cons(ty, Scope::close(One, &[&label], inner)))
-        }
-    }
+    let (entries, body) = normalize_entries(context, &telescope)?;
+    Ok(Telescope::build(entries, normalize(context, body)?))
 }
 
-/// Normalize a Σ telescope (`TupleType`): its field types, opening each field's binder under a fresh variable exactly like [`normalize_telescope`]. The `Done` body is `()`, carrying nothing to reduce.
+/// Normalize a Σ telescope (`TupleType`): its field types, exactly like [`normalize_telescope`]. The `Done` body is `()`, carrying nothing to reduce.
 fn normalize_tuple_telescope(
     context: &mut Context,
     telescope: Telescope<()>,
 ) -> Result<Telescope<()>, ReduceError> {
-    match telescope {
-        Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
-        Telescope::Cons(ty, rest) => {
-            let ty = normalize(context, ty)?;
-            let label = context.fresh(rest.first_hint());
-            let inner = normalize_tuple_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
-            Ok(Telescope::Cons(ty, Scope::close(One, &[&label], inner)))
-        }
+    let (entries, ()) = normalize_entries(context, &telescope)?;
+    Ok(Telescope::build(entries, ()))
+}
+
+/// Each entry normalized under a fresh variable per binder before it, in one walk, with the payload opened at all of them: what the two normalizers rebuild with one pass of `Telescope::build`, rather than recursing into the reopened rest and re-closing every level.
+fn normalize_entries<B: Bound>(
+    context: &mut Context,
+    telescope: &Telescope<B>,
+) -> Result<(Vec<(Free, Term)>, B), ReduceError> {
+    let mut entries = Vec::new();
+    let mut cursor = telescope.cursor();
+
+    while let Some((_, ty)) = cursor.entry() {
+        let ty = normalize(context, ty)?;
+        entries.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
     }
+
+    Ok((entries, cursor.body().expect("a cursor past every entry")))
 }

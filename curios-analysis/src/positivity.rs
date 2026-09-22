@@ -20,8 +20,8 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, One, Polarity, RecGroup,
-        Scope, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Advance, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Polarity,
+        RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -207,7 +207,7 @@ impl Split {
             for (tag, constructor) in &declaration.constructors {
                 // The terminal is the constructed type, not a payload: it is *always* a recursive occurrence and is skipped, which `labelled` does by ignoring the telescope's `Done`.
                 let payload = constructor.telescope.clone().open_params(&arguments);
-                for (label, type_) in labelled(env, payload) {
+                for (label, type_) in labelled(env, &payload) {
                     parts.push(Part {
                         label: format!("{tag}({label})"),
                         type_,
@@ -223,7 +223,7 @@ impl Split {
             .expect("every analyzed name is an inductive or a struct");
         let params = binders(env, &declaration.arity);
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
-        let parts = labelled(env, declaration.fields_at(&arguments))
+        let parts = labelled(env, &declaration.fields_at(&arguments))
             .into_iter()
             .map(|(label, type_)| Part { label, type_ })
             .collect();
@@ -245,17 +245,15 @@ fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
 }
 
 /// Split an opened telescope into `(label, type)` entries, minting a fresh binder per entry so each later type holds free occurrences rather than dangling de Bruijn indices — the precondition for reducing it at all.
-fn labelled<E: Env, B: Bound>(env: &mut E, telescope: Telescope<B>) -> Vec<(String, Term)> {
+fn labelled<E: Env, B: Bound>(env: &mut E, telescope: &Telescope<B>) -> Vec<(String, Term)> {
     let mut entries = Vec::new();
-    let mut telescope = telescope;
-    let mut position = 0;
-    while let Telescope::Cons(type_, rest) = telescope {
-        let hint = rest.first_hint().filter(|hint| !hint.is_empty());
-        let label = hint.map_or_else(|| position.to_string(), str::to_string);
-        let binder = env.fresh(hint);
+    let mut cursor = telescope.cursor();
+    while let Some((hint, type_)) = cursor.entry() {
+        let label = hint
+            .filter(|hint| !hint.is_empty())
+            .map_or_else(|| cursor.args().len().to_string(), str::to_string);
         entries.push((label, type_));
-        telescope = rest.open(&[&Term::free_var(&binder)]);
-        position += 1;
+        cursor.advance_fresh(|hint| env.fresh(hint.filter(|hint| !hint.is_empty())));
     }
     entries
 }
@@ -552,35 +550,27 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// Open one telescope binder against a fresh assumption, so the rest of the telescope holds free occurrences rather than dangling indices and can be reduced. The binder is never assumed a type: the walk reads structure, not sorts.
-    fn open<B: Bound>(&mut self, rest: Scope<One, Telescope<B>>) -> Telescope<B> {
-        let binder = self.env.fresh(rest.first_hint());
-        rest.open(&[&Term::free_var(&binder)])
-    }
-
     /// A function type: each domain flips, the terminal keeps its polarity.
     ///
     /// A nullary `() -> X` is `Done(X)` — an *empty* domain telescope — so this loop never runs and `X` keeps the polarity it arrived with. That is not an edge case to tolerate but the rule that admits `step(pause : Pause, next : () -> Async(A))`: a zero-argument function is a thunk of its result, so `Async(A) = done(A) | step(Pause × X)` is the polynomial functor it looks like.
     fn arrow(&mut self, telescope: &Telescope<Term>, polarity: Polarity) {
         let flipped = polarity.flip();
-        let mut telescope = telescope.clone();
-        loop {
-            match telescope {
-                Telescope::Done(terminal) => return self.walk(&terminal, polarity),
-                Telescope::Cons(domain, rest) => {
-                    self.walk(&domain, flipped);
-                    telescope = self.open(rest);
-                }
-            }
+        let mut cursor = telescope.cursor();
+        // Each binder is fresh so what follows holds free occurrences rather than dangling indices and can be reduced; it is never assumed a type, since the walk reads structure, not sorts.
+        while let Some((_, domain)) = cursor.entry() {
+            self.walk(&domain, flipped);
+            cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
+        let terminal = cursor.body().expect("a cursor past every entry");
+        self.walk(&terminal, polarity)
     }
 
     /// A field telescope — a tuple type, a struct's fields, a constructor's payload. Every component keeps the polarity it arrived with: a product is as positive as its factors.
     fn fields(&mut self, telescope: &Telescope<()>, polarity: Polarity) {
-        let mut telescope = telescope.clone();
-        while let Telescope::Cons(field, rest) = telescope {
+        let mut cursor = telescope.cursor();
+        while let Some((_, field)) = cursor.entry() {
             self.walk(&field, polarity);
-            telescope = self.open(rest);
+            cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
     }
 

@@ -38,8 +38,9 @@ use {
     },
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
-        Intrinsic, Let, Many, MatchResult, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_results_term, wire_term,
+        Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Proj, Rec, Reducer, Scope, Step, Struct,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_results_term,
+        wire_term,
     },
     curios_num::{Binary, Grain},
     curios_utilities::recurse,
@@ -126,20 +127,15 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 });
             }
 
-            let mut telescope = telescope;
+            let mut cursor = telescope.cursor();
             for param in apply.params() {
-                let Telescope::Cons(domain, rest) = telescope else {
-                    unreachable!("arity was checked above")
-                };
+                let (_, domain) = cursor.entry().expect("arity was checked above");
 
                 check(kernel, param, &domain)?;
-                telescope = rest.open(&[param]);
+                cursor.advance(param.clone());
             }
 
-            match telescope {
-                Telescope::Done(result) => Ok(*result),
-                Telescope::Cons(..) => unreachable!("arity was checked above"),
-            }
+            Ok(cursor.body().expect("arity was checked above"))
         }
 
         // A tuple's type is the Σ over its components' types. Non-dependent: a component's type is inferred in the scope it stands in, so nothing here can make a later component depend on an earlier one. A term that needs that dependency carries the Σ and is *checked* against it.
@@ -197,25 +193,25 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
 
-            let mut parameters = at.parameters();
+            let parameters = at.parameters();
+            let mut cursor = parameters.cursor();
             for param in &family.params {
-                let Telescope::Cons(domain, rest) = parameters else {
-                    unreachable!("the handle checked the parameter count")
-                };
+                let (_, domain) = cursor
+                    .entry()
+                    .expect("the handle checked the parameter count");
 
                 check(kernel, param, &domain)?;
-                parameters = rest.open(&[param]);
+                cursor.advance(param.clone());
             }
 
             // The index telescope arrives already opened at those parameters, which is what makes a later index able to mention an earlier one.
-            let mut indices = at.indices();
+            let indices = at.indices();
+            let mut cursor = indices.cursor();
             for index in &family.indices {
-                let Telescope::Cons(domain, rest) = indices else {
-                    unreachable!("the handle checked the index count")
-                };
+                let (_, domain) = cursor.entry().expect("the handle checked the index count");
 
                 check(kernel, index, &domain)?;
-                indices = rest.open(&[index]);
+                cursor.advance(index.clone());
             }
 
             Ok(sort.term())
@@ -229,14 +225,15 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             let sort = infer_sort(kernel, term)?;
             let at = kernel.struct_at(name, universes, params)?;
 
-            let mut parameters = at.parameters();
+            let parameters = at.parameters();
+            let mut cursor = parameters.cursor();
             for param in params {
-                let Telescope::Cons(domain, rest) = parameters else {
-                    unreachable!("the handle checked the parameter count")
-                };
+                let (_, domain) = cursor
+                    .entry()
+                    .expect("the handle checked the parameter count");
 
                 check(kernel, param, &domain)?;
-                parameters = rest.open(&[param]);
+                cursor.advance(param.clone());
             }
 
             Ok(sort.term())
@@ -264,27 +261,23 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 });
             }
 
-            let mut signature = signature;
+            let mut cursor = signature.cursor();
             for component in payload {
-                let Telescope::Cons(field, rest) = signature else {
-                    unreachable!("arity was checked above")
-                };
+                let (_, field) = cursor.entry().expect("arity was checked above");
 
                 check(kernel, component, &field)?;
-                signature = rest.open(&[component]);
+                cursor.advance(component.clone());
             }
 
             // The constructed type, rebuilt from what the terminal states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
-            match signature {
-                Telescope::Done(targets) => Ok(Subterm::InductType(InductType {
-                    name: name.clone(),
-                    universes: universes.clone(),
-                    params: params.clone(),
-                    indices: *targets,
-                })
-                .into()),
-                Telescope::Cons(..) => unreachable!("arity was checked above"),
-            }
+            let targets = cursor.body().expect("arity was checked above");
+            Ok(Subterm::InductType(InductType {
+                name: name.clone(),
+                universes: universes.clone(),
+                params: params.clone(),
+                indices: targets,
+            })
+            .into())
         }
 
         // A nominal record: its fields check against the declaration's field telescope, and its type is the family at the same parameters.
@@ -305,14 +298,12 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 });
             }
 
-            let mut telescope = telescope;
+            let mut cursor = telescope.cursor();
             for field in fields {
-                let Telescope::Cons(expected, rest) = telescope else {
-                    unreachable!("arity was checked above")
-                };
+                let (_, expected) = cursor.entry().expect("arity was checked above");
 
                 check(kernel, field, &expected)?;
-                telescope = rest.open(&[field]);
+                cursor.advance(field.clone());
             }
 
             Ok(Subterm::StructType(StructType {
@@ -456,13 +447,11 @@ fn check_motive(
 
         match family {
             Some(family) => {
-                let mut indices = kernel.induct_at(family)?.indices();
-                while let Telescope::Cons(domain, rest) = indices {
-                    let binder = kernel.fresh(rest.first_hint());
-                    kernel.assume(&binder, &domain);
-                    let occurrence = Term::free_var(&binder);
-                    indices = rest.open(&[&occurrence]);
-                    opened.push(occurrence);
+                let indices = kernel.induct_at(family)?.indices();
+                let mut cursor = indices.cursor();
+                while let Some((_, domain)) = cursor.entry() {
+                    let binder = kernel.advance_assumed(&mut cursor, &domain);
+                    opened.push(Term::free_var(&binder));
                 }
 
                 let at_binders = Term::induct_type_at(
@@ -850,11 +839,15 @@ fn check_lambda(
     lambda: Telescope<Term>,
     against: Telescope<Term>,
 ) -> Result<(), KernelError> {
-    let (mut lambda, mut against) = (lambda, against);
+    let mut walk = Lockstep::new(&lambda, &against);
 
     loop {
-        match (lambda, against) {
-            (Telescope::Cons(mine, mine_rest), Telescope::Cons(theirs, theirs_rest)) => {
+        match walk.step() {
+            Step::Entries {
+                left: mine,
+                right: theirs,
+                ..
+            } => {
                 infer_type(kernel, &mine)?;
                 if !convert(kernel, &Term::type_ground(), &mine, &theirs)? {
                     return Err(KernelError::Mismatch {
@@ -862,18 +855,10 @@ fn check_lambda(
                         expected: Box::new(theirs),
                     });
                 }
-
-                let binder = kernel.fresh(mine_rest.first_hint());
-                kernel.assume(&binder, &theirs);
-                let occurrence = Term::free_var(&binder);
-
-                lambda = mine_rest.open(&[&occurrence]);
-                against = theirs_rest.open(&[&occurrence]);
+                kernel.advance_assumed(&mut walk, &theirs);
             }
-            (Telescope::Done(body), Telescope::Done(codomain)) => {
-                return check(kernel, &body, &codomain);
-            }
-            _ => unreachable!("the dispatch guarded the arities equal"),
+            Step::Bodies(body, codomain) => return check(kernel, &body, &codomain),
+            Step::Mismatch => unreachable!("the dispatch guarded the arities equal"),
         }
     }
 }
@@ -882,7 +867,7 @@ fn check_lambda(
 fn check_fields(
     kernel: &mut Kernel,
     fields: &[Term],
-    mut telescope: Telescope<()>,
+    telescope: Telescope<()>,
 ) -> Result<(), KernelError> {
     if telescope.len() != fields.len() {
         return Err(KernelError::Arity {
@@ -892,12 +877,13 @@ fn check_fields(
         });
     }
 
+    let mut cursor = telescope.cursor();
     for field in fields {
-        let Telescope::Cons(type_, rest) = telescope else {
-            unreachable!("the arity guard bounds the walk to the telescope's length");
-        };
+        let (_, type_) = cursor
+            .entry()
+            .expect("the arity guard bounds the walk to the telescope's length");
         check(kernel, field, &type_)?;
-        telescope = rest.open(&[field]);
+        cursor.advance(field.clone());
     }
 
     Ok(())
@@ -949,56 +935,44 @@ fn subsumes_telescope(
     this: Telescope<Term>,
     that: Telescope<Term>,
 ) -> Result<bool, KernelError> {
-    let (mut this, mut that) = (this, that);
+    let mut walk = Lockstep::new(&this, &that);
 
     loop {
-        match (this, that) {
-            (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
+        match walk.step() {
+            Step::Entries { left, right, .. } => {
                 if !convert(kernel, &Term::type_ground(), &left, &right)? {
                     return Ok(false);
                 }
-
-                let binder = kernel.fresh(left_rest.first_hint());
-                kernel.assume(&binder, &left);
-                let occurrence = Term::free_var(&binder);
-
-                this = left_rest.open(&[&occurrence]);
-                that = right_rest.open(&[&occurrence]);
+                kernel.advance_assumed(&mut walk, &left);
             }
-            (Telescope::Done(left), Telescope::Done(right)) => {
-                return subsumes(kernel, &left, &right);
-            }
+            Step::Bodies(left, right) => return subsumes(kernel, &left, &right),
             // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
-            _ => return Ok(false),
+            Step::Mismatch => return Ok(false),
         }
     }
 }
 
 /// Check that every domain of a λ's telescope is a type, then its body under those binders, rebuilding the telescope as the Π the λ inhabits.
+///
+/// One walk under one retraction bracket, each domain opened once at the binders before it and the Π built in one pass at the end — where recursing into the reopened rest and re-closing each level rewrote the whole inner telescope once per binder.
 fn infer_telescope(
     kernel: &mut Kernel,
     telescope: Telescope<Term>,
 ) -> Result<Telescope<Term>, KernelError> {
-    match telescope {
-        Telescope::Done(body) => {
-            let type_ = infer(kernel, &body)?;
+    kernel.scoped(|kernel| {
+        let mut entries = Vec::new();
+        let mut cursor = telescope.cursor();
 
-            Ok(Telescope::Done(Box::new(type_)))
-        }
-        Telescope::Cons(domain, rest) => {
+        while let Some((_, domain)) = cursor.entry() {
             infer_type(kernel, &domain)?;
 
-            let binder = kernel.fresh(rest.first_hint());
-            let inner = kernel.scoped(|kernel| {
-                kernel.assume(&binder, &domain);
-
-                infer_telescope(kernel, rest.open(&[&Term::free_var(&binder)]))
-            });
-
-            Ok(Telescope::Cons(
-                domain,
-                Scope::close(One, &[&binder], inner?),
-            ))
+            let binder = kernel.advance_assumed(&mut cursor, &domain);
+            entries.push((binder, domain));
         }
-    }
+
+        let body = cursor.body().expect("a cursor past every entry");
+        let type_ = infer(kernel, &body)?;
+
+        Ok(Telescope::build(entries, type_))
+    })
 }

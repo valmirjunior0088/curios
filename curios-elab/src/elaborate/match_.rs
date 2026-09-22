@@ -3,8 +3,8 @@ use {
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
     curios_analysis::{Invert, invert_indices, pinned_by_targets},
     curios_core::{
-        Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
-        Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
+        Advance, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
+        IntrinsicHead, Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
         case_substitution,
     },
     curios_num::{Binary, Grain, Natural},
@@ -597,17 +597,11 @@ fn singleton_eliminable(
 
     // Open the payload telescope under fresh binders, collecting each binder's (name, type) and the terminal whose indices are the constructor's targets.
     let mut binders: Vec<(Free, Term)> = Vec::new();
-    let mut telescope = payload;
-    let terminal = loop {
-        match telescope {
-            Telescope::Cons(ty, rest) => {
-                let name = context.fresh(rest.first_hint());
-                telescope = rest.open(&[&Term::free_var(&name)]);
-                binders.push((name, ty));
-            }
-            Telescope::Done(terminal) => break *terminal,
-        }
-    };
+    let mut cursor = payload.cursor();
+    while let Some((_, ty)) = cursor.entry() {
+        binders.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
+    }
+    let terminal = cursor.body().expect("a cursor past every entry");
 
     // A binder is forced iff the index targets the signature terminates in pin it.
     let forced = pinned_by_targets(&terminal);
@@ -871,31 +865,30 @@ fn elaborate_induct_match(
     Ok((rebuilt, result_type))
 }
 
-/// Re-assume, at its specialized type, every local whose type mentions a variable the case substitutes for — the elaborator's copy of the kernel's `shadow`. The arm's refinements already make such a type *reduce* at the case, which is enough for the arm body's own conversions, but not for a metavariable solution parked and retried outside the frame: `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple where the solution is checked, which the shadow states outright. The substituted variables' own entries are left alone, exactly as the kernel leaves them.
 /// Open a case's instantiated telescope under `labels`, each assumed at its declared (dependent) type, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.
 ///
 /// A written arm and an omitted one open their case the same way, so inversion is put the same question about both — which is also the question the kernel puts, its callers reaching the unifier through a payload open that assumes every binder.
 fn assume_payload(
     context: &mut Context,
-    mut telescope: Telescope<Vec<Term>>,
+    telescope: Telescope<Vec<Term>>,
     labels: &[Free],
 ) -> Vec<Term> {
+    let mut cursor = telescope.cursor();
     for label in labels {
-        match telescope {
-            Telescope::Cons(type_, rest) => {
-                context.assume(label, &type_);
-                telescope = rest.open(&[&Term::free_var(label)]);
-            }
-            Telescope::Done(_) => unreachable!("a case's binders parallel its telescope"),
-        }
+        let (_, type_) = cursor
+            .entry()
+            .expect("a case's binders parallel its telescope");
+        context.assume(label, &type_);
+        cursor.advance(Term::free_var(label));
     }
 
-    match telescope {
-        Telescope::Done(targets) => *targets,
-        Telescope::Cons(..) => unreachable!("a case's binders parallel its telescope"),
+    match cursor.body() {
+        Some(targets) => targets,
+        None => unreachable!("a case's binders parallel its telescope"),
     }
 }
 
+/// Re-assume, at its specialized type, every local whose type mentions a variable the case substitutes for — the elaborator's copy of the kernel's `shadow`. The arm's refinements already make such a type *reduce* at the case, which is enough for the arm body's own conversions, but not for a metavariable solution parked and retried outside the frame: `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple where the solution is checked, which the shadow states outright. The substituted variables' own entries are left alone, exactly as the kernel leaves them.
 fn shadow_specialized(
     context: &mut Context,
     head: &Term,
