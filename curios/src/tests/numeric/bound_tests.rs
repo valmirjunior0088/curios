@@ -285,18 +285,18 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
     );
 }
 
-// `Nat/Lt/strong` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `Str/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `strong` carries it as ordinary induction on the bound.
+// `WellFounded/recurse` over `WellFounded/lt` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `Str/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `recurse` carries it along the accessibility of `<`.
 //
-// The proof is consumed where erasure deletes it; `tests::erasure` pins the other route, a proof bound by a value-level `let`, which runs `strong` with a step erased to a function returning the unit constant.
+// The proof is consumed where erasure deletes it; `tests::erasure` pins the other route, a proof bound by a value-level `let`, which runs a `Type`-valued combinator with a step erased to a function returning the unit constant.
 #[test]
-fn strong_induction_serves_a_proposition_and_a_computation() {
+fn well_founded_recursion_serves_a_proposition_and_a_computation() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bool, Char};
+        use /std/{Nat, Str, Bool, Char, WellFounded};
         let below(n: Nat) -> Nat/Lt(n, n + 3) =
-            Nat/Lt/strong((k) => Nat/Lt(k, k + 3), (k, ih) => Bool/True/qed(), n);
+            WellFounded/recurse((k) => Nat/Lt(k, k + 3), (k, ih) => Bool/True/qed(), n, WellFounded/lt(n));
         let fib(n: Nat) -> Nat =
-            Nat/Lt/strong(
+            WellFounded/recurse(
                 (k) => Nat,
                 (k, ih) =>
                     match k
@@ -307,7 +307,8 @@ fn strong_induction_serves_a_proposition_and_a_computation() {
                         | kpp + 1 => ih(kp, Bool/True/qed()) + ih(kpp, Bool/True/qed())
                         end
                     end,
-                n);
+                n,
+                WellFounded/lt(n));
         /std/print(Str/flatten([Str/of_char(Str/get("hello", 2, below(2))), Nat/to_str(fib(1)), ",", Nat/to_str(fib(10))]))
         "#),
         b"l1,55"

@@ -12,15 +12,21 @@ pub let WellFounded(@A: Type, R: (A, A) -> Prop) -> Prop =
     (x: A) -> Accessible(R, x);
 
 --- The fixpoint over accessibility: the step may assume `P` at every `y` below `x`.
+---
+--- `P` is a `Type`, so the recursion computes as readily as it proves: a `Prop` motive rides it by cumulativity, and erasure deletes the accessibility proof it descends on, leaving the step alone to run. Over [`lt`] it is course-of-values induction on `Nat`.
+---
+--- The loop is local to a wrapper that does not recurse, so inlining the wrapper at a call fuses `step` into the loop. A `recurse` that passed `step` to itself kept an indirect call at every level, and ran out of stack at about two thirds of the depth.
 pub let recurse(
     @A: Type,
     @R: (A, A) -> Prop,
-    P: (A) -> Prop,
+    P: (A) -> Type,
     step: (x: A, ih: (y: A, r: R(y, x)) -> P(y)) -> P(x),
     x: A,
     acc: Accessible(R, x),
 ) -> P(x) =
-    match acc | intro(@w, below) => step(w, (y, r) => recurse(P, step, y, below(y, r))) end;
+    let go(x: A, acc: Accessible(R, x)) -> P(x) =
+        match acc | intro(@w, below) => step(w, (y, r) => go(y, below(y, r))) end;
+    go(x, acc);
 
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k

@@ -69,21 +69,3 @@ pub let add_mul_lt(
     pb: Lt(b, n),
 ) -> Lt(a * n + b, m * n) =
     lt_of_lt_le(a * n + b, a * n + n, m * n, pb, Le/mul_mono_r(n, le_succ_of_lt(a, m, pa)));
-
---- Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor.
-pub let strong(
-    P: (Nat) -> Type,
-    step: (n: Nat, ih: (m: Nat, lt: Lt(m, n)) -> P(m)) -> P(n),
-    n: Nat,
-) -> P(n) =
-    let go(k: Nat, n: Nat, le: Nat/Le(n, k)) -> P(n) =
-        match k
-        | 0 =>
-            step(n, (_, lt) =>
-                match n
-                | 0 => match lt end
-                | _ + 1 => match le end
-                end)
-        | kp + 1 => step(n, (m, lt) => go(kp, m, Le/trans(le_succ_of_lt(m, n, lt), le)))
-        end;
-    go(n, n, Le/refl(n));

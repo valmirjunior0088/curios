@@ -108,3 +108,23 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
         );
     }
 }
+
+// A well-founded recursion runs as its step and nothing else: the accessibility proof it descends on is erased, and `recurse` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` that passed `step` to itself survived to the optimized program as a function of its own, calling the step through a closure at every level.
+#[test]
+fn a_well_founded_recursion_is_fused_with_its_step() {
+    let source = r#"
+        use /std/{Nat, List, Io, Bool, proc, WellFounded};
+        let sum_to(n: Nat) -> Nat =
+            WellFounded/recurse(
+                (_) => Nat,
+                (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, Bool/True/qed()) end,
+                n,
+                WellFounded/lt(n));
+        Io/bind(proc/args, (args) => proc/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
+        "#;
+    let optimized = cont_optm(source);
+    assert!(
+        !optimized.contains("WellFounded/recurse"),
+        "the fixpoint survived the step it should have fused:\n{optimized}"
+    );
+}

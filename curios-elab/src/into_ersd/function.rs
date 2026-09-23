@@ -166,7 +166,7 @@ impl Lowering {
         }
     }
 
-    /// The content-free stand-in for an erased value in a kept slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `strong`'s `step` at a `Prop` motive — is a function of the slot's kept arity whose body is the stand-in for its codomain, one layer per curried arrow: the declaration kept the slot because the callee applies it, and applying the unit constant traps where applying this returns. The two sides of the seam agree the way the declaration mask and `masked_fields` do — the callee's own calls drop the same parameters this stub omits, both reading the one telescope.
+    /// The content-free stand-in for an erased value in a kept slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `WellFounded/recurse`'s `step` at a `Prop` motive — is a function of the slot's kept arity whose body is the stand-in for its codomain, one layer per curried arrow: the declaration kept the slot because the callee applies it, and applying the unit constant traps where applying this returns. The two sides of the seam agree the way the declaration mask and `masked_fields` do — the callee's own calls drop the same parameters this stub omits, both reading the one telescope.
     fn proof_stub(
         &mut self,
         context: &mut Context,

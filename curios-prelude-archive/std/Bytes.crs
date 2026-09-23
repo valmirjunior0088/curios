@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice, replicate, and, or, xor, to_bits};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, WellFounded};
 use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
@@ -114,7 +114,7 @@ let no_empty(k: Byte, p: Bytes, e: Eq(x[], x[k, ..p])) -> Bool/False =
 ---
 --- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte — the digit by an index at it, the rest by a window past it — recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a, b) =
-    Nat/Lt/strong(
+    WellFounded/recurse(
         (m) => (d: Nat, e: Eq(of_nat(m), of_nat(d))) -> Eq(m, d),
         (n, ih) =>
             (d, e) =>
@@ -161,7 +161,8 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a
                         Eq/trans(Eq/sym(euclid(np + 1)), Eq/trans(rejoined, euclid(dq + 1)))
                     end
                 end,
-        a)(b, same);
+        a,
+        WellFounded/lt(a))(b, same);
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =

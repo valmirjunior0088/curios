@@ -535,6 +535,20 @@ fn the_library_well_founded_recursion_serves_a_proof() {
     assert_eq!(run(source), b"b");
 }
 
+// The same fixpoint at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts the fixpoint, its local loop and `lt` under obligation (T), and the checkers reduce it through the accessibility proof to `4`; the running program computes the same value with that proof erased.
+#[test]
+fn the_library_well_founded_recursion_computes_at_a_dependent_motive() {
+    let source = r#"
+        use /std/{Nat, Eq, WellFounded};
+        let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
+        let pick(n: Nat) -> Shape(n) =
+            WellFounded/recurse(Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n, WellFounded/lt(n));
+        let _computed: Eq(pick(5), 4) = Eq/refl();
+        /std/print(Nat/to_str(pick(5)))
+        "#;
+    assert_eq!(run(source), b"4");
+}
+
 // A convoy written by hand around the recursive call: the arm generalizes the witness it descends on and applies the lambda back to it. The analysis grades the redex as its contractum, so `rest` is still read as the payload of `d` and the proof descends. Before that rule the same program was refused as a proof reaching a definition not known to terminate, which is what the elaborator's own synthesized convoys ran into.
 #[test]
 fn a_hand_written_convoy_keeps_its_descent_visible() {

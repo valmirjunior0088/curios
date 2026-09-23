@@ -11,7 +11,7 @@ Working specification for the `Nat` theorems and helpers the standard library st
 - a left shift by a symbolic count is read through its power, `shl(x, k + 1) = 2 · shl(x, k)`, and a right shift through its floor, so a shift recurses on its count;
 - `/std/Nat/div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
 - `/std/Nat/Divides(d, n)` is a multiple witness, with `refl`, `trans`, `zero`, `one`, `add`, `mul`, and `of_rem`, which turns a zero remainder into divisibility with the quotient as the witness;
-- `/std/Nat/Lt` and `/std/Nat/Le` carry the order laws, `Lt/strong` among them — strong induction, which is the measure a Euclidean recursion recurses on.
+- `/std/Nat/Lt` and `/std/Nat/Le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on.
 
 Every law below is proved over those facts. None is a new kernel rule; if a proof needs a fact the reducer does not decide, the finding goes to the law grid in `curios/src/tests/laws.rs` before a lemma is written around it.
 
@@ -23,7 +23,7 @@ Every law below is proved over those facts. None is a new kernel rule; if a proo
 
 **Exact division.** `exact_div(n, d, @ok: Lt(0, d), p: Divides(d, n)) -> Nat` returns the quotient, with `Eq(n, exact_div(n, d, p) · d)` beside it. It is `n / d` in its computation; the law is what the divisibility evidence buys.
 
-**A certified greatest common divisor.** `/std/Nat/gcd` exists as general recursion and a type may not mention it. The certified one recurses on `Lt(b % a, a)` through `Lt/strong`, so it is total and may appear in a type; whether it replaces the existing `gcd` or stands beside it is decided when it lands, preferring one `gcd`. Its laws:
+**A certified greatest common divisor.** `/std/Nat/gcd` exists as general recursion and a type may not mention it. The certified one recurses on `Lt(b % a, a)` through `WellFounded/recurse` over `WellFounded/lt`, so it is total and may appear in a type; whether it replaces the existing `gcd` or stands beside it is decided when it lands, preferring one `gcd`. Its laws:
 
 - it divides both operands;
 - every common divisor divides it;

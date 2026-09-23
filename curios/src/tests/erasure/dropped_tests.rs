@@ -243,7 +243,7 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
     );
 }
 
-// The seam in the other direction, found while landing `Nat/Lt/strong`. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda as the proof it has become — and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit trapped.
+// The seam in the other direction, found while landing course-of-values induction at a `Type`-valued motive, which `WellFounded/recurse` now carries. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda as the proof it has become — and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit trapped.
 #[test]
 fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
     assert_eq!(

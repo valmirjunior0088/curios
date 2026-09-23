@@ -147,7 +147,7 @@ pub use Map/{let Map};
 pub mod Set;
 pub use Set/{let Set};
 
---- Well-founded recursion, as a proof principle: the recursion lives in the accessibility proof, which erasure deletes, so it serves proofs and not programs.
+--- Well-founded recursion: `recurse` is the fixpoint along any relation proved well-founded, at a motive that is a proof or a program, and `lt` proves `<` on `Nat` well-founded.
 pub mod WellFounded;
 pub use WellFounded/{let WellFounded};
 
