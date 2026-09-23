@@ -69,6 +69,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Final `| _ =>` catch-all in dispatching matches (bare, final, and top-level only)
 - [x] Destructuring patterns at `let` and parameter positions (tuple/struct, irrefutable)
 - [x] Irrefutable patterns at the `;` fold-hypothesis binder, as a `let` binder takes them
+- [ ] [Typed patterns: a wildcard beside a concrete pattern in any column, coverage against the scrutinee's constructors, and redundant arms reported](roadmap/typed-patterns-spec.md)
 
 ## Syntax Sugar
 
