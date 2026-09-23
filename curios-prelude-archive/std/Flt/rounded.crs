@@ -1,5 +1,5 @@
 use /std/{Flt, Nat, Int, Bool, Str, Option};
-use /std/Flt/{Rounding, exact};
+use /std/Flt/{Rounding, exact, Dyadic};
 
 --- `a + b`, in the direction `r` names.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Flt =
@@ -99,46 +99,29 @@ pub let of_dyadic(r: Rounding, m: Int, e: Int) -> Flt =
 pub let scale(r: Rounding, f: Flt, n: Int) -> Flt =
     choose
     | Flt/is_nan(f) => f + f
-    | Flt/is_infinite(f) || Flt/is_zero(f) => f
-    | _ =>
-        match exact/of_flt(f)
-        | some(d) => exact/round(r, d.negative, d.magnitude, d.exponent + n, false)
-        | none() => f
-        end
+    | Flt/is_zero(f) => f
+    | some(d) = Dyadic/try_of(f) => exact/round(r, d.negative, d.magnitude, d.exponent + n, false)
+    -- An infinity, its own scaling.
+    | _ => f
     end;
 
---- `f`'s value rounded to an integer in the direction `r` names, as a sign and a magnitude.
-let integral(r: Rounding, f: Flt) -> {Bool, Nat} =
-    match exact/of_flt(f)
-    | none() => (false, 0)
-    | some(d) =>
-        match d.exponent >= +0
-        | true => (d.negative, Nat/shl(d.magnitude, Int/abs(d.exponent)))
-        | false =>
-            let k = Int/abs(d.exponent);
-            let q = Nat/shr(d.magnitude, k);
-            let dropped = d.magnitude - Nat/shl(q, k);
-            let half = Nat/shl(1, k - 1);
-            let up =
-                exact/rounds_up(
-                    r,
-                    d.negative,
-                    dropped > half,
-                    dropped == half,
-                    Bool/not(Nat/is_even(q)),
-                    dropped != 0);
-            (d.negative, match up | true => q + 1 | false => q end)
-        end
+--- Whether truncating to `t` moves away from zero when rounding in the direction `r` names, `fraction` being the magnitude truncation dropped: exact, since the fractional part of a float is a float.
+let steps_away(r: Rounding, negative: Bool, t: Nat, fraction: Flt) -> Bool =
+    exact/rounds_up(r, negative, fraction > 0.5, fraction == 0.5, Bool/not(Nat/is_even(t)), fraction != +0.0);
+
+--- IEEE's `convertToInteger` in the direction `r` names (§5.8): `f` rounded to an `Int`, exactly — `Flt/to_int`'s truncation under the bound, stepped one away from zero where the direction says the dropped fraction rounds up.
+pub let to_int(r: Rounding, f: Flt, @ok: Flt/Finite(f)) -> Int =
+    let t = Flt/to_int(f, @ok);
+    let negative = f < +0.0;
+    match steps_away(r, negative, Int/abs(t), Flt/abs(f - Int/to_flt(t)))
+    | false => t
+    | true => match negative | true => t - +1 | false => t + +1 end
     end;
 
---- IEEE's `convertToInteger` in the direction `r` names (§5.8): `f` rounded to an `Int`, exactly. The bound excludes an infinity and a NaN.
-pub let to_int(r: Rounding, f: Flt, @_: Flt/Finite(f)) -> Int =
-    let (negative, magnitude) = integral(r, f);
-    match negative | true => Int/sub(+0, Nat/to_int(magnitude)) | false => Nat/to_int(magnitude) end;
-
---- `to_int` for a non-negative `f`, as a `Nat`.
-pub let to_nat(r: Rounding, f: Flt, @_: Flt/NonNeg(f)) -> Nat =
-    integral(r, f).1;
+--- `to_int` for a non-negative `f`, as a `Nat`: `Flt/to_nat`'s truncation under the bound, stepped up where the direction says the dropped fraction rounds up.
+pub let to_nat(r: Rounding, f: Flt, @ok: Flt/NonNeg(f)) -> Nat =
+    let t = Flt/to_nat(f, @ok);
+    match steps_away(r, false, t, f - Nat/to_flt(t)) | true => t + 1 | false => t end;
 
 --- `Flt/of_str` in the direction `r` names: decimal or hex text read exactly and rounded once, the special names read as they are. `none` for text that spells no number.
 pub let of_str(r: Rounding, s: Str) -> Option(Flt) =
@@ -153,5 +136,8 @@ pub let of_decimal(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> 
     Flt/of_decimal_in(r, negative, d, e, digits);
 
 --- `Flt/to_str_significant` in the direction `r` names: exactly `n` significant digits (§5.12.2).
-pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @_: Nat/Lt(0, n)) -> Str =
-    Flt/to_str_significant_in(r, f, n);
+pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @ok: Nat/Lt(0, n)) -> Str =
+    match n
+    | 0 => match ok end
+    | k + 1 => Flt/to_str_significant_in(r, f, k + 1)
+    end;

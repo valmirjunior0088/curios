@@ -29,6 +29,10 @@ pub mod signals;
 --- The exact layer every rounding in this library goes through.
 mod exact;
 
+--- A finite float's exact value, and the exact arithmetic over it.
+mod Dyadic;
+use Dyadic/{let Dyadic};
+
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
     Bool/Holds(Nat/eql(Bytes/len(b), 8));
@@ -114,21 +118,19 @@ pub let unordered(a: Flt, b: Flt) -> Bool =
     is_nan(a) || is_nan(b);
 
 --- The exact value of a finite `f` as `mantissa · 2^exponent`, the zeros as `(+0, +0)`: the decomposition `/std/Rat` and this library's exact layer share.
-pub let to_dyadic(f: Flt, @_: Finite(f)) -> {mantissa: Int, exponent: Int} =
-    match exact/of_flt(f)
-    | some(d) =>
-        let m = Nat/to_int(d.magnitude);
-        choose
-        | d.magnitude == 0 => (+0, +0)
-        | d.negative => (Int/sub(+0, m), d.exponent)
-        | _ => (m, d.exponent)
-        end
-    | none() => (+0, +0)
-    end;
+pub let to_dyadic(f: Flt, @ok: Finite(f)) -> {mantissa: Int, exponent: Int} =
+    (mantissa(f, @ok), exponent(f, @ok));
 
 --- That `f` is a finite nonzero value, decided: the domain of `log_b`.
 pub let FiniteNonZero(f: Flt) -> Prop =
     Bool/Holds(is_finite(f) && Bool/not(is_zero(f)));
+
+--- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
+let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
+    (match neg_inf < f && f < pos_inf: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
+    | true => (_) => Bool/True/qed()
+    | false => (no) => match no end
+    end)(ok);
 
 --- The procedure that decides `FiniteNonZero(f)`.
 pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
@@ -141,11 +143,9 @@ pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
 pub let remainder(x: Flt, y: Flt) -> Flt =
     choose
     | is_nan(x) || is_nan(y) => x + y
-    | is_infinite(x) || is_zero(y) => nan
-    | is_infinite(y) || is_zero(x) => x
-    | _ =>
-        let d = Option/unwrap_or(exact/of_flt(x), exact/Dyadic { negative = false, magnitude = 0, exponent = +0 });
-        let v = Option/unwrap_or(exact/of_flt(y), exact/Dyadic { negative = false, magnitude = 1, exponent = +0 });
+    | is_zero(y) => nan
+    | is_zero(x) => x
+    | (some(d), some(v)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let e = Int/min(d.exponent, v.exponent);
         let a = Nat/shl(d.magnitude, Int/abs(d.exponent - e));
         let b = Nat/shl(v.magnitude, Int/abs(v.exponent - e));
@@ -161,6 +161,8 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
             | true => exact/round(Rounding/ties_to_even(), Bool/not(d.negative), b - r, e, false)
             end
         end
+    -- An infinity: invalid when it is `x`, and `x` itself when it is only `y`.
+    | _ => match is_infinite(x) | true => nan | false => x end
     end;
 
 --- IEEE's `nextUp` (§5.3.1): the least float above `f`. `-0` and `+0` step to the least subnormal, the negative least subnormal to `-0`, `-inf` to the negative largest finite value, and `+inf` stays; a NaN answers itself quieted.
@@ -183,11 +185,9 @@ pub let scale(f: Flt, n: Int) -> Flt =
     rounded/scale(Rounding/ties_to_even(), f, n);
 
 --- IEEE's `logB` (§5.3.3): the exponent of `f`'s leading bit, `⌊log₂|f|⌋`, subnormals included. A zero, an infinity or a NaN has none, which the bound excludes.
-pub let log_b(f: Flt, @_: FiniteNonZero(f)) -> Int =
-    match exact/of_flt(f)
-    | some(d) => d.exponent + Nat/to_int(exact/bit_len(d.magnitude)) - +1
-    | none() => +0
-    end;
+pub let log_b(f: Flt, @ok: FiniteNonZero(f)) -> Int =
+    let finite = finite_of_non_zero(f, @ok);
+    exponent(f, @finite) + Nat/to_int(exact/bit_len(Int/abs(mantissa(f, @finite)))) - +1;
 
 --- `log_b(f)`, or `none` for a zero, an infinity or a NaN.
 pub let try_log_b(f: Flt) -> Option(Int) =
@@ -703,8 +703,11 @@ let of_hex_body(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
         end);
 
 --- `f` written with exactly `n` significant digits, rounded to nearest with ties to even, and laid out as `to_str` lays out digits (§5.12.2). `rounded/to_str_significant` takes the direction.
-pub let to_str_significant(f: Flt, n: Nat, @_: Nat/Lt(0, n)) -> Str =
-    to_str_significant_in(Rounding/ties_to_even(), f, n);
+pub let to_str_significant(f: Flt, n: Nat, @ok: Nat/Lt(0, n)) -> Str =
+    match n
+    | 0 => match ok end
+    | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)
+    end;
 
 --- `m · 2^e / 10^k` rounded to an integer in the direction `r`, of `negative`'s sign.
 let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
@@ -716,13 +719,13 @@ let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
 
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
 let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
-    match exact/of_flt(f)
+    match Dyadic/try_of(f)
     | some(d) => match d.magnitude == 0 | true => to_str(f) | false => significant(r, d, n) end
     | none() => to_str(f)
     end;
 
 --- A finite nonzero `d` with `n` significant digits in the direction `r`.
-let significant(r: Rounding, d: exact/Dyadic, n: Nat) -> Str =
+let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
     let sign = match d.negative | true => "-" | false => "+" end;
     let p = d.exponent + Nat/to_int(exact/bit_len(d.magnitude)) - +1;
     let scaled = p * +30103;
