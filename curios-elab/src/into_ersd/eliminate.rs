@@ -2,7 +2,7 @@
 //!
 //! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
 //!
-//! The scrutinee is erased exactly once. The fold forms alias a non-variable head on the Core side first — a fresh variable defined as the head, its label mapped to the once-erased operand — because their peels re-derive Core terms from the head (`head - 1`, the sequence's length and slices), and walking those must re-resolve to the same operand instead of re-erasing an effectful expression. The dispatch forms (`Bool`, `Switch`, the inductive match) never re-derive from the head, so they refine the *original* head term — arm bodies were elaborated against reductions keyed on that term, and refining an alias in its place would break their re-derived typing. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
+//! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
 use {
     super::{
@@ -195,7 +195,7 @@ impl Lowering {
         Ok(self.seal(outcome))
     }
 
-    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default and the peeled dispatch arm.
+    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, and `List/fold`'s initial value.
     fn open_arm(
         &mut self,
         context: &mut Context,
@@ -285,7 +285,7 @@ impl Lowering {
         ))
     }
 
-    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, peeled to a single-key dispatch at `pred := head - 1`.
+    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, a single-key dispatch whose default computes the predecessor from the erased operand. Either way the successor arm is erased under `head = pred + 1`, the refinement it was elaborated under.
     fn erase_nat_fold(
         &mut self,
         context: &mut Context,
@@ -296,30 +296,52 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Nat)?;
-        let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
-        };
+        let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let zero = self.refined_arm(
             context,
-            &head,
+            head,
             &Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             result,
             empty_case,
         )?;
 
-        // The hypothesis is dead: a case split, not a fold.
+        let pred_hint = cons_case.first_hint().map(str::to_string);
+        let pred_label = context.fresh(pred_hint.as_deref());
+        let pred_var = Term::free_var(&pred_label);
+        let successor = Term::intrinsic(Intrinsic::nat_add(
+            pred_var.clone(),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        ));
+
+        // The hypothesis is dead: a case split, not a fold. The predecessor is computed from the operand, and only where the arm reads it — the walk resolves a name through the environment and never walks a reduct, so a predecessor the arm does not mention needs no value.
         if !cons_case.uses(1) {
-            let pred = Term::intrinsic(Intrinsic::nat_sub(
-                head.clone(),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-            ));
-            // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-            let peeled = cons_case.open(&[&pred, &dead_hypothesis]);
-            let expected = result.of(&head, &[]);
-            let default = self.open_arm(context, &expected, &peeled)?;
+            self.builder.open_block();
+            let outcome = context.with_frame(|context| {
+                context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
+                if cons_case.uses(0) {
+                    let one = curios_ersd::Atom::Constant(
+                        self.builder
+                            .constant(curios_ersd::Constant::Nat(Natural::one())),
+                    );
+                    let predecessor = emitted!(self.bind(
+                        pred_hint.as_deref(),
+                        curios_ersd::Rhs::Operation {
+                            operation: curios_ersd::Operation::NatSub,
+                            operands: vec![scrutinee, one],
+                        },
+                    ));
+                    self.environment.bind(&pred_label, predecessor);
+                }
+                refine_head(context, head, &successor)?;
+
+                // The hypothesis never appears, so any term serves its slot.
+                let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+                let peeled = cons_case.open(&[&pred_var, &dead_hypothesis]);
+                let expected = result.at(head, &[], &[], &successor);
+                self.walk(context, &peeled, &expected, None)
+            })?;
+            let default = self.seal(outcome);
 
             return Ok(self.bind(
                 hint,
@@ -335,9 +357,7 @@ impl Lowering {
         }
 
         // Induction: bind the predecessor and the hypothesis, then erase the successor arm at the result at `pred + 1`.
-        let pred_hint = cons_case.first_hint().map(str::to_string);
         let hypothesis_hint = cons_case.second_hint().map(str::to_string);
-        let pred_label = context.fresh(pred_hint.as_deref());
         let hypothesis_label = context.fresh(hypothesis_hint.as_deref());
         let predecessor = self.builder.value(pred_hint);
         let hypothesis = self.builder.value(hypothesis_hint);
@@ -348,18 +368,12 @@ impl Lowering {
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
-            let pred_var = Term::free_var(&pred_label);
             context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
-            context.assume(&hypothesis_label, &result.at(&head, &[], &[], &pred_var));
-
-            let successor = Term::intrinsic(Intrinsic::nat_add(
-                pred_var.clone(),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-            ));
-            refine_head(context, &head, &successor)?;
+            context.assume(&hypothesis_label, &result.at(head, &[], &[], &pred_var));
+            refine_head(context, head, &successor)?;
 
             let body = cons_case.open(&[&pred_var, &Term::free_var(&hypothesis_label)]);
-            let expected = result.at(&head, &[], &[], &successor);
+            let expected = result.at(head, &[], &[], &successor);
             self.walk(context, &body, &expected, None)
         })?;
         let step = self.seal(outcome);
@@ -472,22 +486,18 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         let head_type = infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
-        let (head, sequence) = match self.scrutinee_operand(context, head, &head_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
-        };
+        let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let empty = self.refined_arm(context, &head, &carrier.empty_value(), result, empty_case)?;
+        let empty = self.refined_arm(context, head, &carrier.empty_value(), result, empty_case)?;
 
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         //
         // The peel binds *names* for the element and the suffix rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch establishes, so at the point the terms would be constructed there is no proof to hand them.
         //
-        // What the arm loses by it is the definitional connection back to the scrutinee: the binders are opaque assumptions of the element and sequence types rather than the reads themselves. Nothing needs that connection, because the arm is checked at `motive(head)`, which does not mention either.
+        // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored as the fold's step restores it: the arm is erased under `head = [element, ..suffix]`, the refinement it was elaborated under. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
         //
         // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here meant this crate had to hold a window's operand convention, and a window is the one shape whose operands have changed under it.
         if !cons_case.uses(2) {
-            let sequence_atom = sequence;
             let element_hint = cons_case.first_hint().map(str::to_string);
             let suffix_hint = cons_case.second_hint().map(str::to_string);
             let element_label = context.fresh(element_hint.as_deref());
@@ -502,17 +512,18 @@ impl Lowering {
 
             self.builder.open_block();
             let outcome = context.with_frame(|context| {
+                let element_var = Term::free_var(&element_label);
+                let suffix_var = Term::free_var(&suffix_label);
                 context.assume(&element_label, &carrier.element_type());
                 context.assume(&suffix_label, &head_type);
 
+                let cons_value = carrier.cons_value(&element_var, &suffix_var);
+                refine_head(context, head, &cons_value)?;
+
                 // The hypothesis never appears, so any term serves its slot.
                 let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-                let peeled = cons_case.open(&[
-                    &Term::free_var(&element_label),
-                    &Term::free_var(&suffix_label),
-                    &dead_hypothesis,
-                ]);
-                let expected = result.of(&head, &[]);
+                let peeled = cons_case.open(&[&element_var, &suffix_var, &dead_hypothesis]);
+                let expected = result.at(head, &[], &[], &cons_value);
                 self.walk(context, &peeled, &expected, None)
             })?;
             let cons_block = self.seal(outcome);
@@ -521,7 +532,7 @@ impl Lowering {
                 hint,
                 curios_ersd::Rhs::UnconsSequence {
                     grain: carrier.grain(),
-                    scrutinee: sequence_atom,
+                    scrutinee: sequence,
                     empty,
                     cons: curios_ersd::UnconsSequenceStep {
                         element,
@@ -554,17 +565,17 @@ impl Lowering {
             let suffix_var = Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
             context.assume(&suffix_label, &head_type);
-            context.assume(&accumulator_label, &result.at(&head, &[], &[], &suffix_var));
+            context.assume(&accumulator_label, &result.at(head, &[], &[], &suffix_var));
 
             let cons_value = carrier.cons_value(&element_var, &suffix_var);
-            refine_head(context, &head, &cons_value)?;
+            refine_head(context, head, &cons_value)?;
 
             let body = cons_case.open(&[
                 &element_var,
                 &suffix_var,
                 &Term::free_var(&accumulator_label),
             ]);
-            let expected = result.at(&head, &[], &[], &cons_value);
+            let expected = result.at(head, &[], &[], &cons_value);
             self.walk(context, &body, &expected, None)
         })?;
         let step = self.seal(outcome);

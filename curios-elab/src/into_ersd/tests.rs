@@ -788,8 +788,8 @@ entry
     case 0
       Return Nat(0)
     default
-      Let ~v0 = Operation NatSub [Nat(5), Nat(1)]
-      Return ~v0
+      Let ~v0$pred = Operation NatSub [Nat(5), Nat(1)]
+      Return ~v0$pred
   Return ~v1
 "
     );
