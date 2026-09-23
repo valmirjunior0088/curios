@@ -262,9 +262,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
-- [ ] Exact rationals (`/std/Rat`)
-  - [ ] [Dyadic: exact binary rationals and correctly rounded `Flt` boundaries](roadmap/rat-dyadic-spec.md)
-  - [ ] [General: every rational, division, and exact decimals](roadmap/rat-general-spec.md)
+- [ ] [Exact rationals (`/std/Rat`): one canonical form, division under a nonzero bound, binary64 in both directions, exact decimals, and their laws](roadmap/rat-laws-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, deferred to a consumer
   - [x] `Key(Nat)`, `Key(Byte)` and `Key(Bool)`, over the encodings `/std/Hash` already gave them

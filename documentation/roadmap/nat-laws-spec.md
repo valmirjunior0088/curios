@@ -1,6 +1,6 @@
 # `Nat` laws: the Euclidean remainder and the binary scale
 
-Working specification for the `Nat` theorems and helpers the standard library still lacks: the Euclidean layer past certified division, and the unsigned binary-scale layer. Both are independent capabilities of `/std/Nat` that stand without any consumer; the two `Rat` specifications ([dyadic](rat-dyadic-spec.md), [general](rat-general-spec.md)) are the consumers that ask for them, and each names which layer it needs.
+Working specification for the `Nat` theorems and helpers the standard library still lacks: the Euclidean layer past certified division, and the unsigned binary-scale layer. Both are independent capabilities of `/std/Nat` that stand without any consumer; [the `Rat` specification](rat-laws-spec.md) is the consumer that asks for them, and names which layer each stage needs.
 
 ## What this builds on
 

@@ -1,6 +1,6 @@
 # `Int` laws: cancellation, sign, absolute value and the signed scale
 
-Working specification for the `Int` theorems the standard library still lacks past its order laws. They are an independent capability of `/std/Int`, and the two `Rat` specifications ([dyadic](rat-dyadic-spec.md), [general](rat-general-spec.md)) are the consumers that ask for them.
+Working specification for the `Int` theorems the standard library still lacks past its order laws. They are an independent capability of `/std/Int`, and [the `Rat` specification](rat-laws-spec.md) is the consumer that asks for them.
 
 ## What this builds on
 
