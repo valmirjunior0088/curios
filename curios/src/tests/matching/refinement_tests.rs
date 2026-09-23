@@ -238,3 +238,93 @@ fn a_bound_a_hypothesis_only_implies_is_still_stuck() {
         "the seam decided a bound that needs arithmetic:\n{message}"
     );
 }
+
+// === A scrutinee bound by `let` ===============================================
+//
+// The kernel substitutes a `let` rather than binding it, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name — and a metavariable solved against the name is stored as the definition, which the arm never refined: `refl`'s implicit below became `x`, and `x` stayed apart from `xp + 1`. Refining a local binding refines its definition too, in both arms, whatever the scrutinee's type.
+
+#[test]
+fn a_let_bound_scrutinee_is_refined_through_its_definition() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let f(x: Nat) -> Nat =
+            let y: Nat = x;
+            match y
+            | 0 => let _zero: Eq(y, 0) = Eq/refl(); 0
+            | xp + 1 =>
+                let _same: Eq(y, y) = Eq/refl();
+                let _successor: Eq(y, xp + 1) = Eq/refl();
+                let _definition: Eq(x, xp + 1) = Eq/refl(@Nat, @(xp + 1));
+                xp
+            end;
+        /std/print(Nat/to_str(f(5)))
+        "#;
+    assert_eq!(run(source), b"4");
+}
+
+#[test]
+fn a_let_bound_boolean_scrutinee_is_refined_through_its_definition() {
+    let source = r#"
+        use /std/{Bool, Eq, Str};
+        let f(b: Bool) -> Str =
+            let c: Bool = b;
+            match c
+            | true => let _: Eq(c, true) = Eq/refl(); "yes"
+            | false => let _: Eq(c, false) = Eq/refl(); "no"
+            end;
+        /std/print(f(true))
+        "#;
+    assert_eq!(run(source), b"yes");
+}
+
+// The ambient path, where the arm is checked against the expected type with the scrutinee standing for its case.
+#[test]
+fn a_let_bound_inductive_scrutinee_is_refined_through_its_definition() {
+    let source = r#"
+        use /std/{Nat, Eq, Option};
+        let f(o: Option(Nat)) -> Nat =
+            let p: Option(Nat) = o;
+            match p
+            | some(v) => let _: Eq(p, Option/some(v)) = Eq/refl(); v
+            | none() => 0
+            end;
+        /std/print(Nat/to_str(f(Option/some(7))))
+        "#;
+    assert_eq!(run(source), b"7");
+}
+
+#[test]
+fn a_chain_of_lets_is_refined_to_its_end() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let f(x: Nat) -> Nat =
+            let y: Nat = x;
+            let z: Nat = y;
+            match z
+            | 0 => 0
+            | zp + 1 =>
+                let _: Eq(z, z) = Eq/refl();
+                let _: Eq(x, zp + 1) = Eq/refl(@Nat, @(zp + 1));
+                zp
+            end;
+        /std/print(Nat/to_str(f(3)))
+        "#;
+    assert_eq!(run(source), b"2");
+}
+
+// A definition that is itself a stuck expression is refined under its own spelling, as the kernel's case equation for the substituted scrutinee is.
+#[test]
+fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
+        let f(x: Nat) -> Nat =
+            let y: Nat = count(x);
+            match y
+            | 0 => 0
+            | yp + 1 => let _: Eq(y, y) = Eq/refl(); yp
+            end;
+        /std/print(Nat/to_str(f(3)))
+        "#;
+    assert_eq!(run(source), b"2");
+}
