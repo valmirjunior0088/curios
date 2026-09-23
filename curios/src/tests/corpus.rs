@@ -52,8 +52,6 @@ fn run_unit(unit: &str) {
 
     assert!(!records.is_empty(), "`{unit}` declares no tests");
 
-    // `proved` and `passed` are both exit 0, and the guest's own line is what tells them apart. They are counted separately because the difference is the point: a proved test is a theorem the kernel settled — over the whole telescope for a parameterized one, over the description itself for a nullary — rather than a case that happened to run. `curios test` draws no such distinction, since it runs each test under `OsHost` and never sees the line.
-    let mut proved = 0usize;
     let mut passed = 0usize;
     let mut failures = String::new();
     for (index, record) in records.iter().enumerate() {
@@ -65,11 +63,8 @@ fn run_unit(unit: &str) {
         let reported = String::from_utf8_lossy(&io.output()).into_owned();
 
         match outcome {
-            // The guest printed `path: proved` or `path: passed` and returned.
-            Ok(0) => match reported.trim_end().ends_with(": proved") {
-                true => proved += 1,
-                false => passed += 1,
-            },
+            // The guest printed `path: passed` and returned.
+            Ok(0) => passed += 1,
             // The guest printed its own outcome line and its report; the body as written is what only the records know, appended beneath it.
             Ok(_) => {
                 failures.push_str(&reported);
@@ -84,7 +79,7 @@ fn run_unit(unit: &str) {
         }
     }
 
-    eprintln!("{unit}: {proved} proved, {passed} passed");
+    eprintln!("{unit}: {passed} passed");
 
     assert!(failures.is_empty(), "\n{failures}");
 }
