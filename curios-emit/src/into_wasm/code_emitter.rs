@@ -1833,9 +1833,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::FltFma(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Fma)
             }
-            // WebAssembly has no `f64.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
+            // WebAssembly has no `f64.rem`; the helper computes the exact `fmod` the folders compute (see `FltHelper::Rem`).
             curios_cont::Intrinsic::FltRem => {
-                let rem = call(&self.context.table().flt_rem_func());
+                let rem = call(&self.context.table().flt_func(FltHelper::Rem));
                 self.emit_flt_checked(dest, &op, &[&args[0], &args[1]], vec![rem], false)
             }
             curios_cont::Intrinsic::FltEql => {
