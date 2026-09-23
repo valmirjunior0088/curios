@@ -14,7 +14,7 @@ Working specification for what `/std/Flt` still lacks past its operations: the l
 
 These hold for every bit pattern under the model, NaNs included, so each is a candidate for a fold or a probe-side decision rather than a lemma:
 
-- **Commutativity** of `add`, `mul`, `min`, `max`, `eql` and `neq` in every direction, and of `fma`'s two factors. The NaN rule is what makes these hold of the carrier rather than of numbers alone. Decided probe-side: sorting the operands in a fold would respell a term a guard's refinement is keyed on.
+- **Commutativity** of `add`, `mul`, `min` and `max` in every direction, and of `fma`'s two factors — `eql` and `neq` are held already. The NaN rule is what makes these hold of the carrier rather than of numbers alone. Decided probe-side: sorting the operands in a fold would respell a term a guard's refinement is keyed on.
 - **The sign operations**: `neg(neg(x)) = x`, `abs(abs(x)) = abs(x)`, `abs(neg(x)) = abs(x)`, `copysign(copysign(x, y), z) = copysign(x, z)` and `neg(copysign(x, y)) = copysign(x, neg(y))` — each a bit operation, so each holds of every pattern. Folds.
 - **Subtraction** is addition of the negation, `sub(r, a, b) = add(r, a, neg(b))`, in every direction — the model defines it so. A fold.
 - **The roundings to an integral value are idempotent**, `round_integral(r, round_integral(s, x)) = round_integral(s, x)`. A fold.

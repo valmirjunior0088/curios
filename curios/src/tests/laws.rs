@@ -625,6 +625,82 @@ const CARRIERS: &[Carrier] = &[
         refused: &["Eq(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
     },
     Carrier {
+        name: "Flt, commutative",
+        binders: "a: Flt, b: Flt, c: Flt",
+        held: &[
+            // IEEE equality is symmetric on every pattern, a NaN unequal to everything from either side, and the comparisons are already decided in either operand order.
+            "Eq(a == b, b == a)",
+            "Eq(a != b, b != a)",
+        ],
+        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. Taking one is `documentation/roadmap/flt-laws-spec.md`'s, probe-side, since sorting operands in a fold would respell a term a guard's refinement is keyed on.
+        refused: &[
+            "Eq(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
+            "Eq(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",
+            "Eq(Flt/rounded/add(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), b, a))",
+            "Eq(Flt/rounded/add(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), b, a))",
+            "Eq(Flt/rounded/add(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), b, a))",
+            "Eq(Flt/rounded/mul(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/mul(Flt/Rounding/ties_to_even(), b, a))",
+            "Eq(Flt/rounded/mul(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/mul(Flt/Rounding/ties_to_away(), b, a))",
+            "Eq(Flt/rounded/mul(Flt/Rounding/toward_zero(), a, b), Flt/rounded/mul(Flt/Rounding/toward_zero(), b, a))",
+            "Eq(Flt/rounded/mul(Flt/Rounding/toward_positive(), a, b), Flt/rounded/mul(Flt/Rounding/toward_positive(), b, a))",
+            "Eq(Flt/rounded/mul(Flt/Rounding/toward_negative(), a, b), Flt/rounded/mul(Flt/Rounding/toward_negative(), b, a))",
+            "Eq(Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_even(), b, a, c))",
+            "Eq(Flt/rounded/fma(Flt/Rounding/ties_to_away(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_away(), b, a, c))",
+            "Eq(Flt/rounded/fma(Flt/Rounding/toward_zero(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_zero(), b, a, c))",
+            "Eq(Flt/rounded/fma(Flt/Rounding/toward_positive(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_positive(), b, a, c))",
+            "Eq(Flt/rounded/fma(Flt/Rounding/toward_negative(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_negative(), b, a, c))",
+            "Eq(Flt/min(a, b), Flt/min(b, a))",
+            "Eq(Flt/max(a, b), Flt/max(b, a))",
+        ],
+    },
+    Carrier {
+        name: "Flt, sign operations and roundings",
+        binders: "a: Flt, b: Flt, c: Flt",
+        held: &[],
+        // Candidate laws, each a fold `documentation/roadmap/flt-laws-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
+        refused: &[
+            "Eq(Flt/neg(Flt/neg(a)), a)",
+            "Eq(Flt/abs(Flt/abs(a)), Flt/abs(a))",
+            "Eq(Flt/abs(Flt/neg(a)), Flt/abs(a))",
+            "Eq(Flt/copysign(Flt/copysign(a, b), c), Flt/copysign(a, c))",
+            "Eq(Flt/neg(Flt/copysign(a, b)), Flt/copysign(a, Flt/neg(b)))",
+            "Eq(Flt/rounded/sub(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), a, Flt/neg(b)))",
+            "Eq(Flt/rounded/sub(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), a, Flt/neg(b)))",
+            "Eq(Flt/rounded/sub(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), a, Flt/neg(b)))",
+            "Eq(Flt/rounded/sub(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), a, Flt/neg(b)))",
+            "Eq(Flt/rounded/sub(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), a, Flt/neg(b)))",
+            "Eq(Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), a)), Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), a))",
+            "Eq(Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), a)), Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), a))",
+            "Eq(Flt/rounded/to_integral(Flt/Rounding/toward_zero(), Flt/rounded/to_integral(Flt/Rounding/toward_zero(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_zero(), a))",
+            "Eq(Flt/rounded/to_integral(Flt/Rounding/toward_positive(), Flt/rounded/to_integral(Flt/Rounding/toward_positive(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_positive(), a))",
+            "Eq(Flt/rounded/to_integral(Flt/Rounding/toward_negative(), Flt/rounded/to_integral(Flt/Rounding/toward_negative(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_negative(), a))",
+        ],
+    },
+    Carrier {
+        name: "Flt, controls",
+        binders: "a: Flt, b: Flt, c: Flt",
+        held: &[],
+        // Controls, none a law, each beside its counterexample: a rule that took one would be unsound.
+        refused: &[
+            // Rounding.
+            "Eq((a + b) + c, a + (b + c))",
+            "Eq((a * b) * c, a * (b * c))",
+            "Eq(a * (b + c), a * b + a * c)",
+            // `-0.0 + 0.0` is `+0.0`.
+            "Eq(a + 0.0, a)",
+            // A signaling NaN is quieted.
+            "Eq(a * 1.0, a)",
+            // An infinity or a NaN.
+            "Eq(a - a, 0.0)",
+            // An infinity, a NaN, or a negative `a`'s sign.
+            "Eq(a * 0.0, 0.0)",
+            // A NaN.
+            "Eq(a == a, true)",
+            // A NaN on either side.
+            "Eq(a < b, Bool/not(a >= b))",
+        ],
+    },
+    Carrier {
         name: "Char, over Nat",
         binders: "c: Char, d: Char",
         held: &[
