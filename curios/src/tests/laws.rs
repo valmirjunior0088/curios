@@ -632,7 +632,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(a == b, b == a)",
             "Eq(a != b, b != a)",
         ],
-        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. Taking one is `documentation/roadmap/flt-laws-spec.md`'s, probe-side, since sorting operands in a fold would respell a term a guard's refinement is keyed on.
+        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/flt-laws-spec.md` declares them a commutative magma of `documentation/roadmap/algebra-spec.md`'s, whose canonical form is computed where terms are compared, since sorting operands in a fold would respell a term a guard's refinement is keyed on.
         refused: &[
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",
@@ -657,7 +657,7 @@ const CARRIERS: &[Carrier] = &[
         name: "Flt, sign operations and roundings",
         binders: "a: Flt, b: Flt, c: Flt",
         held: &[],
-        // Candidate laws, each a fold `documentation/roadmap/flt-laws-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
+        // Candidate laws, each a declaration `documentation/roadmap/flt-laws-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
         refused: &[
             "Eq(Flt/neg(Flt/neg(a)), a)",
             "Eq(Flt/abs(Flt/abs(a)), Flt/abs(a))",

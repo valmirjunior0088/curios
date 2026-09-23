@@ -87,13 +87,14 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Bool` (conjunction, disjunction, exclusive or, and both equalities)
   - [x] `Nat`, unbounded at run time as in the theory — an i31 while small and a boxed magnitude past it, with no arbitrary-precision library beside it ([Nat and Int are an i31 until they outgrow it](design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md))
     - [x] Certified division with remainder and divisibility (`/std/Nat/div_mod` and `/std/Nat/Divides`)
-    - [ ] [The Euclidean remainder past them, and the unsigned binary scale](roadmap/nat-laws-spec.md)
+    - [ ] [The Euclidean remainder past them, the unsigned binary scale, and `min` and `max` as declared operations](roadmap/nat-laws-spec.md)
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
   - [x] `Int`, unbounded at run time as `Nat` is
     - [x] Order carried from `Nat` along the embedding (a sign view, trichotomy, and the laws of `/std/Int/Lt` and `/std/Int/Le`)
-    - [ ] [Cancellation, sign and absolute value, and the signed scale](roadmap/int-laws-spec.md)
+    - [ ] [Multiplicative cancellation, `abs`, `sign`, `min` and `max` as declared operations, and the signed scale](roadmap/int-laws-spec.md)
   - [x] `Flt`, IEEE 754-2019 binary64 specified by a hardware-independent model stated in this repository: every bit pattern a value under one symmetric NaN rule, the five rounding directions and `fma`, exceptions as values and the environment as a monad, decimal and hexadecimal text in every direction, `/std/Dyadic` as a finite value's exact form, and §9.4's reductions and §9.5's augmented operations
-    - [ ] [Its laws, the reflected model, the elementary functions of §9.2, and the rest of §8](roadmap/flt-laws-spec.md)
+    - [ ] [Its decided laws and the theorems over its bits](roadmap/flt-laws-spec.md)
+    - [ ] [The elementary functions of §9.2 and the rest of §8](roadmap/flt-elementary-spec.md)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
   - [x] `List`
   - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
@@ -103,6 +104,17 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A fact is stated once, or the copies are checked — the fold arms' grain twins, the decomposition's carriers and its two measures, and a key's encoding
 - [x] [A law is decided where it neither respells nor invents](design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md) — a left shift by a literal count, parity, a position inside a window, a map by a function convertible to the identity, and De Morgan with absorption, each moved from the law grid's refused rows to its held ones
 - [x] [Euclid's identity, a comparison split by sign, `Nat/to_int` as an ordered-semiring embedding, and a shift by a symbolic count](soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), each decided by both checkers and moved from the law grid's refused rows to its held ones
+- [ ] [Intrinsic laws as theorems of declared structures](roadmap/algebra-spec.md) — each law is a fold, a peel or a probe of its own today, so conversion misses linear consequences, a law holds on one carrier and not its twin, and every new law is new engine code
+  - [ ] Grids holding conversion transitive and stable under substitution
+  - [ ] One `Seq` carrier inside the compiler, with `List`, `Bits` and `Bytes` unchanged for the guest
+  - [ ] `curios-algebra` as the reference implementation both checkers decide with: polynomials, words, Boolean forms, and the certificate checker for linear integer arithmetic
+  - [ ] Comparisons and `Bool` decided modulo linear integer arithmetic, its search in the elaborator and its certificates checked by the certifier
+  - [ ] Refinement keys in canonical form
+  - [ ] `Nat` and `Int` as one polynomial ring, with a solver
+  - [ ] Declared morphisms, `pow` among them, and the word algebra over `Seq`
+  - [ ] The theory audited against Coq Modulo Theory's conditions
+  - [ ] The law grid generated from the declarations
+  - [ ] Bounds discharged from the hypotheses in scope
 
 ## Module System
 
@@ -132,6 +144,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core`)
 - [x] [Independent kernel in `curios-cert` re-checking what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)
 - [x] Crate-boundary split separating the rules both checkers run (`curios-analysis`)
+- [ ] [A certifier that believes nothing](roadmap/certifier-spec.md) — the certifier believes the elaborator's carried totality stamps, and depends on code written for speed or search rather than to be checked
+  - [ ] The certifier profiled
+  - [ ] Its own verdict record in place of the carried totality stamps
+  - [ ] Call sites recorded during the certifier's own typing walk
+  - [ ] Evidence checked, beginning with linear integer arithmetic's certificates
+  - [ ] Elaborator-grade code outside the certifier's dependency closure, enforced by the crate graph
+  - [ ] The perimeter restated as the certifier's own
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit)
 - [x] Full table and element section support in `curios-wasm` (plural tables, every segment mode)
 - [x] `Stage::WasmOptm`: the Binaryen-optimized module observable through `wonder stage`
@@ -219,7 +238,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located
 - [x] [Goal suggestions (`? ≈`)](design/toolchain/goal-suggestions-are-depth-one-fits-not-proof-search.md): sandboxed candidate fits, verified to compile
 - [x] Goal suggestions reach what a program has not already mentioned
-- [x] [A failing program names what failed](design/language/a-refusal-is-a-panic-the-emitter-renders.md) (one sentence per class; no program can spell it)
+- [x] [A failing program names what failed](design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md) (one sentence per class; no program can spell it)
 
 ## Standard Library
 
@@ -259,7 +278,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
-- [ ] [Exact rationals (`/std/Rat`): one canonical form, division under a nonzero bound, binary64 in both directions, exact decimals, and their laws](roadmap/rat-laws-spec.md)
+- [ ] [Exact rationals (`/std/Rat`): one canonical form, division under a nonzero bound, binary64 in both directions, exact decimals, and their laws](roadmap/rat-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, deferred to a consumer
   - [x] `Key(Nat)`, `Key(Byte)` and `Key(Bool)`, over the encodings `/std/Hash` already gave them
