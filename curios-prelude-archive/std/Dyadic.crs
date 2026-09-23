@@ -1,0 +1,152 @@
+use /std/{Flt, Nat, Int, Bool, Option, Ordering, Str, Show, Spell, Ord, Hash};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul};
+
+--- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `Flt/rounded/of_dyadic` is the one way back to a float.
+---
+--- Unnormalized: `3 · 2^0` and `6 · 2^-1` are two representations of one number, and arithmetic keeps whichever it arrives at rather than paying to normalize. Every comparison and the hash read the number, not the representation; `normalized` answers the one representation each number has with an odd mantissa.
+pub struct Dyadic: pub Type {
+    --- The whole number scaled, carrying the sign.
+    mantissa: Int,
+    --- The power of two it is scaled by.
+    exponent: Int,
+}
+
+--- The exact value of a finite `f`: its own mantissa and exponent, so a zero of either sign is `0 · 2^0`.
+pub let of(f: Flt, @ok: Flt/Finite(f)) -> Dyadic =
+    Dyadic { mantissa = Flt/mantissa(f, @ok), exponent = Flt/exponent(f, @ok) };
+
+--- The exact value of `f`, or `none` for an infinity or a NaN.
+pub let try_of(f: Flt) -> Option(Dyadic) =
+    match Flt/finite(f) | some(ok) => Option/some(of(f, @ok)) | none() => Option/none() end;
+
+--- `n`, exactly.
+pub let of_int(n: Int) -> Dyadic =
+    Dyadic { mantissa = n, exponent = +0 };
+
+--- `a`'s mantissa at an exponent `to` at or below its own, exactly.
+let lowered(a: Dyadic, to: Int) -> Int =
+    Int/shl(a.mantissa, Int/abs(a.exponent - to));
+
+--- The exponent both operands are exact at.
+let common(a: Dyadic, b: Dyadic) -> Int =
+    Int/min(a.exponent, b.exponent);
+
+--- The negation.
+pub let neg(a: Dyadic) -> Dyadic =
+    Dyadic { mantissa = +0 - a.mantissa, exponent = a.exponent };
+
+--- The magnitude.
+pub let abs(a: Dyadic) -> Dyadic =
+    Dyadic { mantissa = Nat/to_int(Int/abs(a.mantissa)), exponent = a.exponent };
+
+--- The exact sum.
+pub let add(a: Dyadic, b: Dyadic) -> Dyadic =
+    let e = common(a, b);
+    Dyadic { mantissa = lowered(a, e) + lowered(b, e), exponent = e };
+
+--- The exact difference.
+pub let sub(a: Dyadic, b: Dyadic) -> Dyadic =
+    add(a, neg(b));
+
+--- The exact product.
+pub let mul(a: Dyadic, b: Dyadic) -> Dyadic =
+    Dyadic { mantissa = a.mantissa * b.mantissa, exponent = a.exponent + b.exponent };
+
+--- The quotient of `a` by a nonzero `b` to 64 bits and past, truncated toward zero, with whether anything remained: `q · 2^e` short of the exact quotient by less than a unit exactly when `sticky`, which every rounding reads the same as the quotient itself. Exact division leaves the dyadics — `1 / 3` is not one — which is why this answers a truncation and a flag rather than a value.
+pub let quotient(a: Dyadic, b: Dyadic, @ok: Int/NonZero(b.mantissa)) -> {Dyadic, Bool} =
+    -- The divisor's bit length: `log2` of a nonzero magnitude plus one, which a zero one would not have.
+    let k = 65 + Nat/log2(Int/abs(b.mantissa));
+    let scaled = Int/shl(a.mantissa, k);
+    (Dyadic {
+        mantissa = Int/div(scaled, b.mantissa, @ok),
+        exponent = a.exponent - b.exponent - Nat/to_int(k),
+    }, Int/rem(scaled, b.mantissa, @ok) != +0);
+
+--- The representation with an odd mantissa, or `0 · 2^0` for zero: the one each number has.
+pub let normalized(a: Dyadic) -> Dyadic =
+    let m = Int/abs(a.mantissa);
+    match m
+    | 0 => of_int(+0)
+    | _ =>
+        -- `m & (m ^ (m - 1))` is the lowest set bit alone, and its position is how many zeros trail.
+        let t = Nat/log2(Nat/and(m, Nat/xor(m, m - 1)));
+        Dyadic { mantissa = Int/shr(a.mantissa, t), exponent = a.exponent + Nat/to_int(t) }
+    end;
+
+--- Whether the two are one number.
+pub let eql(a: Dyadic, b: Dyadic) -> Bool =
+    let e = common(a, b);
+    lowered(a, e) == lowered(b, e);
+
+--- Whether the two are different numbers.
+pub let neq(a: Dyadic, b: Dyadic) -> Bool =
+    Bool/not(eql(a, b));
+
+--- Whether `a` is below `b`.
+pub let lt(a: Dyadic, b: Dyadic) -> Bool =
+    let e = common(a, b);
+    lowered(a, e) < lowered(b, e);
+
+--- Whether `a` is at most `b`.
+pub let le(a: Dyadic, b: Dyadic) -> Bool =
+    let e = common(a, b);
+    lowered(a, e) <= lowered(b, e);
+
+--- Whether `a` is above `b`.
+pub let gt(a: Dyadic, b: Dyadic) -> Bool =
+    lt(b, a);
+
+--- Whether `a` is at least `b`.
+pub let ge(a: Dyadic, b: Dyadic) -> Bool =
+    le(b, a);
+
+--- The order of the two numbers, which is total: unlike `Flt`, nothing here is unordered.
+pub let ord(a: Dyadic, b: Dyadic) -> Ordering =
+    let e = common(a, b);
+    Int/ord(lowered(a, e), lowered(b, e));
+
+--- `a` as it is held, `±mantissa*2^exponent`: `+3*2^-2` is three quarters.
+pub let to_str(a: Dyadic) -> Str =
+    Str/concat(Str/concat(Int/to_str(a.mantissa), "*2^"), Int/to_str(a.exponent));
+
+satisfy Eql(Dyadic) {
+    eql = eql,
+    neq = neq,
+}
+
+satisfy Cmp(Dyadic) {
+    lt = lt,
+    le = le,
+    gt = gt,
+    ge = ge,
+}
+
+satisfy Ord(Dyadic) {
+    ord = ord,
+}
+
+satisfy Add(Dyadic) {
+    add = add,
+}
+
+satisfy Sub(Dyadic) {
+    sub = sub,
+}
+
+satisfy Mul(Dyadic) {
+    mul = mul,
+}
+
+satisfy Show(Dyadic) {
+    show = to_str,
+}
+
+--- The representation as it is held, so a spelled value reads back to the same one.
+satisfy Spell(Dyadic);
+
+--- The normalized representation's, so two representations of one number hash alike, as `eql` calls them one.
+satisfy Hash(Dyadic) {
+    hash(a) =
+        let n = normalized(a);
+        Hash/tagged(0, [Hash/hash(n.mantissa), Hash/hash(n.exponent)]),
+}

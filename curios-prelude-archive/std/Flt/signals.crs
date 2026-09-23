@@ -1,6 +1,5 @@
-use /std/{Flt, Nat, Int, Bool};
-use /std/Flt/{Rounding, Exceptions, rounded, exact, Dyadic};
-use /std/Flt/Dyadic/{let Dyadic};
+use /std/{Flt, Nat, Int, Bool, Dyadic};
+use /std/Flt/{Rounding, Exceptions, rounded, exact};
 
 --- Only the invalid operation.
 let invalid: Exceptions =
@@ -12,17 +11,18 @@ let division_by_zero: Exceptions =
 
 --- What rounding the exact value `e` — or one above it by less than a unit in its last place, when `sticky` — to `result` in `r` raises: overflow when the rounding with an unbounded exponent passes the largest finite value (§7.4), inexact when `result` differs from the exact value, and underflow when the exact value is tiny before rounding and the result is inexact (§7.5).
 let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions =
-    let overflow = exact/overflows(r, e.negative, e.magnitude, e.exponent, sticky);
+    let magnitude = Int/abs(e.mantissa);
+    let overflow = exact/overflows(r, e.mantissa < +0, magnitude, e.exponent, sticky);
     let inexact =
         sticky || overflow
         || (match Dyadic/try_of(result)
-            | some(d) => Bool/not(Dyadic/same_value(d, e))
+            | some(d) => d != e
             | none() => true
             end);
     Exceptions {
         ..Exceptions/none,
         overflow = overflow,
-        underflow = exact/tiny(e.magnitude, e.exponent) && inexact,
+        underflow = exact/tiny(magnitude, e.exponent) && inexact,
         inexact = inexact,
     };
 
@@ -60,10 +60,10 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
-        match y.magnitude
-        | 0 => match x.magnitude == 0 | true => invalid | false => division_by_zero end
-        | _ + 1 =>
-            match x.magnitude == 0
+        match y.mantissa != +0
+        | false => match x.mantissa == +0 | true => invalid | false => division_by_zero end
+        | true =>
+            match x.mantissa == +0
             | true => Exceptions/none
             | false =>
                 let (q, sticky) = Dyadic/quotient(x, y, @Bool/True/qed());
@@ -99,7 +99,7 @@ pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
     | a < +0.0 => invalid
     | Flt/is_zero(a) => Exceptions/none
     | (some(root), some(x)) = (Dyadic/try_of(rounded/sqrt(r, a)), Dyadic/try_of(a)) =>
-        Exceptions { ..Exceptions/none, inexact = Bool/not(Dyadic/same_value(Dyadic/mul(root, root), x)) }
+        Exceptions { ..Exceptions/none, inexact = root * root != x }
     -- `+inf`, its own root.
     | _ => Exceptions/none
     end;
@@ -108,7 +108,7 @@ pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
 pub let of_nat(r: Rounding, n: Nat) -> Exceptions =
     from_exact(
         r,
-        Dyadic { negative = false, magnitude = n, exponent = +0 },
+        Dyadic/of_int(Nat/to_int(n)),
         false,
         rounded/of_nat(r, n));
 
@@ -116,7 +116,7 @@ pub let of_nat(r: Rounding, n: Nat) -> Exceptions =
 pub let of_int(r: Rounding, n: Int) -> Exceptions =
     from_exact(
         r,
-        Dyadic { negative = n < +0, magnitude = Int/abs(n), exponent = +0 },
+        Dyadic/of_int(n),
         false,
         rounded/of_int(r, n));
 

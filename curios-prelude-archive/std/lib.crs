@@ -65,6 +65,10 @@ pub use Int/{let Int};
 pub mod Flt;
 pub use Flt/{let Flt};
 
+--- Dyadic rationals, `mantissa · 2^exponent`: every finite `Flt`'s exact value, with arithmetic that never rounds.
+pub mod Dyadic;
+pub use Dyadic/{let Dyadic};
+
 --- A packed bit string, least-significant first, written `b[...]`.
 pub mod Bits;
 pub use Bits/{let Bits};

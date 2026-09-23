@@ -1,7 +1,7 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs,
     sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- IEEE 754's rounding directions.
@@ -28,10 +28,6 @@ pub mod signals;
 
 --- The exact layer every rounding in this library goes through.
 mod exact;
-
---- A finite float's exact value, and the exact arithmetic over it.
-mod Dyadic;
-use Dyadic/{let Dyadic};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
@@ -117,10 +113,6 @@ pub let class(f: Flt) -> Class =
 pub let unordered(a: Flt, b: Flt) -> Bool =
     is_nan(a) || is_nan(b);
 
---- The exact value of a finite `f` as `mantissa · 2^exponent`, the zeros as `(+0, +0)`: the decomposition `/std/Rat` and this library's exact layer share.
-pub let to_dyadic(f: Flt, @ok: Finite(f)) -> {mantissa: Int, exponent: Int} =
-    (mantissa(f, @ok), exponent(f, @ok));
-
 --- That `f` is a finite nonzero value, decided: the domain of `log_b`.
 pub let FiniteNonZero(f: Flt) -> Prop =
     Bool/Holds(is_finite(f) && Bool/not(is_zero(f)));
@@ -143,13 +135,14 @@ pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
 pub let remainder(x: Flt, y: Flt) -> Flt =
     choose
     | is_nan(x) || is_nan(y) => x + y
-    | is_zero(y) => nan
-    | is_zero(x) => x
     | (some(d), some(v)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let e = Int/min(d.exponent, v.exponent);
-        let a = Nat/shl(d.magnitude, Int/abs(d.exponent - e));
-        let b = Nat/shl(v.magnitude, Int/abs(v.exponent - e));
+        let a = Nat/shl(Int/abs(d.mantissa), Int/abs(d.exponent - e));
+        let b = Nat/shl(Int/abs(v.mantissa), Int/abs(v.exponent - e));
+        -- `x`'s sign, which a zero answer keeps, `-0` included.
+        let negative = is_sign_minus(x);
         match b
+        -- A zero divisor, which is invalid.
         | 0 => nan
         | bp + 1 =>
             let q = a / (bp + 1);
@@ -157,8 +150,8 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
             -- The quotient rounded to the nearest integer, ties to even: `r` is what truncating left, so rounding up leaves `r - b`.
             let up = r * 2 > b || (r * 2 == b && Bool/not(Nat/is_even(q)));
             match up
-            | false => exact/round(Rounding/ties_to_even(), d.negative, r, e, false)
-            | true => exact/round(Rounding/ties_to_even(), Bool/not(d.negative), b - r, e, false)
+            | false => exact/round(Rounding/ties_to_even(), negative, r, e, false)
+            | true => exact/round(Rounding/ties_to_even(), Bool/not(negative), b - r, e, false)
             end
         end
     -- An infinity: invalid when it is `x`, and `x` itself when it is only `y`.
@@ -720,14 +713,16 @@ let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
 let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
     match Dyadic/try_of(f)
-    | some(d) => match d.magnitude == 0 | true => to_str(f) | false => significant(r, d, n) end
+    | some(d) => match d.mantissa == +0 | true => to_str(f) | false => significant(r, d, n) end
     | none() => to_str(f)
     end;
 
 --- A finite nonzero `d` with `n` significant digits in the direction `r`.
 let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
-    let sign = match d.negative | true => "-" | false => "+" end;
-    let p = d.exponent + Nat/to_int(exact/bit_len(d.magnitude)) - +1;
+    let negative = d.mantissa < +0;
+    let magnitude = Int/abs(d.mantissa);
+    let sign = match negative | true => "-" | false => "+" end;
+    let p = d.exponent + Nat/to_int(exact/bit_len(magnitude)) - +1;
     let scaled = p * +30103;
     let log10 =
         match scaled >= +0
@@ -736,7 +731,7 @@ let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
         end;
     let low = Nat/pow(10, n - 1);
     let high = Nat/pow(10, n);
-    let digits_at = (k: Int) => decimal_digits(r, d.negative, d.magnitude, d.exponent, k);
+    let digits_at = (k: Int) => decimal_digits(r, negative, magnitude, d.exponent, k);
     let k0 = log10 - Nat/to_int(n) + +1;
     let d0 = digits_at(k0);
     let first: {Nat, Int} =

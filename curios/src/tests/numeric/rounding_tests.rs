@@ -105,7 +105,7 @@ fn every_direction_executes_as_the_model_rounds() {
     let naturals = NATURALS.join(",\n            ");
     let source = format!(
         r#"
-        use /std/{{Nat, Int, Flt, Bytes, List, Io}};
+        use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic}};
         use /std/Flt/{{Rounding, rounded}};
         let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
         let zero = Bytes/len(/std/rand/bytes(0)!);
@@ -196,15 +196,15 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
     let exponents = EXPONENTS.map(|e| format!("{e:+}")).join(", ");
     let source = format!(
         r#"
-        use /std/{{Nat, Int, Flt, Bytes, List, Io}};
+        use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic}};
         use /std/Flt/{{Rounding, rounded}};
         let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
         let magnitudes: List(Int) = List/map([{magnitudes}], (m) => Nat/to_int(m) + zero);
         let exponents: List(Int) = [{exponents}];
         let direction(r: Rounding) -> List(Flt) =
             List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
-                rounded/of_dyadic(r, m, e),
-                rounded/of_dyadic(r, Int/sub(+0, m), e),
+                rounded/of_dyadic(r, Dyadic {{ mantissa = m, exponent = e }}),
+                rounded/of_dyadic(r, Dyadic {{ mantissa = Int/sub(+0, m), exponent = e }}),
             ]));
         let results = List/concat_map([
             Rounding/ties_to_even(),

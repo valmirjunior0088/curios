@@ -1,5 +1,5 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
-use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool};
+use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash, Show, Dyadic};
 use /std/Flt/{Rounding, rounded, Exceptions, Env, Class};
 
 -- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
@@ -11,45 +11,45 @@ let _orders_nan_after_infinity_in_a_type: Eq(Flt/ord(Flt/nan, Flt/pos_inf), Orde
 let _reads_infinity_in_a_type: Eq(Flt/of_str("-Infinity"), Option/some(Flt/neg_inf)) = Eq/refl();
 
 -- Every direction folds in a type, and each operation rounds its exact result exactly as `of_dyadic` rounds that result written out: `0.1 + 0.2` is `21617278211378382 · 2^-56`, `0.1 · 0.1` is `m² · 2^-112` for the tenth's significand `m`, `(1/3) · 3` is `18014398509481983 · 2^-54`, and `0.1 · 10 - 1` is `4 · 2^-56` exactly, which only a fused operation sees.
-let _sum_rounds_its_exact_value_ties_to_even: Eq(rounded/add(Rounding/ties_to_even(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_even(), +21617278211378382, -56)) =
+let _sum_rounds_its_exact_value_ties_to_even: Eq(rounded/add(Rounding/ties_to_even(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_even(), +51922968585348282049912486326436, -112)) =
+let _product_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_even(), +18014398509481983, -54)) =
+let _third_times_three_rounds_its_exact_value_ties_to_even: Eq(rounded/mul(Rounding/ties_to_even(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_ties_to_even: Eq(rounded/fma(Rounding/ties_to_even(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_even(), +4, -56)) =
+let _fma_rounds_its_exact_value_ties_to_even: Eq(rounded/fma(Rounding/ties_to_even(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_ties_to_away: Eq(rounded/add(Rounding/ties_to_away(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_away(), +21617278211378382, -56)) =
+let _sum_rounds_its_exact_value_ties_to_away: Eq(rounded/add(Rounding/ties_to_away(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_away(), +51922968585348282049912486326436, -112)) =
+let _product_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_away(), +18014398509481983, -54)) =
+let _third_times_three_rounds_its_exact_value_ties_to_away: Eq(rounded/mul(Rounding/ties_to_away(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_ties_to_away: Eq(rounded/fma(Rounding/ties_to_away(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_away(), +4, -56)) =
+let _fma_rounds_its_exact_value_ties_to_away: Eq(rounded/fma(Rounding/ties_to_away(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_zero: Eq(rounded/add(Rounding/toward_zero(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_zero(), +21617278211378382, -56)) =
+let _sum_rounds_its_exact_value_toward_zero: Eq(rounded/add(Rounding/toward_zero(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_zero(), +51922968585348282049912486326436, -112)) =
+let _product_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_zero(), +18014398509481983, -54)) =
+let _third_times_three_rounds_its_exact_value_toward_zero: Eq(rounded/mul(Rounding/toward_zero(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_zero: Eq(rounded/fma(Rounding/toward_zero(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_zero(), +4, -56)) =
+let _fma_rounds_its_exact_value_toward_zero: Eq(rounded/fma(Rounding/toward_zero(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_positive: Eq(rounded/add(Rounding/toward_positive(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_positive(), +21617278211378382, -56)) =
+let _sum_rounds_its_exact_value_toward_positive: Eq(rounded/add(Rounding/toward_positive(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_positive(), +51922968585348282049912486326436, -112)) =
+let _product_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_positive(), +18014398509481983, -54)) =
+let _third_times_three_rounds_its_exact_value_toward_positive: Eq(rounded/mul(Rounding/toward_positive(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_positive: Eq(rounded/fma(Rounding/toward_positive(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_positive(), +4, -56)) =
+let _fma_rounds_its_exact_value_toward_positive: Eq(rounded/fma(Rounding/toward_positive(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_negative: Eq(rounded/add(Rounding/toward_negative(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_negative(), +21617278211378382, -56)) =
+let _sum_rounds_its_exact_value_toward_negative: Eq(rounded/add(Rounding/toward_negative(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_negative(), +51922968585348282049912486326436, -112)) =
+let _product_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_negative(), +18014398509481983, -54)) =
+let _third_times_three_rounds_its_exact_value_toward_negative: Eq(rounded/mul(Rounding/toward_negative(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_negative: Eq(rounded/fma(Rounding/toward_negative(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_negative(), +4, -56)) =
+let _fma_rounds_its_exact_value_toward_negative: Eq(rounded/fma(Rounding/toward_negative(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
 
 -- The directions part where the exact value falls between two floats, and meet where it doesn't.
@@ -59,9 +59,9 @@ let _an_exact_quotient_is_every_direction_s: Eq(rounded/div(Rounding/toward_nega
     Eq/refl();
 let _a_tie_to_even_and_away: Eq(rounded/to_integral(Rounding/ties_to_away(), 2.5), 3.0) = Eq/refl();
 let _a_tie_to_even: Eq(rounded/to_integral(Rounding/ties_to_even(), 2.5), 2.0) = Eq/refl();
-let _half_the_least_subnormal_rounds_by_direction: Eq(rounded/of_dyadic(Rounding/toward_positive(), +1, -1075), Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])) =
+let _half_the_least_subnormal_rounds_by_direction: Eq(rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +1, exponent = -1075 }), Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])) =
     Eq/refl();
-let _an_overflow_toward_zero_stops_at_the_largest: Eq(rounded/of_dyadic(Rounding/toward_zero(), +1, +1024), Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F])) =
+let _an_overflow_toward_zero_stops_at_the_largest: Eq(rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +1, exponent = +1024 }), Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F])) =
     Eq/refl();
 let _an_exact_cancellation_is_negative_toward_negative: Eq(Flt/to_str(rounded/sub(Rounding/toward_negative(), 1.0, 1.0)), "-0") =
     Eq/refl();
@@ -289,3 +289,26 @@ test significant_digits_round_in_a_direction =
             Flt/to_str_significant(-0.0, 3, @Bool/True/qed()),
             Flt/to_str_significant(123456.0, 2, @Bool/True/qed())],
         ["+0.33333", "+0.33334", "+1000", "+2", "+3", "-0", "+120000"]);
+
+-- A float's exact value is a `Dyadic`, whose arithmetic never rounds and whose comparisons read the number rather than the representation: `0.1 + 0.2` held exactly is the sum that rounds to `0.30000000000000004`, and `6 · 2^-1` is `3`.
+let _three_quarters_is_exactly_three_over_four: Eq(Dyadic/of(0.75, @Bool/True/qed()) == Dyadic { mantissa = +3, exponent = -2 }, true) =
+    Eq/refl();
+let _a_dyadic_sum_never_rounds: Eq(Dyadic/of(0.1, @Bool/True/qed()) + Dyadic/of(0.2, @Bool/True/qed()) == Dyadic { mantissa = +21617278211378382, exponent = -56 }, true) =
+    Eq/refl();
+let _two_representations_hash_as_one_number: Eq(Hash/hash(Dyadic { mantissa = +6, exponent = -1 }), Hash/hash(Dyadic/of_int(+3))) =
+    Eq/refl();
+let _normalizing_strips_the_trailing_zeros: Eq(Dyadic/normalized(Dyadic { mantissa = -12, exponent = +1 }), Dyadic { mantissa = -3, exponent = +3 }) =
+    Eq/refl();
+
+test dyadics_compute_and_compare_as_numbers =
+    let half = Dyadic/of(0.5, @Bool/True/qed());
+    Test/all([
+        Test/equal(Dyadic { mantissa = +6, exponent = -1 }, Dyadic/of_int(+3)),
+        Test/equal(half * half - half, Dyadic/neg(Dyadic/of(0.25, @Bool/True/qed()))),
+        Test/equal(List/map([Flt/pos_inf, Flt/nan, -0.0], Dyadic/try_of), [Option/none(), Option/none(), Option/some(Dyadic/of_int(+0))]),
+        Test/equal(List/sort([Dyadic/of_int(+2), half, Dyadic/of_int(-1)]), [Dyadic/of_int(-1), half, Dyadic/of_int(+2)]),
+        Test/equal(Show/show(Dyadic/of(-0.75, @Bool/True/qed())), "-6755399441055744*2^-53"),
+        Test/equal(
+            List/map([Rounding/toward_negative(), Rounding/toward_positive()],
+                (r) => rounded/of_dyadic(r, Dyadic/of(0.1, @Bool/True/qed()) + Dyadic/of(0.2, @Bool/True/qed()))),
+            [0.3, 0.1 + 0.2])]);
