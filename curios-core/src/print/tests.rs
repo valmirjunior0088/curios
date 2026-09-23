@@ -103,6 +103,35 @@ fn a_labeled_tuple_type_keeps_its_labels_through_a_rebuild() {
     assert_eq!(tuple.to_string(), "{fst: Nat, Bool}");
 }
 
+/// A successor over a symbolic tail prints as `k + 1` without being an operator intrinsic, so as an operand it takes the parentheses an addition would. Printed bare, `n - (k + 1)` read as `n - k + 1`, which is `(n - k) + 1`.
+#[test]
+fn a_symbolic_successor_is_parenthesized_as_an_operand() {
+    let n = Term::free_var(&Free::local(0, Some("n")));
+    let successor = || {
+        Term::intrinsic(Intrinsic::Nat(Nat::Succ(
+            1usize.into(),
+            Term::free_var(&Free::local(1, Some("k"))),
+        )))
+    };
+
+    let difference = Term::intrinsic(Intrinsic::nat_sub(n.clone(), successor()));
+    assert_eq!(difference.to_string(), "n - (k + 1)");
+
+    let product = Term::intrinsic(Intrinsic::nat_mul(successor(), n));
+    assert_eq!(product.to_string(), "(k + 1) * n");
+}
+
+/// A successor over zero is a numeral, which delimits itself.
+#[test]
+fn a_numeral_operand_prints_bare() {
+    let n = Term::free_var(&Free::local(0, Some("n")));
+    let difference = Term::intrinsic(Intrinsic::nat_sub(
+        n,
+        Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
+    ));
+    assert_eq!(difference.to_string(), "n - 3");
+}
+
 /// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `x => x` does not split it in two.
 #[test]
 fn a_short_lambda_body_stays_on_the_arrows_line() {

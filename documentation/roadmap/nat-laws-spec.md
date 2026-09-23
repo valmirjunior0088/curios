@@ -1,12 +1,14 @@
 # `Nat` laws: the Euclidean remainder, the binary scale, and `min` and `max`
 
-Working specification for the `Nat` theorems and operations the standard library still lacks: the Euclidean layer past certified division, the unsigned binary-scale layer, and `min` and `max` as declared operations. Each is an independent capability of `/std/Nat` that stands without any consumer; [the `Rat` specification](rat-spec.md) is the consumer that asks for the first two, and names which layer each stage needs.
+Working specification for the `Nat` theorems and operations the standard library still lacks: the Euclidean layer past certified division, the unsigned binary-scale layer, and `min` and `max` as declared operations. Each is an independent capability of `/std/Nat` that stands without any consumer; [Rat part 1](rat-pt1-spec.md) is the consumer that asks for the first two, and names which layer each stage needs.
+
+The broader algebra dependencies named here belong to [part 2](algebra-pt2-spec.md), whose design is not refined yet. [Part 1](algebra-pt1-spec.md) consolidates existing behavior and does not fulfill these requests for additional reasoning or declarations.
 
 ## What this builds on
 
 `Nat` is unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a law stated over `Nat` holds of the compiled program, and nothing below needs a second, library-defined natural. Its arithmetic is reasoned about by the kernel rather than beside it:
 
-- what conversion decides about `Nat` today — the commutative-semiring laws through the sum normal form, Euclid's identity and the remainder's bound, and a shift read through its power and its floor — is recorded in [Open fold laws and the sum normal form](../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), and what it will decide is [the algebra specification](algebra-spec.md)'s;
+- what conversion decides about `Nat` today — the commutative-semiring laws through the sum normal form, Euclid's identity and the remainder's bound, and a shift read through its power and its floor — is recorded in [Open fold laws and the sum normal form](../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), and what it will decide is [algebra part 2](algebra-pt2-spec.md)'s;
 - `/std/Nat/div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
 - `/std/Nat/Divides(d, n)` is a multiple witness, with `refl`, `trans`, `zero`, `one`, `add`, `mul`, and `of_rem`, which turns a zero remainder into divisibility with the quotient as the witness;
 - `/std/Nat/Lt` and `/std/Nat/Le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on.

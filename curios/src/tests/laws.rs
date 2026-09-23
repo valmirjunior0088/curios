@@ -632,7 +632,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(a == b, b == a)",
             "Eq(a != b, b != a)",
         ],
-        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/flt-laws-spec.md` declares them a commutative magma of `documentation/roadmap/algebra-spec.md`'s, whose canonical form is computed where terms are compared, since sorting operands in a fold would respell a term a guard's refinement is keyed on.
+        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/flt-laws-spec.md` requests these laws; `documentation/roadmap/algebra-pt2-spec.md` retains the unrefined declaration and canonical-form design. Sorting operands in a fold would respell a term a guard's refinement is keyed on.
         refused: &[
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",

@@ -98,6 +98,26 @@ fn spells_index_arithmetic_infix() {
     );
 }
 
+// Reduction stores `k + 1` as a successor over `k`, which prints infix without being an operator, so a report once spelled `n - (k + 1)` as `n - k + 1` — a different term — once the index had normalized.
+#[test]
+fn parenthesizes_a_reduced_successor_operand() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let claim(n: Nat, k: Nat) -> Eq(n - (k + 1), 0) = Eq/refl();
+        claim
+        "#;
+
+    let error = error(source);
+    assert!(
+        error.contains("expected: Eq(@Nat, n - (k + 1), 0)"),
+        "successor operand not parenthesized: {error}"
+    );
+    assert!(
+        !error.contains("n - k + 1"),
+        "successor operand printed bare: {error}"
+    );
+}
+
 // A name whose unfolding stalls keeps its name. `double` is a `rec`, so unfolding `double(n)` on a variable reaches the folded call's neutral, which the printer can only spell as the whole recursive group — twice, once per reference — with the author's `n` renamed against the binders the body brought in. The head stays as written and only the arguments normalize; the `2 + 3` and witness-collapse fixtures above are what still unfolds.
 #[test]
 fn keeps_the_name_of_a_stalled_unfolding() {

@@ -1,10 +1,12 @@
 # `Int` laws: the order bridges, multiplicative cancellation, `abs`, `sign`, `min` and `max`, and the signed scale
 
-Working specification for the `Int` theorems and operations the standard library still lacks past its order laws. They are an independent capability of `/std/Int`, and [the `Rat` specification](rat-spec.md) is the consumer that asks for them.
+Working specification for the `Int` theorems and operations the standard library still lacks past its order laws. They are an independent capability of `/std/Int`, and [Rat part 1](rat-pt1-spec.md) is the consumer that asks for them.
+
+The broader algebra dependencies named here belong to [part 2](algebra-pt2-spec.md), whose design is not refined yet. [Part 1](algebra-pt1-spec.md) consolidates existing behavior and does not fulfill these requests for additional reasoning or declarations.
 
 ## What this builds on
 
-`Int` is unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The kernel reasons about its arithmetic: what conversion decides about `Int` today — the commutative-ring laws through the sum normal form, a comparison through its difference split by sign, and `Nat/to_int` as an ordered-semiring embedding — is recorded in [Open fold laws and the sum normal form](../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), and what it will decide is [the algebra specification](algebra-spec.md)'s. Two laws a proof might expect to state are already there and are not lemmas: order reversal under negation, `a <= b` being `+0 - b <= +0 - a`, and additive cancellation in its order form, `a + n <= b + n` being `a <= b`.
+`Int` is unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The kernel reasons about its arithmetic: what conversion decides about `Int` today — the commutative-ring laws through the sum normal form, a comparison through its difference split by sign, and `Nat/to_int` as an ordered-semiring embedding — is recorded in [Open fold laws and the sum normal form](../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), and what it will decide is [algebra part 2](algebra-pt2-spec.md)'s. Two laws a proof might expect to state are already there and are not lemmas: order reversal under negation, `a <= b` being `+0 - b <= +0 - a`, and additive cancellation in its order form, `a + n <= b + n` being `a <= b`.
 
 The library carries what reduction does not state:
 

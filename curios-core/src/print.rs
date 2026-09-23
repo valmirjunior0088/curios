@@ -755,9 +755,12 @@ fn former_doc(former: FormerEta, frame: Frame) -> Printer {
     }
 }
 
-/// An operand of [`print_infix`], wrapped in parentheses when it too prints as an infix operator (a nested operator intrinsic or a residual `Infix` node); self-delimiting operands (variables, literals, applications) print bare.
+/// An operand of [`print_infix`], wrapped in parentheses when it too prints infix — a nested operator intrinsic, a residual `Infix` node, or a successor over a symbolic tail, which is how reduction stores `k + 1` and which prints as `k + 1` without being an operator intrinsic; self-delimiting operands (variables, literals, applications) print bare.
 fn print_operand(term: Term, frame: Frame) -> Printer {
     let parenthesize = match &*term {
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(_, tail))) => {
+            !matches!(tail.as_ref(), Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
+        }
         Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
         Subterm::Transient(Transient::Infix(_)) => true,
         _ => false,

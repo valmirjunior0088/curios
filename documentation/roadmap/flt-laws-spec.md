@@ -1,12 +1,14 @@
 # `Flt` laws: decided identities and theorems over the bits
 
-Working specification for the laws a proof about floats needs that `/std/Flt` still lacks past its operations: identities conversion decides for every bit pattern, and theorems proved over the encoding. The elementary functions of §9.2 and the rest of §8 are [a specification of their own](flt-elementary-spec.md); they consume these laws only in their proofs, never in their execution.
+Working specification for the laws a proof about floats needs that `/std/Flt` still lacks past its operations: identities conversion decides for every bit pattern, and theorems proved over the encoding. [The elementary functions of §9.2](flt-elementary-spec.md) and [the remaining alternate exception handling of §8](flt-exception-handling-spec.md) have independent specifications. The elementary functions consume these laws only in their proofs, never in their execution.
+
+The broader algebra dependencies named here belong to [part 2](algebra-pt2-spec.md), whose design is not refined yet. [Part 1](algebra-pt1-spec.md) consolidates existing behavior and does not fulfill these requests for additional reasoning or declarations.
 
 ## What this builds on
 
 - **The model.** `curios_num::Floating` is binary64 with every one of the 2⁶⁴ bit patterns a distinct value, one symmetric NaN rule — an invalid operation with no NaN operand answers `+0x7ff8_0000_0000_0000`, and otherwise the greatest quieted NaN operand, read unsigned, which keeps `add`, `mul`, `min`, `max` and `fma`'s product commutative bit for bit — and five rounding directions. [The binary64 model and its NaN rule](../soundness/per-term-rules/the-binary64-model-and-its-nan-rule.md) holds the running program to it.
 - **The primitives.** Exactly IEEE's compute-exactly-round-once operations fold in one step through the model, each carrying its direction: `add`, `sub`, `mul`, `div`, `sqrt`, `fma`, the roundings to an integral value, and the conversions from `Nat` and `Int`; beside them the comparisons, `min`/`max`, the sign operations, the byte conversions, and `to_int`, `to_nat`, `mantissa` and `exponent`, the last four under `Flt/Finite` or `Flt/NonNeg`.
-- **The law grid.** `curios/src/tests/laws.rs` states laws as held and refused rows put to both checkers. A law conversion takes is a declaration in the table [the algebra specification](algebra-spec.md) builds, whose rows it generates; what is not a law stays a control written by hand. A declaration is decided in both checkers by that specification's reference implementation.
+- **The law grid.** `curios/src/tests/laws.rs` states laws as held and refused rows put to both checkers. A law conversion takes is a declaration in the table [algebra part 2](algebra-pt2-spec.md) builds, whose rows it generates; what is not a law stays a control written by hand. A declaration is decided in both checkers by that specification's reference implementation.
 
 ## Decided laws
 
