@@ -398,12 +398,14 @@ The compiler tells you everything it knows about the hole, and then refuses to b
 
 ### Whole-term forms and operand positions
 
-`let`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
+`let`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
-An infix operand is an applied atom: a literal, name, sort (`Type`/`Prop`), tuple, tuple type, structure literal, goal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
+An infix operand is an applied atom: a literal, name, sort (`Type`/`Prop`), tuple, tuple type, structure literal, goal, `match`, `choose`, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A `match` and a `choose` are atoms because `end` closes them, so nothing after one can be read as part of it. A whole-term form is not an operand; parenthesize it to use it as one.
 
 ```crs
-1 + (match flag | true => 1 | false => 0 end)
+1 + match flag | true => 1 | false => 0 end
+match chosen | left() => f | right() => g end(x)
+1 + (let n = 2; n * n)
 ```
 
 Positions that accept a full term need no parentheses: call arguments, list elements, field values, match scrutinees, and arm bodies.

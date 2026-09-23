@@ -453,3 +453,31 @@ fn a_match_binder_spans_its_word_alone() {
     };
     assert_eq!(super::test_support::spelled(x), "x");
 }
+
+/// `end` closes a `match` or a `choose`, so either is an atom: an operator, a call, a projection and a `!` take one bare, where a `let` or a lambda, which extend to the end of the enclosing term, still need parentheses.
+#[test]
+fn a_match_or_choose_takes_operators_and_suffixes_bare() {
+    let sum = "1 + match b | true => 1 | false => 0 end"
+        .parse::<Term>()
+        .expect("a match is an operand");
+    let Subterm::Infix(infix) = sum.as_subterm() else {
+        panic!("expected a sum, got {sum}");
+    };
+    assert!(matches!(infix.right.as_subterm(), Subterm::Match(_)));
+
+    let call = "match b | true => f | false => g end(x)"
+        .parse::<Term>()
+        .expect("a match is a callee");
+    let Subterm::Apply(apply) = call.as_subterm() else {
+        panic!("expected a call, got {call}");
+    };
+    assert!(matches!(apply.head.as_subterm(), Subterm::Match(_)));
+
+    let performed = "choose | c => a | _ => b end!"
+        .parse::<Term>()
+        .expect("a choose is an action");
+    let Subterm::Bang(action) = performed.as_subterm() else {
+        panic!("expected a bang, got {performed}");
+    };
+    assert!(matches!(action.as_subterm(), Subterm::Choose(_)));
+}

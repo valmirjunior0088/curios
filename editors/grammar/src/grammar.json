@@ -2292,14 +2292,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "match_term"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "choose_term"
-        },
-        {
-          "type": "SYMBOL",
           "name": "function_type"
         },
         {
@@ -3098,6 +3090,14 @@
     "_atom": {
       "type": "CHOICE",
       "members": [
+        {
+          "type": "SYMBOL",
+          "name": "match_term"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "choose_term"
+        },
         {
           "type": "SYMBOL",
           "name": "goal"

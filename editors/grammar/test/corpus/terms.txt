@@ -125,6 +125,36 @@ join(@Nat, use custom_show, values)
           (identifier))))))
 
 ================================================================================
+A match is an atom: an operand, a callee, a projected value
+================================================================================
+
+1 + match b | true => f | false => g end(x).0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (binary
+    (number)
+    (projection
+      (call
+        (match_term
+          (path
+            (identifier))
+          (match_arm
+            (boolean)
+            (path
+              (identifier)))
+          (match_arm
+            (boolean)
+            (path
+              (identifier))))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (field_identifier))))
+
+================================================================================
 Match with a motive and every leaf shape
 ================================================================================
 

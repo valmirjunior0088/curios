@@ -110,3 +110,16 @@ fn a_local_let_group_breaks_before_each_and() {
         "let a: Type = b\nand b: Type = a;\na"
     );
 }
+
+#[test]
+fn a_match_operand_or_callee_prints_bare() {
+    // `end` closes it, so the parentheses a `let` or a lambda needs in these positions would only be noise.
+    assert_eq!(
+        render("1 + match b | true => 1 | false => 0 end", 80),
+        "1 + match b | true => 1 | false => 0 end"
+    );
+    assert_eq!(
+        render("(match b | true => f | false => g end)(x)", 80),
+        "match b | true => f | false => g end(x)"
+    );
+}

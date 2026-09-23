@@ -150,11 +150,19 @@
             "named": true
           },
           {
+            "type": "choose_term",
+            "named": true
+          },
+          {
             "type": "goal",
             "named": true
           },
           {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_term",
             "named": true
           },
           {
@@ -238,11 +246,19 @@
             "named": true
           },
           {
+            "type": "choose_term",
+            "named": true
+          },
+          {
             "type": "goal",
             "named": true
           },
           {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_term",
             "named": true
           },
           {
@@ -378,11 +394,19 @@
             "named": true
           },
           {
+            "type": "choose_term",
+            "named": true
+          },
+          {
             "type": "goal",
             "named": true
           },
           {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_term",
             "named": true
           },
           {
@@ -492,11 +516,19 @@
             "named": true
           },
           {
+            "type": "choose_term",
+            "named": true
+          },
+          {
             "type": "goal",
             "named": true
           },
           {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_term",
             "named": true
           },
           {
@@ -4326,11 +4358,19 @@
             "named": true
           },
           {
+            "type": "choose_term",
+            "named": true
+          },
+          {
             "type": "goal",
             "named": true
           },
           {
             "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_term",
             "named": true
           },
           {

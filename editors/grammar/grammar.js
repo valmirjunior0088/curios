@@ -306,8 +306,6 @@ module.exports = grammar({
     _term: ($) =>
       choice(
         $.let_term,
-        $.match_term,
-        $.choose_term,
         $.function_type,
         $.lambda,
         $._infix,
@@ -404,8 +402,11 @@ module.exports = grammar({
 
     bang: ($) => prec.left(PRECEDENCE.suffix, seq(field("action", $._applied), "!")),
 
+    // `match` and `choose` are atoms because `end` closes them, so an operator or a suffix may follow one bare.
     _atom: ($) =>
       choice(
+        $.match_term,
+        $.choose_term,
         $.goal,
         $.struct_literal,
         $.path,

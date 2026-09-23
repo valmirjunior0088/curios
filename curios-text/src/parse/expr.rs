@@ -235,10 +235,12 @@ pub(super) fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 }
 
 pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
-    // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins.
+    // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins. `match` and `choose` are heads because `end` closes them: nothing after one can be read as part of it, so an operator, a call, a projection or a `!` may follow one bare.
     with_span(
         with_span(
             parse_goal()
+                .or(parse_match())
+                .or(parse_choose())
                 .or(parse_struct_lit())
                 .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
                 .or(parse_type())
@@ -385,8 +387,6 @@ pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
             look_ahead(take_eof())
                 .and_keep(fail("expected a term, obtained 'end-of-file'"))
                 .or(parse_let())
-                .or(parse_match())
-                .or(parse_choose())
                 .or(parse_func_type())
                 .or(parse_func())
                 .or(parse_infix_expr(0))

@@ -1184,15 +1184,11 @@ fn signature_start(signature: &LetSignature) -> Option<usize> {
     earliest.span().map(|span| span.start)
 }
 
-/// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a match, a lambda, an arrow, an effect form) parenthesizes unconditionally, since the operand grammar cannot produce it bare.
+/// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` or `choose` does not: `end` closes it, so it is an atom and prints bare in every position.
 fn print_operand(term: Term, min_prec: u8) -> Printer {
     let parenthesized = match term.as_subterm() {
         Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
-        Subterm::Let(_)
-        | Subterm::Match(_)
-        | Subterm::Choose(_)
-        | Subterm::FuncType(_)
-        | Subterm::Func(_) => true,
+        Subterm::Let(_) | Subterm::FuncType(_) | Subterm::Func(_) => true,
         _ => false,
     };
     match parenthesized {
