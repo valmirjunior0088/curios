@@ -36,6 +36,16 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-cont` b
 
 **Rejected — inlining the slow path.** It would save a call where a value has already outgrown the i31, and pay for it with a multiplied division and a multiplied float conversion at every site.
 
+### Floats past ties to even are a helper library the emitter writes
+
+**Decision.** A `Flt` operation Wasm has an instruction for — ties-to-even arithmetic, `sqrt`, `min`, `max`, the roundings to an integral value it spells — stays that instruction, followed by `r != r` and, only for a NaN, a call to `flt/nan`, which recomputes the model's NaN rule from the operands. What Wasm has no instruction for — the four other directions, `fma` in every direction, and ties to away to an integral value — is `into_wasm/flt_emitter.rs`: integer soft-float helpers over the operands' bits, emitted on demand in `FltHelper::ALL`'s order exactly as `big_emitter` emits its own, and sharing its `wasm!` splicing and helper declarations through `shorthand.rs`. A direction is static on each operation, so the choice between the instruction and a helper is made once, at emission. `rem`, exact `fmod`, is the one float helper outside that library: it predates it and is still declared among the rope helpers as `flt/rem`.
+
+**Rationale.** The default direction is the common case and runs at hardware speed; the directed ones are rare, long and cold, so they are functions every use calls. The check after an instruction is what makes the instruction usable at all: Wasm leaves a computed NaN's sign and payload to the engine, and the model pins them.
+
+**What the check costs is not yet measured.** Take it with a float-heavy workload under `programs/` — one does not exist yet, and adding one follows `programs/README.md` — built once as it stands and once with `emit_flt_checked`'s check removed, comparing the run's time; record the figure and the date here.
+
+**Rejected.** Error-free transformations over the hardware operations for the directed results: they fail near underflow and overflow, which is where the directions differ most. A run-time direction operand: it would branch on every call where the static tag decides at emission.
+
 ### A refusal names its class
 
 **Decision.** The emitter never emits a bare trap for a failure a program can meet. Every refusal — the host-wire narrowing of a `Nat` or `Int`, the packed and list bounds, the `Flt` decode, and the arm behind `curios_cont::Node::Unreachable` — is `Table::refuse_instrs` over a class of the IR's `Panic` roster: a call to the class's `$refuse/<class>` helper, then `unreachable`. The helper builds the sentence from a passive data segment where the refusal fires and hands it to the `sys.panic` import, so a module declares only the helpers its code can reach and allocates nothing for a message until one is printed. `into_wasm/refusal.rs` is the one place a sentence is spelled; the import is declared unconditionally. A lowering that must refuse a reachable state seats a `curios_cont::Node::Panic` of its class, as the knot's forcing state does with `Panic::Cycle`. The cross-cutting decision, including why no program can spell a panic, is [a refusal is a panic the emitter renders](../documentation/design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md).

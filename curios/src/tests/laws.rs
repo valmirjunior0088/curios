@@ -621,7 +621,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
             "Eq(Bytes/len(Flt/to_le_bytes(f)), 8)",
         ],
-        // A candidate law, refused because nothing decides it: true of the model now that every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side.
+        // A candidate law, refused because nothing decides it: true of the model now that every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/flt-laws-spec.md` states it among the decided laws to land.
         refused: &["Eq(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
     },
     Carrier {
