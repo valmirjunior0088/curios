@@ -1,6 +1,6 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
-use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash, Show, Dyadic};
-use /std/Flt/{Rounding, rounded, Exceptions, Env, Class};
+use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash, Show, Dyadic, Vec};
+use /std/Flt/{Rounding, rounded, signals, Exceptions, Env, Class};
 
 -- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
 let _renders_in_a_type: Eq(Flt/to_str(0.1), "+0.1") = Eq/refl();
@@ -312,3 +312,57 @@ test dyadics_compute_and_compare_as_numbers =
             List/map([Rounding/toward_negative(), Rounding/toward_positive()],
                 (r) => rounded/of_dyadic(r, Dyadic/of(0.1, @Bool/True/qed()) + Dyadic/of(0.2, @Bool/True/qed()))),
             [0.3, 0.1 + 0.2])]);
+
+-- §9.4's reductions compute exactly and round once: `0.1 + 0.2 + 0.3` folded is `0.6000000000000001` but their sum is `0.6`, a large sum that cancels never overflows on the way, a dot product whose products would overflow cancels exactly, and an exact zero sum takes §6.3's sign.
+let _a_sum_rounds_once: Eq(Flt/sum([0.1, 0.2, 0.3]), 0.6) = Eq/refl();
+let _a_cancelling_sum_does_not_overflow: Eq(Flt/sum([1.0e308, 1.0e308, -1.0e308]), 1.0e308) = Eq/refl();
+let _a_cancelling_dot_is_exact: Eq(Flt/dot(Vec/of_list([1.0e200, 1.0e200]), Vec/of_list([1.0e200, -1.0e200])), +0.0) = Eq/refl();
+let _a_sum_of_negative_zeros_is_negative: Eq(Flt/to_le_bytes(Flt/sum([-0.0, -0.0])), Flt/to_le_bytes(-0.0)) = Eq/refl();
+let _a_cancelling_sum_toward_negative_is_negative_zero: Eq(Flt/to_le_bytes(rounded/sum(Rounding/toward_negative(), [1.0, -1.0])), Flt/to_le_bytes(-0.0)) = Eq/refl();
+let _a_scaled_product_keeps_its_scale: Eq(Flt/scaled_prod([1.0e200, 1.0e200, 1.0e200]).1, +1993) = Eq/refl();
+
+-- §9.5's augmented operations answer a value and its exact error: `1 + 2^-60` is `1` with `2^-60` left over, and the pair a product answers adds back to the exact product.
+let _an_augmented_sum_keeps_what_rounding_dropped: Eq(Flt/augmented_add(1.0, Flt/scale(1.0, -60)), (1.0, Flt/scale(1.0, -60))) = Eq/refl();
+let _an_augmented_product_adds_back_exactly: Eq(
+    Dyadic/of(Flt/augmented_mul(0.1, 0.1).0, @Bool/True/qed()) + Dyadic/of(Flt/augmented_mul(0.1, 0.1).1, @Bool/True/qed())
+        == Dyadic/of(0.1, @Bool/True/qed()) * Dyadic/of(0.1, @Bool/True/qed()),
+    true) =
+    Eq/refl();
+
+test reductions_round_once_and_signal_as_ieee_defines =
+    let invalid = Exceptions { ..Exceptions/none, invalid = true };
+    let (pr, sf) = Flt/scaled_prod([1.0e200, 1.0e200, 1.0e200]);
+    Test/all([
+        Test/equal(show(Flt/sum([0.1, 0.2, 0.3])), show(0.6)),
+        Test/equal(show(Flt/sum([])), show(+0.0)),
+        Test/equal(Flt/is_nan(Flt/sum([Flt/pos_inf, Flt/neg_inf])), true),
+        Test/equal(signals/sum(Rounding/ties_to_even(), [Flt/pos_inf, Flt/neg_inf]), invalid),
+        Test/equal(signals/dot(Rounding/ties_to_even(), Vec/of_list([Flt/pos_inf]), Vec/of_list([0.0])), invalid),
+        Test/equal(signals/sum(Rounding/ties_to_even(), [1.0e308, 1.0e308]), Exceptions { ..Exceptions/none, overflow = true, inexact = true }),
+        Test/equal(show(Flt/sum_abs([-1.5, 2.5])), show(4.0)),
+        Test/equal(show(Flt/sum_square([3.0, 4.0])), show(25.0)),
+        Test/equal(sf, +1993),
+        Test/equal(pr >= 1.0 && pr < 2.0, true),
+        Test/equal(Flt/scaled_prod_sum(Vec/of_list([1.0, 2.0]), Vec/of_list([2.0, 2.0])), (1.5, +3)),
+        Test/equal(Flt/scaled_prod_diff(Vec/of_list([Flt/pos_inf]), Vec/of_list([Flt/pos_inf])).0 != Flt/scaled_prod_diff(Vec/of_list([Flt/pos_inf]), Vec/of_list([Flt/pos_inf])).0, true)]);
+
+test augmented_operations_answer_the_error =
+    let tiny = Flt/scale(1.0, -60);
+    Test/all([
+        Test/equal(Flt/augmented_add(1.0, tiny), (1.0, tiny)),
+        Test/equal(Flt/augmented_sub(1.0, 1.0), (+0.0, +0.0)),
+        Test/equal(Flt/augmented_mul(Flt/pos_inf, 2.0), (Flt/pos_inf, Flt/pos_inf)),
+        Test/equal(signals/augmented_add(1.0, tiny), Exceptions/none),
+        Test/equal(signals/augmented_mul(1.0e308, 10.0), Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
+
+-- §8.3's alternate handling: an exception the block handles is not recorded, and its result is replaced.
+test handled_exceptions_are_not_recorded =
+    let overflow = Exceptions { ..Exceptions/none, overflow = true };
+    let (caught, raised) = Env/run(Env/checked(overflow, Env/mul(1.0e308, 10.0)));
+    let (fine, _) = Env/run(Env/checked(overflow, Env/add(1.0, 2.0)));
+    let (replaced, _) = Env/run(Env/substitute(overflow, 0.0, Env/mul(1.0e308, 10.0)));
+    Test/all([
+        Test/equal(Option/is_some(caught), false),
+        Test/equal(raised, Exceptions { ..Exceptions/none, inexact = true }),
+        Test/equal(Option/map(fine, show), Option/some(show(3.0))),
+        Test/equal(show(replaced), show(0.0))]);

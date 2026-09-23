@@ -1,5 +1,5 @@
-use /std/{Flt, Nat, Int, Bool, Str, Option, Dyadic};
-use /std/Flt/{Rounding, exact};
+use /std/{Flt, Nat, Int, Bool, Str, Option, Dyadic, List, Vec};
+use /std/Flt/{Rounding, exact, reduction};
 
 --- `a + b`, in the direction `r` names.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Flt =
@@ -141,3 +141,31 @@ pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @ok: Nat/Lt(0, n)) -> St
     | 0 => match ok end
     | k + 1 => Flt/to_str_significant_in(r, f, k + 1)
     end;
+
+--- IEEE's `sum` (§9.4): the terms of `p` added exactly and rounded once in the direction `r` names. A NaN term answers the greatest of the NaNs' quieted patterns, the infinities of both signs answer the default NaN, and an exact zero is negative only when every term is a negative zero or `r` rounds toward negative.
+pub let sum(r: Rounding, p: List(Flt)) -> Flt =
+    reduction/summed(r, List/map(p, reduction/of));
+
+--- IEEE's `dot` (§9.4): `Σ p_i · q_i` over two vectors of one length, every product and the sum exact and rounded once in `r`. An infinity times a zero is invalid.
+pub let dot(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Flt =
+    reduction/summed(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/product(a, b)));
+
+--- IEEE's `sumSquare` (§9.4): `Σ p_i²`, exact and rounded once in `r`.
+pub let sum_square(r: Rounding, p: List(Flt)) -> Flt =
+    reduction/summed(r, List/map(p, (a) => reduction/product(a, a)));
+
+--- IEEE's `sumAbs` (§9.4): `Σ |p_i|`, exact and rounded once in `r`.
+pub let sum_abs(r: Rounding, p: List(Flt)) -> Flt =
+    reduction/summed(r, List/map(p, (a) => reduction/of(Flt/abs(a))));
+
+--- IEEE's `scaledProd` (§9.4): `Π p_i` as `(pr, sf)` with `pr · 2^sf` the product and `pr`, rounded once in `r`, between one and two in magnitude, so that no product of floats overflows or underflows. A NaN, an infinity or a zero answers itself, signed as the product is, at a scale of zero; an infinity against a zero is invalid.
+pub let scaled_prod(r: Rounding, p: List(Flt)) -> {Flt, Int} =
+    reduction/scaled(r, List/map(p, reduction/of));
+
+--- IEEE's `scaledProdSum` (§9.4): `Π (p_i + q_i)` as `scaled_prod` answers a product, each sum exact.
+pub let scaled_prod_sum(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+    reduction/scaled(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, b)));
+
+--- IEEE's `scaledProdDiff` (§9.4): `Π (p_i - q_i)` as `scaled_prod` answers a product, each difference exact.
+pub let scaled_prod_diff(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+    reduction/scaled(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, Flt/neg(b))));

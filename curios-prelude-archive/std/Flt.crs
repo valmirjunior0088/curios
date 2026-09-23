@@ -1,7 +1,7 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs,
     sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic, Vec};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- IEEE 754's rounding directions.
@@ -28,6 +28,9 @@ pub mod signals;
 
 --- The exact layer every rounding in this library goes through.
 mod exact;
+
+--- The terms §9.4's reductions add and multiply, read exactly.
+mod reduction;
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
@@ -156,6 +159,69 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
         end
     -- An infinity: invalid when it is `x`, and `x` itself when it is only `y`.
     | _ => match is_infinite(x) | true => nan | false => x end
+    end;
+
+--- IEEE's `sum` (§9.4), rounded ties to even: `rounded/sum` takes the direction.
+pub let sum(p: List(Flt)) -> Flt =
+    rounded/sum(Rounding/ties_to_even(), p);
+
+--- IEEE's `dot` (§9.4), rounded ties to even.
+pub let dot(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Flt =
+    rounded/dot(Rounding/ties_to_even(), p, q);
+
+--- IEEE's `sumSquare` (§9.4), rounded ties to even.
+pub let sum_square(p: List(Flt)) -> Flt =
+    rounded/sum_square(Rounding/ties_to_even(), p);
+
+--- IEEE's `sumAbs` (§9.4), rounded ties to even.
+pub let sum_abs(p: List(Flt)) -> Flt =
+    rounded/sum_abs(Rounding/ties_to_even(), p);
+
+--- IEEE's `scaledProd` (§9.4), rounded ties to even.
+pub let scaled_prod(p: List(Flt)) -> {Flt, Int} =
+    rounded/scaled_prod(Rounding/ties_to_even(), p);
+
+--- IEEE's `scaledProdSum` (§9.4), rounded ties to even.
+pub let scaled_prod_sum(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+    rounded/scaled_prod_sum(Rounding/ties_to_even(), p, q);
+
+--- IEEE's `scaledProdDiff` (§9.4), rounded ties to even.
+pub let scaled_prod_diff(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+    rounded/scaled_prod_diff(Rounding/ties_to_even(), p, q);
+
+--- The pair §9.5's augmented operations answer for a nonzero exact value `v`: `a`, `v` rounded ties toward zero, and `b`, what `a` leaves of `v` rounded the same way, which is exact unless it underflows. An `a` that overflows answers itself twice, and a zero `b` takes `a`'s sign.
+let augmented(v: Dyadic) -> {Flt, Flt} =
+    let a = exact/ties_toward_zero(v.mantissa, v.exponent);
+    match Dyadic/try_of(a)
+    | none() => (a, a)
+    | some(h) =>
+        let rest = v - h;
+        let b = exact/ties_toward_zero(rest.mantissa, rest.exponent);
+        (a, match is_zero(b) | true => copysign(+0.0, a) | false => b end)
+    end;
+
+--- IEEE's `augmentedAddition` (§9.5): `x + y` as the pair `(a, b)` of its value rounded ties toward zero and the error that rounding made, so that `a + b` is the exact sum whenever `b` does not underflow. An exact zero sum answers the zero `x + y` does, twice; a NaN or an infinity answers the sum twice.
+pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =
+    let s = x + y;
+    choose
+    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+        let v = a + b;
+        match v.mantissa == +0 | true => (s, s) | false => augmented(v) end
+    | _ => (s, s)
+    end;
+
+--- IEEE's `augmentedSubtraction` (§9.5): `augmented_add(x, neg(y))`.
+pub let augmented_sub(x: Flt, y: Flt) -> {Flt, Flt} =
+    augmented_add(x, neg(y));
+
+--- IEEE's `augmentedMultiplication` (§9.5): `x · y` as the pair `augmented_add` answers for a sum, a zero product signed as the operands are.
+pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
+    let p = x * y;
+    choose
+    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+        let v = a * b;
+        match v.mantissa == +0 | true => (p, p) | false => augmented(v) end
+    | _ => (p, p)
     end;
 
 --- IEEE's `nextUp` (§5.3.1): the least float above `f`. `-0` and `+0` step to the least subnormal, the negative least subnormal to `-0`, `-inf` to the negative largest finite value, and `+inf` stays; a NaN answers itself quieted.

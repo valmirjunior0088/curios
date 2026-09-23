@@ -1,0 +1,153 @@
+use /std/{Flt, Nat, Int, Bool, List, Option, Dyadic};
+use /std/Flt/{Rounding, rounded};
+
+--- One term of a reduction (§9.4), read exactly: what an operand is, or what a product or a sum of two operands is before anything rounds.
+pub induct Term: pub Type
+--- A NaN operand, quieted when a reduction answers it.
+| nan(n: Flt)
+--- An infinity against a zero, or against the infinity of the other sign.
+| invalid()
+| infinite(negative: Bool)
+--- A finite value, with the sign a zero one carries.
+| number(value: Dyadic, negative: Bool)
+end
+
+--- `x` as a term.
+pub let of(x: Flt) -> Term =
+    match Dyadic/try_of(x)
+    | some(d) => Term/number(d, Flt/is_sign_minus(x))
+    | none() => match Flt/is_nan(x) | true => Term/nan(x) | false => Term/infinite(Flt/is_sign_minus(x)) end
+    end;
+
+--- The exact product `a · b` as a term: a NaN operand's NaN, invalid for an infinity against a zero, and otherwise signed as the operands are.
+pub let product(a: Flt, b: Flt) -> Term =
+    let negative = Flt/is_sign_minus(a) != Flt/is_sign_minus(b);
+    -- What `a`'s kind meets in `b`'s: `x` is `a`'s value when `a` is a number, and `none` when it is an infinity.
+    let with(x: Option(Dyadic)) -> Term =
+        match of(b)
+        | nan(_) => Term/nan(a + b)
+        | invalid() => Term/invalid()
+        | infinite(_) =>
+            match x
+            | some(d) => match d.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
+            | none() => Term/infinite(negative)
+            end
+        | number(y, _) =>
+            match x
+            | some(d) => Term/number(d * y, negative)
+            | none() => match y.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
+            end
+        end;
+    match of(a)
+    | nan(_) => Term/nan(a + b)
+    | invalid() => Term/invalid()
+    | infinite(_) => with(Option/none())
+    | number(x, _) => with(Option/some(x))
+    end;
+
+--- The exact sum `a + b` as a term, in the direction `r` a zero sum's sign reads (§6.3): a NaN operand's NaN, and invalid for the infinities of both signs.
+pub let sum(r: Rounding, a: Flt, b: Flt) -> Term =
+    match of(a)
+    | nan(_) => Term/nan(a + b)
+    | invalid() => Term/invalid()
+    | infinite(x) =>
+        match of(b)
+        | nan(_) => Term/nan(a + b)
+        | invalid() => Term/invalid()
+        | infinite(y) => match x == y | true => Term/infinite(x) | false => Term/invalid() end
+        | number(_, _) => Term/infinite(x)
+        end
+    | number(x, _) =>
+        match of(b)
+        | nan(_) => Term/nan(a + b)
+        | invalid() => Term/invalid()
+        | infinite(y) => Term/infinite(y)
+        | number(y, _) =>
+            let s = x + y;
+            -- An exact zero sum takes the sign a rounded sum gives it, which rounding cannot change.
+            match s.mantissa == +0
+            | true => Term/number(s, Flt/is_sign_minus(rounded/add(r, a, b)))
+            | false => Term/number(s, s.mantissa < +0)
+            end
+        end
+    end;
+
+--- The NaN a reduction over `terms` answers when any is one: the greatest of their quieted patterns, since the rule every binary operation reads is associative.
+pub let nan_of(terms: List(Term)) -> Option(Flt) =
+    List/fold(terms, Option/none(), (t, acc) =>
+        match t
+        | nan(n) => match acc | some(m) => Option/some(m + n) | none() => Option/some(n + n) end
+        | _ => acc
+        end);
+
+--- Whether any term is invalid.
+pub let any_invalid(terms: List(Term)) -> Bool =
+    List/any(terms, (t) => match t | invalid() => true | _ => false end);
+
+--- Whether any term is the infinity of the sign `negative` names.
+pub let any_infinite(terms: List(Term), negative: Bool) -> Bool =
+    List/any(terms, (t) => match t | infinite(n) => n == negative | _ => false end);
+
+--- Whether any term is an infinity of either sign.
+pub let any_infinity(terms: List(Term)) -> Bool =
+    any_infinite(terms, false) || any_infinite(terms, true);
+
+--- Whether any term is a zero.
+pub let any_zero(terms: List(Term)) -> Bool =
+    List/any(terms, (t) => match t | number(d, _) => d.mantissa == +0 | _ => false end);
+
+--- The exact sum of the numbers among `terms`.
+pub let number_sum(terms: List(Term)) -> Dyadic =
+    List/fold(terms, Dyadic/of_int(+0), (t, acc) => match t | number(d, _) => acc + d | _ => acc end);
+
+--- The exact product of the numbers among `terms`.
+pub let number_product(terms: List(Term)) -> Dyadic =
+    List/fold(terms, Dyadic/of_int(+1), (t, acc) => match t | number(d, _) => acc * d | _ => acc end);
+
+--- The zero an exact sum of `terms` answers in `r` (§6.3, over as many terms as are summed): negative when every term is a negative zero, or when rounding toward negative and not every term is a positive zero.
+let zero_sum(r: Rounding, terms: List(Term)) -> Flt =
+    let negative_zero = (t: Term) => match t | number(d, n) => d.mantissa == +0 && n | _ => false end;
+    let positive_zero = (t: Term) => match t | number(d, n) => d.mantissa == +0 && Bool/not(n) | _ => false end;
+    let every_negative = match terms | [] => false | _ => List/all(terms, negative_zero) end;
+    let toward_negative = match r | toward_negative() => true | _ => false end;
+    match every_negative || (toward_negative && Bool/not(List/all(terms, positive_zero)))
+    | true => -0.0
+    | false => +0.0
+    end;
+
+--- The sum of `terms` rounded once in `r`: a NaN term's NaN, the default NaN for an invalid term or the infinities of both signs, an infinity where one stands, and otherwise the exact sum rounded.
+pub let summed(r: Rounding, terms: List(Term)) -> Flt =
+    choose
+    | some(n) = nan_of(terms) => n
+    | any_invalid(terms) || (any_infinite(terms, false) && any_infinite(terms, true)) => Flt/nan
+    | any_infinite(terms, false) => Flt/pos_inf
+    | any_infinite(terms, true) => Flt/neg_inf
+    -- No NaN, invalid term or infinity: every term is a number.
+    | _ =>
+        let s = number_sum(terms);
+        match s.mantissa == +0 | true => zero_sum(r, terms) | false => rounded/of_dyadic(r, s) end
+    end;
+
+--- Whether a product of `factors` is negative: an odd count of negative ones.
+let negative_product(factors: List(Term)) -> Bool =
+    List/fold(factors, false, (t, acc) =>
+        match t | infinite(n) => acc != n | number(_, n) => acc != n | _ => acc end);
+
+--- The power of two a nonzero `d`'s leading bit stands at.
+pub let scale_of(d: Dyadic) -> Int =
+    d.exponent + Nat/to_int(Nat/log2(Int/abs(d.mantissa)));
+
+--- The product of `factors` as `(pr, sf)`, `pr · 2^sf` the product and `pr` rounded once in `r` from between one and two in magnitude, so that neither overflows nor underflows (§9.4 `scaledProd`): a NaN factor's NaN, the default NaN for an invalid factor or an infinity against a zero, and a signed infinity or zero where one stands, each with a scale of zero.
+pub let scaled(r: Rounding, factors: List(Term)) -> {Flt, Int} =
+    let negative = negative_product(factors);
+    choose
+    | some(n) = nan_of(factors) => (n, +0)
+    | any_invalid(factors) || (any_infinity(factors) && any_zero(factors)) => (Flt/nan, +0)
+    | any_infinity(factors) => (match negative | true => Flt/neg_inf | false => Flt/pos_inf end, +0)
+    | any_zero(factors) => (match negative | true => -0.0 | false => +0.0 end, +0)
+    -- No NaN, invalid factor, infinity or zero: every factor is a nonzero number.
+    | _ =>
+        let p = number_product(factors);
+        let sf = scale_of(p);
+        (rounded/of_dyadic(r, Dyadic { ..p, exponent = p.exponent - sf }), sf)
+    end;

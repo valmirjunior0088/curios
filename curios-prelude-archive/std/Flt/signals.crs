@@ -1,5 +1,5 @@
-use /std/{Flt, Nat, Int, Bool, Dyadic};
-use /std/Flt/{Rounding, Exceptions, rounded, exact};
+use /std/{Flt, Nat, Int, Bool, Dyadic, List, Vec, Option};
+use /std/Flt/{Rounding, Exceptions, rounded, exact, reduction};
 
 --- Only the invalid operation.
 let invalid: Exceptions =
@@ -150,4 +150,101 @@ pub let remainder(x: Flt, y: Flt) -> Exceptions =
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | Flt/is_infinite(x) || Flt/is_zero(y) => invalid
     | _ => Exceptions/none
+    end;
+
+--- What a sum of `terms`, over the operands `operands`, raises answering `result` in `r`: invalid for a signaling NaN operand, and with no NaN operand for an invalid term or the infinities of both signs; nothing for another NaN or an infinity; and otherwise what rounding the exact sum raises.
+let summed(r: Rounding, operands: List(Flt), terms: List(reduction/Term), result: Flt) -> Exceptions =
+    choose
+    | List/any(operands, Flt/is_signaling) => invalid
+    | List/any(operands, Flt/is_nan) => Exceptions/none
+    | reduction/any_invalid(terms) || (reduction/any_infinite(terms, false) && reduction/any_infinite(terms, true)) =>
+        invalid
+    | reduction/any_infinity(terms) => Exceptions/none
+    | _ => from_exact(r, reduction/number_sum(terms), false, result)
+    end;
+
+--- What a scaled product of `factors`, over the operands `operands`, raises answering `result` in `r`: invalid for a signaling NaN operand, and with no NaN operand for an invalid factor or an infinity against a zero; nothing for another NaN, an infinity or a zero; and otherwise inexact when `pr` differs from the exact product over `2^sf`, which lies between one and two and so neither overflows nor underflows.
+let scaled(r: Rounding, operands: List(Flt), factors: List(reduction/Term), result: {Flt, Int}) -> Exceptions =
+    choose
+    | List/any(operands, Flt/is_signaling) => invalid
+    | List/any(operands, Flt/is_nan) => Exceptions/none
+    | reduction/any_invalid(factors) || (reduction/any_infinity(factors) && reduction/any_zero(factors)) =>
+        invalid
+    | reduction/any_infinity(factors) || reduction/any_zero(factors) => Exceptions/none
+    | _ =>
+        let p = reduction/number_product(factors);
+        from_exact(r, Dyadic { ..p, exponent = p.exponent - result.1 }, false, result.0)
+    end;
+
+--- Both vectors' elements, `p`'s first.
+let both(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> List(Flt) =
+    [..Vec/to_list(p), ..Vec/to_list(q)];
+
+--- The pairs of two vectors' elements.
+let pairs(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> List({Flt, Flt}) =
+    Vec/to_list(Vec/zip(p, q));
+
+--- What `rounded/sum(r, p)` raises.
+pub let sum(r: Rounding, p: List(Flt)) -> Exceptions =
+    summed(r, p, List/map(p, reduction/of), rounded/sum(r, p));
+
+--- What `rounded/dot(r, p, q)` raises: an infinity times a zero is invalid.
+pub let dot(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
+    summed(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/product(a, b)), rounded/dot(r, p, q));
+
+--- What `rounded/sum_square(r, p)` raises.
+pub let sum_square(r: Rounding, p: List(Flt)) -> Exceptions =
+    summed(r, p, List/map(p, (a) => reduction/product(a, a)), rounded/sum_square(r, p));
+
+--- What `rounded/sum_abs(r, p)` raises.
+pub let sum_abs(r: Rounding, p: List(Flt)) -> Exceptions =
+    summed(r, p, List/map(p, (a) => reduction/of(Flt/abs(a))), rounded/sum_abs(r, p));
+
+--- What `rounded/scaled_prod(r, p)` raises.
+pub let scaled_prod(r: Rounding, p: List(Flt)) -> Exceptions =
+    scaled(r, p, List/map(p, reduction/of), rounded/scaled_prod(r, p));
+
+--- What `rounded/scaled_prod_sum(r, p, q)` raises: the infinities of both signs in one factor are invalid.
+pub let scaled_prod_sum(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
+    scaled(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, b)), rounded/scaled_prod_sum(r, p, q));
+
+--- What `rounded/scaled_prod_diff(r, p, q)` raises: an infinity less itself in one factor is invalid.
+pub let scaled_prod_diff(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
+    scaled(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, Flt/neg(b))), rounded/scaled_prod_diff(r, p, q));
+
+--- What an augmented operation raises for a nonzero exact value `v` (§9.5): overflow and inexact when `a` overflows, and underflow and inexact when `b`, the error, is tiny and so not exact — never merely because `a` rounded, since `b` carries what it dropped.
+let augmented(v: Dyadic) -> Exceptions =
+    match Dyadic/try_of(exact/ties_toward_zero(v.mantissa, v.exponent))
+    -- Ties toward zero rounds every overflow to the infinity, so an `a` that is no number is exactly an overflow.
+    | none() => Exceptions { ..Exceptions/none, overflow = true, inexact = true }
+    | some(h) =>
+        let lost = v - h;
+        let inexact = Dyadic/try_of(exact/ties_toward_zero(lost.mantissa, lost.exponent)) != Option/some(lost);
+        Exceptions { ..Exceptions/none, underflow = inexact, inexact = inexact }
+    end;
+
+--- What `Flt/augmented_add(x, y)` raises: invalid for a signaling NaN or the infinities of both signs, and otherwise what `augmented` says of the exact sum.
+pub let augmented_add(x: Flt, y: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
+    | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
+    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+        let v = a + b;
+        match v.mantissa == +0 | true => Exceptions/none | false => augmented(v) end
+    | _ => match Flt/is_nan(x + y) | true => invalid | false => Exceptions/none end
+    end;
+
+--- What `Flt/augmented_sub(x, y)` raises.
+pub let augmented_sub(x: Flt, y: Flt) -> Exceptions =
+    augmented_add(x, Flt/neg(y));
+
+--- What `Flt/augmented_mul(x, y)` raises: invalid for a signaling NaN or an infinity times a zero, and otherwise what `augmented` says of the exact product.
+pub let augmented_mul(x: Flt, y: Flt) -> Exceptions =
+    choose
+    | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
+    | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
+    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+        let v = a * b;
+        match v.mantissa == +0 | true => Exceptions/none | false => augmented(v) end
+    | _ => match Flt/is_nan(x * y) | true => invalid | false => Exceptions/none end
     end;
