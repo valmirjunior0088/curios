@@ -42,7 +42,7 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-cont` b
 
 **Rationale.** The default direction is the common case and runs at hardware speed; the directed ones are rare, long and cold, so they are functions every use calls. The check after an instruction is what makes the instruction usable at all: Wasm leaves a computed NaN's sign and payload to the engine, and the model pins them.
 
-**What the check costs is not yet measured.** Take it with a float-heavy workload under `programs/` — one does not exist yet, and adding one follows `programs/README.md` — built once as it stands and once with `emit_flt_checked`'s check removed, comparing the run's time; record the figure and the date here.
+**What the check costs, measured 2026-09-23 on x86_64-unknown-linux-gnu: about 1.4%.** `programs/flt_hot_loop.crs` runs five checked ties-to-even instructions a round on a value that never becomes a NaN, so every check is taken and none fires; at `N = 300000000` the median of seven alternating runs was 3.572 s with the check and 3.522 s without. To retake it, compile the program with `curios compile programs/flt_hot_loop.crs -o with_check`, delete `emit_flt_checked`'s store of the result, its self-comparison and the `either` that follows so the instruction's result is stored directly, compile again to `without_check`, restore the emitter, and time both executables alternately on the same input.
 
 **Rejected.** Error-free transformations over the hardware operations for the directed results: they fail near underflow and overflow, which is where the directions differ most. A run-time direction operand: it would branch on every call where the static tag decides at emission.
 

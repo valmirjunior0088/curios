@@ -29,6 +29,8 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **The rope's hazard.** `rope_push_peek.crs` alternates one append with one indexed read over a list growing to N, the alternation `curios-emit`'s rope cost model names as quadratic, with `rng_manual.crs` as its control: the same arithmetic and the same output with no list. It stands outside the census corpus, whose roster is fixed, and it exists so that a change to how a rope answers a read has a program to be measured on.
 
+**The NaN check's cost.** `flt_hot_loop.crs` runs N rounds of ties-to-even float arithmetic — a multiply, two adds, a square root and a divide — on a value that stays positive, so every NaN check the emitter places after an instruction is taken and none fires. `curios-emit`'s README owns the figure and how to retake it.
+
 **Samples.** `hello_world.crs` — also `cargo x profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
 
 ## The cross-language workloads
