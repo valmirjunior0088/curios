@@ -24,11 +24,18 @@ pub induct Mode: pub Type
 end
 
 --- Whether a significand that lost bits steps up to the next one in `mode`: `above` says the lost part is past half a unit, `tie` that it is exactly half, `odd` that the kept significand is odd, `inexact` that anything was lost.
-let rounds_up_in(mode: Mode, negative: Bool, above: Bool, tie: Bool, odd: Bool, inexact: Bool) -> Bool =
+let rounds_up_in(
+    mode: Mode,
+    negative: Bool,
+    above: Bool,
+    tie: Bool,
+    odd: Bool,
+    inexact: Bool,
+) -> Bool =
     match mode
     | direction(r) =>
         match r
-        | ties_to_even() => above || (tie && odd)
+        | ties_to_even() => above || tie && odd
         | ties_to_away() => above || tie
         | toward_zero() => false
         | toward_positive() => inexact && Bool/not(negative)
@@ -38,7 +45,14 @@ let rounds_up_in(mode: Mode, negative: Bool, above: Bool, tie: Bool, odd: Bool, 
     end;
 
 --- `rounds_up_in` in one of the five directions.
-pub let rounds_up(r: Rounding, negative: Bool, above: Bool, tie: Bool, odd: Bool, inexact: Bool) -> Bool =
+pub let rounds_up(
+    r: Rounding,
+    negative: Bool,
+    above: Bool,
+    tie: Bool,
+    odd: Bool,
+    inexact: Bool,
+) -> Bool =
     rounds_up_in(Mode/direction(r), negative, above, tie, odd, inexact);
 
 --- Whether a result past the largest finite value becomes the infinity of its sign rather than that value (§7.4): always when rounding to nearest, ties toward zero included, when directed only toward the infinity of its own sign.
@@ -94,7 +108,7 @@ pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Fl
             let kept = Nat/shr(m, s);
             let dropped = m - Nat/shl(kept, s);
             let half = pow2(s - 1);
-            let above = dropped > half || (dropped == half && sticky);
+            let above = dropped > half || dropped == half && sticky;
             let tie = dropped == half && Bool/not(sticky);
             let inexact = sticky || dropped != 0;
             let up = rounds_up_in(mode, negative, above, tie, Bool/not(Nat/is_even(kept)), inexact);
@@ -126,7 +140,7 @@ pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -
         let kept = Nat/shr(m, s);
         let dropped = m - Nat/shl(kept, s);
         let half = pow2(s - 1);
-        let above = dropped > half || (dropped == half && sticky);
+        let above = dropped > half || dropped == half && sticky;
         let tie = dropped == half && Bool/not(sticky);
         let inexact = sticky || dropped != 0;
         let up = rounds_up_in(mode, negative, above, tie, Bool/not(Nat/is_even(kept)), inexact);

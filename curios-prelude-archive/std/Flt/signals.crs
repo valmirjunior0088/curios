@@ -14,11 +14,7 @@ let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions 
     let magnitude = Int/abs(e.mantissa);
     let overflow = exact/overflows(r, e.mantissa < +0, magnitude, e.exponent, sticky);
     let inexact =
-        sticky || overflow
-        || match Dyadic/try_of(result)
-            | some(d) => d != e
-            | none() => true
-            end;
+        sticky || overflow || match Dyadic/try_of(result) | some(d) => d != e | none() => true end;
     Exceptions {
         ..Exceptions/none,
         overflow = overflow,
@@ -46,7 +42,7 @@ pub let mul(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     choose
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
-    | (Flt/is_infinite(a) && Flt/is_zero(b)) || (Flt/is_zero(a) && Flt/is_infinite(b)) => invalid
+    | Flt/is_infinite(a) && Flt/is_zero(b) || Flt/is_zero(a) && Flt/is_infinite(b) => invalid
     | Flt/is_zero(a) || Flt/is_zero(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
         from_exact(r, Dyadic/mul(x, y), false, rounded/mul(r, a, b))
@@ -71,13 +67,17 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
             end
         end
     -- An infinity: invalid over another, and exact over or under a finite value.
-    | _ => match Flt/is_infinite(a) && Flt/is_infinite(b) | true => invalid | false => Exceptions/none end
+    | _ =>
+        match Flt/is_infinite(a) && Flt/is_infinite(b)
+        | true => invalid
+        | false => Exceptions/none
+        end
     end;
 
 --- What `rounded/fma(r, a, b, c)` raises: invalid for a signaling NaN, for a zero times an infinity unless `c` is a quiet NaN — IEEE leaves that case to the implementation, and here the NaN answers first as it does in the result — and for an infinite product meeting the infinity of the other sign; nothing for the other cases no rounding touches; and otherwise what rounding the exact `a · b + c` raises.
 pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
     let zero_times_infinity =
-        (Flt/is_infinite(a) && Flt/is_zero(b)) || (Flt/is_zero(a) && Flt/is_infinite(b));
+        Flt/is_infinite(a) && Flt/is_zero(b) || Flt/is_zero(a) && Flt/is_infinite(b);
     choose
     | Flt/is_signaling(a) || Flt/is_signaling(b) || Flt/is_signaling(c) => invalid
     | zero_times_infinity && Bool/not(Flt/is_nan(c)) => invalid
@@ -88,7 +88,8 @@ pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
         | false => from_exact(r, Dyadic/add(Dyadic/mul(x, y), z), false, rounded/fma(r, a, b, c))
         end
     -- An infinity, exact unless the product's meets the other one.
-    | _ => match Flt/is_nan(rounded/fma(r, a, b, c)) | true => invalid | false => Exceptions/none end
+    | _ =>
+        match Flt/is_nan(rounded/fma(r, a, b, c)) | true => invalid | false => Exceptions/none end
     end;
 
 --- What `rounded/sqrt(r, a)` raises: invalid for a signaling NaN and for a negative value other than `-0`, and otherwise inexact exactly when the root squared is not `a`. No root of a finite value overflows or is tiny.
@@ -106,19 +107,11 @@ pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
 
 --- What `rounded/of_nat(r, n)` raises: what rounding `n` does.
 pub let of_nat(r: Rounding, n: Nat) -> Exceptions =
-    from_exact(
-        r,
-        Dyadic/of_int(Nat/to_int(n)),
-        false,
-        rounded/of_nat(r, n));
+    from_exact(r, Dyadic/of_int(Nat/to_int(n)), false, rounded/of_nat(r, n));
 
 --- What `rounded/of_int(r, n)` raises: what rounding `n` does.
 pub let of_int(r: Rounding, n: Int) -> Exceptions =
-    from_exact(
-        r,
-        Dyadic/of_int(n),
-        false,
-        rounded/of_int(r, n));
+    from_exact(r, Dyadic/of_int(n), false, rounded/of_int(r, n));
 
 --- What `rounded/to_integral(r, a)` raises: invalid for a signaling NaN, and nothing else — IEEE's named roundings to an integral value never signal inexact (§5.3.1).
 pub let to_integral(_: Rounding, a: Flt) -> Exceptions =
@@ -153,23 +146,33 @@ pub let remainder(x: Flt, y: Flt) -> Exceptions =
     end;
 
 --- What a sum of `terms`, over the operands `operands`, raises answering `result` in `r`: invalid for a signaling NaN operand, and with no NaN operand for an invalid term or the infinities of both signs; nothing for another NaN or an infinity; and otherwise what rounding the exact sum raises.
-let summed(r: Rounding, operands: List(Flt), terms: List(reduction/Term), result: Flt) -> Exceptions =
+let summed(
+    r: Rounding,
+    operands: List(Flt),
+    terms: List(reduction/Term),
+    result: Flt,
+) -> Exceptions =
     choose
     | List/any(operands, Flt/is_signaling) => invalid
     | List/any(operands, Flt/is_nan) => Exceptions/none
-    | reduction/any_invalid(terms) || (reduction/any_infinite(terms, false) && reduction/any_infinite(terms, true)) =>
-        invalid
+    | reduction/any_invalid(terms)
+        || reduction/any_infinite(terms, false) && reduction/any_infinite(terms, true) => invalid
     | reduction/any_infinity(terms) => Exceptions/none
     | _ => from_exact(r, reduction/number_sum(terms), false, result)
     end;
 
 --- What a scaled product of `factors`, over the operands `operands`, raises answering `result` in `r`: invalid for a signaling NaN operand, and with no NaN operand for an invalid factor or an infinity against a zero; nothing for another NaN, an infinity or a zero; and otherwise inexact when `pr` differs from the exact product over `2^sf`, which lies between one and two and so neither overflows nor underflows.
-let scaled(r: Rounding, operands: List(Flt), factors: List(reduction/Term), result: {Flt, Int}) -> Exceptions =
+let scaled(
+    r: Rounding,
+    operands: List(Flt),
+    factors: List(reduction/Term),
+    result: {Flt, Int},
+) -> Exceptions =
     choose
     | List/any(operands, Flt/is_signaling) => invalid
     | List/any(operands, Flt/is_nan) => Exceptions/none
-    | reduction/any_invalid(factors) || (reduction/any_infinity(factors) && reduction/any_zero(factors)) =>
-        invalid
+    | reduction/any_invalid(factors)
+        || reduction/any_infinity(factors) && reduction/any_zero(factors) => invalid
     | reduction/any_infinity(factors) || reduction/any_zero(factors) => Exceptions/none
     | _ =>
         let p = reduction/number_product(factors);
@@ -190,7 +193,11 @@ pub let sum(r: Rounding, p: List(Flt)) -> Exceptions =
 
 --- What `rounded/dot(r, p, q)` raises: an infinity times a zero is invalid.
 pub let dot(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
-    summed(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/product(a, b)), rounded/dot(r, p, q));
+    summed(
+        r,
+        both(p, q),
+        List/map(pairs(p, q), ((a, b)) => reduction/product(a, b)),
+        rounded/dot(r, p, q));
 
 --- What `rounded/sum_square(r, p)` raises.
 pub let sum_square(r: Rounding, p: List(Flt)) -> Exceptions =
@@ -206,11 +213,19 @@ pub let scaled_prod(r: Rounding, p: List(Flt)) -> Exceptions =
 
 --- What `rounded/scaled_prod_sum(r, p, q)` raises: the infinities of both signs in one factor are invalid.
 pub let scaled_prod_sum(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
-    scaled(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, b)), rounded/scaled_prod_sum(r, p, q));
+    scaled(
+        r,
+        both(p, q),
+        List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, b)),
+        rounded/scaled_prod_sum(r, p, q));
 
 --- What `rounded/scaled_prod_diff(r, p, q)` raises: an infinity less itself in one factor is invalid.
 pub let scaled_prod_diff(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Exceptions =
-    scaled(r, both(p, q), List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, Flt/neg(b))), rounded/scaled_prod_diff(r, p, q));
+    scaled(
+        r,
+        both(p, q),
+        List/map(pairs(p, q), ((a, b)) => reduction/sum(r, a, Flt/neg(b))),
+        rounded/scaled_prod_diff(r, p, q));
 
 --- What an augmented operation raises for a nonzero exact value `v` (§9.5): overflow and inexact when `a` overflows, and underflow and inexact when `b`, the error, is tiny and so not exact — never merely because `a` rounded, since `b` carries what it dropped.
 let augmented(v: Dyadic) -> Exceptions =
@@ -219,7 +234,9 @@ let augmented(v: Dyadic) -> Exceptions =
     | none() => Exceptions { ..Exceptions/none, overflow = true, inexact = true }
     | some(h) =>
         let lost = v - h;
-        let inexact = Dyadic/try_of(exact/ties_toward_zero(lost.mantissa, lost.exponent)) != Option/some(lost);
+        let inexact =
+            Dyadic/try_of(exact/ties_toward_zero(lost.mantissa, lost.exponent))
+                != Option/some(lost);
         Exceptions { ..Exceptions/none, underflow = inexact, inexact = inexact }
     end;
 

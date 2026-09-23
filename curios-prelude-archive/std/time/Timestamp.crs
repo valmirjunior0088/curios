@@ -23,11 +23,7 @@ pub let to_unix(t: Timestamp) -> {secs: Nat, nanos: Nat} =
 
 --- Whether `a` is earlier than `b`.
 pub let before(a: Timestamp, b: Timestamp) -> Bool =
-    choose
-    | a.secs < b.secs => true
-    | a.secs > b.secs => false
-    | _ => a.nanos < b.nanos
-    end;
+    choose | a.secs < b.secs => true | a.secs > b.secs => false | _ => a.nanos < b.nanos end;
 
 let total_nanos(t: Timestamp) -> Nat =
     t.secs * 1000000000 + t.nanos;

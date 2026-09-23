@@ -1,7 +1,9 @@
 pub use /sys/{Flt};
-pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs,
-    sqrt, round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic, Vec};
+pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
+    round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
+    of_le_bytes};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic,
+    Vec};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- IEEE 754's rounding directions.
@@ -97,7 +99,8 @@ pub let radix(_: Flt) -> Nat =
     2;
 
 --- This library follows IEEE 754-2019.
-pub let is_754_version_2019: Bool = true;
+pub let is_754_version_2019: Bool =
+    true;
 
 --- The class `f` falls in.
 pub let class(f: Flt) -> Class =
@@ -105,7 +108,8 @@ pub let class(f: Flt) -> Class =
     choose
     | is_signaling(f) => Class/signaling_nan()
     | is_nan(f) => Class/quiet_nan()
-    | is_infinite(f) => match minus | true => Class/negative_infinity() | false => Class/positive_infinity() end
+    | is_infinite(f) =>
+        match minus | true => Class/negative_infinity() | false => Class/positive_infinity() end
     | is_zero(f) => match minus | true => Class/negative_zero() | false => Class/positive_zero() end
     | is_subnormal(f) =>
         match minus | true => Class/negative_subnormal() | false => Class/positive_subnormal() end
@@ -122,7 +126,8 @@ pub let FiniteNonZero(f: Flt) -> Prop =
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match neg_inf < f && f < pos_inf: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
+    match neg_inf < f && f < pos_inf: (d) =>
+        (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
     | true => (_) => Bool/True/qed()
     | false => (no) => match no end
     end(ok);
@@ -151,7 +156,7 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
             let q = a / (bp + 1);
             let r = a % (bp + 1);
             -- The quotient rounded to the nearest integer, ties to even: `r` is what truncating left, so rounding up leaves `r - b`.
-            let up = r * 2 > b || (r * 2 == b && Bool/not(Nat/is_even(q)));
+            let up = r * 2 > b || r * 2 == b && Bool/not(Nat/is_even(q));
             match up
             | false => exact/round(Rounding/ties_to_even(), negative, r, e, false)
             | true => exact/round(Rounding/ties_to_even(), Bool/not(negative), b - r, e, false)
@@ -307,7 +312,8 @@ pub let maximum_magnitude_number(a: Flt, b: Flt) -> Flt =
     end;
 
 --- How many payloads a NaN carries: the trailing significand less its quiet bit.
-let payload_room: Nat = Nat/shl(1, 51);
+let payload_room: Nat =
+    Nat/shl(1, 51);
 
 --- IEEE's `getPayload` (§9.7): a NaN's payload as a non-negative integral float, and `-1` for anything else.
 pub let payload(f: Flt) -> Flt =
@@ -323,17 +329,11 @@ let admissible(p: Flt, low: Nat) -> Option(Nat) =
 
 --- IEEE's `setPayload` (§9.7): the positive quiet NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[0, 2^51)`.
 pub let quiet_nan(p: Flt) -> Flt =
-    match admissible(p, 0)
-    | some(n) => exact/of_bits(0x7FF8000000000000 + n)
-    | none() => +0.0
-    end;
+    match admissible(p, 0) | some(n) => exact/of_bits(0x7FF8000000000000 + n) | none() => +0.0 end;
 
 --- IEEE's `setPayloadSignaling` (§9.7): the positive signaling NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[1, 2^51)` — a zero payload with the quiet bit clear is an infinity.
 pub let signaling_nan(p: Flt) -> Flt =
-    match admissible(p, 1)
-    | some(n) => exact/of_bits(0x7FF0000000000000 + n)
-    | none() => +0.0
-    end;
+    match admissible(p, 1) | some(n) => exact/of_bits(0x7FF0000000000000 + n) | none() => +0.0 end;
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
@@ -372,10 +372,12 @@ let div_mod(r: Nat, s: Nat) -> {Nat, Nat} =
     match s | 0 => (0, r) | sp + 1 => (r / (sp + 1), r % (sp + 1)) end;
 
 --- How many decimal places the two scalings may move the exponent. A finite binary64 lies between `4.9 · 10⁻³²⁴` and `1.8 · 10³⁰⁸`, so neither moves it past 324 places: the count never runs out and changes no answer, and it is what lets `to_str` stand in a type.
-let scaling_fuel: Nat = 330;
+let scaling_fuel: Nat =
+    330;
 
 --- How many digits `generate` may write. Seventeen significant digits tell every binary64 apart, so the shortest spelling stops by then: the count never runs out and changes no answer.
-let digit_fuel: Nat = 20;
+let digit_fuel: Nat =
+    20;
 
 let scale_up(fuel: Nat, rpm: Nat, s: Nat, k: Int) -> {Nat, Int} =
     match fuel
@@ -556,7 +558,10 @@ pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
 
 --- The rounding a value of `negative`'s sign past the overflow threshold takes in `r`, or one under half the least subnormal when `below`: a stand-in far past the threshold, or far under it, rounded where `r` sends it. The decimal and hex readers answer from these before building a number that large or that small.
 let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =
-    match below | true => exact/round(r, negative, 1, -1200, false) | false => exact/round(r, negative, 1, +1100, false) end;
+    match below
+    | true => exact/round(r, negative, 1, -1200, false)
+    | false => exact/round(r, negative, 1, +1100, false)
+    end;
 
 --- `of_decimal` in the direction `r`. The sign goes into the rounding rather than after it, since a directed rounding reads it.
 let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
@@ -665,14 +670,18 @@ let hex_value(s: Str) -> Option(Nat) =
     match Str/is_empty(s)
     | true => Option/none()
     | false =>
-        Str/fold(s, Option/some(0), (c, acc) =>
-            let a = acc!;
-            let digit = Char/of_hex_digit(c)!;
-            Option/some(a * 16 + digit))
+        Str/fold(
+            s,
+            Option/some(0),
+            (c, acc) =>
+                let a = acc!;
+                let digit = Char/of_hex_digit(c)!;
+                Option/some(a * 16 + digit))
     end;
 
 --- How many hex digits `hex_str` may write: a payload has at most thirteen and a significand's fraction thirteen, so the count never runs out.
-let hex_fuel: Nat = 20;
+let hex_fuel: Nat =
+    20;
 
 --- `n`'s hex digits, most significant first and lowercase, `0` for zero.
 let hex_str(n: Nat) -> Str =
@@ -710,8 +719,7 @@ pub let to_hex_str(f: Flt) -> Str =
 let trimmed(n: Nat, count: Nat) -> {Nat, Nat} =
     match count
     | 0 => (n, 0)
-    | pred + 1 =>
-        match n % 16 == 0 | true => trimmed(n / 16, pred) | false => (n, count) end
+    | pred + 1 => match n % 16 == 0 | true => trimmed(n / 16, pred) | false => (n, count) end
     end;
 
 --- The float hex text spells, `0x` and all: an optional sign, `0x`, hex digits with an optional point, and an optional `p` exponent, rounded once — and the infinities and NaNs by the names `to_hex_str` writes for them. `none` for any other text.
@@ -773,7 +781,14 @@ let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
     let numerator = Nat/shl(m, Int/abs(Int/max(e, +0))) * Nat/pow(10, Int/abs(Int/min(k, +0)));
     let denominator = Nat/shl(1, Int/abs(Int/min(e, +0))) * Nat/pow(10, Int/abs(Int/max(k, +0)));
     let (q, rem) = div_mod(numerator, denominator);
-    let up = exact/rounds_up(r, negative, rem * 2 > denominator, rem * 2 == denominator, Bool/not(Nat/is_even(q)), rem != 0);
+    let up =
+        exact/rounds_up(
+            r,
+            negative,
+            rem * 2 > denominator,
+            rem * 2 == denominator,
+            Bool/not(Nat/is_even(q)),
+            rem != 0);
     match up | true => q + 1 | false => q end;
 
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
@@ -893,8 +908,13 @@ satisfy Spell(Flt) {
                         "",
                         (b, acc) =>
                             let atom = Nat/to_str(Byte/to_nat(b));
-                            match Str/is_empty(acc) | true => atom | false => Str/concat(Str/concat(acc, ", "), atom) end);
-                Str/concat(Str/concat("/std/Flt/of_le_bytes(x[", atoms), "], @/std/Bool/True/qed())")
+                            match Str/is_empty(acc)
+                            | true => atom
+                            | false => Str/concat(Str/concat(acc, ", "), atom)
+                            end);
+                Str/concat(
+                    Str/concat("/std/Flt/of_le_bytes(x[", atoms),
+                    "], @/std/Bool/True/qed())")
             end
         | _ =>
             let raw = to_str(f);

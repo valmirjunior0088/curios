@@ -57,18 +57,20 @@ pub let quotient(a: Dyadic, b: Dyadic, @ok: Int/NonZero(b.mantissa)) -> {Dyadic,
     -- The divisor's bit length: `log2` of a nonzero magnitude plus one, which a zero one would not have.
     let k = 65 + Nat/log2(Int/abs(b.mantissa));
     let scaled = Int/shl(a.mantissa, k);
-    (Dyadic {
-        mantissa = Int/div(scaled, b.mantissa, @ok),
-        exponent = a.exponent - b.exponent - Nat/to_int(k),
-    }, Int/rem(scaled, b.mantissa, @ok) != +0);
+    (
+        Dyadic {
+            mantissa = Int/div(scaled, b.mantissa, @ok),
+            exponent = a.exponent - b.exponent - Nat/to_int(k),
+        },
+        Int/rem(scaled, b.mantissa, @ok) != +0);
 
 --- The representation with an odd mantissa, or `0 · 2^0` for zero: the one each number has.
 pub let normalized(a: Dyadic) -> Dyadic =
     let m = Int/abs(a.mantissa);
     match m
     | 0 => of_int(+0)
+    -- `m & (m ^ (m - 1))` is the lowest set bit alone, and its position is how many zeros trail.
     | _ =>
-        -- `m & (m ^ (m - 1))` is the lowest set bit alone, and its position is how many zeros trail.
         let t = Nat/log2(Nat/and(m, Nat/xor(m, m - 1)));
         Dyadic { mantissa = Int/shr(a.mantissa, t), exponent = a.exponent + Nat/to_int(t) }
     end;

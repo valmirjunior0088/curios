@@ -107,7 +107,13 @@ pub let scale(r: Rounding, f: Flt, n: Int) -> Flt =
 
 --- Whether truncating to `t` moves away from zero when rounding in the direction `r` names, `fraction` being the magnitude truncation dropped: exact, since the fractional part of a float is a float.
 let steps_away(r: Rounding, negative: Bool, t: Nat, fraction: Flt) -> Bool =
-    exact/rounds_up(r, negative, fraction > 0.5, fraction == 0.5, Bool/not(Nat/is_even(t)), fraction != +0.0);
+    exact/rounds_up(
+        r,
+        negative,
+        fraction > +0.5,
+        fraction == +0.5,
+        Bool/not(Nat/is_even(t)),
+        fraction != +0.0);
 
 --- IEEE's `convertToInteger` in the direction `r` names (§5.8): `f` rounded to an `Int`, exactly — `Flt/to_int`'s truncation under the bound, stepped one away from zero where the direction says the dropped fraction rounds up.
 pub let to_int(r: Rounding, f: Flt, @ok: Flt/Finite(f)) -> Int =
@@ -168,4 +174,6 @@ pub let scaled_prod_sum(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) ->
 
 --- IEEE's `scaledProdDiff` (§9.4): `Π (p_i - q_i)` as `scaled_prod` answers a product, each difference exact.
 pub let scaled_prod_diff(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
-    reduction/scaled(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, Flt/neg(b))));
+    reduction/scaled(
+        r,
+        List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, Flt/neg(b))));
