@@ -12,6 +12,11 @@ pub enum Error {
         qualifier: String,
         candidates: Vec<Qualifier>,
     },
+    /// A structure literal's head names no global in scope — a local or an unresolved name, neither of which can declare a structure. `candidates` are the bindings in the public interfaces that carry the name, as an unresolved qualifier's are the modules.
+    UnresolvedNominal {
+        name: String,
+        candidates: Vec<Qualifier>,
+    },
     ModuleNotFound {
         path: String,
     },
@@ -211,6 +216,13 @@ impl fmt::Display for Error {
                 write!(f, "unresolved qualifier: {qualifier}")?;
                 for candidate in candidates {
                     write!(f, "\n{}", candidate.reach_hint(qualifier))?;
+                }
+                Ok(())
+            }
+            Error::UnresolvedNominal { name, candidates } => {
+                write!(f, "unresolved struct name: {name}")?;
+                for candidate in candidates {
+                    write!(f, "\n{}", candidate.reach_hint(name))?;
                 }
                 Ok(())
             }

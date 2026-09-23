@@ -522,13 +522,18 @@ impl<'a> Context<'a> {
         found
     }
 
-    /// Mint the binder an unresolved bare name lowers to, and record beside it every binding in scope that could have been meant — see [`Context::candidates`].
+    /// Mint the binder an unresolved bare name lowers to, and record beside it every binding in scope that could have been meant.
     pub(super) fn unbound_binder(&self, label: &str) -> curios_core::Free {
-        let found = self.candidates(label, |interface| interface.bindings.contains_key(label));
+        let found = self.binding_candidates(label);
 
         let binder = self.fresh_binder(Some(label));
         self.unbound.borrow_mut().insert(binder.clone(), found);
         binder
+    }
+
+    /// Every public binding in scope that carries `label` — what an unresolved name could have meant; see [`Context::candidates`].
+    pub(super) fn binding_candidates(&self, label: &str) -> Vec<Qualifier> {
+        self.candidates(label, |interface| interface.bindings.contains_key(label))
     }
 
     /// Every public child module in scope that carries `label` — what an unresolved qualifier could have meant, gathered as [`Context::unbound_binder`] gathers a binding's candidates.

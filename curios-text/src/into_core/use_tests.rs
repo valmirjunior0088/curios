@@ -426,6 +426,28 @@ fn an_unresolved_qualifier_names_the_modules_it_could_mean() {
     );
 }
 
+/// A structure literal's head that names no global in scope is refused where it is written, with the binding it could have meant, as an unresolved qualifier is.
+#[test]
+fn an_unresolved_struct_name_names_the_binding_it_could_mean() {
+    let report = run_err(
+        r#"
+        pub mod Shapes
+            pub struct Point: pub Type {
+                x: Type,
+            }
+        end
+        let p = Point { x = Type };
+        ()
+    "#,
+    );
+    assert!(
+        report.contains(
+            "unresolved struct name: Point\n  `Point` is `/Shapes/Point`: write it absolute, or `use /Shapes/{Point};`"
+        ),
+        "reported {report}"
+    );
+}
+
 #[test]
 fn glob_skips_private_child_modules() {
     assert!(

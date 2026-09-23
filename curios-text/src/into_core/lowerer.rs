@@ -6,7 +6,7 @@ use {
         Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
     },
     curios_num::{Binary, Grain},
-    curios_utilities::{Plicity, Qualifier, Span, recurse},
+    curios_utilities::{Plicity, Span, recurse},
     std::{
         cell::{Cell, RefCell},
         collections::HashSet,
@@ -832,12 +832,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .remove(0)
     }
 
-    /// A nominal head's resolved name. Only a global can head a nominal literal; a local in that position is a resolution error the core stage reports, so an unresolved one keeps its own unbindable identity.
+    /// A nominal head's resolved name. Only a global declares a structure, so a head resolving to a local or to nothing is refused here, where the bindings it could have meant are known — lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference.
     pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_core::Global, Error> {
-        Ok(match self.resolve_name(name)?.as_global() {
-            Some(global) => global.clone(),
-            None => curios_core::Global::Authored(Qualifier::from([name.head()])),
-        })
+        match self.resolve_name(name)?.as_global() {
+            Some(global) => Ok(global.clone()),
+            None => Err(Error::UnresolvedNominal {
+                name: name.head().to_string(),
+                candidates: self.context.binding_candidates(name.head()),
+            }),
+        }
     }
 
     /// Builds `let pat = value : type_; tail` for a pattern in any of the three binder positions: `Pattern::Binder` is today's single core `let_` call, unchanged — the whole reason the plain-name path stays a zero-cost passthrough. A compound pattern mints one fresh synthetic binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's own annotation, so it is still checked), then projects each field off it via [`Self::lower_pattern_fields`]. The synthetic binder is minted unconditionally, even when `value` is already a bare variable reference: reusing it directly would risk silently dropping `type_`'s check (e.g. `let (x, y) : Point = pair;` must still check `pair : Point`). The extra trivial `let` this occasionally emits is exactly the shape `cont`'s copy-threading optimization already collapses, so it costs nothing at runtime. `binders` are the identities minted for this pattern's written leaves, in `pattern_names` order — the same ones the scope this `let` opened was entered with, so the tail's references land on them.
