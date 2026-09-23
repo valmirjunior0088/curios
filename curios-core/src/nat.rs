@@ -44,7 +44,7 @@ impl Nat {
 
     /// This literal as a `u64`, when it is closed and fits — the shift amount a price is computed from.
     ///
-    /// A `u64` rather than a `usize` because a charge may not differ between the native and wasm32 targets, and `usize` differs; [`Natural::to_u64`] carries the argument.
+    /// A `u64` rather than a `usize` because a charge may not differ between the native and wasm32 targets, and `usize` differs; the machine narrowings out of [`Natural`] carry the argument.
     pub(crate) fn to_u64(&self) -> Option<u64> {
         u64::try_from(self.as_literal()?).ok()
     }

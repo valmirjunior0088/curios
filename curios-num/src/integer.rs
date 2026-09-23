@@ -179,7 +179,6 @@ from_primitive!(
     i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
 );
 
-/// Widening a natural is total and exact — ℕ ⊂ ℤ — and is the inverse of [`Integer::to_natural`] on every value that one accepts.
 /// The machine narrowing: the value as an `i32`, when it fits.
 impl TryFrom<&Integer> for i32 {
     type Error = OutOfRange;
@@ -202,6 +201,7 @@ impl TryFrom<&Integer> for Natural {
     }
 }
 
+/// Widening a natural is total and exact — ℕ ⊂ ℤ — and is the inverse of [`Natural`]'s `TryFrom<&Integer>` on every value that one accepts.
 impl From<Natural> for Integer {
     fn from(value: Natural) -> Self {
         Self {
