@@ -348,6 +348,25 @@ fn a_conversion_agrees_with_the_host() {
             .map(|value| value.to_string()),
         Ok("-2".to_string()),
     );
+
+    // The decomposition is the encoding's own: `-2.5` is `-5 · 2^-1` held as `-(5 · 2^50) · 2^-51`, the least subnormal is `1 · 2^-1074`, a zero of either sign is `(0, 0)`, and only the non-numbers are refused.
+    let decomposed = |value: f64| {
+        Floating::from(value)
+            .to_dyadic()
+            .map(|(mantissa, exponent)| (mantissa.to_string(), exponent))
+    };
+    assert_eq!(decomposed(-2.5), Ok(((-(5i64 << 50)).to_string(), -51)));
+    assert_eq!(decomposed(f64::from_bits(1)), Ok(("1".to_string(), -1074)));
+    assert_eq!(decomposed(-0.0), Ok(("0".to_string(), 0)));
+    assert_eq!(
+        decomposed(f64::MAX),
+        Ok((((1i64 << 53) - 1).to_string(), 971))
+    );
+    assert_eq!(
+        decomposed(f64::NEG_INFINITY),
+        Err(ScalarTrap::ConversionRange)
+    );
+    assert_eq!(decomposed(f64::NAN), Err(ScalarTrap::ConversionRange));
 }
 
 #[test]

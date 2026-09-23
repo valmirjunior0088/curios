@@ -900,6 +900,8 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         }
         Intrinsic::FltToNat { flt: i, .. } => print_call("Flt/to_nat", vec![], vec![i], frame),
         Intrinsic::FltToInt { flt: i, .. } => print_call("Flt/to_int", vec![], vec![i], frame),
+        Intrinsic::FltMantissa { flt: i, .. } => print_call("Flt/mantissa", vec![], vec![i], frame),
+        Intrinsic::FltExponent { flt: i, .. } => print_call("Flt/exponent", vec![], vec![i], frame),
         Intrinsic::BinType(Grain::X) => pure("Bytes"),
         Intrinsic::Bin(Grain::X, bytes) => print_packed(Grain::X, bin_atoms(Grain::X, &bytes)),
         Intrinsic::BinLen(Grain::X, b) => print_call("Bytes/len", vec![], vec![b], frame),

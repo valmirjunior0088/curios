@@ -124,6 +124,14 @@ pub enum Intrinsic {
         flt: Term,
         finite: Term,
     },
+    FltMantissa {
+        flt: Term,
+        finite: Term,
+    },
+    FltExponent {
+        flt: Term,
+        finite: Term,
+    },
     BinType(Grain),
     Bin(Grain, Vec<BinSegment>),
     BinLen(Grain, Term),

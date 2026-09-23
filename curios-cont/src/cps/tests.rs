@@ -271,6 +271,8 @@ fn every_guarded_operation_is_classified_as_trapping() {
         Intrinsic::FltOfLeBytes,
         Intrinsic::FltToNat,
         Intrinsic::FltToInt,
+        Intrinsic::FltMantissa,
+        Intrinsic::FltExponent,
         Intrinsic::WindowExtent,
     ] {
         assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");

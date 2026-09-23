@@ -71,6 +71,35 @@ fn folded_and_executed_scalar_ops_agree() {
     ]);
 }
 
+/// A finite float's exact value, folded and executed: `mantissa` and `exponent` read the encoding at runtime and the model's decomposition at compile time, and each row takes one encoding's arm — a normal of each sign, the least subnormal, the largest finite value, and both zeros, whose sign the pair does not keep.
+#[test]
+fn folded_and_executed_decompositions_agree() {
+    let parts = |term: &str| {
+        format!(
+            "match Flt/finite({term}) \
+             | some(ok) => Str/concat(Str/concat(Int/to_str(Flt/mantissa({term}, @ok)), \" \"), \
+                 Int/to_str(Flt/exponent({term}, @ok))) \
+             | none() => \"none\" \
+             end"
+        )
+    };
+    let rows = [
+        parts("Flt/sub(-2.5, Nat/to_flt(n))"),
+        parts("Flt/add(0.1, Nat/to_flt(n))"),
+        parts("Flt/mul(4.9e-324, Nat/to_flt(n + 1))"),
+        parts("Flt/mul(1.7976931348623157e308, Nat/to_flt(n + 1))"),
+        parts("Nat/to_flt(n)"),
+        parts("Flt/neg(Nat/to_flt(n))"),
+    ];
+    let rows = rows.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let executed = folded_matches_runtime(&rows);
+
+    assert_eq!(executed[0], b"-5629499534213120 -51");
+    assert_eq!(executed[2], b"+1 -1074");
+    assert_eq!(executed[4], b"+0 +0");
+}
+
 /// The NaN rule, folded and executed: an operation over NaN operands answers the greatest of their quieted patterns whatever their order, an invalid one over none answers the default NaN, and the sign operations and the byte conversions carry every pattern as it is. Each row prints the result's bytes, which is the one observation that reads a NaN's sign and payload.
 ///
 /// The NaN operands are *assembled from bytes* rather than computed, with a runtime-tainted low byte, and that is the whole design of the table. A computed NaN carries whatever pattern the engine chose, so a row built on one could pass by coincidence of hardware; reinterpreting a pattern the program chose is bit-preserving on every engine, so a payload set here reaches the instruction on any architecture, and the tainted byte keeps the executed side from folding. The computed rows are the invalid operations, whose answer the model fixes as the default NaN where x86 and aarch64 disagree on the sign — so on an x86 host each is a row the check after the instruction has to win.

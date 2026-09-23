@@ -66,6 +66,8 @@ pub enum Operation {
     IntToFlt(Rounding),
     FltToNat,
     FltToInt,
+    FltMantissa,
+    FltExponent,
     FltToLeBytes,
     FltOfLeBytes,
 }
@@ -86,6 +88,8 @@ impl Operation {
             | Self::IntToFlt(_)
             | Self::FltToNat
             | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
             | Self::FltToLeBytes
             | Self::FltOfLeBytes => 1,
             Self::BoolAnd

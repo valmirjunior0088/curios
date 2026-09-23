@@ -103,6 +103,8 @@ pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
         Intrinsic::FltToNat => Some(Literal::Nat(flt(0)?.to_natural().ok()?)),
         Intrinsic::FltToInt => Some(Literal::Int(flt(0)?.to_integer().ok()?)),
+        Intrinsic::FltMantissa => Some(Literal::Int(flt(0)?.to_dyadic().ok()?.0)),
+        Intrinsic::FltExponent => Some(Literal::Int(Integer::from(flt(0)?.to_dyadic().ok()?.1))),
         // Folds over the *runtime* representation, not the literal's kind: a `Nat` or `Int` is an i31 or a boxed magnitude, both of which the test admits, while an `Flt` is a boxed struct and a `Bin` a rope reference, so those answer 0.
         Intrinsic::IsImmediate => Some(Literal::Nat(Natural::from(match literals[0] {
             Literal::Nat(_) | Literal::Int(_) => 1u32,

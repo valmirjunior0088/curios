@@ -159,6 +159,16 @@ pub enum Intrinsic {
         flt: Term,
         finite: Term,
     },
+    /// The signed mantissa of the operand's exact value `mantissa · 2^exponent`, under the same `finite` proof truncation needs. It and [`Intrinsic::FltExponent`] are two operations shaped like [`Intrinsic::FltToInt`] rather than one whose result is a pair, so no stage carries a compound intrinsic result.
+    FltMantissa {
+        flt: Term,
+        finite: Term,
+    },
+    /// The exponent of the operand's exact value, the other half of [`Intrinsic::FltMantissa`].
+    FltExponent {
+        flt: Term,
+        finite: Term,
+    },
     BinType(Grain),
     Bin(Grain, Binary),
     BinLen(Grain, Term),
@@ -888,6 +898,8 @@ impl Intrinsic {
             | Intrinsic::NatToByte { nat: a, below: p }
             | Intrinsic::FltToNat { flt: a, non_neg: p }
             | Intrinsic::FltToInt { flt: a, finite: p }
+            | Intrinsic::FltMantissa { flt: a, finite: p }
+            | Intrinsic::FltExponent { flt: a, finite: p }
             | Intrinsic::BinReinterp {
                 grain: _,
                 bin: a,
@@ -1183,6 +1195,14 @@ impl Intrinsic {
                 non_neg: visit.visit_subterm(non_neg),
             },
             Intrinsic::FltToInt { flt, finite } => Intrinsic::FltToInt {
+                flt: visit.visit_subterm(flt),
+                finite: visit.visit_subterm(finite),
+            },
+            Intrinsic::FltMantissa { flt, finite } => Intrinsic::FltMantissa {
+                flt: visit.visit_subterm(flt),
+                finite: visit.visit_subterm(finite),
+            },
+            Intrinsic::FltExponent { flt, finite } => Intrinsic::FltExponent {
                 flt: visit.visit_subterm(flt),
                 finite: visit.visit_subterm(finite),
             },

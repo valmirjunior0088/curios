@@ -282,6 +282,22 @@ fn flt_to_nat_guards_its_domain_before_truncating() {
 }
 
 #[test]
+fn flt_decomposition_refuses_a_non_number_before_reading_the_fields() {
+    for part in [
+        curios_cont::Intrinsic::FltMantissa,
+        curios_cont::Intrinsic::FltExponent,
+    ] {
+        let wat = wat(&intrinsic_main(part, vec![flt(1.0)]));
+        let read = wat.find("i64.reinterpret_f64").expect("the bits read");
+        let guard = wat.find("call $refuse/invariant").expect("the refusal");
+        assert!(
+            read < guard,
+            "the field is read before the refusal decides on it"
+        );
+    }
+}
+
+#[test]
 fn flt_to_int_guards_its_domain_before_truncating() {
     let wat = wat(&intrinsic_main(
         curios_cont::Intrinsic::FltToInt,

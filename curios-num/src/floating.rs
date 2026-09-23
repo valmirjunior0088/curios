@@ -795,6 +795,29 @@ impl Floating {
         self.truncate_integer().ok_or(ScalarTrap::ConversionRange)
     }
 
+    /// The exact value as `mantissa · 2^exponent`, refusing a NaN or an infinity — outside the domain `/std/Flt/Finite` states. The decomposition IEEE's encoding holds: a signed mantissa under `2^53` in magnitude, and an exponent from `-1074`, the least subnormal's; a zero of either sign is `(0, 0)`.
+    pub fn to_dyadic(self) -> Result<(Integer, i32), ScalarTrap> {
+        match self.unpack() {
+            Unpacked::Nan | Unpacked::Infinite { .. } => Err(ScalarTrap::ConversionRange),
+            Unpacked::Zero { .. } => Ok((Integer::from(0u32), 0)),
+            Unpacked::Finite {
+                negative,
+                magnitude,
+                exponent,
+            } => {
+                let magnitude = Integer::from(magnitude);
+
+                Ok((
+                    match negative {
+                        true => -magnitude,
+                        false => magnitude,
+                    },
+                    exponent,
+                ))
+            }
+        }
+    }
+
     fn truncate_integer(self) -> Option<Integer> {
         match self.unpack() {
             Unpacked::Nan | Unpacked::Infinite { .. } => None,

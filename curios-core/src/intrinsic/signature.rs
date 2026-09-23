@@ -225,7 +225,7 @@ impl Intrinsic {
                 ],
                 nat_type(),
             ),
-            FltToInt { flt, .. } => sig(
+            FltToInt { flt, .. } | FltMantissa { flt, .. } | FltExponent { flt, .. } => sig(
                 vec![
                     Operand::At(flt_type()),
                     Operand::At(holds(BoolAnd(

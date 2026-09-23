@@ -231,7 +231,7 @@ impl Semantics {
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
-            FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
+            FltToNat | FltToInt | FltMantissa | FltExponent | FltOfLeBytes => LocalBehavior::trap(),
             NatDiv | NatRem | IntDiv | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq
             | NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatLe | NatAnd | NatOr
             | NatXor | NatShl | NatShr | ByteToNat | NatToByte | IntEql | IntNeq | IntAdd
@@ -423,6 +423,20 @@ impl Semantics {
                 IntToFlt(rounding) => Constant::Flt(Floating::of_integer(int(0)?, rounding)),
                 FltToNat => return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat)),
                 FltToInt => return Some(scalar_result(flt(0)?.to_integer(), Constant::Int)),
+                FltMantissa => {
+                    return Some(scalar_result(
+                        flt(0)?.to_dyadic().map(|(mantissa, _)| mantissa),
+                        Constant::Int,
+                    ));
+                }
+                FltExponent => {
+                    return Some(scalar_result(
+                        flt(0)?
+                            .to_dyadic()
+                            .map(|(_, exponent)| Integer::from(exponent)),
+                        Constant::Int,
+                    ));
+                }
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
                 // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
                 NatToByte => Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?),

@@ -148,6 +148,8 @@ impl Sort {
                 | Intrinsic::FltToInt { .. }
                 | Intrinsic::FltToLeBytes(..)
                 | Intrinsic::FltToNat { .. }
+                | Intrinsic::FltMantissa { .. }
+                | Intrinsic::FltExponent { .. }
                 | Intrinsic::Handle(..)
                 | Intrinsic::Int(..)
                 | Intrinsic::IntAdd(..)

@@ -800,6 +800,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::FltToInt { flt: operand, .. } => {
             print_intrinsic_call("Flt/to_int", vec![], vec![operand])
         }
+        Intrinsic::FltMantissa { flt: operand, .. } => {
+            print_intrinsic_call("Flt/mantissa", vec![], vec![operand])
+        }
+        Intrinsic::FltExponent { flt: operand, .. } => {
+            print_intrinsic_call("Flt/exponent", vec![], vec![operand])
+        }
         Intrinsic::BinType(grain) => pure(match grain {
             Grain::B => "Bits",
             Grain::X => "Bytes",

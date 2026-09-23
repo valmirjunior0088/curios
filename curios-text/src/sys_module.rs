@@ -530,6 +530,30 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
             }),
         ),
         documented(
+            &[
+                "The signed mantissa of `a`'s exact value `mantissa · 2^exponent`, under the evidence that it is finite: under `2^53` in magnitude, and `0` for a zero of either sign.",
+            ],
+            guarded_unary(
+                "mantissa",
+                flt(),
+                int(),
+                flt_finite(syntax),
+                |flt, finite| Intrinsic::FltMantissa { flt, finite },
+            ),
+        ),
+        documented(
+            &[
+                "The exponent of `a`'s exact value `mantissa · 2^exponent`, under the evidence that it is finite: from `-1074`, the least subnormal's, and `0` for a zero of either sign.",
+            ],
+            guarded_unary(
+                "exponent",
+                flt(),
+                int(),
+                flt_finite(syntax),
+                |flt, finite| Intrinsic::FltExponent { flt, finite },
+            ),
+        ),
+        documented(
             &["Its eight bytes, least significant first."],
             unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
         ),

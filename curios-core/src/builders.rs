@@ -346,6 +346,30 @@ impl Intrinsic {
         }
     }
 
+    /// A `FltMantissa` node from anything term-shaped, with the proof that its operand is a number.
+    pub fn flt_mantissa<T, P>(flt: T, finite: P) -> Self
+    where
+        T: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::FltMantissa {
+            flt: flt.into(),
+            finite: finite.into(),
+        }
+    }
+
+    /// A `FltExponent` node from anything term-shaped, with the proof that its operand is a number.
+    pub fn flt_exponent<T, P>(flt: T, finite: P) -> Self
+    where
+        T: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::FltExponent {
+            flt: flt.into(),
+            finite: finite.into(),
+        }
+    }
+
     /// A `FltToNat` conversion node from anything term-shaped, with the proof that its operand is a non-negative number.
     pub fn flt_to_nat<T, P>(flt: T, non_neg: P) -> Self
     where

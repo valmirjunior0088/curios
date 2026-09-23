@@ -210,6 +210,88 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
+    /// Lower one half of a finite float's exact value `mantissa · 2^exponent`, read off its encoding: the exponent field names a subnormal (`0`) or a normal, and the fraction gains the hidden bit in the latter. The all-ones field is an infinity or a NaN, which the `finite` evidence says cannot arrive, so it refuses as the compiler's fault exactly as [`Self::emit_flt_narrowing`]'s guard does. The exponent is an i31 on every path, `-1074` through `971`; the mantissa goes through `big/of_i64`, since `2^53` does not fit one.
+    fn emit_flt_decomposition(
+        &mut self,
+        dest: &Dest<'_>,
+        intrinsic: &curios_cont::Intrinsic,
+        operand: &EmissionValueName,
+        mantissa: bool,
+    ) {
+        let bits = self.context.push_local(
+            "flt_bits",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+        );
+        let field = self.context.push_local(
+            "flt_field",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+        );
+        let fraction = self.context.push_local(
+            "flt_fraction",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+        );
+
+        self.emit_operand(intrinsic, 0, operand);
+        self.emit_instrs([
+            curios_wasm::Instr::I64ReinterpretF64,
+            tee(&bits),
+            curios_wasm::Instr::I64Const {
+                value: 0x000F_FFFF_FFFF_FFFF,
+            },
+            curios_wasm::Instr::I64And,
+            set(&fraction),
+            get(&bits),
+            curios_wasm::Instr::I64Const { value: 52 },
+            curios_wasm::Instr::I64ShrU,
+            curios_wasm::Instr::I32WrapI64,
+            curios_wasm::Instr::I32Const { value: 0x7FF },
+            curios_wasm::Instr::I32And,
+            tee(&field),
+            curios_wasm::Instr::I32Const { value: 0x7FF },
+            curios_wasm::Instr::I32Eq,
+            when(
+                self.context
+                    .table()
+                    .refuse_instrs(curios_cont::Panic::Invariant),
+            ),
+        ]);
+        match mantissa {
+            // `±(fraction | hidden)` for a normal, `±fraction` for a subnormal or a zero, negated when the sign bit is set.
+            true => self.emit_instrs([
+                curios_wasm::Instr::I64Const { value: 0 },
+                get(&fraction),
+                curios_wasm::Instr::I64Const { value: 1 << 52 },
+                curios_wasm::Instr::I64Or,
+                get(&fraction),
+                get(&field),
+                curios_wasm::Instr::Select { val_types: vec![] },
+                tee(&fraction),
+                curios_wasm::Instr::I64Sub,
+                get(&fraction),
+                get(&bits),
+                curios_wasm::Instr::I64Const { value: 0 },
+                curios_wasm::Instr::I64LtS,
+                curios_wasm::Instr::Select { val_types: vec![] },
+                self.big(BigHelper::OfI64),
+            ]),
+            // `field - 1075` for a normal, `-1074` for a subnormal, and `0` for a zero.
+            false => self.emit_instrs([
+                get(&field),
+                curios_wasm::Instr::I32Const { value: 1075 },
+                curios_wasm::Instr::I32Sub,
+                curios_wasm::Instr::I32Const { value: 0 },
+                curios_wasm::Instr::I32Const { value: -1074 },
+                get(&fraction),
+                curios_wasm::Instr::I64Eqz,
+                curios_wasm::Instr::Select { val_types: vec![] },
+                get(&field),
+                curios_wasm::Instr::Select { val_types: vec![] },
+                curios_wasm::Instr::RefI31,
+            ]),
+        }
+        self.emit_store(dest, &intrinsic.result_repr());
+    }
+
     /// Lower a two-operand numeric op: load each operand at its declared representation, apply `instr`, store the result the way its local holds it.
     fn emit_binary_op(
         &mut self,
@@ -1908,6 +1990,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::FltToNat => self.emit_flt_narrowing(dest, &op, &args[0], false),
             curios_cont::Intrinsic::FltToInt => self.emit_flt_narrowing(dest, &op, &args[0], true),
+            curios_cont::Intrinsic::FltMantissa => {
+                self.emit_flt_decomposition(dest, &op, &args[0], true)
+            }
+            curios_cont::Intrinsic::FltExponent => {
+                self.emit_flt_decomposition(dest, &op, &args[0], false)
+            }
             curios_cont::Intrinsic::BinLen(grain) => {
                 self.emit_bin_len(grain, &args[0]);
                 self.emit_length_box();

@@ -1031,6 +1031,25 @@ pub fn reduce_intrinsic(
                 finite: finite.clone(),
             },
         ),
+        // The two halves of the exact value, each folding through the one decomposition the model states and declining outside the domain the bound states, as the narrowings do.
+        Intrinsic::FltMantissa { flt, finite } => reduce_flt_unary(
+            reducer,
+            flt,
+            |v| Some(Intrinsic::Int(v.to_dyadic().ok()?.0)),
+            |flt| Intrinsic::FltMantissa {
+                flt,
+                finite: finite.clone(),
+            },
+        ),
+        Intrinsic::FltExponent { flt, finite } => reduce_flt_unary(
+            reducer,
+            flt,
+            |v| Some(Intrinsic::Int(Integer::from(v.to_dyadic().ok()?.1))),
+            |flt| Intrinsic::FltExponent {
+                flt,
+                finite: finite.clone(),
+            },
+        ),
         Intrinsic::BinType(grain) => Ok(Subterm::Intrinsic(Intrinsic::BinType(*grain))),
         Intrinsic::Bin(grain, run) => Ok(Subterm::Intrinsic(Intrinsic::Bin(*grain, run.clone()))),
         Intrinsic::BinLen(grain, bin) => {

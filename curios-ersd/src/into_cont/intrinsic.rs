@@ -64,6 +64,8 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::Intrinsi
         O::IntToFlt(rounding) => curios_cont::Intrinsic::IntToFlt(rounding),
         O::FltToNat => curios_cont::Intrinsic::FltToNat,
         O::FltToInt => curios_cont::Intrinsic::FltToInt,
+        O::FltMantissa => curios_cont::Intrinsic::FltMantissa,
+        O::FltExponent => curios_cont::Intrinsic::FltExponent,
         O::FltToLeBytes => curios_cont::Intrinsic::FltToLeBytes,
         O::FltOfLeBytes => curios_cont::Intrinsic::FltOfLeBytes,
         O::ByteToNat | O::NatToByte => {

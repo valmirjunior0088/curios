@@ -134,6 +134,8 @@ pub enum Intrinsic {
     FltToLeBytes,
     FltOfLeBytes,
     FltToInt,
+    FltMantissa,
+    FltExponent,
     BinLen(Grain),
     BinEql(Grain),
     BinGet(Grain),
@@ -243,7 +245,8 @@ impl Intrinsic {
             (
                 FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltEql
                 | FltNeq | FltLt | FltLe | FltMin | FltMax | FltNeg | FltAbs | FltSqrt(_)
-                | FltRoundIntegral(_) | FltCopysign | FltToNat | FltToLeBytes | FltToInt,
+                | FltRoundIntegral(_) | FltCopysign | FltToNat | FltToLeBytes | FltToInt
+                | FltMantissa | FltExponent,
                 _,
             ) => Repr::Flt,
         }
@@ -289,8 +292,8 @@ impl Intrinsic {
             // Every `Nat` or `Int` an operation computes is a reference, since no operation bounds its result's size in general: a length and a window's checked extent included, which a sequence past the i31 would leave.
             NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
             | NatShr | IntToNat | FltToNat | IntAdd | IntSub | IntMul | IntDiv | IntRem
-            | IntAnd | IntOr | IntXor | IntShl | IntShr | NatToInt | FltToInt | BinLen(_)
-            | ListLen | WindowExtent => Repr::Ref,
+            | IntAnd | IntOr | IntXor | IntShl | IntShr | NatToInt | FltToInt | FltMantissa
+            | FltExponent | BinLen(_) | ListLen | WindowExtent => Repr::Ref,
 
             FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltMin
             | FltMax | FltNeg | FltAbs | FltSqrt(_) | FltRoundIntegral(_) | FltCopysign
@@ -346,6 +349,8 @@ impl Intrinsic {
             | Self::FltToLeBytes
             | Self::FltOfLeBytes
             | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
             | Self::BinLen(_)
             | Self::BinReinterp(_)
             | Self::ListLen
@@ -427,6 +432,8 @@ impl Intrinsic {
             | Self::IntRem
             | Self::FltToNat
             | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
             | Self::FltOfLeBytes
             | Self::BinGet(_)
             | Self::BinSlice(_)

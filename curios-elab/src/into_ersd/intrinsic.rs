@@ -320,6 +320,12 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltToInt { flt: inner, .. } => {
             op!(curios_ersd::Operation::FltToInt, flt_type, inner)
         }
+        Intrinsic::FltMantissa { flt: inner, .. } => {
+            op!(curios_ersd::Operation::FltMantissa, flt_type, inner)
+        }
+        Intrinsic::FltExponent { flt: inner, .. } => {
+            op!(curios_ersd::Operation::FltExponent, flt_type, inner)
+        }
         Intrinsic::FltToLeBytes(inner) => {
             op!(curios_ersd::Operation::FltToLeBytes, flt_type, inner)
         }

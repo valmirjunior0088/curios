@@ -727,6 +727,8 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::FltToLeBytes => "Flt/to_le_bytes",
         Intrinsic::FltOfLeBytes => "Flt/of_le_bytes",
         Intrinsic::FltToInt => "Flt/to_int",
+        Intrinsic::FltMantissa => "Flt/mantissa",
+        Intrinsic::FltExponent => "Flt/exponent",
         Intrinsic::ListLen => "List/len",
         Intrinsic::ListGet => "List/get",
         Intrinsic::ListSlice => "List/slice",

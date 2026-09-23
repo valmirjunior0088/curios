@@ -924,6 +924,8 @@ fn operation_name(operation: Operation) -> String {
         Operation::IntToFlt(rounding) => return flt_rounded(rounding, "of_int"),
         Operation::FltToNat => "Flt/to_nat",
         Operation::FltToInt => "Flt/to_int",
+        Operation::FltMantissa => "Flt/mantissa",
+        Operation::FltExponent => "Flt/exponent",
         Operation::FltToLeBytes => "Flt/to_le_bytes",
         Operation::FltOfLeBytes => "Flt/of_le_bytes",
     };

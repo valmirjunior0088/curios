@@ -796,6 +796,8 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::IntToNat { .. }
             | Intrinsic::IntToFlt(..)
             | Intrinsic::FltToNat { .. }
+            | Intrinsic::FltMantissa { .. }
+            | Intrinsic::FltExponent { .. }
             | Intrinsic::FltToLeBytes(..)
             | Intrinsic::FltOfLeBytes { .. }
             | Intrinsic::FltToInt { .. }
