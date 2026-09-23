@@ -92,9 +92,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Int`, unbounded at run time as `Nat` is
     - [x] Order carried from `Nat` along the embedding (a sign view, trichotomy, and the laws of `/std/Int/Lt` and `/std/Int/Le`)
     - [ ] [Cancellation, sign and absolute value, and the signed scale](roadmap/int-laws-spec.md)
-  - [x] `Flt` (bit-preserving binary64 identity, with the full arithmetic and comparison family)
+  - [x] `Flt`, IEEE 754-2019 binary64 specified by a hardware-independent model stated in this repository: every bit pattern a value under one symmetric NaN rule, the five rounding directions and `fma`, exceptions as values and the environment as a monad, decimal and hexadecimal text in every direction, `/std/Dyadic` as a finite value's exact form, and §9.4's reductions and §9.5's augmented operations
+    - [ ] [Its laws, the reflected model, the elementary functions of §9.2, and the rest of §8](roadmap/flt-laws-spec.md)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
-  - [x] `Flt` specified by a hardware-independent model, stated in this repository
   - [x] `List`
   - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
