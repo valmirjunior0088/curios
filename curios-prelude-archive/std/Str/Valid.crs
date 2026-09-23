@@ -136,11 +136,11 @@ let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) 
 --- The code point of the first character, as a number.
 let decode_head_raw(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Nat =
     let rest = Eq/subst((sc: Scan) => from(sc, t), step_scans(c), w);
-    (match classify(c): (cl) => (w2: from(scan_of_class(cl), t)) -> Nat
+    match classify(c): (cl) => (w2: from(scan_of_class(cl), t)) -> Nat
     | ascii() => (_) => Byte/to_nat(c)
     | lead(k, _, _, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
     | bad() => (w2) => match from_bad(w2) end
-    end)(rest);
+    end(rest);
 
 --- The first character of bytes valid from the first byte.
 pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char =

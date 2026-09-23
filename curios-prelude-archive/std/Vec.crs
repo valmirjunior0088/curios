@@ -64,10 +64,10 @@ pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
 
 --- Everything after the first element.
 pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
-    (match v.list: (l) => (Counted(l, n + 1)) -> Vec(T, n)
+    match v.list: (l) => (Counted(l, n + 1)) -> Vec(T, n)
     | [] => (c) => match zero_not_succ(c) end
     | [_, ..t] => (c) => Vec { list = t, counted = succ_cancel(c) }
-    end)(v.counted);
+    end(v.counted);
 
 --- `v` then `w`.
 pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, n + m) =

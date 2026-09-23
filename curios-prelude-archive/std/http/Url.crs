@@ -112,10 +112,10 @@ pub let Valid(s: Str) -> Prop =
 
 --- The URL the literal `s` spells, at no cost at run time beyond the read.
 pub let lit(s: Str, @ok: Valid(s)) -> Url =
-    (match of_str(s): (r) => (Read(r)) -> Url
+    match of_str(s): (r) => (Read(r)) -> Url
     | success(u) => (_) => u
     | failure(_) => (absent) => match absent end
-    end)(ok);
+    end(ok);
 
 let scheme_str(s: Scheme) -> Str =
     match s | http() => "http" | https() => "https" end;

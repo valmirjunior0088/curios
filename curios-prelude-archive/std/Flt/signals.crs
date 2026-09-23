@@ -15,10 +15,10 @@ let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions 
     let overflow = exact/overflows(r, e.mantissa < +0, magnitude, e.exponent, sticky);
     let inexact =
         sticky || overflow
-        || (match Dyadic/try_of(result)
+        || match Dyadic/try_of(result)
             | some(d) => d != e
             | none() => true
-            end);
+            end;
     Exceptions {
         ..Exceptions/none,
         overflow = overflow,

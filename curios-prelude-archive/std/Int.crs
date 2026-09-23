@@ -35,7 +35,7 @@ end
 --- `i`'s form: the natural it is, or the natural one below its negation is.
 pub let view(i: Int) -> Sign(i) =
     let go(r: Bool, c: Eq(i >= +0, r)) -> Sign(i) =
-        (match r: (s) => (Eq(i >= +0, s)) -> Sign(i)
+        match r: (s) => (Eq(i >= +0, s)) -> Sign(i)
         | true =>
             (c) =>
                 let ok: NonNeg(i) = Bool/holds_of_eq(i >= +0, c);
@@ -44,7 +44,7 @@ pub let view(i: Int) -> Sign(i) =
             (c) =>
                 let ok: NonNeg(-1 - i) = Bool/holds_of_eq(i < +0, Eq/cong(Bool/not, c));
                 Sign/neg(to_nat(-1 - i, @ok))
-        end)(c);
+        end(c);
     go(i >= +0, Eq/refl());
 
 -- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
@@ -79,21 +79,21 @@ end
 --- `a` against `b`: below, equal, or above, one of them with its proof.
 pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
     let above(s: Bool, d: Eq(b < a, s), ge: Le(b, a)) -> Trichotomy(a, b) =
-        (match s: (t) => (Eq(b < a, t)) -> Trichotomy(a, b)
+        match s: (t) => (Eq(b < a, t)) -> Trichotomy(a, b)
         | true => (d) => Trichotomy/gt(Bool/holds_of_eq(b < a, d))
         | false =>
             (d) =>
                 let le: Le(a, b) = Bool/holds_of_eq(Bool/not(b < a), Eq/cong(Bool/not, d));
                 Trichotomy/eq(Le/antisym(a, b, le, ge))
-        end)(d);
+        end(d);
     let below(r: Bool, c: Eq(a < b, r)) -> Trichotomy(a, b) =
-        (match r: (s) => (Eq(a < b, s)) -> Trichotomy(a, b)
+        match r: (s) => (Eq(a < b, s)) -> Trichotomy(a, b)
         | true => (c) => Trichotomy/lt(Bool/holds_of_eq(a < b, c))
         | false =>
             (c) =>
                 let ge: Le(b, a) = Bool/holds_of_eq(Bool/not(a < b), Eq/cong(Bool/not, c));
                 above(b < a, Eq/refl(), ge)
-        end)(c);
+        end(c);
     below(a < b, Eq/refl());
 
 --- A decided equality is an equation: `a == b` gives `Eq(a, b)`.

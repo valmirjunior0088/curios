@@ -119,10 +119,10 @@ pub let FiniteNonZero(f: Flt) -> Prop =
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    (match neg_inf < f && f < pos_inf: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
+    match neg_inf < f && f < pos_inf: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
     | true => (_) => Bool/True/qed()
     | false => (no) => match no end
-    end)(ok);
+    end(ok);
 
 --- The procedure that decides `FiniteNonZero(f)`.
 pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
@@ -562,13 +562,13 @@ let nan_of_str(body: Str) -> Option(Flt) =
     let open = Str/index_of(body, '(');
     let kind = Str/slice(body, 0, Option/unwrap_or(open, Str/len(body)));
     let signaling =
-        (choose
+        choose
         | Str/eql_ascii_ci(kind, "nan") => Option/some(false)
         | Str/eql_ascii_ci(kind, "snan") => Option/some(true)
         | _ => Option/none()
-        end)!;
+        end!;
     let payload =
-        (match open
+        match open
         | none() => Option/some(match signaling | true => 1 | false => 0 end)
         | some(at) =>
             let inner = Str/slice(body, at + 1, Str/len(body) - (at + 1));
@@ -576,7 +576,7 @@ let nan_of_str(body: Str) -> Option(Flt) =
             | true => hex_value(Str/slice(inner, 2, Str/len(inner) - 3))
             | false => Option/none()
             end
-        end)!;
+        end!;
     match signaling
     | true =>
         match payload >= 1 && payload < pow2(51)
@@ -673,10 +673,10 @@ let of_hex_body(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
             Option/unwrap_or(Str/index_of(body, 'P'), length));
     let mantissa = Str/slice(body, 0, p);
     let exponent =
-        (match p < length
+        match p < length
         | true => Int/of_str(Str/slice(body, p + 1, length - (p + 1)))
         | false => Option/some(+0)
-        end)!;
+        end!;
     let dot = Option/unwrap_or(Str/index_of(mantissa, '.'), Str/len(mantissa));
     let whole = Str/slice(mantissa, 0, dot);
     let fraction =
