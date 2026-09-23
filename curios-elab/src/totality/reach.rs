@@ -83,8 +83,6 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
         entries(declaration.fields(), &site, &mut positions);
     }
 
-    // Temporary instrumentation: (T)'s two seedings and (V)'s one are the inputs both obligations walk, and nothing has ever counted them. Remove once answered.
-    curios_profile::sample!("totality::type_positions", positions.len());
     positions
 }
 
