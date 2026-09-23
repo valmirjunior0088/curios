@@ -163,7 +163,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A copied body reproduces the definitions nested inside it
 - [x] Moving an application into the function that returns it, so a monadic step stops allocating
 - [x] An idiomatic string walk stops building a suffix and a closure per character
-- [ ] [A combinator specialized on a known function argument stops calling through it](roadmap/known-function-specialization-spec.md) (`/std/Str/fold` still dispatches through a closure once per character)
 - [x] The unfolding discard decides on progress
 - [x] [A reduction step costs what it builds](design/toolchain/a-reduction-step-costs-what-it-builds.md)
 - [x] [A type-level concatenation no longer copies what it joins](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md)
@@ -173,7 +172,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [A variant collapses when nothing needs to distinguish it](design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)
 - [x] [A variant travels as the fields of its widest constructor](design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md)
 - [x] [A pure program rebuilds what an impure one would mutate](design/toolchain/a-pure-program-rebuilds-what-an-impure-one-would-mutate.md)
-- [ ] [The survivors are what cost](roadmap/collector-economics-spec.md) (the mechanism is settled; the route is not)
 - [x] [The map wall falls by classes, not by symptom](design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md)
 - [x] [A monomorphic field carries its own type](design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md)
 - [x] The map's remaining distance is decomposed before it is spent
@@ -186,7 +184,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Five measured cliffs where an ordinary spelling cost superlinearly, or refused
 - [x] [A product of two symbolic sums is its own weak-head form](design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md)
 - [x] [A stuck comparison is spelled one way](design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)
-- [ ] [A closed term evaluates at an interpreter's speed](roadmap/faster-conversion-oracle-spec.md) (not refined yet)
 
 ## IO
 
@@ -290,14 +287,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache; `curios pin` derives a row's hash from the delivery and writes it, so a pin is never computed by hand)
   - [x] [Payload reuse](soundness/admission-without-judgment/reused-payloads.md) (an unchanged target re-executes without recompiling)
   - [x] [A unit the store holds is a baseline, not a hit or a miss](design/toolchain/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) (a question compiles an edited unit over the stored one, reusing every item the edit did not reach; elaboration and parsing recover per item)
-  - [ ] [Proof automation writes terms into the source and is never trusted](roadmap/proof-automation-spec.md) (phase 0 not built)
   - [x] Project manifest & discovery (identity declared once; scope reached through artifacts)
   - [x] `curios new` scaffolding (a package named after its directory, with both halves written)
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
   - [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name = body;` declarations run by `curios test`, listed by `wonder tests`)
   - [x] [Documentation generator](design/toolchain/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md) (`curios document` writes a package's library interface as static pages under `.curios/documentation/`, read off the compilation that builds it; `---` documentation comments are syntax attached to the declaration below them)
   - [x] [Linter](design/toolchain/a-lint-is-an-exact-finding-read-off-the-compilation.md) (`curios lint` — four exact, always-on lints read off name resolution: an unused import, binder, private declaration or dependency; reported beside diagnostics by `wonder` and the server, turned into an exit code by `lint` alone)
-  - [ ] [A profile is a fact about the program, not about the machine](roadmap/profiling-spec.md)
     - [x] Profiling is a property of the build, not a subcommand (`curios profile` retired; a `profile` build files every span and event of whatever it ran to `.artifacts/profile.tsv` beside the crate that wrote it, and `cargo x profile` folds it)
     - [x] `wonder cost` — what became of each declaration by the time the optimizer settled, `survived`, `specialized <n>` or `absorbed`, read off the continuation graph either side of the optimizer with no pass instrumented
     - [ ] What checking a declaration cost, in the budget's own machine-independent units (not refined yet)
