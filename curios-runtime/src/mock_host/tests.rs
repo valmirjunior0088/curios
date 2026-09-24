@@ -1,9 +1,41 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
-    super::{super::host::*, EBUSY, MockHost},
+    super::{super::host::*, EBUSY, ENOTTY, MockHost},
     curios_abi::{event, serial_flow, serial_op, serial_parity},
 };
+
+#[test]
+fn terminal_sizes_advance_on_queries_and_repeat_the_last() {
+    let (host, io) = MockHost::builder().tty_sizes([(12, 5), (16, 6)]).build();
+
+    assert!(matches!(host.tty_raw(Handle::Stdin, 1), Status::Ok));
+    assert!(matches!(host.tty_size(Handle::Stdin), (Status::Ok, 12, 5)));
+    assert!(matches!(host.tty_raw(Handle::Stdin, 0), Status::Ok));
+    for _ in 0..3 {
+        assert!(matches!(host.tty_size(Handle::Stdin), (Status::Ok, 16, 6)));
+    }
+    assert_eq!(io.raw_modes(), [true, false]);
+}
+
+#[test]
+fn a_fixed_terminal_size_repeats_and_an_empty_script_has_no_terminal() {
+    let (host, _) = MockHost::builder().tty_size(20, 5).build();
+    for _ in 0..3 {
+        assert!(matches!(host.tty_size(Handle::Stdin), (Status::Ok, 20, 5)));
+    }
+
+    let (host, io) = MockHost::builder().tty_size(20, 5).tty_sizes([]).build();
+    assert!(matches!(
+        host.tty_size(Handle::Stdin),
+        (Status::Other(ENOTTY), 0, 0)
+    ));
+    assert!(matches!(
+        host.tty_raw(Handle::Stdin, 1),
+        Status::Other(ENOTTY)
+    ));
+    assert!(io.raw_modes().is_empty());
+}
 
 #[test]
 fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {

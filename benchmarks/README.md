@@ -4,7 +4,9 @@ A throwaway, run-once-every-never harness to place Curios against industry langu
 
 ## Results
 
-Every capture so far: Apple Silicon, Docker Desktop's Linux VM, one pinned arm64 core.
+The [guest coordination measurements](guest-coordination.md) track a local before-and-after compiler/runtime change with scripted Async and Tui workloads. They use their own workload and profiling configuration, separate from the cross-language series below.
+
+Every cross-language capture so far: Apple Silicon, Docker Desktop's Linux VM, one pinned arm64 core.
 
 ### Curios across peers
 

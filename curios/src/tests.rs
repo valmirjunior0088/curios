@@ -5,6 +5,8 @@ mod characters;
 mod cli;
 mod codegen;
 mod concepts;
+#[cfg(feature = "profile")]
+mod coordination;
 mod corpus;
 mod derive;
 mod document;

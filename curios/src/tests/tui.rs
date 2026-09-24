@@ -84,8 +84,19 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
         .tty_size(12, 5)
         .stdin_chunks(vec![b"\x1b[B".to_vec(), b"q".to_vec()])
         .build();
-    run_text(
-        r#"
+    run_text(LISTING_PROGRAM, system).expect("expected result");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.starts_with("\x1b[?1049h"), "{output:?}");
+    assert!(output.ends_with("\x1b[?1049ltwo"), "{output:?}");
+    // The first frame is the whole screen: a clear, the border's corner, the title. The second is a diff: no clear, and the two rows whose highlight moved.
+    assert_eq!(output.matches("\x1b[2J").count(), 1, "{output:?}");
+    assert_eq!(output.matches("\x1b[?2026h").count(), 2, "{output:?}");
+    assert!(output.contains("┌pick"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// Shared with the coordination measurement so both exercise the same application.
+pub(super) const LISTING_PROGRAM: &str = r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Async, Io, Show, Tui};
         use /std/Tui/{Style, Frame, Key, Event, Directive, Listing, Border};
         let app: Tui(Listing, Nat) =
@@ -128,16 +139,4 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
             | failure(e) => /std/print(Show/show(e))
             end;
         Async/run(fiber)
-        "#,
-        system,
-    )
-    .expect("expected result");
-    let output = String::from_utf8_lossy(&io.output()).into_owned();
-    assert!(output.starts_with("\x1b[?1049h"), "{output:?}");
-    assert!(output.ends_with("\x1b[?1049ltwo"), "{output:?}");
-    // The first frame is the whole screen: a clear, the border's corner, the title. The second is a diff: no clear, and the two rows whose highlight moved.
-    assert_eq!(output.matches("\x1b[2J").count(), 1, "{output:?}");
-    assert_eq!(output.matches("\x1b[?2026h").count(), 2, "{output:?}");
-    assert!(output.contains("┌pick"), "{output:?}");
-    assert_eq!(io.raw_modes(), vec![true, false]);
-}
+        "#;

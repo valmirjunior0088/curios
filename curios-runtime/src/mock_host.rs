@@ -405,8 +405,8 @@ pub struct MockHost {
     env: HashMap<Vec<u8>, Vec<u8>>,
     /// Every mode `tty_raw` was asked for, in order. Shared with [`MockIo::raw_modes`], so a test can see that a bracket switched raw mode on and back off.
     raw_modes: Arc<Mutex<Vec<bool>>>,
-    /// The scripted terminal size `tty_size` answers; `None` is a host with no terminal, which answers `ENOTTY` as the native host does.
-    tty_size: Option<(u64, u64)>,
+    /// Terminal sizes served in order, repeating the last; an empty script answers `ENOTTY` as a host with no terminal does.
+    tty_sizes: Mutex<VecDeque<(u64, u64)>>,
     /// The scripted working directory `proc_cwd` answers.
     cwd: Vec<u8>,
     /// Scripted children by program name: what `proc_spawn` finds.
@@ -825,18 +825,24 @@ impl HostOps for MockHost {
     }
 
     fn tty_raw(&self, _io: Handle, on: u32) -> Status {
-        match self.tty_size {
-            Some(_) => {
-                self.raw_modes.lock().unwrap().push(on != 0);
-
-                Status::Ok
-            }
-            None => Status::Other(ENOTTY),
+        if self.tty_sizes.lock().unwrap().is_empty() {
+            return Status::Other(ENOTTY);
         }
+
+        self.raw_modes.lock().unwrap().push(on != 0);
+
+        Status::Ok
     }
 
     fn tty_size(&self, _io: Handle) -> (Status, u64, u64) {
-        match self.tty_size {
+        let mut sizes = self.tty_sizes.lock().unwrap();
+        let size = if sizes.len() > 1 {
+            sizes.pop_front()
+        } else {
+            sizes.front().copied()
+        };
+
+        match size {
             Some((cols, rows)) => (Status::Ok, cols, rows),
             None => (Status::Other(ENOTTY), 0, 0),
         }
@@ -1090,7 +1096,7 @@ pub struct MockHostBuilder {
     clock_mono_seq: VecDeque<(u64, u64)>,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
-    tty_size: Option<(u64, u64)>,
+    tty_sizes: VecDeque<(u64, u64)>,
     dirs: BTreeSet<Vec<u8>>,
     cwd: Option<Vec<u8>>,
     children: HashMap<Vec<u8>, MockChildScript>,
@@ -1139,8 +1145,13 @@ impl MockHostBuilder {
     }
 
     /// Give the host a terminal of `cols` by `rows`: `tty_size` answers it and `tty_raw` records its switches. Without one, both rows answer `ENOTTY`.
-    pub fn tty_size(mut self, cols: u64, rows: u64) -> Self {
-        self.tty_size = Some((cols, rows));
+    pub fn tty_size(self, cols: u64, rows: u64) -> Self {
+        self.tty_sizes([(cols, rows)])
+    }
+
+    /// Set the terminal sizes served by successive `tty_size` calls, repeating the last after the script ends. An empty script gives the host no terminal. Raw-mode switches do not advance the script.
+    pub fn tty_sizes(mut self, sizes: impl IntoIterator<Item = (u64, u64)>) -> Self {
+        self.tty_sizes = sizes.into_iter().collect();
 
         self
     }
@@ -1330,7 +1341,7 @@ impl MockHostBuilder {
             args: self.args,
             env: self.env,
             raw_modes,
-            tty_size: self.tty_size,
+            tty_sizes: Mutex::new(self.tty_sizes),
             cwd: self.cwd.unwrap_or_else(|| b"/".to_vec()),
             children: self.children,
             kills,
