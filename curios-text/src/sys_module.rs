@@ -2,7 +2,7 @@
 //!
 //! Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //!
-//! The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `holds` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
+//! Ordinary polymorphic inductives are parsed from declarations so a repeated lowering of each written `Type` retains its universe identity. Intrinsic bodies have no surface spelling and are built structurally; their declarations are assembled beside them.
 //!
 //! **These declarations are a second statement of `Intrinsic::signature`, not a projection of it.** The table is `curios-core`'s; this roster is what a caller actually names, and elaborating a body here checks its operands against that table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced — so deriving either from the other would make the check compare the roster with itself.
 //!
@@ -33,6 +33,22 @@ use {
     curios_num::{Grain, Integer, Rounding},
     curios_utilities::{Plicity, SyntaxRegistry},
 };
+
+// Ordinary declarations use the parser's source identities: every repeated lowering of a written `Type` must share its universe seed, including the family and constructor signatures synthesized from it.
+fn option_decl() -> TopItem {
+    let module: Module = r#"
+        --- A value that may be absent.
+        pub induct Option(A: Type): pub Type
+        --- The value is there.
+        | some(A)
+        --- There is none.
+        | none()
+        end
+    "#
+    .parse()
+    .expect("the ordinary Option declaration parses");
+    module.items.into_iter().next().expect("one declaration")
+}
 
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
 fn true_prop() -> TopItem {
@@ -1396,6 +1412,7 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         .into_iter()
         .chain(code_modules())
         .flat_map(SysModule::into_items)
+        .chain([option_decl()])
         .collect();
 
     Module { items }

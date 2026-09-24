@@ -497,7 +497,7 @@ fn a_package_documents_its_interface_for_its_consumers() {
         referents,
         [
             ("Shape", "/shapes/Shape".to_string(), true),
-            ("Option", "/std/Option/Option".to_string(), false),
+            ("Option", "/sys/Option".to_string(), false),
             // The canonical site, not the re-export the import went through: `/std/Nat` exposes the carrier `/sys` declares.
             ("Nat", "/sys/Nat/Nat".to_string(), false),
         ],

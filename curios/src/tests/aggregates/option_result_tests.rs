@@ -16,3 +16,18 @@ fn get_on_an_opaque_option_names_the_unfilled_bound() {
         "the refusal names the bound's binder"
     );
 }
+
+#[test]
+fn reexported_option_serves_repeated_occurrences_and_higher_universes() {
+    let source = r#"
+        use /std/{Option, Nat, Str, Spell, Io};
+        use /std/Option/{some, none};
+        let pair(@A: Type, a: A) -> {Option(A), Option(A)} = (some(a), none());
+        let small: {Option(Nat), Option(Nat)} = pair(7);
+        let large: {Option(Type), Option(Type)} = pair(Nat);
+        let carried: Type = match large.0 | some(t) => t | none() => Nat end;
+        let nested: Option(Option(Nat)) = some(small.0);
+        /std/print(Spell/spell(nested))
+    "#;
+    assert_eq!(crate::tests::run(source), b"Option/some(Option/some(7))");
+}

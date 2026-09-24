@@ -1,9 +1,9 @@
-//! Canonical compiler-known names, owned by the authored `/std` source tree that declares them.
+//! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies.
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
-    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -26,6 +26,11 @@ const STRING: StringSyntax = StringSyntax {
 };
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    option: OptionSyntax {
+        family: name(&["sys", "Option"]),
+        some: name(&["sys", "Option", "some"]),
+        none: name(&["sys", "Option", "none"]),
+    },
     monad: MonadSyntax {
         bind: name(&["std", "Monad", "Monad", "bind"]),
     },

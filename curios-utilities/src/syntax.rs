@@ -49,6 +49,7 @@ pub struct ConceptField {
 /// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot — where a positional constructor once let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
+    pub option: OptionSyntax,
     pub monad: MonadSyntax,
     pub lift: LiftSyntax,
     pub operator: OperatorSyntax,
@@ -65,6 +66,7 @@ impl SyntaxRegistry {
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
+            option,
             monad,
             lift,
             operator,
@@ -75,8 +77,9 @@ impl SyntaxRegistry {
             derivations,
         } = self;
 
-        monad
+        option
             .targets()
+            .chain(monad.targets())
             .chain(lift.targets())
             .chain(operator.targets())
             .chain(character.targets())
@@ -88,9 +91,10 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only three groups hold concept methods; the other five are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only three groups hold concept methods; the other six are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
+            option: _,
             monad: _,
             lift,
             operator,
@@ -105,6 +109,21 @@ impl SyntaxRegistry {
             .concept_fields()
             .chain([lift.lift])
             .chain(derivations.concept_fields())
+    }
+}
+
+/// The ordinary optional family and its constructors, in declaration order.
+#[derive(Debug, Clone, Copy)]
+pub struct OptionSyntax {
+    pub family: SyntaxName,
+    pub some: SyntaxName,
+    pub none: SyntaxName,
+}
+
+impl OptionSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { family, some, none } = self;
+        [family, some, none].into_iter()
     }
 }
 

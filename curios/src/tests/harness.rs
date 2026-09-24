@@ -213,7 +213,7 @@ fn sequences_spell_as_their_bracketed_literals() {
 
 #[test]
 fn structural_values_spell_as_type_qualified_constructor_paths() {
-    // The declaration's own path — `/std/Option/Option/some`, the induct `Option` inside module `/std/Option` — rather than the facade's `/std/Option/some` the written witnesses once spelled: both re-parse, and the derived witness spells the one it reads off the registry.
+    // The declaration now lives at `/sys/Option`, while its derived spelling remains `Option/some` through the public facade.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Option, Result, Ordering, Io, Spell, print};

@@ -1,15 +1,7 @@
+pub use /sys/{Option};
+pub use /sys/Option/{some, none};
 use /std/{Bool, Show, Spell, Str, Monad, Result, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
-
---- A value that may be absent.
-pub induct Option(A: Type): pub Type
---- The value is there.
-| some(A)
---- There is none.
-| none()
-end
-
-pub use Option/*;
 
 --- `f` on the value, or `none`.
 pub let bind(@A: Type, @B: Type, m: Option(A), f: (A) -> Option(B)) -> Option(B) =

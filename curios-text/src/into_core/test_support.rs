@@ -6,8 +6,8 @@ use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
     CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
-    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind, SpellDerivation,
-    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
+    MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind,
+    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
 };
 use std::{fs, path::Path};
 
@@ -32,6 +32,11 @@ const STRING: StringSyntax = StringSyntax {
 };
 
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    option: OptionSyntax {
+        family: registry_name(&["sys", "Option"]),
+        some: registry_name(&["sys", "Option", "some"]),
+        none: registry_name(&["sys", "Option", "none"]),
+    },
     monad: MonadSyntax {
         bind: registry_name(&["std", "Monad", "bind"]),
     },

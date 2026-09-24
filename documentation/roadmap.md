@@ -142,7 +142,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] `List`
 - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
 - [ ] [Host and guest boundary, part 1: guest coordination](roadmap/host-and-guest-boundary-pt1-spec.md) — write-once cells, bounded channels, level waiting and threaded session state
-  - [ ] `Option` declared in `/sys`, preserving explicit `/std` re-exports
+  - [x] `Option` declared in `/sys`, preserving explicit `/std` re-exports
   - [ ] Knot and program cells share write-once semantics; initialized construction, `Cell/set` and `Cell/get` removed
   - [ ] The `Channel` intrinsic with a positive-capacity obligation and atomic outcomes
   - [ ] Scheduler state threaded through its loop; opaque waits replace wakers and notification lists

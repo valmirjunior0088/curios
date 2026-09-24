@@ -6,8 +6,8 @@
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
-    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -28,6 +28,11 @@ const STRING: StringSyntax = StringSyntax {
 };
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    option: OptionSyntax {
+        family: name(&["sys", "Option"]),
+        some: name(&["sys", "Option", "some"]),
+        none: name(&["sys", "Option", "none"]),
+    },
     monad: MonadSyntax {
         bind: name(&["std", "Monad", "bind"]),
     },
