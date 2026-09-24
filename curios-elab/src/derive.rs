@@ -2,7 +2,7 @@
 //!
 //! Lowering carries the declaration into Core as the same anonymous definition a written witness produces, with [`Transient::Derive`](curios_core::Transient) in body position, so the witness's telescope — its implicit binders and `use` premises — is in scope when the body is checked, and its signature registers in the witness table exactly as a written one does (orphan and duplicate-key refusals need no body). Checking the transient against the concept application is what writes the body: the roster row for the concept produces the Core the lowerer would have produced for the equivalent written witness, and that Core is elaborated under the same expectation, so a derived body is typed, resolved, zonked and certified like any authored one — the kernel never sees the transient.
 //!
-//! **The blessed set is one value.** Which concepts derive, and the names each derived body applies, are one row of `curios_utilities::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. A writer therefore cannot apply a name the scheduler does not order, which is what the two used to be free to disagree about.
+//! **The blessed set is one value.** Which concepts derive, and their specific method and renderer names, are one row of `curios_utilities::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. `Spell` also uses the registry's shared string vocabulary; both its writer and the scheduler receive that same entry.
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` span.
 //!
@@ -24,7 +24,7 @@ use {
     curios_num::Natural,
     curios_utilities::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, Sign, Span, SpellDerivation, SyntaxRegistry,
+        Qualifier, Sign, Span, SpellDerivation, StringSyntax, SyntaxRegistry,
     },
 };
 
@@ -69,7 +69,8 @@ pub(crate) fn elaborate_derive(
         return Err(Error::private_representation(name.symbol()).at_opt(term.span()));
     }
 
-    let Some(derivation) = derivation_for(&context.syntax(), name) else {
+    let syntax = context.syntax();
+    let Some(derivation) = derivation_for(&syntax, name) else {
         return Err(Error::no_derivation(name.clone()).at_opt(term.span()));
     };
     let key = params
@@ -85,7 +86,7 @@ pub(crate) fn elaborate_derive(
     };
     let subject = subject(context, &site)?;
     let body = match derivation {
-        Derivation::Spell(row) => spell_body(context, &site, &subject, row)?,
+        Derivation::Spell(row) => spell_body(context, &site, &subject, row, &syntax.string)?,
         Derivation::Eql(row) => eql_body(context, &site, &subject, row)?,
         Derivation::Ord(row) => ord_body(context, &site, &subject, row)?,
         Derivation::Hash(row) => hash_body(context, &site, &subject, row)?,
@@ -476,13 +477,14 @@ fn spell_body(
     site: &Site<'_>,
     subject: &Subject,
     row: SpellDerivation,
+    string: &StringSyntax,
 ) -> Result<Term, Error> {
     let value = context.fresh(Some("value"));
 
     // The spelling of one classified payload read through `read`.
     let spell = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
     {
-        Part::Proof => str_literal(&row.string, b"?"),
+        Part::Proof => str_literal(string, b"?"),
         Part::Value { premise } => witness_call(
             context,
             site,
@@ -501,13 +503,13 @@ fn spell_body(
                 .map(|classified| {
                     let read = Term::proj(Term::free_var(&value), classified.position);
                     Term::tuple([
-                        str_literal(&row.string, classified.payload.label.as_bytes()),
+                        str_literal(string, classified.payload.label.as_bytes()),
                         spell(context, classified, read),
                     ])
                 })
                 .collect::<Vec<_>>();
             let items = list(context, entries);
-            let head = str_literal(&row.string, path(name, None).as_bytes());
+            let head = str_literal(string, path(name, None).as_bytes());
             site.at(syn_call(row.record, [head, items]))
         }
         Subject::Induct { name, decl, params } => {
@@ -530,7 +532,7 @@ fn spell_body(
                     })
                     .collect::<Vec<_>>();
                 let items = list(context, pieces);
-                let head = str_literal(&row.string, path(name, Some(tag.as_str())).as_bytes());
+                let head = str_literal(string, path(name, Some(tag.as_str())).as_bytes());
                 let body = site.at(syn_call(row.call, [head, items]));
                 arms.push((
                     tag.clone(),

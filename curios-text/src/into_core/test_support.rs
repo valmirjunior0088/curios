@@ -25,12 +25,6 @@ pub(super) const fn registry_field(
     }
 }
 
-/// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
-const STRING: StringSyntax = StringSyntax {
-    string: registry_name(&["std", "Str", "Str"]),
-    qed: registry_name(&["std", "Bool", "True", "qed"]),
-};
-
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     option: OptionSyntax {
         family: registry_name(&["sys", "Option"]),
@@ -61,7 +55,10 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     character: CharacterSyntax {
         character: registry_name(&["std", "Char", "Char"]),
     },
-    string: STRING,
+    string: StringSyntax {
+        string: registry_name(&["std", "Str", "Str"]),
+        qed: registry_name(&["std", "Bool", "True", "qed"]),
+    },
     proof: ProofSyntax {
         true_qed: registry_name(&["std", "Bool", "True", "qed"]),
         true_type: registry_name(&["std", "Bool", "True"]),
@@ -77,7 +74,6 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             spell: registry_field(&["std", "Spell", "Spell"], "spell"),
             call: registry_name(&["std", "Spell", "call"]),
             record: registry_name(&["std", "Spell", "record"]),
-            string: STRING,
         },
         eql: EqlDerivation {
             eql: registry_field(&["std", "Equal", "Equal"], "eql"),

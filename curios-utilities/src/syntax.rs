@@ -338,16 +338,14 @@ impl DerivationSyntax {
     }
 }
 
-/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call; the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields; and the string machinery every rendered piece is built out of. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+/// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
-/// The string machinery is carried by the row rather than reached out of the registry at the emitter, because it is part of what *this* body writes: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece. A row that emits a literal therefore cannot forget to order it, and one that emits none — as `Eql` does, building a `Bool` — does not carry it.
+/// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so the scheduler must order those shared names too. They have one registry entry, shared with ordinary string literals.
 #[derive(Debug, Clone, Copy)]
 pub struct SpellDerivation {
     pub spell: ConceptField,
     pub call: SyntaxName,
     pub record: SyntaxName,
-    /// The whole group rather than the names out of it, because `str_literal` takes it whole — so the body writer and the scheduler read one value, and a spelling cannot drift between what is emitted and what is ordered.
-    pub string: StringSyntax,
 }
 
 /// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and nothing else. What the body builds beside that is an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness — neither names a global for anything to order against.
@@ -399,7 +397,9 @@ impl Derivation {
     /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the hard edges `curios-text`'s scheduler cannot read off the `Derive` transient, since the body naming them does not exist yet.
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`]: a concept *method* is its concept's path extended by a field label, which is built rather than spelled, so no `&'static` segment list for it exists or could be made.
-    pub fn vocabulary(self) -> Vec<Qualifier> {
+    ///
+    /// `string` is [`SyntaxRegistry::string`], shared with the body writer; only `Spell` emits string literals and adds these dependencies.
+    pub fn vocabulary(self, string: &StringSyntax) -> Vec<Qualifier> {
         let field = self.concept_field();
         let method = field.concept.qualifier().with(field.field);
 
@@ -408,7 +408,6 @@ impl Derivation {
                 spell: _,
                 call,
                 record,
-                string,
             }) => [method]
                 .into_iter()
                 .chain(
@@ -441,11 +440,7 @@ impl Derivation {
                 spell,
                 call,
                 record,
-                string,
-            }) => [spell.concept, call, record]
-                .into_iter()
-                .chain(string.targets())
-                .collect::<Vec<_>>(),
+            }) => vec![spell.concept, call, record],
             Derivation::Eql(EqlDerivation { eql }) => vec![eql.concept],
             Derivation::Ord(OrdDerivation {
                 ord,
