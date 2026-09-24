@@ -262,18 +262,19 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
     assert_eq!(run(source), b"42");
 }
 
-// `/std/Async/Future` publishes the type and the operations a parking primitive needs, and keeps the phase machinery behind them private, so a program can hold a `Future` without reaching the states that drive one.
+// `/std/Async/Future` publishes its operations while keeping its result cell private.
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
-        use /std/{Nat, Async};
-        let f = /std/Async/Future/Phase/ready(1);
+        use /std/{Nat, Cell};
+        use /std/Async/{Future};
+        let _cell(f: Future(Nat)) -> Cell(Nat) = f.0;
         /std/print("no")
         "#;
 
     let error = error(source);
     assert!(
-        error.contains("private child module"),
+        error.contains("field '0'") && error.contains("private"),
         "unexpected error: {error}"
     );
 }

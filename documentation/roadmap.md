@@ -141,15 +141,15 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bitwise vocabulary on the packed carriers (`not`, `shl`, `shr`, `rotl`, `rotr` at both grains over `/sys`'s `replicate`, length-preserving and positional; `Bits` and `Bytes` read least-significant-first without exception, and `Bits` is level with `Bytes` on the surface they share)
 - [x] `List`
 - [x] `Cell` (write-once storage over any carrier, with empty construction, first-write `fill` and optional `poll`)
-- [ ] [Host and guest boundary, part 1: guest coordination](roadmap/host-and-guest-boundary-pt1-spec.md) — write-once cells, bounded channels, level waiting and threaded session state
-  - [x] `Option` declared in `/sys`, preserving explicit `/std` re-exports
-  - [x] Knot and program cells share write-once semantics; initialized construction, `Cell/set` and `Cell/get` removed
-  - [x] The `Channel` intrinsic with a positive-capacity obligation and atomic outcomes
-  - [x] Scheduler state threaded through its loop; opaque waits replace wakers and notification lists
-  - [x] `Tui/Session` state threaded through reading, size tracking and drawing
+- [x] [Guest coordination](design/language/guest-coordination-uses-write-once-cells-and-bounded-channels.md) — write-once cells, bounded channels, level waiting and threaded session state
+  - [x] [Ordinary `/sys/Option`](../curios-prelude-archive/README.md#optional-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
+  - [x] [Knot memoization](../curios-cont/README.md#mutation-hides-behind-instruction-atomicity) through a write-once result cell and a capacity-one initializer channel
+  - [x] [Guest channel storage](../curios-emit/README.md#cells-and-channels-occupy-the-guest-heap) with a positive-capacity obligation, atomic outcomes and consumed-slot release
+  - [x] Scheduler state threaded through its loop; opaque readiness waits and shared park claims
+  - [x] `Tui/Session` state threaded through reading, size tracking and drawing; [comparison measurements](../curios/src/tests/coordination.rs) recorded with their workloads
 - [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — canonical operation contracts and checked adapters; write progress, flushing and poll-wide failure remain design decisions
   - [ ] `Byte` on the wire and exit as a diverging row
-  - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing part 1's `Option`
+  - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing the existing `/sys/Option`
   - [ ] Checked host outcomes, guest reply validation, buffer ownership and resource transitions
   - [ ] Ordinary `/sys` outcome wrappers over wire-shaped Core calls; domain vocabulary retained in `/std`
   - [ ] Native, mock, plugin and browser conformance, with independent protocol fixtures
