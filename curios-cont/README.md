@@ -6,9 +6,11 @@ The Curios continuation-passing IR and its optimizer: `curios_ersd::lower_to_con
 
 ### Mutation hides behind instruction atomicity
 
-**Decision.** The IR has no stateful operation sequence: observable mutation happens only inside a single emitted instruction. The sole stateful value is `Cell`, and each of its operations is one such instruction.
+**Decision.** Guest coordination uses write-once cells and bounded channels. Each operation is a CPS node that completes before invoking its continuation; the emitter performs its state transition and chooses its outcome without calling the host or suspending. Optimizers preserve these nodes and their order. Readiness queries observe state and do not reserve a later operation's outcome.
 
-**Rationale.** CPS optimization reorders, duplicates, and deletes operations on dataflow grounds alone; an operation with internal state would turn each of those rewrites into a case analysis. Confining mutation to one instruction keeps effects atomic in the alphabet, so the optimizer's rewrites stay sound by construction rather than by side condition.
+**Rationale.** A push or take must report the outcome of its own attempt. Keeping the transition inside one operation prevents a cooperative fiber from observing a partial update. The guarantee is within one guest instance; these objects are not shared between processes.
+
+Compiler-generated knots use the same operations: a result cell and a capacity-one initializer channel per computed member. All storage and closures are bound and every initializer is enqueued before forcing starts. A force polls the result, otherwise takes and runs the initializer, then fills the result. An empty result with an empty initializer channel means recursive reentry and emits `Panic::Cycle`. The force captures only the two storage objects, so taking the initializer releases the knot's persistent reference to its captures. Initializers are pure and cannot suspend between these operations; the pair itself is not an atomic transaction. The lowering and its structural tests live in `curios-ersd/src/into_cont/`.
 
 ### Representation is decided for locals only
 

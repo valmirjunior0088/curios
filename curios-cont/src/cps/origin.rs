@@ -169,6 +169,7 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
                 }
                 Node::Foreign { return_to, .. }
                 | Node::Cell { return_to, .. }
+                | Node::Channel { return_to, .. }
                 | Node::Intrinsic { return_to, .. } => {
                     if let Some(resume) = module.continuation(*return_to) {
                         for param in &resume.params {

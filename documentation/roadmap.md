@@ -140,13 +140,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
 - [x] Bitwise vocabulary on the packed carriers (`not`, `shl`, `shr`, `rotl`, `rotr` at both grains over `/sys`'s `replicate`, length-preserving and positional; `Bits` and `Bytes` read least-significant-first without exception, and `Bits` is level with `Bytes` on the surface they share)
 - [x] `List`
-- [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
+- [x] `Cell` (write-once storage over any carrier, with empty construction, first-write `fill` and optional `poll`)
 - [ ] [Host and guest boundary, part 1: guest coordination](roadmap/host-and-guest-boundary-pt1-spec.md) — write-once cells, bounded channels, level waiting and threaded session state
   - [x] `Option` declared in `/sys`, preserving explicit `/std` re-exports
-  - [ ] Knot and program cells share write-once semantics; initialized construction, `Cell/set` and `Cell/get` removed
-  - [ ] The `Channel` intrinsic with a positive-capacity obligation and atomic outcomes
-  - [ ] Scheduler state threaded through its loop; opaque waits replace wakers and notification lists
-  - [ ] `Tui/Session` state threaded through reading, size tracking and drawing
+  - [x] Knot and program cells share write-once semantics; initialized construction, `Cell/set` and `Cell/get` removed
+  - [x] The `Channel` intrinsic with a positive-capacity obligation and atomic outcomes
+  - [x] Scheduler state threaded through its loop; opaque waits replace wakers and notification lists
+  - [x] `Tui/Session` state threaded through reading, size tracking and drawing
 - [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — canonical operation contracts and checked adapters; write progress, flushing and poll-wide failure remain design decisions
   - [ ] `Byte` on the wire and exit as a diverging row
   - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing part 1's `Option`
@@ -284,9 +284,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `map`, and `sleep`/`timeout`
   - [x] Concurrent `race`/`first` over spawned tasks, `select` over offers, and `join_all` over a list of tasks
   - [x] Fibers (`go`) and tasks (`spawn`/`join`/`cancel`), over `Future`/`await`
-  - [x] One park over a list of waits — a handle's readability, an elapsed duration, or a waker registration — resumed by whichever fires first and claimed once, with `yield_now` beside it, driven by the poll-based run loop (`block_on`/`run`); the park is the library's own, reached by a program through the stream types, `sleep`, `join` and `select`
+  - [x] One park over opaque waits for handle readiness, elapsed time, filled cells or channel readiness, claimed once across its alternatives, with `yield_now` beside it; private guest probes run on idle rounds and an offer retries after waking ([guest coordination](design/language/guest-coordination-uses-write-once-cells-and-bounded-channels.md))
   - [x] Scoped resource ownership (`using`), a finalizer run exactly once on both exits
-  - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported with how many fibers wait on a waker nothing will fire, rather than hung)
+  - [x] Deadlock detection after scanning guest readiness, with no runnable job, handle wait or sleeper; reports the number of parked fibers and releases their guards
 - [x] A channel owns its state, and a fiber parks with none (`/std/Async/Channel`: a bounded queue with `Sender` and `Receiver` ends, every park one `park` over a list of offers claimed once)
 
 ### Foreign functions

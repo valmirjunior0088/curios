@@ -454,7 +454,7 @@ Postfix `!` is not allowed in types. The token `!=` is an infix operator and is 
 
 ### Host effects and `Io`
 
-Every operation that touches the host — writing a handle, reading a clock, allocating or reading a cell, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
+Every operation that touches the host — writing a handle, reading a clock, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Guest cell and channel operations also return `Io(T)`, since they allocate or observe state within the guest instance. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
 
 **There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions and the carrier has no eliminator](design/language/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 

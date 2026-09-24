@@ -100,9 +100,9 @@ pub(super) fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_
 
 pub(super) fn cell_op(operation: CellOperation) -> curios_cont::CellOp {
     match operation {
-        CellOperation::New => curios_cont::CellOp::New,
-        CellOperation::Get => curios_cont::CellOp::Get,
-        CellOperation::Set => curios_cont::CellOp::Set,
+        CellOperation::New => curios_cont::CellOp::Reserve,
+        CellOperation::Poll { .. } => curios_cont::CellOp::Poll,
+        CellOperation::Fill => curios_cont::CellOp::Fill,
     }
 }
 

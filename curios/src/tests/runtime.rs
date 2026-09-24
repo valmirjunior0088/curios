@@ -2,6 +2,7 @@
 
 mod bang_tests;
 mod closure_tests;
+mod coordination_tests;
 mod diagnostic_tests;
 mod knot_tests;
 mod loop_tests;

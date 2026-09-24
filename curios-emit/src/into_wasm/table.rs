@@ -56,6 +56,17 @@ pub(crate) struct RopeData {
     pub offset_field: curios_wasm::FieldName,
 }
 
+/// The bounded channel's storage names. The payload array fixes capacity; mutable head, count, and closed fields describe its live window.
+#[derive(Debug, Clone)]
+pub(crate) struct ChannelData {
+    pub channel: curios_wasm::TypeName,
+    pub payload: curios_wasm::TypeName,
+    pub payload_field: curios_wasm::FieldName,
+    pub head_field: curios_wasm::FieldName,
+    pub count_field: curios_wasm::FieldName,
+    pub closed_field: curios_wasm::FieldName,
+}
+
 /// The name bundle for the boxed form a `Nat` or `Int` outside the i31 takes: the `$big` struct, the `$words` array holding its magnitude, and the struct's two fields — one handle for the big-number helpers and the literal materialization to share.
 #[derive(Debug, Clone)]
 pub(crate) struct BigData {
@@ -661,6 +672,17 @@ impl<'a> Table<'a> {
             cache_field: curios_wasm::FieldName::from("cache"),
             base_field: curios_wasm::FieldName::from("base"),
             offset_field: curios_wasm::FieldName::from("offset"),
+        }
+    }
+
+    pub(crate) fn channel(&self) -> ChannelData {
+        ChannelData {
+            channel: curios_wasm::TypeName::from("channel"),
+            payload: self.elems_type(),
+            payload_field: curios_wasm::FieldName::from("payload"),
+            head_field: curios_wasm::FieldName::from("head"),
+            count_field: curios_wasm::FieldName::from("count"),
+            closed_field: curios_wasm::FieldName::from("closed"),
         }
     }
 

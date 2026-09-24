@@ -402,41 +402,32 @@ impl Intrinsic {
         }
     }
 
-    /// A cell allocation — the `Intrinsic::Cell` variant — from a term-shaped element type and initial value.
-    pub fn cell_new<T, I>(type_: T, init: I) -> Self
-    where
-        T: Into<Term>,
-        I: Into<Term>,
-    {
+    /// An empty public cell allocation from its element type.
+    pub fn cell_new(type_: impl Into<Term>) -> Self {
         Self::Cell {
             element: type_.into(),
-            initial: init.into(),
         }
     }
 
-    /// A `CellSet` node from term-shaped element type, cell, and new value.
-    pub fn cell_set<T, C, V>(type_: T, cell: C, value: V) -> Self
-    where
-        T: Into<Term>,
-        C: Into<Term>,
-        V: Into<Term>,
-    {
-        Self::CellSet {
+    /// A first-write-wins fill from its element type, cell, and value.
+    pub fn cell_fill(
+        type_: impl Into<Term>,
+        cell: impl Into<Term>,
+        value: impl Into<Term>,
+    ) -> Self {
+        Self::CellFill {
             element: type_.into(),
             cell: cell.into(),
             value: value.into(),
         }
     }
 
-    /// A `CellGet` node from term-shaped element type and cell.
-    pub fn cell_get<T, C>(type_: T, cell: C) -> Self
-    where
-        T: Into<Term>,
-        C: Into<Term>,
-    {
-        Self::CellGet {
+    /// A public poll before elaboration supplies its ordinary `Option` universe instance.
+    pub fn cell_poll(type_: impl Into<Term>, cell: impl Into<Term>) -> Self {
+        Self::CellPoll {
             element: type_.into(),
             cell: cell.into(),
+            universes: Vec::new(),
         }
     }
 }

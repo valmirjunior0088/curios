@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async, Tty};
+use /std/{Nat, Bytes, List, Option, Io, Try, Async, Tty};
 use /std/time/{Duration};
 use /std/Tui/{Frame, Event, input, render, ansi};
 
@@ -11,9 +11,9 @@ struct Held: Type {
 --- A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
     tty: Tty,
-    rest: Cell(Bytes),
-    previous: Cell(Option(Held)),
-    size: Cell(Tty/Size),
+    rest: Bytes,
+    previous: Option(Held),
+    size: Tty/Size,
 }
 
 let enter: Io({}) =
@@ -36,24 +36,24 @@ pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async,
     Tty/with_raw_async(
         t,
         let first = Tty/size(t)!;
-        let rest: Cell(Bytes) = Cell/new(x[])!;
-        let previous: Cell(Option(Held)) = Cell/new(Option/none())!;
-        let size: Cell(Tty/Size) = Cell/new(first)!;
-        let s = Session { tty = t, rest = rest, previous = previous, size = size };
+        let s = Session { tty = t, rest = x[], previous = Option/none(), size = first };
         let _ = enter!;
         let outcome = Async/using(leave, Try/run(body(s)))!;
         let a = outcome!;
         Try/pure(a));
 
---- The terminal's size now.
-pub let size(s: Session) -> Try(Async, Io/Error, Tty/Size) =
+--- The terminal's size now, together with the session remembering it.
+pub let size(s: Session) -> Try(Async, Io/Error, {Session, Tty/Size}) =
     let now = Tty/size(s.tty)!;
-    let _ = Cell/set(s.size, now)!;
-    Try/pure(now);
+    Try/pure((resized(s, now), now));
+
+--- Remember a size received through a resize event.
+pub let resized(s: Session, now: Tty/Size) -> Session =
+    Session { ..s, size = now };
 
 --- The size last read.
 pub let last_size(s: Session) -> Io(Tty/Size) =
-    Cell/get(s.size);
+    Io/pure(s.size);
 
 --- `frame` written as the difference from the previous one where the size is unchanged, and whole where it is not.
 pub let draw(
@@ -62,10 +62,9 @@ pub let draw(
     s: Session,
     frame: Frame(w, h),
     cursor: Option({x: Nat, y: Nat}),
-) -> Async({}) =
-    let held = Cell/get(s.previous)!;
+) -> Async(Session) =
     let before: Option(Frame(w, h)) =
-        match held
+        match s.previous
         | none() => Option/none()
         | some(p) =>
             match p.w == w && p.h == h
@@ -74,31 +73,30 @@ pub let draw(
             end
         end;
     let _ = Io/write(Io/stdout, render/render(before, frame, cursor))!;
-    Cell/set(s.previous, Option/some(Held { w = w, h = h, frame = frame }));
+    Async/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
---- The next burst of input as events, parking until one arrives; `none` once standard input has ended.
-pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
-    let carried = Cell/get(s.rest)!;
+--- The updated session and next burst of input as events, parking until one arrives; `none` once standard input has ended.
+pub let read(@E: Type, s: Session) -> Async({Session, Option(List(Event(E)))}) =
     let got = Async/Read/read(Io/stdin, 1024)!;
     match got
-    | eof() => Async/pure(Option/none())
-    | error(_) => Async/pure(Option/none())
+    | eof() => Async/pure((s, Option/none()))
+    | error(_) => Async/pure((s, Option/none()))
     | chunk(bytes) =>
-        let d = input/decode(x[..carried, ..bytes]);
-        match Bytes/len(d.rest) == 0: (_) => Async(Option(List(Event(E))))
-        | true =>
-            let _ = Cell/set(s.rest, x[])!;
-            Async/pure(Option/some(d.events))
+        let d = input/decode(x[..s.rest, ..bytes]);
+        match Bytes/len(d.rest) == 0: (_) => Async({Session, Option(List(Event(E)))})
+        | true => Async/pure((Session { ..s, rest = x[] }, Option/some(d.events)))
         | false =>
-            let settle() -> Async(Option(List(Event(E)))) =
-                let _ = Cell/set(s.rest, x[])!;
-                Async/pure(Option/some([..d.events, ..input/flush(d.rest)]));
+            let settle() -> Async({Session, Option(List(Event(E)))}) =
+                Async/pure((
+                    Session { ..s, rest = x[] },
+                    Option/some([..d.events, ..input/flush(d.rest)])));
             let more = Async/timeout(Duration/of_millis(30), Async/Read/read(Io/stdin, 1024))!;
             match more
             | some(chunk(next)) =>
                 let settled = input/decode(x[..d.rest, ..next]);
-                let _ = Cell/set(s.rest, settled.rest)!;
-                Async/pure(Option/some([..d.events, ..settled.events]))
+                Async/pure((
+                    Session { ..s, rest = settled.rest },
+                    Option/some([..d.events, ..settled.events])))
             | _ => settle()
             end
         end

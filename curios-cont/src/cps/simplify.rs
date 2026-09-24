@@ -93,6 +93,7 @@ pub(super) fn forward_continuations(module: &mut Module) -> bool {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 retarget(return_to, &resolve_identity, &mut changed);
             }
@@ -869,6 +870,7 @@ fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
+            | Node::Channel { .. }
             | Node::Intrinsic { .. }
             | Node::Exit { .. }
             | Node::Panic(_)
@@ -911,6 +913,7 @@ pub(super) fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
+            | Node::Channel { .. }
             | Node::Intrinsic { .. }
             | Node::Exit { .. }
             | Node::Panic(_)
@@ -945,6 +948,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => Some(*return_to),
             _ => None,
         })

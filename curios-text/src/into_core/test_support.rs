@@ -5,9 +5,10 @@
 use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
-    MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind,
-    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
+    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
+    LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, Qualifier,
+    RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    test_support::Temporary,
 };
 use std::{fs, path::Path};
 
@@ -30,6 +31,16 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: registry_name(&["sys", "Option"]),
         some: registry_name(&["sys", "Option", "some"]),
         none: registry_name(&["sys", "Option", "none"]),
+    },
+    channel: ChannelSyntax {
+        push: registry_name(&["sys", "Channel", "Push"]),
+        taken: registry_name(&["sys", "Channel", "Push", "taken"]),
+        full: registry_name(&["sys", "Channel", "Push", "full"]),
+        closed: registry_name(&["sys", "Channel", "Push", "closed"]),
+        take: registry_name(&["sys", "Channel", "Take"]),
+        item: registry_name(&["sys", "Channel", "Take", "item"]),
+        empty: registry_name(&["sys", "Channel", "Take", "empty"]),
+        ended: registry_name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
         bind: registry_name(&["std", "Monad", "bind"]),

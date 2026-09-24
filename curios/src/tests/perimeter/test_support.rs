@@ -812,18 +812,18 @@ pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-/// The premise every rule above is stated over and no entry under `documentation/soundness/` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/get(c) : Io(Bool)` *describes* a read instead of being one, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The cell is forced on the line above so that the refusal lands here and not on the binding.
+/// The premise every rule above is stated over and no entry under `documentation/soundness/` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the current write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
 pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
-    let c = Cell/new(true)!;
+    let c = Cell/new(@Bool)!;
 
     let forged : Str =
-        match Cell/get(c)
+        match Cell/fill(c, true)
         | true =>
-            let p : Eq(Cell/get(c), true) = Eq/refl();
-            let done = Cell/set(c, false);
-            match Cell/get(c)
+            let p : Eq(Cell/fill(c, true), true) = Eq/refl();
+            let done = Cell/fill(c, false);
+            match Cell/fill(c, true)
             | true => "second read true"
             | false => match Bool/false_neq_true(p) end
             end
@@ -833,12 +833,13 @@ pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     /std/print(forged)
     "#;
 
-/// The control, and it has more to guard than it used to. Only the refinement's escape into a *type* was ever at issue, so a fix that refused the elimination outright would be a brick — and now that the cure is a typing rule rather than a reduction guard, a rule that refused `Cell/get` in every position would be exactly that brick. Forcing the description yields an ordinary `Bool`, which matches like one.
+/// The control, and it has more to guard than it used to. Only the refinement's escape into a *type* was ever at issue, so a fix that refused the elimination outright would be a brick — and now that the cure is a typing rule rather than a reduction guard, a rule that refused `Cell/poll` in every position would be exactly that brick. Forcing the poll yields an ordinary `Option(Bool)`, from which the fixture reads its Boolean.
 pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
-    use /std/{Cell, Str};
+    use /std/{Cell, Bool, Option, Str};
 
-    let c = Cell/new(true)!;
-    let v = Cell/get(c)!;
+    let c = Cell/new(@Bool)!;
+    let _ = Cell/fill(c, true)!;
+    let v = Option/unwrap_or(Cell/poll(c)!, false);
 
     /std/print(
         match v
@@ -865,18 +866,18 @@ pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
           g : (Bool) -> Bool,
           h : (x : Bool) -> Eq(g(x), f(x)),
           c : Cell(Bool)) =>
-            match f(Cell/get(@Bool, c))
+            match f(Cell/fill(@Bool, c, true))
             | true =>
-                let step(p : Eq(g(Cell/get(@Bool, c)), true)) -> Str =
-                    let done = Cell/set(c, false);
-                    match g(Cell/get(@Bool, c))
+                let step(p : Eq(g(Cell/fill(@Bool, c, true)), true)) -> Str =
+                    let done = Cell/fill(c, false);
+                    match g(Cell/fill(@Bool, c, true))
                     | true => "second read true"
                     | false => match Bool/false_neq_true(p) end
                     end;
-                step(h(Cell/get(@Bool, c)))
+                step(h(Cell/fill(@Bool, c, true)))
             | false => "first read false"
             end
-        )((b) => b, (b) => b, (x) => Eq/refl(), Cell/new(true)!)
+        )((b) => b, (b) => b, (x) => Eq/refl(), Cell/new(@Bool)!)
     )
     "#;
 
@@ -901,12 +902,12 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
 //
 // `fixes_no_value`'s cure was to ask a second question — does the walk read the body of every function the term would call — and refuse the equation when it does not. It worked and it was expensive in exactly the direction that matters: a *pure* opaque head stopped refining too, because nothing distinguished it. `(Bool) -> Bool` said nothing about purity, since the function space admitted `Cell/get`.
 //
-// Nothing is asked now, and the sentence that made the walk necessary is false. `(b) => Cell/get(c)` has type `(Bool) -> Io(Bool)`; it does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than another clause in the walk (see `documentation/soundness/per-term-rules/a-term-outside-io-performs-no-effect.md`) — and [`a_parameter_headed_scrutinee_refines_again`] is what the walk was costing.
+// Nothing is asked now, and the sentence that made the walk necessary is false. the current fixture's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)`; it does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than another clause in the walk (see `documentation/soundness/per-term-rules/a-term-outside-io-performs-no-effect.md`) — and [`a_parameter_headed_scrutinee_refines_again`] is what the walk was costing.
 pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
     let forge(f : (Bool) -> Bool, c : Cell(Bool), p : Eq(f(true), true)) -> Str =
-        let done = Cell/set(c, false);
+        let done = Cell/fill(c, false);
         match f(true)
         | false =>
             let contradiction : Bool/False = Bool/false_neq_true(p);
@@ -921,8 +922,8 @@ pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
                 | true => forge(f, c, Eq/refl())
                 | false => "first read false"
                 end
-            )((b) => Cell/get(c))
-        )(Cell/new(true)!)
+            )((b) => Cell/fill(c, true))
+        )(Cell/new(@Bool)!)
     )
     "#;
 

@@ -3,9 +3,9 @@ use {
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
         FltEmitter, FltHelper, ImmediateLayout, RopeEmitter, Table, big_sub_type, bytes_sub_type,
-        cell_sub_type, elems_sub_type, flt_sub_type, longs_sub_type, refusal_data_name,
-        refusal_message, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
-        rope_view_sub_type, words_sub_type,
+        cell_sub_type, channel_sub_type, elems_sub_type, flt_sub_type, longs_sub_type,
+        refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
+        rope_node_sub_type, rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_num::{Binary, Grain},
@@ -222,6 +222,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.table.cell_type(),
             cell_sub_type(self.table.special_field(), Table::top_type(true)),
         );
+        let channel = self.table.channel();
+        self.module
+            .add_type(channel.channel.clone(), channel_sub_type(&channel));
     }
 
     fn emit_tuple_types(&mut self) {

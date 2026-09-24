@@ -1,48 +1,20 @@
-use /std/{List, Option, Cell, Io};
-use /std/Async/{Waker};
-
-induct Phase(A: Type): Type
-| pending(List(Waker))
-| ready(A)
-end
+use /std/{Option, Cell, Io};
 
 --- A value fulfilled once and read as often as asked.
 pub struct Future(A: Type): Type {
-    Cell(Phase(A)),
+    Cell(A),
 }
 
 --- A future nothing has fulfilled yet.
 pub let new(@A: Type) -> Io(Future(A)) =
-    let cell = Cell/new(Phase/pending([]))!;
+    let cell = Cell/new()!;
     Io/pure(Future { cell });
 
 --- The value, once there is one.
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
-    let state = Cell/get(f.0)!;
-    Io/pure(match state | ready(a) => Option/some(a) | pending(_) => Option/none() end);
+    Cell/poll(f.0);
 
-let wake_all(ws: List(Waker)) -> Io({}) =
-    match ws
-    | [] => Io/pure(())
-    | [w, ..more] =>
-        let _ = Waker/wake(w)!;
-        wake_all(more)
-    end;
-
---- Wake `w` when `f` is fulfilled, or at once where it already is.
-pub let register(@A: Type, f: Future(A), w: Waker) -> Io({}) =
-    let state = Cell/get(f.0)!;
-    match state
-    | ready(_) => Waker/wake(w)
-    | pending(ws) => Cell/set(f.0, Phase/pending([w, ..ws]))
-    end;
-
---- Fulfil `f` with `a` and wake everything registered on it. A second fulfilment is dropped, so the first value stands.
+--- Fulfil `f` with `a`. A second fulfilment is dropped, so the first value stands.
 pub let fulfill(@A: Type, f: Future(A), a: A) -> Io({}) =
-    let state = Cell/get(f.0)!;
-    match state
-    | ready(_) => Io/pure(())
-    | pending(ws) =>
-        let _ = Cell/set(f.0, Phase/ready(a))!;
-        wake_all(ws)
-    end;
+    let _ = Cell/fill(f.0, a)!;
+    Io/pure(());

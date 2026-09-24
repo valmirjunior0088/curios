@@ -1049,19 +1049,41 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("proc/exit", vec![result], vec![code])
         }
         Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
-        Intrinsic::Cell {
-            element: type_,
-            initial: init,
-        } => print_intrinsic_call("Cell/new", vec![type_], vec![init]),
-        Intrinsic::CellSet {
-            element: type_,
+        Intrinsic::ChannelType(elem) => print_intrinsic_call("Channel", vec![], vec![elem]),
+        Intrinsic::Cell { element } => print_intrinsic_call("Cell/new", vec![element], vec![]),
+        Intrinsic::CellFill {
+            element,
             cell,
             value,
-        } => print_intrinsic_call("Cell/set", vec![type_], vec![cell, value]),
-        Intrinsic::CellGet {
-            element: type_,
-            cell,
-        } => print_intrinsic_call("Cell/get", vec![type_], vec![cell]),
+        } => print_intrinsic_call("Cell/fill", vec![element], vec![cell, value]),
+        Intrinsic::CellPoll { element, cell } => {
+            print_intrinsic_call("Cell/poll", vec![element], vec![cell])
+        }
+        Intrinsic::Channel {
+            element,
+            capacity,
+            positive,
+        } => print_intrinsic_call("Channel/new", vec![element], vec![capacity, positive]),
+        Intrinsic::ChannelPush {
+            element,
+            channel,
+            value,
+        } => print_intrinsic_call("Channel/push", vec![element], vec![channel, value]),
+        Intrinsic::ChannelTake { element, channel } => {
+            print_intrinsic_call("Channel/take", vec![element], vec![channel])
+        }
+        Intrinsic::ChannelClose { element, channel } => {
+            print_intrinsic_call("Channel/close", vec![element], vec![channel])
+        }
+        Intrinsic::ChannelClosed { element, channel } => {
+            print_intrinsic_call("Channel/closed", vec![element], vec![channel])
+        }
+        Intrinsic::ChannelCount { element, channel } => {
+            print_intrinsic_call("Channel/count", vec![element], vec![channel])
+        }
+        Intrinsic::ChannelCapacity { element, channel } => {
+            print_intrinsic_call("Channel/capacity", vec![element], vec![channel])
+        }
         Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![], vec![result]),
         Intrinsic::IoPure {
             result: type_,

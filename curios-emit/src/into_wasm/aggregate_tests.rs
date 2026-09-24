@@ -66,10 +66,22 @@ fn packed_bin_literal_builds_a_rope_leaf() {
 }
 
 #[test]
-fn cell_new_and_get_use_the_cell_struct() {
+fn cell_fill_and_poll_use_the_cell_struct() {
     let wat = wat(&cell_roundtrip());
-    assert_contains(&wat, "struct.new $cell");
+    assert_contains(&wat, "struct.new_default $cell");
+    assert_contains(&wat, "struct.set $cell");
     assert_contains(&wat, "struct.get $cell");
+}
+
+#[test]
+fn taking_a_channel_item_clears_the_slot_without_a_host_call() {
+    let wat = wat(&channel_roundtrip());
+    assert_contains(&wat, "array.new_default $elems");
+    assert_contains(&wat, "array.get $elems");
+    assert_contains(&wat, "ref.null any");
+    // One store enqueues; the other clears the consumed slot. The round trip needs no runtime helper or host operation.
+    assert_eq!(count(&wat, "array.set $elems"), 2, "{wat}");
+    assert_eq!(count(&wat, "(call "), 0, "{wat}");
 }
 
 /// A `Tuple` reaching a raw-carried continuation parameter is refused at compile time.
@@ -184,8 +196,8 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
         body: built,
     });
     let new = module.add_node(curios_cont::Node::Cell {
-        op: curios_cont::CellOp::New,
-        args: vec![nat(0)],
+        op: curios_cont::CellOp::Reserve,
+        args: vec![],
         return_to: made,
     });
     let body = module.add_node(curios_cont::Node::LetCont {

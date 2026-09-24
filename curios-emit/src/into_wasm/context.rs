@@ -1,9 +1,10 @@
+mod coordination;
+
 use {
     super::{
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
-        EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
-        EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Table, get, set,
+        EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get, set,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_num::Grain,
@@ -755,6 +756,7 @@ impl<'a, 'b> Context<'a, 'b> {
             }) => self.call_indirect_instrs(target, params, resume),
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
+            EmissionTail::Channel(channel) => self.channel_instrs(channel),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
             // An arm the theory proved impossible, carried down as `curios_cont::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
             EmissionTail::Unreachable => self.table().refuse_instrs(curios_cont::Panic::Invariant),
@@ -930,55 +932,6 @@ impl<'a, 'b> Context<'a, 'b> {
                 });
 
                 output.push(curios_wasm::Instr::Unreachable);
-            }
-        }
-
-        output
-    }
-
-    pub(crate) fn cell_instrs(&self, cell: &'a EmissionCellTarget) -> Vec<curios_wasm::Instr> {
-        let mut output = Vec::new();
-
-        match cell {
-            EmissionCellTarget::New { init, resume } => {
-                output.extend(self.load_value_instrs(init, LoadAs::NonNull));
-                output.push(curios_wasm::Instr::StructNew {
-                    type_name: self.table().cell_type(),
-                });
-                self.host_single_resume(&mut output, resume);
-            }
-            EmissionCellTarget::Reserve { resume } => {
-                output.push(curios_wasm::Instr::StructNewDefault {
-                    type_name: self.table().cell_type(),
-                });
-                self.host_single_resume(&mut output, resume);
-            }
-            EmissionCellTarget::Set {
-                cell,
-                value,
-                resume,
-            } => {
-                output.extend(
-                    self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
-                );
-                output.extend(self.load_value_instrs(value, LoadAs::NonNull));
-                output.push(curios_wasm::Instr::StructSet {
-                    type_name: self.table().cell_type(),
-                    field_name: self.table().special_field(),
-                });
-                self.host_unit_resume(&mut output, resume);
-            }
-            EmissionCellTarget::Get { cell, resume } => {
-                output.extend(
-                    self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
-                );
-                output.push(curios_wasm::Instr::StructGet {
-                    type_name: self.table().cell_type(),
-                    field_name: self.table().special_field(),
-                });
-                // The field is declared nullable, so its `struct.get` is typed `anyref` — and on the sentinel path this value *is* the function's `(ref any)` result. `New` takes an init and `Set` takes a value, so the one null a cell can hold is a `Reserve`d knot member's before its initializer has stored it, and this coercion is where reading it traps — the loud end of a read the verifier could not see to refuse, where the placeholder it once held computed on in silence. Without the coercion the module is ill-typed besides, which only Binaryen's repair used to hide.
-                output.push(curios_wasm::Instr::RefAsNonNull);
-                self.host_single_resume(&mut output, resume);
             }
         }
 

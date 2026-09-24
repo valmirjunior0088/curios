@@ -238,16 +238,46 @@ pub enum Intrinsic {
     CellType(Term),
     Cell {
         element: Term,
-        initial: Term,
     },
-    CellSet {
+    CellFill {
         element: Term,
         cell: Term,
         value: Term,
     },
-    CellGet {
+    CellPoll {
         element: Term,
         cell: Term,
+    },
+    ChannelType(Term),
+    Channel {
+        element: Term,
+        capacity: Term,
+        positive: Term,
+    },
+    ChannelPush {
+        element: Term,
+        channel: Term,
+        value: Term,
+    },
+    ChannelTake {
+        element: Term,
+        channel: Term,
+    },
+    ChannelClose {
+        element: Term,
+        channel: Term,
+    },
+    ChannelClosed {
+        element: Term,
+        channel: Term,
+    },
+    ChannelCount {
+        element: Term,
+        channel: Term,
+    },
+    ChannelCapacity {
+        element: Term,
+        channel: Term,
     },
     IoType(Term),
     IoPure {

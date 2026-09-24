@@ -373,7 +373,7 @@ impl<'m> Evaluator<'m> {
                 Err(bail) => Outcome::Bail(bail),
             },
             // A cell operation's identity is its program point: never residualized, never folded.
-            Rhs::Cell { .. } => Outcome::Bail(Bail::Effect),
+            Rhs::Cell { .. } | Rhs::Channel { .. } => Outcome::Bail(Bail::Effect),
             Rhs::Intrinsic {
                 intrinsic: Intrinsic::ListMap,
                 operands,

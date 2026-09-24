@@ -4,6 +4,7 @@
 
 use {
     super::{ConstructorId, FamilyId, FieldShape, Module, ProductId},
+    curios_num::Natural,
     std::collections::BTreeMap,
 };
 
@@ -92,6 +93,32 @@ pub(super) struct Layout<'a> {
 }
 
 impl<'a> Layout<'a> {
+    /// Pack a boxed constructor in the same row at every construction site, including guest operation outcomes.
+    pub(super) fn constructor_row(
+        &mut self,
+        module: &mut curios_cont::Module,
+        constructor: ConstructorId,
+        fields: Vec<curios_cont::Atom>,
+    ) -> curios_cont::ValueExpr {
+        let family = self.constructor_family(constructor);
+        let encoding = self.family_encoding(family);
+        let row = self.row_identity(module, family);
+        let width = self.row_width(module, family);
+        let places = self.constructor_slots(module, constructor);
+        let mut atoms = (0..width)
+            .map(|index| module.pad(Some(row), index))
+            .collect::<Vec<_>>();
+        if encoding != FamilyEncoding::Collapsed {
+            atoms[0] = curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
+                self.constructor_tag(constructor),
+            )));
+        }
+        for (field, atom) in fields.into_iter().enumerate() {
+            atoms[places[field]] = atom;
+        }
+        curios_cont::ValueExpr::Row(row, atoms)
+    }
+
     pub(super) fn new(source: &'a Module) -> Self {
         Self {
             source,

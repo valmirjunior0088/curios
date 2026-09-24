@@ -298,13 +298,17 @@ fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, Emi
             rename_names(operands, renames)
         }
         EmissionTail::Host(EmissionHostTarget::Exit { code }) => rename_name(code, renames),
-        EmissionTail::Cell(EmissionCellTarget::New { init, .. }) => rename_name(init, renames),
+        EmissionTail::Channel(channel) => {
+            for arg in &mut channel.args {
+                rename_name(arg, renames);
+            }
+        }
         EmissionTail::Cell(EmissionCellTarget::Reserve { .. }) => {}
-        EmissionTail::Cell(EmissionCellTarget::Set { cell, value, .. }) => {
+        EmissionTail::Cell(EmissionCellTarget::Fill { cell, value, .. }) => {
             rename_name(cell, renames);
             rename_name(value, renames);
         }
-        EmissionTail::Cell(EmissionCellTarget::Get { cell, .. }) => rename_name(cell, renames),
+        EmissionTail::Cell(EmissionCellTarget::Poll { cell, .. }) => rename_name(cell, renames),
         EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
     }
 }

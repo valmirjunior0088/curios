@@ -60,6 +60,7 @@ impl Subterm {
             };
         match self {
             Subterm::Type(level) => level_matches(level),
+            Subterm::Intrinsic(intrinsic) => intrinsic.result_universes().iter().any(level_matches),
             // A projection head's group context is this node's own data now that the head is typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
             Subterm::Instance(Instance { head, levels }) => {
                 levels.iter().any(&mut level_matches)
@@ -443,6 +444,10 @@ impl Subterm {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
             Subterm::Type(level) => level_has_meta(level),
+            Subterm::Intrinsic(intrinsic) => {
+                intrinsic.result_universes().iter().any(level_has_meta)
+                    || self.any_child_term(&mut |term| term.has_universe_meta())
+            }
             Subterm::Instance(Instance { levels, .. }) => {
                 levels.iter().any(level_has_meta)
                     || self.any_child_term(&mut |term| term.has_universe_meta())
@@ -461,6 +466,10 @@ impl Subterm {
     pub(crate) fn has_universe_data(&self) -> bool {
         match self {
             Subterm::Type(level) => level != &Level::zero(),
+            Subterm::Intrinsic(intrinsic) => {
+                !intrinsic.result_universes().is_empty()
+                    || self.any_child_term(&mut |term| term.has_universe_data())
+            }
             Subterm::Instance(_) => true,
             Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })

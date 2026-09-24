@@ -119,6 +119,9 @@ pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId
             | Node::Cell {
                 return_to: target, ..
             }
+            | Node::Channel {
+                return_to: target, ..
+            }
             | Node::Intrinsic {
                 return_to: target, ..
             } if *target == function.return_cont => *target = return_to,

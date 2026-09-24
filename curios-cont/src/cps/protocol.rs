@@ -106,6 +106,7 @@ pub(super) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
                 }
                 | Node::Foreign { return_to, .. }
                 | Node::Cell { return_to, .. }
+                | Node::Channel { return_to, .. }
                 | Node::Intrinsic { return_to, .. }
                     if *return_to == sentinel =>
                 {
@@ -290,6 +291,7 @@ fn entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>>
             }
             Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 output.entry(*return_to).or_default().push(None);
             }

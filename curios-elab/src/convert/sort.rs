@@ -91,6 +91,7 @@ impl Sort {
                 | Intrinsic::HandleType => Sort::Type(Level::zero()),
                 Intrinsic::ListType(element)
                 | Intrinsic::CellType(element)
+                | Intrinsic::ChannelType(element)
                 | Intrinsic::IoType(element) => {
                     let element = element.clone();
                     match Sort::of_in(context, opened, &element)? {
@@ -123,8 +124,15 @@ impl Sort {
                 | Intrinsic::Byte(..)
                 | Intrinsic::ByteToNat(..)
                 | Intrinsic::Cell { .. }
-                | Intrinsic::CellGet { .. }
-                | Intrinsic::CellSet { .. }
+                | Intrinsic::CellPoll { .. }
+                | Intrinsic::CellFill { .. }
+                | Intrinsic::Channel { .. }
+                | Intrinsic::ChannelPush { .. }
+                | Intrinsic::ChannelTake { .. }
+                | Intrinsic::ChannelClose { .. }
+                | Intrinsic::ChannelClosed { .. }
+                | Intrinsic::ChannelCount { .. }
+                | Intrinsic::ChannelCapacity { .. }
                 | Intrinsic::ProcExit { .. }
                 | Intrinsic::Flt(..)
                 | Intrinsic::FltAbs(..)

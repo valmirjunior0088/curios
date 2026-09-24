@@ -271,6 +271,7 @@ pub(crate) fn sort_of_intrinsic(
         // For `Io` that is load-bearing rather than tidy. Erasure is sort-driven, so a `Prop`-sorted `Io(P)` would be dropped as proof content and its host effect would vanish with it.
         Intrinsic::ListType(element)
         | Intrinsic::CellType(element)
+        | Intrinsic::ChannelType(element)
         | Intrinsic::IoType(element) => {
             let element = element.clone();
 

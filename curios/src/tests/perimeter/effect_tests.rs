@@ -37,7 +37,7 @@ fn a_match_on_a_forced_cell_read_still_compiles() {
     assert_eq!(run(A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES), b"t");
 }
 
-/// Asserted on the *argument*, which is where this shape now dies. The old rule withheld an equation and the program failed where it needed one, so the discriminator was `p`'s type still reading the unrefined `g(Cell/get(c))`; there is no equation to withhold any more. `Cell/get(@Bool, c)` is an `Io(Bool)` and `f : (Bool) -> Bool` does not take one, so the derivation is refused at the first of its four occurrences and never reaches a refinement at all.
+/// Asserted on the *argument*, which is where this shape now dies. The old rule withheld an equation and the program failed where it needed one. The current fixture uses `Cell/fill(c, true) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all.
 #[test]
 fn an_effect_behind_a_stuck_head_is_not_an_argument() {
     rejected_by(AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT, "Io");
@@ -48,7 +48,7 @@ fn a_stuck_application_scrutinee_still_refines() {
     assert_eq!(run(A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES), b"t");
 }
 
-/// Asserted on the offending *argument*: the refusal is that `(b) => Cell/get(c)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a perimeter test asserts its own diagnostic.
+/// Asserted on the offending *argument*: the refusal is that `(b) => Cell/fill(c, true)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a perimeter test asserts its own diagnostic.
 #[test]
 fn an_effect_cannot_inhabit_a_pure_arrow() {
     rejected_by(AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW, "Io");

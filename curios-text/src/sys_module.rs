@@ -1077,35 +1077,29 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-// Allocating a cell, reading one, and writing one are all host effects, so all three return descriptions. `Cell/get` is the operation the whole discipline was named for: a scrutinee spelled `Cell/get(c)` denotes a different value before and after a `Cell/set`, and giving it an `Io` result is what makes that spelling ill-typed in scrutinee position rather than something an analysis has to notice.
-fn cell_ops() -> Vec<Decl> {
+// Public cells describe allocation and first-write-wins observation; private knot memoization is introduced only below erasure.
+fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
-            &["A new cell holding `x`."],
+            &["A new empty cell."],
             pub_fn_marked(
                 "new",
-                vec![
-                    (Plicity::Implicit, "T", type_()),
-                    (Plicity::Explicit, "x", name("T")),
-                ],
+                vec![(Plicity::Implicit, "T", type_())],
                 io_of(cell_of(name("T"))),
-                intrinsic(Intrinsic::Cell {
-                    element: name("T"),
-                    initial: name("x"),
-                }),
+                intrinsic(Intrinsic::Cell { element: name("T") }),
             ),
         ),
         documented(
-            &["Put `v` in the cell."],
+            &["Store `v` only if empty, returning whether this fill won."],
             pub_fn_marked(
-                "set",
+                "fill",
                 vec![
                     (Plicity::Implicit, "T", type_()),
                     (Plicity::Explicit, "c", cell_of(name("T"))),
                     (Plicity::Explicit, "v", name("T")),
                 ],
-                io_of(unit()),
-                intrinsic(Intrinsic::CellSet {
+                io_of(bool_()),
+                intrinsic(Intrinsic::CellFill {
                     element: name("T"),
                     cell: name("c"),
                     value: name("v"),
@@ -1113,21 +1107,69 @@ fn cell_ops() -> Vec<Decl> {
             ),
         ),
         documented(
-            &["What the cell holds."],
+            &["The first value filled, or none while empty."],
             pub_fn_marked(
-                "get",
+                "poll",
                 vec![
                     (Plicity::Implicit, "T", type_()),
                     (Plicity::Explicit, "c", cell_of(name("T"))),
                 ],
-                io_of(name("T")),
-                intrinsic(Intrinsic::CellGet {
+                io_of(applied(registered(syntax.option.family), vec![name("T")])),
+                intrinsic(Intrinsic::CellPoll {
                     element: name("T"),
                     cell: name("c"),
                 }),
             ),
         ),
     ]
+}
+
+fn channel_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+    let outcomes: Module = r#"
+        --- The outcome of one nonblocking push.
+        pub induct Push: pub Type
+        | taken()
+        | full()
+        | closed()
+        end
+        --- The outcome of one nonblocking take.
+        pub induct Take(A: Type): pub Type
+        | item(A)
+        | empty()
+        | ended()
+        end
+    "#
+    .parse()
+    .expect("ordinary channel outcomes parse");
+    let channel_of = |element| intrinsic(Intrinsic::ChannelType(element));
+    let query = |label, description, output, body| {
+        documented(
+            &[description],
+            pub_fn_marked(
+                label,
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "c", channel_of(name("T"))),
+                ],
+                io_of(output),
+                intrinsic(body),
+            ),
+        )
+    };
+    outcomes.items.into_iter().chain(items(vec![
+        documented(&["A bounded FIFO with positive capacity."], pub_fn_marked("new",
+            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "capacity", nat()),
+                (Plicity::Implicit, "positive", decided(syntax, intrinsic(Intrinsic::NatLt(nat_lit(0), name("capacity")))))],
+            io_of(channel_of(name("T"))), intrinsic(Intrinsic::Channel { element: name("T"), capacity: name("capacity"), positive: name("positive") }))),
+        documented(&["Append if open and not full, reporting this attempt's outcome."], pub_fn_marked("push",
+            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "c", channel_of(name("T"))), (Plicity::Explicit, "value", name("T"))],
+            io_of(registered(syntax.channel.push)), intrinsic(Intrinsic::ChannelPush { element: name("T"), channel: name("c"), value: name("value") }))),
+        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", applied(registered(syntax.channel.take), vec![name("T")]), Intrinsic::ChannelTake { element: name("T"), channel: name("c") }),
+        query("close", "Prevent later pushes, preserving queued items for draining. Repeated closes do nothing.", unit(), Intrinsic::ChannelClose { element: name("T"), channel: name("c") }),
+        query("closed", "Whether the channel has been closed.", bool_(), Intrinsic::ChannelClosed { element: name("T"), channel: name("c") }),
+        query("count", "The number of queued items. This observation reserves nothing.", nat(), Intrinsic::ChannelCount { element: name("T"), channel: name("c") }),
+        query("capacity", "The positive bound supplied at creation.", nat(), Intrinsic::ChannelCapacity { element: name("T"), channel: name("c") }),
+    ])).collect()
 }
 
 // The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the one its own store row names, not the type its result wears.
@@ -1379,13 +1421,20 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         ),
         SysModule::carrier(
             "Cell",
-            &[
-                "A mutable holder of one value.",
-                "",
-                "Reading answers the last value written through any name for the same cell, so two names for one cell are not two cells.",
-            ],
+            &["An initially empty holder whose first fill wins."],
             pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
-            items(cell_ops()),
+            items(cell_ops(syntax)),
+        ),
+        SysModule::carrier(
+            "Channel",
+            &["A bounded FIFO shared within one program instance."],
+            pub_fn(
+                "Channel",
+                vec![("T", type_())],
+                type_(),
+                intrinsic(Intrinsic::ChannelType(name("T"))),
+            ),
+            channel_ops(syntax),
         ),
         SysModule::carrier(
             "Io",

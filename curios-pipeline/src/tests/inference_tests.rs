@@ -140,13 +140,14 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
 
 #[test]
 fn a_dependent_result_action_auto_lifts_through_bang() {
-    // `Cell/new : (@T: Type, x: T) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Async)` embedding without an explicit `lift(...)`.
+    // `Cell/new : (@T: Type) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Async)` embedding without an explicit `lift(...)`.
     let source = r#"
-        use /std/{Async, Cell, Nat, Io};
+        use /std/{Async, Cell, Nat, Option, Io};
 
         let fiber: Async(Nat) =
-            let c = Cell/new(7)!;
-            let n = Cell/get(c)!;
+            let c = Cell/new()!;
+            let _ = Cell/fill(c, 7)!;
+            let n = Option/unwrap_or(Cell/poll(c)!, 0);
             Async/pure(n);
 
         Io/pure(())
@@ -170,12 +171,12 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
 
 #[test]
 fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
-    // The inference spec's defect (b): `c`'s element type is pinned only by the later `Cell/set`, and the chain back to the `Cell/new` argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
+    // The inference spec's defect (b): `c`'s element type is pinned only by the later `Cell/fill`, and the chain back to the `Cell/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
     let source = r#"
         use /std/{Cell, Option, Io, Nat};
         let probe: Io({}) =
-            let c = Cell/new(Option/none())!;
-            let _ = Cell/set(c, Option/some(1))!;
+            let c = Cell/new()!;
+            let _ = Cell/fill(c, Option/some(1))!;
             Io/pure(());
         probe
     "#;

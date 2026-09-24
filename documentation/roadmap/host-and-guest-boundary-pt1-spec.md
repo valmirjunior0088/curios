@@ -4,7 +4,7 @@ Pending implementation specification. Replace rewritable cells and notification-
 
 ## Scope and existing foundations
 
-The knot representation already has an empty cell, a fill and a read that refuses as `Cycle` when forced before the fill. Program cells share its representation but permit rewriting. `/std/Async` uses those cells for scheduler state and maintains notification lists for futures, signals and channels. Abandoned selection registrations can leave a capacity-zero channel believing a receiver is waiting after that receiver has selected another offer.
+Recursive knots currently use rewritable memoization storage that transitions from unforced to forcing to finished. Replace it with a write-once result cell and a capacity-one initializer channel, preserving release of the initializer closure and `Cycle` refusal on reentrant forcing. `/std/Async` uses program cells for scheduler state and maintains notification lists for futures, signals and channels. Abandoned selection registrations can leave a capacity-zero channel believing a receiver is waiting after that receiver has selected another offer.
 
 Use the existing intrinsic signature roster, syntax registry, decided-bound mechanism, continuation representation and emitter helper libraries. Preserve `/std/Async`'s `Step` and `Pause` protocol, offers, cancellation, finalizers and list-order selection priority. The positive-capacity requirement follows [the decision for partial primitives](../design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md).
 
@@ -18,7 +18,7 @@ Declare the ordinary polymorphic induct directly at `/sys/Option`, preserving it
 
 The existing standard-library module explicitly re-exports `Option` through `pub use /sys/{Option};` and its constructors through `pub use /sys/Option/{some, none};`. Place these before ordinary imports, following the surrounding re-export convention; do not use a glob. Existing `/std/Option` paths remain valid.
 
-Register compiler-needed family and constructor identities through the existing syntax registry. Validate the declarations' actual shapes, and instantiate parameters and universes through the normal declaration machinery. A registry entry is not a substitute for a correctly formed polymorphic declaration. Use `List` as an implementation comparison, and rebuild both prelude archives.
+Register compiler-needed family and constructor identities through the existing syntax registry. Check declarations and instantiate parameters and universes through the normal declaration machinery. Every `Produced::Fixed` result goes through ordinary type formation in both checkers; no separate coordination declaration validator is added. A registry entry is not a substitute for a correctly formed polymorphic declaration. Use `List` as an implementation comparison, and rebuild both prelude archives.
 
 ## Cells and channels
 
@@ -37,11 +37,11 @@ The following signatures are schematic: type parameters and their universe level
 | `Channel/count` | `Channel(A)` | `Io(Nat)` |
 | `Channel/capacity` | `Channel(A)` | `Io(Nat)` |
 
-### One cell rule
+### Write-once cells and knot memoization
 
 `Cell/new()` allocates an empty cell. `fill` stores its value and returns `true` exactly when the cell was empty. A later fill returns `false` and preserves the first value. `poll` returns `none` while empty and `some(value)` after filling. Delete initialized construction, `Cell/set` and `Cell/get`; introduce no temporary public constructor or compatibility layer.
 
-Program cells and continuation knot cells use the same representation and first-write-wins fill semantics. The knot's forced read retains its existing `Cycle` refusal when empty; public polling remains total. Preserve the knot fixtures and distinguish this forced-read invariant from the public cell API in their owning documentation.
+Knots use the same write-once cells and bounded channels as guest coordination. Each computed member has a result cell and a capacity-one channel holding its initializer. Allocate all storage, bind the closures, and enqueue every initializer before any member can be forced. Forcing polls the result first; if empty, it takes the initializer, runs it and fills the result. An empty initializer channel with an empty result means reentrant forcing and reports `Cycle`. The forcing function captures only the storage, so taking the initializer removes the knot's persistent reference to its captures. Preserve lazy evaluation, caching and existing knot fixtures. Delete the private rewritable operations and state rows as well as the public `Cell/set` and `Cell/get`.
 
 ### A bounded queue with atomic outcomes
 
@@ -103,24 +103,26 @@ Migrate every standard-library, example and test consumer of the removed cell an
 
 Review and validate each checkpoint before accumulating unrelated changes. Run focused behavioral tests plus `cargo x clippy` and `cargo x fmt` between implementation checkpoints. Follow [the contributor validation rules](../../CLAUDE.md#build-and-validation), including the complete hand-off gate once implementation and permanent documentation are final. Unavailable prerequisites, timeouts and interrupted commands remain outstanding checks, not passes.
 
-Immediately before and after the combined coordination checkpoint, measure `programs/monad_async.crs` and a repeatable Tui session using built-in profiling. Keep workload and profiling configuration consistent; record the workload, implementation stage and individual measurements, and investigate regressions before retirement. File measurement evidence with the benchmark documentation, not as a permanent copy of this specification.
+Immediately before and after the combined coordination checkpoint, measure `programs/monad_async.crs` and a repeatable Tui session using built-in profiling. Keep workload and profiling configuration consistent; record the workload, implementation stage and individual measurements, and investigate regressions before retirement. Keep measurement evidence in the Rust measurement test's documentation, not as a permanent copy of this specification.
 
 ## Verification and completion criteria
 
-- [ ] Existing `/std/Option` paths, constructor matching, witnesses and derived `Spell` retain their behavior. Both checkers accept normal instantiation, repeated generated type occurrences and higher-universe cases; consumers including `Cli` compile. Malformed registered declaration shapes are rejected.
-- [ ] Empty polling yields `none`; the first fill returns `true`; repeated filling returns `false` and retains the first value. Existing knot behavior and empty-knot `Cycle` refusals remain unchanged.
-- [ ] Channels cover FIFO order, wraparound, capacity bounds, every push/take outcome, idempotent close and close-and-drain. Verify consumed slots release their references and emitted channel helpers contain no operation-specific refusal path.
-- [ ] Zero capacity is rejected through the public constructor and the raw intrinsic checking path. Valid positive capacities work through both checkers.
-- [ ] Scheduler fixtures cover abandoned selections, two receivers competing for one value, stale readiness, fills inside lifted `Io`, cancellation, finalizers and deadlocks. A job cannot be enqueued twice through separate wait alternatives, and cancelled or claimed registrations are pruned.
-- [ ] The explicit rendezvous waits for acknowledgement after receipt, including when another selection alternative wins. Existing sender/receiver operation results and offers retain their behavior.
-- [ ] User code cannot construct an arbitrary probe. Signals coalesce and futures preserve their first result without notification lists.
-- [ ] Threaded Tui tests exercise incomplete input buffering, end of input, resize tracking, drawing history and cleanup.
-- [ ] Source searches and consumer compilation establish that initialized cell construction, `Cell/set`, `Cell/get`, wakers and notification registration APIs are gone. No temporary replacement API remains.
+- [x] Existing `/std/Option` paths, constructor matching, witnesses and derived `Spell` retain their behavior. Both checkers accept normal instantiation, repeated generated type occurrences and higher-universe cases; consumers including `Cli` compile. Intrinsic results pass ordinary type formation.
+- [x] Empty polling yields `none`; the first fill returns `true`; repeated filling returns `false` and retains the first value. Existing knot behavior and reentrant-knot `Cycle` refusals remain unchanged.
+- [x] Channels cover FIFO order, wraparound, capacity bounds, every push/take outcome, idempotent close and close-and-drain. Verify consumed slots release their references and emitted channel helpers contain no operation-specific refusal path.
+- [x] Zero capacity is rejected through the public constructor and the raw intrinsic checking path. Valid positive capacities work through both checkers.
+- [x] Scheduler fixtures cover abandoned selections, two receivers competing for one value, stale readiness, fills inside lifted `Io`, cancellation, finalizers and deadlocks. A job cannot be enqueued twice through separate wait alternatives, and cancelled or claimed registrations are pruned.
+- [x] The explicit rendezvous waits for acknowledgement after receipt, including when another selection alternative wins. Existing sender/receiver operation results and offers retain their behavior.
+- [x] User code cannot construct an arbitrary probe. Signals coalesce and futures preserve their first result without notification lists.
+- [x] Threaded Tui tests exercise incomplete input buffering, end of input, resize tracking, drawing history and cleanup.
+- [x] Source searches and consumer compilation establish that initialized cell construction, `Cell/set`, `Cell/get`, wakers and notification registration APIs are gone. No temporary replacement API remains.
 - [ ] The comparison measurements and full hand-off gate are complete, with any regression resolved or explicitly reviewed before retirement.
+
+The implementation checkpoint is covered by `curios/src/tests/runtime/{std_tests,knot_tests,coordination_tests}.rs`, `curios/src/tests/scheduler.rs` and `scheduler/level_tests.rs`, and `curios/src/tests/tui.rs`. Raw capacity evidence is checked independently in both checkers' `intrinsic_tests`; `curios-ersd/src/into_cont/knot_tests.rs` pins publication, caching, reentry and captures; `curios-emit/src/into_wasm/aggregate_tests.rs` pins consumed-slot release. The comparison is recorded in `curios/src/tests/coordination.rs`; the full hand-off gate remains pending.
 
 ## Rejected alternatives
 
-- **Keep a rewritable cell beside a write-once cell.** That preserves two meanings for cells and leaves coordination depending on conventions about permitted writes.
+- **Expose a rewritable cell beside a write-once cell.** That preserves two public meanings for cells and leaves guest coordination depending on conventions about permitted writes. Knots can preserve memoization and initializer release through the planned cells and channels.
 - **Build the shared queue from write-once cells alone.** Long-lived ends can retain message chains and require traversal from old positions. The bounded ring gives explicit storage and release behavior.
 - **Use a mutable one-slot box as the primitive.** A capacity-one channel already covers that use, while the box does not provide a bounded queue.
 - **Return `Bool` from push and `Option(A)` from take.** Those shapes merge full with closed, and empty with ended. A second query cannot recover the outcome of the original atomic attempt.

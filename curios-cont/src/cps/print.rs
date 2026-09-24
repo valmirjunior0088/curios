@@ -15,7 +15,7 @@ mod tests;
 
 use {
     super::{
-        Atom, Callee, CellOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
+        Atom, Callee, CellOp, ChannelOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
     curios_num::{Grain, Rounding},
@@ -76,6 +76,7 @@ impl Reach {
                 | Node::Switch { .. }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
+                | Node::Channel { .. }
                 | Node::Intrinsic { .. }
                 | Node::Exit { .. }
                 | Node::Panic(_)
@@ -406,6 +407,14 @@ impl Printer<'_, '_, '_, '_> {
                 let call = format!("{}({})", cell_name(*op), self.operands(args));
                 jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
             }
+            Node::Channel {
+                op,
+                args,
+                return_to,
+            } => {
+                let call = format!("{}({})", channel_name(*op), self.operands(args));
+                jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));
+            }
             Node::Intrinsic {
                 op,
                 args,
@@ -635,10 +644,9 @@ fn slot_name(slot: Slot) -> String {
 
 fn cell_name(op: CellOp) -> &'static str {
     match op {
-        CellOp::New => "Cell/new",
         CellOp::Reserve => "Cell/reserve",
-        CellOp::Set => "Cell/set",
-        CellOp::Get => "Cell/get",
+        CellOp::Fill => "Cell/fill",
+        CellOp::Poll => "Cell/poll",
     }
 }
 
@@ -789,5 +797,17 @@ fn render_literal(literal: &Literal) -> String {
                 Grain::X => format!("x\"{rendered}\""),
             }
         }
+    }
+}
+
+fn channel_name(operation: ChannelOp) -> &'static str {
+    match operation {
+        ChannelOp::New => "Channel/new",
+        ChannelOp::Push => "Channel/push",
+        ChannelOp::Take => "Channel/take",
+        ChannelOp::Close => "Channel/close",
+        ChannelOp::Closed => "Channel/closed",
+        ChannelOp::Count => "Channel/count",
+        ChannelOp::Capacity => "Channel/capacity",
     }
 }

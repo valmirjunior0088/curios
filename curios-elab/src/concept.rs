@@ -81,6 +81,7 @@ pub enum HeadKey {
     Handle,
     List,
     Cell,
+    Channel,
     Io,
     /// A tuple type, keyed by its *shape*: the label at each field position, `""` where the field is positional, arity implied by the length. A tuple type has no name to be headed by, so the shape plays the role a nominal name plays — it is precisely the half of the type's identity that conversion does not delegate to the fields (`compare_tuple_type` refuses differing labels before enqueuing one), so keying here splits the type along the seam conversion already splits it on. `{Nat, Bool}` and `{x: Nat, y: Bool}` are two keys because they are two types.
     TupleType(Vec<String>),
@@ -165,6 +166,7 @@ impl HeadKey {
             Intrinsic::HandleType => Some(HeadKey::Handle),
             Intrinsic::ListType(_) => Some(HeadKey::List),
             Intrinsic::CellType(_) => Some(HeadKey::Cell),
+            Intrinsic::ChannelType(_) => Some(HeadKey::Channel),
             Intrinsic::IoType(_) => Some(HeadKey::Io),
             _ => None,
         }
@@ -185,6 +187,7 @@ impl fmt::Display for HeadKey {
             HeadKey::Handle => write!(f, "Handle"),
             HeadKey::List => write!(f, "List"),
             HeadKey::Cell => write!(f, "Cell"),
+            HeadKey::Channel => write!(f, "Channel"),
             HeadKey::Io => write!(f, "Io"),
             // A shape displays as the type it stands for with every field type elided: `{}`, `{_, _}`, `{x: _, y: _}`. The field types are not in the key, so there is nothing truthful to print in their place.
             HeadKey::TupleType(labels) => {

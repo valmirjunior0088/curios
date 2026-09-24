@@ -223,6 +223,13 @@ impl Remap<'_> {
                 operation: *operation,
                 operands: atoms(operands),
             },
+            Rhs::Channel {
+                operation,
+                operands,
+            } => Rhs::Channel {
+                operation: *operation,
+                operands: atoms(operands),
+            },
             Rhs::Foreign { foreign, operands } => Rhs::Foreign {
                 foreign: *foreign,
                 operands: atoms(operands),

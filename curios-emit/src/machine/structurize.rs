@@ -8,10 +8,10 @@ use {
     },
     crate::into_wasm::{
         EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
-        EmissionCallTarget, EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode,
-        EmissionData, EmissionFunction, EmissionFunctionName, EmissionHostTarget,
-        EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName,
+        EmissionCallTarget, EmissionCellTarget, EmissionChannelTarget, EmissionClosure,
+        EmissionClosureName, EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName,
+        EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail,
+        EmissionValue, EmissionValueName,
     },
     curios_num::Natural,
     curios_utilities::Entropy,
@@ -288,6 +288,13 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineTerminator::CellReturn { op, args } => {
                 self.cell(*op, args, self.resume.clone(), values)
             }
+            MachineTerminator::Channel { op, args, resume } => {
+                let resume = self.resume_target(*resume, op.result_arity(), blocks);
+                self.channel(*op, args, resume, values)
+            }
+            MachineTerminator::ChannelReturn { op, args } => {
+                self.channel(*op, args, self.resume.clone(), values)
+            }
             MachineTerminator::Intrinsic {
                 op: curios_cont::IntrinsicCall::ListMap,
                 args,
@@ -373,20 +380,30 @@ impl<'a> MachineFunctionBridge<'a> {
     ) -> EmissionTail {
         let args = self.operands(args, values);
         EmissionTail::Cell(match op {
-            curios_cont::CellOp::New => EmissionCellTarget::New {
-                init: args[0].clone(),
-                resume,
-            },
             curios_cont::CellOp::Reserve => EmissionCellTarget::Reserve { resume },
-            curios_cont::CellOp::Set => EmissionCellTarget::Set {
+            curios_cont::CellOp::Fill => EmissionCellTarget::Fill {
                 cell: args[0].clone(),
                 value: args[1].clone(),
                 resume,
             },
-            curios_cont::CellOp::Get => EmissionCellTarget::Get {
+            curios_cont::CellOp::Poll => EmissionCellTarget::Poll {
                 cell: args[0].clone(),
                 resume,
             },
+        })
+    }
+
+    fn channel(
+        &mut self,
+        op: curios_cont::ChannelOp,
+        args: &[MachineOperand],
+        resume: EmissionBlockName,
+        values: &mut Vec<(EmissionValueName, EmissionValue)>,
+    ) -> EmissionTail {
+        EmissionTail::Channel(EmissionChannelTarget {
+            op,
+            args: self.operands(args, values),
+            resume,
         })
     }
 
@@ -581,7 +598,9 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
         | MachineTerminator::Foreign { args, .. }
         | MachineTerminator::ForeignReturn { args, .. }
         | MachineTerminator::Cell { args, .. }
+        | MachineTerminator::Channel { args, .. }
         | MachineTerminator::CellReturn { args, .. }
+        | MachineTerminator::ChannelReturn { args, .. }
         | MachineTerminator::Intrinsic { args, .. }
         | MachineTerminator::IntrinsicReturn { args, .. } => args.iter().for_each(&mut insert),
         MachineTerminator::IndirectCall { closure, args, .. }
@@ -607,6 +626,7 @@ fn block_successors(terminator: &MachineTerminator) -> Vec<MachineBlockId> {
         | MachineTerminator::IndirectCall { resume, .. }
         | MachineTerminator::Foreign { resume, .. }
         | MachineTerminator::Cell { resume, .. }
+        | MachineTerminator::Channel { resume, .. }
         | MachineTerminator::Intrinsic { resume, .. } => vec![*resume],
         _ => vec![],
     }

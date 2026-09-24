@@ -15,9 +15,10 @@ mod tests;
 
 use {
     super::{
-        Atom, Block, BlockId, Constructor, ConstructorId, FamilyId, Function, FunctionId,
-        Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
-        Statement, StatementId, Terminator, ValueId, VariantFamily, spell_function, spell_value,
+        Atom, Block, BlockId, CellOperation, ChannelOperation, Constructor, ConstructorId,
+        FamilyId, Function, FunctionId, Intrinsic, Module, ProductId, ProductSchema, RecGroup,
+        RecGroupId, Rhs, SequenceArity, Statement, StatementId, Terminator, ValueId, VariantFamily,
+        spell_function, spell_value,
     },
     curios_utilities::{grown, recurse},
     std::collections::HashSet,
@@ -118,6 +119,7 @@ pub(crate) enum StructuralRule {
     OperationArity,
     SequenceOperationArity,
     CellArity,
+    ChannelArity,
     ForeignArity,
     IntrinsicArity,
     MapperArity,
@@ -607,9 +609,48 @@ impl<'m> Verifier<'m> {
                 operation,
                 operands,
             } => {
+                if let CellOperation::Poll { some, none } = operation {
+                    self.outcome(some, 1)?;
+                    self.outcome(none, 0)?;
+                }
                 if operands.len() != operation.arity() {
                     return Err(fault(
                         StructuralRule::CellArity,
+                        format!(
+                            "statement {id} gives {operation:?} {} operands; its arity is {}",
+                            operands.len(),
+                            operation.arity()
+                        ),
+                    ));
+                }
+                for atom in operands {
+                    self.check_atom(id, atom)?;
+                }
+            }
+            Rhs::Channel {
+                operation,
+                operands,
+            } => {
+                match operation {
+                    ChannelOperation::Push {
+                        taken,
+                        full,
+                        closed,
+                    } => {
+                        for constructor in [taken, full, closed] {
+                            self.outcome(constructor, 0)?;
+                        }
+                    }
+                    ChannelOperation::Take { item, empty, ended } => {
+                        self.outcome(item, 1)?;
+                        self.outcome(empty, 0)?;
+                        self.outcome(ended, 0)?;
+                    }
+                    _ => {}
+                }
+                if operands.len() != operation.arity() {
+                    return Err(fault(
+                        StructuralRule::ChannelArity,
                         format!(
                             "statement {id} gives {operation:?} {} operands; its arity is {}",
                             operands.len(),
@@ -924,6 +965,19 @@ impl<'m> Verifier<'m> {
                 format!("dead {id} is referenced"),
             )
         })
+    }
+
+    fn outcome(&self, id: ConstructorId, payload: usize) -> Result<(), StructuralFault> {
+        let width = self.constructor(id)?.width();
+        if width != payload {
+            return Err(fault(
+                StructuralRule::ConstructorWidth,
+                format!(
+                    "operation constructs {id} with {payload} fields; its payload width is {width}"
+                ),
+            ));
+        }
+        Ok(())
     }
 
     fn constructor(&self, id: ConstructorId) -> Result<&'m Constructor, StructuralFault> {

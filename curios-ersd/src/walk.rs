@@ -21,6 +21,7 @@ impl Rhs {
             Self::Operation { operands, .. }
             | Self::Sequence { operands, .. }
             | Self::Cell { operands, .. }
+            | Self::Channel { operands, .. }
             | Self::Foreign { operands, .. }
             | Self::Intrinsic { operands, .. } => operands.clone(),
             Self::Product { fields, .. } | Self::Construct { fields, .. } => fields.clone(),
@@ -45,6 +46,7 @@ impl Rhs {
             | Self::Construct { .. }
             | Self::Project { .. }
             | Self::Cell { .. }
+            | Self::Channel { .. }
             | Self::Foreign { .. }
             | Self::Intrinsic { .. } => Vec::new(),
             Self::MatchVariant { arms, default, .. } => {

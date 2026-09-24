@@ -1412,6 +1412,10 @@ impl Convert {
                 vec![elem.clone()],
                 Box::new(|vars| Term::intrinsic(Intrinsic::CellType(vars[0].clone()))),
             ),
+            Subterm::Intrinsic(Intrinsic::ChannelType(elem)) => (
+                vec![elem.clone()],
+                Box::new(|vars| Term::intrinsic(Intrinsic::ChannelType(vars[0].clone()))),
+            ),
             Subterm::Intrinsic(Intrinsic::IoType(elem)) => (
                 vec![elem.clone()],
                 Box::new(|vars| Term::intrinsic(Intrinsic::IoType(vars[0].clone()))),
@@ -1941,6 +1945,7 @@ impl Convert {
                     Subterm::Intrinsic(
                         rigid @ (Intrinsic::ListType(_)
                         | Intrinsic::CellType(_)
+                        | Intrinsic::ChannelType(_)
                         | Intrinsic::IoType(_)),
                     ),
                 ) => {
@@ -1957,6 +1962,7 @@ impl Convert {
                     Subterm::Intrinsic(
                         rigid @ (Intrinsic::ListType(_)
                         | Intrinsic::CellType(_)
+                        | Intrinsic::ChannelType(_)
                         | Intrinsic::IoType(_)),
                     ),
                     Subterm::Apply(apply),

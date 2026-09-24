@@ -8,11 +8,13 @@
 //!
 //! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.
 //!
-//! **All eleven preconditions are here now, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//! **Preconditions belong here, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
 //!
 //! `NatToByte` was later still, and for neither reason: it was not missing a bound so much as answering without one, masking its operand to eight bits and calling that total. A narrowing that changes a value is what `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids, and it was the only such row on a numeric carrier. Stating the domain removes the mask and buys the inverse besides — with the constructor's domain known, `ByteToNat` can reduce back through it, which is what lets a bound established in `Nat` survive a trip through `Byte`.
 //!
 //! `IntToNat` was late for the opposite reason — nothing stood in its way. It stated `NonNeg` on `/sys`'s declaration and then dropped the proof from its body, so the bound was re-checked wherever the wrapper application survived and nowhere else: unfolding left a bare narrowing that this table typed from an `Int` alone. That is the `Nat::Succ` shape the last paragraph refuses, one operation later. It has a single producer and no fusion path, so nothing had to compose a proof and carrying it cost a field.
+//!
+//! Channel creation carries its positive-capacity evidence as an operand. Coordination outcomes are ordinary registered inductives: every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers, and elaboration retains the resulting universe instance on `CellPoll` and `ChannelTake`. The registry supplies identities, not a separate declaration validator.
 //!
 //! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
 //!
@@ -20,7 +22,7 @@
 
 use {
     super::Intrinsic,
-    crate::{Nat, Term},
+    crate::{Global, Nat, Term},
     curios_num::{Floating, Grain, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
@@ -41,7 +43,7 @@ pub enum Operand {
 /// What an intrinsic produces.
 #[derive(Debug, Clone)]
 pub enum Produced {
-    /// Exactly this type.
+    /// Exactly this type, established by each checker through its ordinary type-formation judgment.
     Fixed(Term),
     /// The sort the parameterized former lands in, which only the sort judgment answers. The element's own sort is *not* it: a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
     Sort,
@@ -71,6 +73,15 @@ impl Intrinsic {
         let bin_len = |grain, bin| Term::intrinsic(Intrinsic::BinLen(grain, bin));
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
         let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
+        let channel_type = |element: Term| Term::intrinsic(Intrinsic::ChannelType(element));
+        let nominal = |family: SyntaxName, universes: Vec<crate::Level>, params: Vec<Term>| {
+            Term::induct_type_at(
+                Global::Authored(family.qualifier()),
+                universes,
+                params,
+                Vec::<Term>::new(),
+            )
+        };
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
 
@@ -116,7 +127,7 @@ impl Intrinsic {
             BoolType | NatType | ByteType | IntType | FltType | BinType(_) | HandleType => {
                 nullary(Term::type_ground())
             }
-            ListType(_) | CellType(_) | IoType(_) => former(),
+            ListType(_) | CellType(_) | ChannelType(_) | IoType(_) => former(),
 
             // Literals. A `Nat` successor is the one literal carrying a term: `Succ(3, x)` is `x + 3`, and its base is a `Nat` like any other.
             Bool(_) => nullary(bool_type()),
@@ -424,26 +435,72 @@ impl Intrinsic {
                 list_type(to.clone()),
             ),
 
-            // A mutable cell, and the process exit. All of these are host effects and so describe rather than do: `CellGet` returning `Io(T)` rather than `T` is what makes `match Cell/get(c)` ill-typed.
+            // Guest coordination operations describe effects; their outcomes are ordinary declared inductives.
             ProcExit { result, .. } => sig(
                 vec![Operand::IsType, Operand::At(byte_type())],
                 io_type(result.clone()),
             ),
-            Cell { element, .. } => sig(
-                vec![Operand::IsType, Operand::At(element.clone())],
-                io_type(cell_type(element.clone())),
-            ),
-            CellGet { element, .. } => sig(
+            Cell { element } => sig(vec![Operand::IsType], io_type(cell_type(element.clone()))),
+            CellPoll {
+                element, universes, ..
+            } => sig(
                 vec![Operand::IsType, Operand::At(cell_type(element.clone()))],
-                io_type(element.clone()),
+                io_type(nominal(
+                    syntax.option.family,
+                    universes.clone(),
+                    vec![element.clone()],
+                )),
             ),
-            CellSet { element, .. } => sig(
+            CellFill { element, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(cell_type(element.clone())),
                     Operand::At(element.clone()),
                 ],
+                io_type(bool_type()),
+            ),
+            Channel {
+                element, capacity, ..
+            } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::At(nat_type()),
+                    Operand::At(holds(NatLt(
+                        Term::intrinsic(Nat(self::Nat::Zero)),
+                        capacity.clone(),
+                    ))),
+                ],
+                io_type(channel_type(element.clone())),
+            ),
+            ChannelPush { element, .. } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::At(channel_type(element.clone())),
+                    Operand::At(element.clone()),
+                ],
+                io_type(nominal(syntax.channel.push, Vec::new(), Vec::new())),
+            ),
+            ChannelTake {
+                element, universes, ..
+            } => sig(
+                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
+                io_type(nominal(
+                    syntax.channel.take,
+                    universes.clone(),
+                    vec![element.clone()],
+                )),
+            ),
+            ChannelClose { element, .. } => sig(
+                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
                 io_type(unit()),
+            ),
+            ChannelClosed { element, .. } => sig(
+                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
+                io_type(bool_type()),
+            ),
+            ChannelCount { element, .. } | ChannelCapacity { element, .. } => sig(
+                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
+                io_type(nat_type()),
             ),
 
             // The two constructors of the opaque effect carrier. There is no third: nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.

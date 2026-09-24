@@ -922,6 +922,7 @@ fn resume_targets(module: &Module) -> BTreeSet<ContinuationId> {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => Some(*return_to),
             _ => None,
         })

@@ -565,28 +565,61 @@ pub struct Edge {
     pub args: Vec<Atom>,
 }
 
+/// Write-once cell storage, shared by guest coordination and compiler-generated knots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CellOp {
-    New,
-    /// A cell allocated *empty*, to be filled by a later `Set`: what ties a recursive knot, whose members' cells must exist before any initializer runs and hold nothing meaningful until their own has. Reading one before its fill traps, which is the point — a knot read out of order once computed with the placeholder `New` had been handed, and `Get`'s emission already refuses a null for free. Nothing a program writes mints one; only the erased lowering does.
+    /// Allocate an empty slot.
     Reserve,
-    Set,
-    Get,
+    /// Fill an empty cell, returning whether the value was accepted.
+    Fill,
+    /// Return presence (zero or one) and the stored payload; the absent payload is a filler.
+    Poll,
 }
 
 impl CellOp {
     pub fn operand_arity(self) -> usize {
         match self {
             Self::Reserve => 0,
-            Self::New | Self::Get => 1,
-            Self::Set => 2,
+            Self::Poll => 1,
+            Self::Fill => 2,
         }
     }
 
     pub fn result_arity(self) -> usize {
         match self {
-            Self::New | Self::Reserve | Self::Get => 1,
-            Self::Set => 0,
+            Self::Reserve | Self::Fill => 1,
+            Self::Poll => 2,
+        }
+    }
+}
+
+/// Bounded guest queue operations. Outcome codes belong to this lowering protocol, never to the host ABI or a nominal constructor's layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelOp {
+    New,
+    /// Return zero for accepted, one for full, or two for closed.
+    Push,
+    /// Return zero and an item, one and a filler for empty, or two and a filler for ended.
+    Take,
+    Close,
+    Closed,
+    Count,
+    Capacity,
+}
+
+impl ChannelOp {
+    pub fn operand_arity(self) -> usize {
+        match self {
+            Self::Push => 2,
+            Self::New | Self::Take | Self::Close | Self::Closed | Self::Count | Self::Capacity => 1,
+        }
+    }
+
+    pub fn result_arity(self) -> usize {
+        match self {
+            Self::Take => 2,
+            Self::Close => 0,
+            Self::New | Self::Push | Self::Closed | Self::Count | Self::Capacity => 1,
         }
     }
 }
@@ -636,6 +669,11 @@ pub enum Node {
     },
     Cell {
         op: CellOp,
+        args: Vec<Atom>,
+        return_to: ContinuationId,
+    },
+    Channel {
+        op: ChannelOp,
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
@@ -1128,6 +1166,9 @@ impl Module {
                         operation = operation.or(Some(function.signature.results.len()));
                     }
                     Node::Cell { op, return_to, .. } if *return_to == sentinel => {
+                        operation = operation.or(Some(op.result_arity()));
+                    }
+                    Node::Channel { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
                     }
                     Node::Intrinsic { return_to, .. } if *return_to == sentinel => {
@@ -1680,6 +1721,7 @@ impl Module {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
+            | Node::Channel { .. }
             | Node::Intrinsic { .. }
             | Node::Exit { .. }
             | Node::Panic(_)
@@ -1754,6 +1796,7 @@ impl Module {
                 | Node::Switch { .. }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
+                | Node::Channel { .. }
                 | Node::Intrinsic { .. }
                 | Node::Exit { .. }
                 | Node::Panic(_)
@@ -1906,6 +1949,31 @@ impl Module {
                     )));
                 }
             }
+            Node::Channel {
+                op,
+                args,
+                return_to,
+            } => {
+                if args.len() != op.operand_arity() {
+                    return Err(VerifyError(format!(
+                        "{id} channel {op:?} expects {} operands, got {}",
+                        op.operand_arity(),
+                        args.len()
+                    )));
+                }
+                if self.continuation_arity(
+                    current_function,
+                    return_cont,
+                    facts,
+                    scope,
+                    *return_to,
+                )? != op.result_arity()
+                {
+                    return Err(VerifyError(format!(
+                        "{id} channel {op:?} continuation arity mismatch"
+                    )));
+                }
+            }
             Node::Intrinsic {
                 op: IntrinsicCall::ListMap,
                 args,
@@ -2033,6 +2101,7 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
         | Node::ApplyFun { args, .. }
         | Node::Foreign { args, .. }
         | Node::Cell { args, .. }
+        | Node::Channel { args, .. }
         | Node::Intrinsic { args, .. } => output.extend(args),
         Node::ApplyCont(edge) => output.extend(&edge.args),
         Node::Switch {
@@ -2066,6 +2135,7 @@ pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Ato
         | Node::ApplyFun { args, .. }
         | Node::Foreign { args, .. }
         | Node::Cell { args, .. }
+        | Node::Channel { args, .. }
         | Node::Intrinsic { args, .. } => args.iter_mut().for_each(visitor),
         Node::ApplyCont(edge) => edge.args.iter_mut().for_each(visitor),
         Node::Switch {

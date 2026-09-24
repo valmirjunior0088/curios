@@ -4,6 +4,14 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-cont` b
 
 ## Design
 
+### Cells and channels occupy the guest heap
+
+**Decision.** A write-once cell is one Wasm GC struct with a nullable payload field. Null means empty; a successful fill stores a non-null value, and every later fill preserves it. A channel is a GC struct holding a preallocated nullable-reference array, a head index, a count and a closed flag. The array length is its capacity. Push appends at `(head + count) % capacity`; take clears the consumed slot before advancing the head. Close preserves queued values for draining.
+
+**Rationale.** The ring bounds retained payload storage and releases removed references without retaining a message chain. Creation allocates a struct and an array proportional to capacity; each subsequent attempt uses constant storage. Allocation remains subject to engine resource limits. Neither object allocates a host handle, and storing a handle does not transfer ownership of the host resource. Cells and channels complete inline without suspension; the ordinary `Option`, `Push` and `Take` layouts are constructed by Ersd lowering from the private operation results.
+
+**Rejected.** A linked queue rooted at freely copied old ends can retain consumed messages. Rewritable cells would preserve a second mutation primitive when write-once results and bounded queues already support coordination and knot memoization.
+
 ### A closure carries its code as a table index
 
 **Decision.** A closure environment's code field is an `i32` — the body's 1-based slot in the dispatch table for its arity — never a funcref. The emitter declares one table per closure arity, typed `(ref null $clsr/N)`, and fills it with one active element segment in the module's ordered closure walk, so indices are reproducible rather than a `HashMap` iteration's. Every unknown call dispatches with `call_indirect`/`return_call_indirect` against that table, and because the call site expects exactly the table's element type the engine proves the signature match statically instead of comparing type indices per dispatch. Slot 0 stays null, so a zeroed code field selects the null entry and `call_indirect` traps — the loud failure an unfilled nullable funcref reached, with no stub function and no extra check. Construction writes `i32.const <index>`, and the `list/map` helper dispatches its mapper the same way. Which programs trap does not change.

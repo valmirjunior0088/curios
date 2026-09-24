@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Option, Io, Try, Async};
+use /std/{Nat, Bool, List, Option, Io, Try, Async, Tty};
 use /std/time/{Duration};
 use /std/Async/{Channel};
 
@@ -111,26 +111,26 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
         let push(e: Event(E)) -> Async({}) =
             let _ = Channel/send(queue.0, e)!;
             Async/pure(());
-        let reader() -> Async({}) =
-            let got = Session/read(@E, s)!;
-            match got
+        let reader(session: Session) -> Async({}) =
+            let got = Session/read(@E, session)!;
+            match got.1
             | none() => Async/pure(())
             | some(events) =>
                 let _ = List/each(events, push)!;
-                reader()
+                reader(got.0)
             end;
-        let ticker() -> Async({}) =
+        let ticker(session: Session) -> Async({}) =
             let _ = Async/sleep(Duration/of_millis(100))!;
-            let known = Session/last_size(s)!;
-            let now = Try/run(Session/size(s))!;
+            let known = Session/last_size(session)!;
+            let now = Try/run(Session/size(session))!;
             match now
-            | failure(_) => ticker()
-            | success(sz) =>
+            | failure(_) => ticker(session)
+            | success((updated, sz)) =>
                 match sz == known
-                | true => ticker()
+                | true => ticker(updated)
                 | false =>
                     let _ = push(Event/resize(sz.cols, sz.rows))!;
-                    ticker()
+                    ticker(updated)
                 end
             end;
         let answer(a: Async(E)) -> Async({}) =
@@ -139,42 +139,51 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
         let issue(c: Directive(E)) -> Async(Bool) =
             let _ = List/each(c.run, (a) => Async/go(answer(a)))!;
             Async/pure(c.stop);
-        let draw(m: M) -> Async({}) =
-            let sz = Session/last_size(s)!;
-            Session/draw(s, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
-        let drain(m: M, events: List(Event(E))) -> Async({M, Bool}) =
+        let draw(session: Session, m: M) -> Async(Session) =
+            let sz = Session/last_size(session)!;
+            Session/draw(session, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
+        let drain(session: Session, m: M, events: List(Event(E))) -> Async({Session, M, Bool}) =
             match events
-            | [] => Async/pure((m, false))
+            | [] => Async/pure((session, m, false))
             | [e, ..more] =>
+                let updated =
+                    match e
+                    | resize(cols, rows) =>
+                        Session/resized(session, Tty/Size { cols = cols, rows = rows })
+                    | _ => session
+                    end;
                 let next = app.update(m, e);
                 let stop = issue(next.1)!;
-                match stop | true => Async/pure((next.0, true)) | false => drain(next.0, more) end
+                match stop
+                | true => Async/pure((updated, next.0, true))
+                | false => drain(updated, next.0, more)
+                end
             end;
         -- Everything queued behind the event that woke the loop, so a burst still draws once.
         let burst(acc: List(Event(E))) -> Async(List(Event(E))) =
             let more = Async/lift(Channel/try_recv(queue.1))!;
             match more | none() => Async/pure(acc) | some(e) => burst([..acc, e]) end;
-        let loop(m: M) -> Async(M) =
+        let loop(session: Session, m: M) -> Async(M) =
             let woke = Channel/recv(queue.1)!;
             match woke
             | none() => Async/pure(m)
             | some(e) =>
                 let events = burst([e])!;
-                let folded = drain(m, events)!;
-                match folded.1
-                | true => Async/pure(folded.0)
+                let folded = drain(session, m, events)!;
+                match folded.2
+                | true => Async/pure(folded.1)
                 | false =>
-                    let _ = draw(folded.0)!;
-                    loop(folded.0)
+                    let drawn = draw(folded.0, folded.1)!;
+                    loop(drawn, folded.1)
                 end
             end;
-        let _ = Async/go(reader())!;
-        let _ = Async/go(ticker())!;
+        let _ = Async/go(reader(s))!;
+        let _ = Async/go(ticker(s))!;
         let first = issue(app.init.1)!;
         match first
         | true => Try/pure(app.init.0)
         | false =>
-            let _ = draw(app.init.0)!;
-            let m = loop(app.init.0)!;
+            let drawn = draw(s, app.init.0)!;
+            let m = loop(drawn, app.init.0)!;
             Try/pure(m)
         end);

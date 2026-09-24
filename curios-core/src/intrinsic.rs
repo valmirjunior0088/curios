@@ -2,7 +2,7 @@ mod signature;
 pub use signature::*;
 
 use {
-    super::{Bound, Free, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, Free, Level, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ResultShape, WireResults, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
     std::collections::BTreeSet,
@@ -38,9 +38,9 @@ pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> F
     }
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
-/// An intrinsic that performs a host effect returns an `Io`. That is the invariant the whole effect discipline rests on and it is enforced nowhere but here and in the two checkers' per-variant arms, so a new effectful variant must be given an `IoType` result when it is added.
+/// An intrinsic that performs an effect returns an `Io`, including guest cell and channel operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -297,16 +297,48 @@ pub enum Intrinsic {
     CellType(Term),
     Cell {
         element: Term,
-        initial: Term,
     },
-    CellSet {
+    CellFill {
         element: Term,
         cell: Term,
         value: Term,
     },
-    CellGet {
+    CellPoll {
         element: Term,
         cell: Term,
+        universes: Vec<Level>,
+    },
+    ChannelType(Term),
+    Channel {
+        element: Term,
+        capacity: Term,
+        positive: Term,
+    },
+    ChannelPush {
+        element: Term,
+        channel: Term,
+        value: Term,
+    },
+    ChannelTake {
+        element: Term,
+        channel: Term,
+        universes: Vec<Level>,
+    },
+    ChannelClose {
+        element: Term,
+        channel: Term,
+    },
+    ChannelClosed {
+        element: Term,
+        channel: Term,
+    },
+    ChannelCount {
+        element: Term,
+        channel: Term,
+    },
+    ChannelCapacity {
+        element: Term,
+        channel: Term,
     },
     // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
     //
@@ -993,22 +1025,52 @@ impl Intrinsic {
                 terms.iter().for_each(&mut *visit);
             }
 
-            Intrinsic::CellType(a) => visit(a),
-            Intrinsic::Cell {
-                element: a,
-                initial: b,
+            Intrinsic::CellType(a) | Intrinsic::ChannelType(a) | Intrinsic::Cell { element: a } => {
+                visit(a)
             }
-            | Intrinsic::CellGet {
+            Intrinsic::CellPoll {
                 element: a,
                 cell: b,
+                ..
+            }
+            | Intrinsic::ChannelTake {
+                element: a,
+                channel: b,
+                ..
+            }
+            | Intrinsic::ChannelClose {
+                element: a,
+                channel: b,
+            }
+            | Intrinsic::ChannelClosed {
+                element: a,
+                channel: b,
+            }
+            | Intrinsic::ChannelCount {
+                element: a,
+                channel: b,
+            }
+            | Intrinsic::ChannelCapacity {
+                element: a,
+                channel: b,
             } => {
                 visit(a);
                 visit(b);
             }
-            Intrinsic::CellSet {
+            Intrinsic::CellFill {
                 element: a,
                 cell: b,
                 value: c,
+            }
+            | Intrinsic::ChannelPush {
+                element: a,
+                channel: b,
+                value: c,
+            }
+            | Intrinsic::Channel {
+                element: a,
+                capacity: b,
+                positive: c,
             } => {
                 visit(a);
                 visit(b);
@@ -1037,6 +1099,24 @@ impl Intrinsic {
             Intrinsic::Nat(Nat::Succ(floor, _)) => floor.bits().div_ceil(64),
             Intrinsic::Int(value) => value.bits().div_ceil(64),
             _ => 0,
+        }
+    }
+
+    /// The universe instance carried by an operation whose result names an ordinary polymorphic family.
+    pub fn result_universes(&self) -> &[Level] {
+        match self {
+            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => universes,
+            _ => &[],
+        }
+    }
+
+    /// The instance elaboration fills from the checked result type; later traversals preserve and substitute it like a nominal occurrence's own vector.
+    pub fn result_universes_mut(&mut self) -> Option<&mut Vec<Level>> {
+        match self {
+            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => {
+                Some(universes)
+            }
+            _ => None,
         }
     }
 
@@ -1385,28 +1465,84 @@ impl Intrinsic {
                 })
             }
             Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
-            Intrinsic::Cell {
-                element: a,
-                initial: b,
-            } => traverse_binary(a, b, visit, |element, initial| Intrinsic::Cell {
-                element,
-                initial,
-            }),
-            Intrinsic::CellGet {
-                element: a,
-                cell: b,
-            } => traverse_binary(a, b, visit, |element, cell| Intrinsic::CellGet {
+            Intrinsic::ChannelType(a) => Intrinsic::ChannelType(visit.visit_subterm(a)),
+            Intrinsic::Cell { element } => Intrinsic::Cell {
+                element: visit.visit_subterm(element),
+            },
+            Intrinsic::CellFill {
                 element,
                 cell,
-            }),
-            Intrinsic::CellSet {
-                element: a,
-                cell: b,
-                value: c,
-            } => Intrinsic::CellSet {
-                element: visit.visit_subterm(a),
-                cell: visit.visit_subterm(b),
-                value: visit.visit_subterm(c),
+                value,
+            } => Intrinsic::CellFill {
+                element: visit.visit_subterm(element),
+                cell: visit.visit_subterm(cell),
+                value: visit.visit_subterm(value),
+            },
+            Intrinsic::CellPoll {
+                element,
+                cell,
+                universes,
+            } => Intrinsic::CellPoll {
+                element: visit.visit_subterm(element),
+                cell: visit.visit_subterm(cell),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
+            },
+            Intrinsic::Channel {
+                element,
+                capacity,
+                positive,
+            } => Intrinsic::Channel {
+                element: visit.visit_subterm(element),
+                capacity: visit.visit_subterm(capacity),
+                positive: visit.visit_subterm(positive),
+            },
+            Intrinsic::ChannelPush {
+                element,
+                channel,
+                value,
+            } => Intrinsic::ChannelPush {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
+                value: visit.visit_subterm(value),
+            },
+            Intrinsic::ChannelTake {
+                element,
+                channel,
+                universes,
+            } => Intrinsic::ChannelTake {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
+                universes: if visit.erases_universes() {
+                    Vec::new()
+                } else {
+                    universes
+                        .iter()
+                        .map(|level| visit.visit_level(level))
+                        .collect()
+                },
+            },
+            Intrinsic::ChannelClose { element, channel } => Intrinsic::ChannelClose {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
+            },
+            Intrinsic::ChannelClosed { element, channel } => Intrinsic::ChannelClosed {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
+            },
+            Intrinsic::ChannelCount { element, channel } => Intrinsic::ChannelCount {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
+            },
+            Intrinsic::ChannelCapacity { element, channel } => Intrinsic::ChannelCapacity {
+                element: visit.visit_subterm(element),
+                channel: visit.visit_subterm(channel),
             },
             Intrinsic::IoType(a) => Intrinsic::IoType(visit.visit_subterm(a)),
             Intrinsic::IoPure {

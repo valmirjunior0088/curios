@@ -106,7 +106,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
     );
 }
 
-/// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the cell's *forcing* state is the trap. The frame is the member's force function, which is what names the member in the report.
+/// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the empty result cell and consumed initializer channel are the cycle state. The initializer names the member in the report even when the force function is inlined.
 ///
 /// Gated on `profile` because that report names a frame only when the wasm name section survived Binaryen, and `to_cwasm` keeps it for a profiling build alone — the same shape as `fixpoint` and `churn`, each gated on the spans that supply what it reads. Ungated it failed under a plain `cargo test -p curios` with the frame rendered `<wasm function 10>`, which reads like a codegen regression and is not one.
 #[cfg(feature = "profile")]
@@ -127,12 +127,12 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
         main
         "#,
     );
-    // The forcing state is a `Panic(Cycle)` the lowering seats, so the report names the cycle before the frames, and the frame names the member.
+    // The lowering emits `Panic(Cycle)`; inlining the force function must preserve the refusal and the active member's initializer frame.
     assert!(
         error.contains(
             "panicked: a recursive value was read while its own initializer was still running"
-        ) && error.contains("/force"),
-        "the cycle must trap in a member's force function, and the report must name the refusal before the frames: {error}"
+        ) && error.contains("$n/init"),
+        "the report must name the cycle and the member whose initializer is running: {error}"
     );
 }
 

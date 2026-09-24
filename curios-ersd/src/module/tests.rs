@@ -166,6 +166,6 @@ fn operation_arities_are_exact() {
         SequenceArity::Exactly(3)
     );
     assert_eq!(SequenceOp::ListConcat.arity(), SequenceArity::AnyCount);
-    assert_eq!(CellOperation::Set.arity(), 2);
+    assert_eq!(CellOperation::Fill.arity(), 2);
     assert_eq!(Intrinsic::ListMap.arity(), 2);
 }

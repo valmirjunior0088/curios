@@ -9,6 +9,44 @@ use {
 
 use super::test_support::*;
 
+#[test]
+fn a_channel_allocation_checks_its_positive_capacity_evidence() {
+    let mut kernel = kernel();
+    let holds = Free::global(SYNTAX.proof.holds.qualifier());
+    kernel.declare(
+        &holds,
+        &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
+        &UniverseContext::default(),
+    );
+    let proof = binder(1, "positive");
+    kernel.assume(
+        &proof,
+        &Term::apply(
+            Term::free_var(&holds),
+            vec![Term::intrinsic(Intrinsic::Bool(true))],
+        ),
+    );
+    let allocation = |capacity, evidence| {
+        Term::intrinsic(Intrinsic::Channel {
+            element: nat_type(),
+            capacity: nat(capacity),
+            positive: evidence,
+        })
+    };
+    assert_eq!(
+        infer(&mut kernel, &allocation(1, Term::free_var(&proof))),
+        Ok(Term::intrinsic(Intrinsic::IoType(Term::intrinsic(
+            Intrinsic::ChannelType(nat_type())
+        )))),
+    );
+    for invalid in [allocation(0, Term::free_var(&proof)), allocation(1, nat(1))] {
+        assert!(matches!(
+            infer(&mut kernel, &invalid),
+            Err(KernelError::Mismatch { .. })
+        ));
+    }
+}
+
 /// An intrinsic's operands are checked against the types its rule demands.
 #[test]
 fn an_intrinsic_operand_of_the_wrong_type_is_refused() {

@@ -196,21 +196,17 @@ pub(crate) enum EmissionHostTarget {
     Exit { code: EmissionValueName },
 }
 
-/// A guest mutable-cell op in tail position. Same `resume` discipline as `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.
+/// A guest write-once cell op in tail position. Same `resume` discipline as `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCellTarget {
-    New {
-        init: EmissionValueName,
-        resume: EmissionBlockName,
-    },
-    /// An empty cell — its field null, which `Get` refuses — for a knot's member before its initializer has run.
+    /// An empty cell, represented by a null field.
     Reserve { resume: EmissionBlockName },
-    Set {
+    Fill {
         cell: EmissionValueName,
         value: EmissionValueName,
         resume: EmissionBlockName,
     },
-    Get {
+    Poll {
         cell: EmissionValueName,
         resume: EmissionBlockName,
     },
@@ -219,12 +215,19 @@ pub(crate) enum EmissionCellTarget {
 impl EmissionCellTarget {
     pub(crate) fn resume(&self) -> &EmissionBlockName {
         match self {
-            EmissionCellTarget::New { resume, .. }
-            | EmissionCellTarget::Reserve { resume }
-            | EmissionCellTarget::Set { resume, .. }
-            | EmissionCellTarget::Get { resume, .. } => resume,
+            EmissionCellTarget::Reserve { resume }
+            | EmissionCellTarget::Fill { resume, .. }
+            | EmissionCellTarget::Poll { resume, .. } => resume,
         }
     }
+}
+
+/// A bounded guest channel operation, performed inline and delivering its results to `resume`.
+#[derive(Debug, Clone)]
+pub(crate) struct EmissionChannelTarget {
+    pub(crate) op: curios_cont::ChannelOp,
+    pub(crate) args: Vec<EmissionValueName>,
+    pub(crate) resume: EmissionBlockName,
 }
 
 /// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful intrinsics (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Panic` reports a failure of its class and stops; `Unreachable` traps, marking a path that cannot be taken (an absurd match).
@@ -235,6 +238,7 @@ pub(crate) enum EmissionTail {
     Call(EmissionCallTarget),
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
+    Channel(EmissionChannelTarget),
     Panic(curios_cont::Panic),
     Unreachable,
 }

@@ -25,6 +25,8 @@ mod module;
 pub use module::*;
 
 #[cfg(test)]
+mod intrinsic_tests;
+#[cfg(test)]
 mod tests;
 
 use {

@@ -15,9 +15,9 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, CellOperation, Constant, ConstructorId, FamilyId, Field, FieldShape,
-        ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs, SequenceGrain,
-        SequenceOp, Statement, StatementId, Terminator, ValueId,
+        Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId, FamilyId, Field,
+        FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs,
+        SequenceGrain, SequenceOp, Statement, StatementId, Terminator, ValueId,
     },
     curios_num::{Grain, Rounding},
     std::{
@@ -132,6 +132,26 @@ impl Reach {
                     self.name_constructor(module, arm.constructor);
                 }
             }
+            Rhs::Cell { operation, .. } => {
+                if let CellOperation::Poll { some, none } = operation {
+                    self.name_constructor(module, *some);
+                    self.name_constructor(module, *none);
+                }
+            }
+            Rhs::Channel { operation, .. } => {
+                let constructors = match operation {
+                    ChannelOperation::Push {
+                        taken,
+                        full,
+                        closed,
+                    } => vec![*taken, *full, *closed],
+                    ChannelOperation::Take { item, empty, ended } => vec![*item, *empty, *ended],
+                    _ => Vec::new(),
+                };
+                for constructor in constructors {
+                    self.name_constructor(module, constructor);
+                }
+            }
             Rhs::Foreign { foreign, .. } => {
                 self.foreigns.insert(*foreign);
             }
@@ -144,7 +164,6 @@ impl Reach {
             | Rhs::FoldNat { .. }
             | Rhs::FoldSequence { .. }
             | Rhs::UnconsSequence { .. }
-            | Rhs::Cell { .. }
             | Rhs::Intrinsic { .. } => {}
         }
     }
@@ -513,6 +532,16 @@ impl Printer<'_, '_, '_, '_> {
                         simple = Some(format!(
                             "{}({})",
                             cell_name(*operation),
+                            self.atoms(operands)
+                        ));
+                    }
+                    Rhs::Channel {
+                        operation,
+                        operands,
+                    } => {
+                        simple = Some(format!(
+                            "{}({})",
+                            channel_name(*operation),
                             self.atoms(operands)
                         ));
                     }
@@ -974,8 +1003,8 @@ fn sequence_name(operation: SequenceOp) -> String {
 fn cell_name(operation: CellOperation) -> &'static str {
     match operation {
         CellOperation::New => "Cell/new",
-        CellOperation::Get => "Cell/get",
-        CellOperation::Set => "Cell/set",
+        CellOperation::Poll { .. } => "Cell/poll",
+        CellOperation::Fill => "Cell/fill",
     }
 }
 
@@ -1012,5 +1041,17 @@ fn render_constant(constant: &Constant) -> String {
             }
         }
         Constant::Handle(token) => format!("io:{token}"),
+    }
+}
+
+fn channel_name(operation: ChannelOperation) -> &'static str {
+    match operation {
+        ChannelOperation::New => "Channel/new",
+        ChannelOperation::Push { .. } => "Channel/push",
+        ChannelOperation::Take { .. } => "Channel/take",
+        ChannelOperation::Close => "Channel/close",
+        ChannelOperation::Closed => "Channel/closed",
+        ChannelOperation::Count => "Channel/count",
+        ChannelOperation::Capacity => "Channel/capacity",
     }
 }

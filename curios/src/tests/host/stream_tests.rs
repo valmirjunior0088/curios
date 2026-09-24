@@ -82,21 +82,19 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
         let error_first(n : Nat) -> Async(Io/Chunk) =
             Async/pure(Io/Chunk/error(Io/Error/other(247)));
         let chunk_then_error : Io((Nat) -> Async(Io/Chunk)) =
-            let calls = Cell/new(0)!;
+            let calls = Cell/new(@{})!;
             Io/pure((n) =>
-                let k = Async/lift(Cell/get(calls))!;
-                let _ = Async/lift(Cell/set(calls, k + 1))!;
-                match k
-                | 0 => Async/pure(Io/Chunk/chunk(x[0x41, 0x42]))
+                let first = Async/lift(Cell/fill(calls, ()))!;
+                match first
+                | true => Async/pure(Io/Chunk/chunk(x[0x41, 0x42]))
                 | _ => Async/pure(Io/Chunk/error(Io/Error/other(247)))
                 end);
         let chunk_then_eof : Io((Nat) -> Async(Io/Chunk)) =
-            let calls = Cell/new(0)!;
+            let calls = Cell/new(@{})!;
             Io/pure((n) =>
-                let k = Async/lift(Cell/get(calls))!;
-                let _ = Async/lift(Cell/set(calls, k + 1))!;
-                match k
-                | 0 => Async/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
+                let first = Async/lift(Cell/fill(calls, ()))!;
+                match first
+                | true => Async/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
                 | _ => Async/pure(Io/Chunk/eof())
                 end);
         let _ = print(show(Async/block_on(Async/drain(error_first))!))!;

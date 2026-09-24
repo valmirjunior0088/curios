@@ -1,55 +1,25 @@
-use /std/{List, Option, Cell, Io, Async};
-use /std/Async/{Waker};
+use /std/{Io, Async};
+use /std/Async/{Channel};
 
-induct Phase: Type
-| idle(List(Waker))
-| raised()
-end
-
---- A flag one fiber raises and another parks on.
+--- A flag one fiber raises and another parks on. Notifications coalesce while its one slot is full.
 pub struct Signal: Type {
-    Cell(Phase),
+    sender: Channel/Sender({}),
+    receiver: Channel/Receiver({}),
 }
 
 --- A lowered flag.
 pub let new() -> Io(Signal) =
-    let cell = Cell/new(Phase/idle([]))!;
-    Io/pure(Signal { cell });
+    let ends = Channel/new(1)!;
+    Io/pure(Signal { sender = ends.0, receiver = ends.1 });
 
-let wake_all(ws: List(Waker)) -> Io({}) =
-    match ws
-    | [] => Io/pure(())
-    | [w, ..more] =>
-        let _ = Waker/wake(w)!;
-        wake_all(more)
-    end;
-
---- Raise the flag and wake every fiber parked on it. A raised flag stays raised until a `wait` lowers it, so a burst of notifications is one wake.
+--- Raise the flag. A raised flag stays raised until taken, so a burst of notifications is one pending wake.
 pub let notify(s: Signal) -> Io({}) =
-    let state = Cell/get(s.0)!;
-    match state
-    | raised() => Io/pure(())
-    | idle(ws) =>
-        let _ = Cell/set(s.0, Phase/raised())!;
-        wake_all(ws)
-    end;
-
-let listen(s: Signal, w: Waker) -> Io({}) =
-    let now = Cell/get(s.0)!;
-    match now | raised() => Waker/wake(w) | idle(ws) => Cell/set(s.0, Phase/idle([w, ..ws])) end;
-
-let lower(s: Signal) -> Io(Option({})) =
-    let state = Cell/get(s.0)!;
-    match state
-    | raised() =>
-        let _ = Cell/set(s.0, Phase/idle([]))!;
-        Io/pure(Option/some(()))
-    | idle(_) => Io/pure(Option/none())
-    end;
+    let _ = Channel/try_send(s.sender, ())!;
+    Io/pure(());
 
 --- An offer that yields once the flag is raised, lowering it.
 pub let offer(s: Signal) -> Async/Offer({}) =
-    Async/Offer/new(lower(s), Io/pure(Async/Wait/woken((w) => listen(s, w))));
+    Async/Offer/new(Channel/try_recv(s.receiver), Io/pure(Async/Wait/readable(s.receiver)));
 
 --- Park until the flag is raised, then lower it. A flag already raised is lowered at once.
 pub let wait(s: Signal) -> Async({}) =

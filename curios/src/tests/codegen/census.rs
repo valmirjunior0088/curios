@@ -151,7 +151,7 @@ enum Consumption {
     HeapStorage,
     UnknownCall,
     ForeignCall,
-    CellOperation,
+    StorageOperation,
     ExitValue,
     Scrutinee,
     OpaqueIntrinsic,
@@ -242,7 +242,7 @@ impl Region {
             "closure-capture",
             "unknown-call",
             "foreign-call",
-            "cell-operation",
+            "storage-operation",
             "exit",
         ]
         .iter()
@@ -547,9 +547,12 @@ impl<'m> Census<'m> {
                 }
                 Node::Cell {
                     args, return_to, ..
+                }
+                | Node::Channel {
+                    args, return_to, ..
                 } => {
                     self.result_conts.insert(*return_to);
-                    self.record_atoms(node_id, args, Consumption::CellOperation);
+                    self.record_atoms(node_id, args, Consumption::StorageOperation);
                 }
                 Node::Intrinsic {
                     args, return_to, ..
@@ -767,7 +770,7 @@ impl<'m> Census<'m> {
                         Consumption::HeapStorage => "heap-storage",
                         Consumption::UnknownCall => "unknown-call",
                         Consumption::ForeignCall => "foreign-call",
-                        Consumption::CellOperation => "cell-operation",
+                        Consumption::StorageOperation => "storage-operation",
                         Consumption::ExitValue => "exit",
                         Consumption::Scrutinee => "scrutinee",
                         Consumption::OpaqueIntrinsic => "opaque-intrinsic",

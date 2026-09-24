@@ -95,6 +95,108 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
+#[test]
+fn a_session_carries_incomplete_input_into_its_next_read() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .stdin_chunks(vec![b"\x1b".to_vec(), b"[".to_vec(), b"A".to_vec()])
+        .build();
+    run_text(r#"
+        use /std/{Nat, List, Option, Try, Async, print};
+        use /std/Tui/{Session};
+        let fiber: Async({}) =
+            let outcome = Try/run(Session/with((s) =>
+                let first = Session/read(@Nat, s)!;
+                let _ = print(match first.1 | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
+                let second = Session/read(@Nat, first.0)!;
+                let _ = print(match second.1
+                    | some(events) => match events
+                        | [event, .._] => match event
+                            | key(k) => match k.code | up() => " up " | _ => " wrong-key " end
+                            | _ => " wrong-event "
+                            end
+                        | [] => " missing "
+                        end
+                    | none() => " early-eof "
+                    end)!;
+                let third = Session/read(@Nat, second.0)!;
+                let _ = print(match third.1 | none() => "eof" | some(_) => "more" end)!;
+                Try/pure(())))!;
+            Async/pure(());
+        Async/run(fiber)
+    "# , host).expect("threaded input");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.contains("0 up eof"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+#[test]
+fn drawing_history_and_size_travel_with_the_returned_session() {
+    let (host, io) = MockHost::builder().tty_sizes([(4, 2), (6, 3)]).build();
+    run_text(
+        r#"
+        use /std/{Nat, Option, Try, Async, print};
+        use /std/Tui/{Session, Frame};
+        let fiber: Async({}) =
+            let outcome = Try/run(Session/with((s) =>
+                let drawn = Session/draw(s, Frame/blank(4, 2), Option/none())!;
+                let again = Session/draw(drawn, Frame/blank(4, 2), Option/none())!;
+                let resized = Session/size(again)!;
+                let _ = Session/draw(resized.0, Frame/blank(6, 3), Option/none())!;
+                let original = Session/last_size(s)!;
+                let updated = Session/last_size(resized.0)!;
+                let _ = print(Nat/to_str(original.cols))!;
+                let _ = print("/")!;
+                let _ = print(Nat/to_str(updated.cols))!;
+                Try/pure(())))!;
+            Async/pure(());
+        Async/run(fiber)
+    "#,
+        host,
+    )
+    .expect("threaded frames and dimensions");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
+    assert!(output.contains("4/6"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+#[test]
+fn resize_events_update_the_drawing_session_before_rendering() {
+    let (host, io) = MockHost::builder()
+        .tty_sizes([(4, 2), (6, 3), (8, 4)])
+        .mono((0..40).map(|second| (second, 0)))
+        .build();
+    run_text(
+        r#"
+        use /std/{Nat, Option, Try, Async, Tui, print};
+        use /std/Tui/{Frame, Directive};
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/none()),
+            update(model, event) = match event
+                | resize(w, h) => match w == 8
+                    | true => (model + 1, Directive/quit())
+                    | false => (model + 1, Directive/none())
+                    end
+                | _ => (model, Directive/none())
+                end,
+            view(model, w, h) = Frame/blank(w, h),
+            cursor(model, w, h) = Option/none(),
+        };
+        let fiber: Async({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
+        Async/run(fiber)
+    "#,
+        host,
+    )
+    .expect("resize event loop");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
+    assert!(output.ends_with("\x1b[?1049l2"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
 // Shared with the coordination measurement so both exercise the same application.
 pub(super) const LISTING_PROGRAM: &str = r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Async, Io, Show, Tui};

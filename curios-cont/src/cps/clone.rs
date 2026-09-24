@@ -111,6 +111,15 @@ pub(super) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
             args: args.iter().map(map.atom).collect(),
             return_to: (map.cont)(*return_to),
         },
+        Node::Channel {
+            op,
+            args,
+            return_to,
+        } => Node::Channel {
+            op: *op,
+            args: args.iter().map(map.atom).collect(),
+            return_to: (map.cont)(*return_to),
+        },
         Node::Intrinsic {
             op,
             args,

@@ -151,6 +151,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
             // A result returning from a call, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
             Node::ApplyFun { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 withdraw_params(module, *return_to, &mut withdrawn)
             }
@@ -250,6 +251,7 @@ fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<V
             | Node::LetValue { .. }
             | Node::ApplyFun { .. }
             | Node::Cell { .. }
+            | Node::Channel { .. }
             | Node::Intrinsic { .. }
             | Node::Foreign { .. }
             | Node::LetFun { .. }
@@ -359,6 +361,7 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
                 },
                 Node::ApplyFun { .. }
                 | Node::Cell { .. }
+                | Node::Channel { .. }
                 | Node::Intrinsic { .. }
                 | Node::LetFun { .. }
                 | Node::LetCont { .. }

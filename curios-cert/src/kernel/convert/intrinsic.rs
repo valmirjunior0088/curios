@@ -129,10 +129,19 @@ pub(super) fn convert_intrinsic(
         }
     }
 
-    let (this_shape, this_operands) = decompose(this);
-    let (that_shape, that_operands) = decompose(that);
+    let (mut this_shape, this_operands) = decompose(this);
+    let (mut that_shape, that_operands) = decompose(that);
 
     // The shapes carry everything that is *not* a term: which operation, which grain, which literal, which successor floor. Comparing them settles the whole of the operation's identity in one derived equality.
+    if !kernel.levels_eq(this.result_universes(), that.result_universes()) {
+        return Ok(false);
+    }
+    if let Some(levels) = this_shape.result_universes_mut() {
+        levels.clear();
+    }
+    if let Some(levels) = that_shape.result_universes_mut() {
+        levels.clear();
+    }
     if this_shape != that_shape || this_operands.len() != that_operands.len() {
         return Ok(false);
     }

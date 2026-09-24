@@ -2052,44 +2052,82 @@ pub fn reduce_intrinsic(
             let code = reducer.reduce(code.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::proc_exit(result, code)))
         }
-        Intrinsic::CellType(elem) => {
-            let elem = reducer.reduce(elem.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::cell_type(elem)))
-        }
-        Intrinsic::Cell {
-            element: type_,
-            initial: init,
-        } => {
-            let type_ = reducer.reduce(type_.clone())?;
-            let init = reducer.reduce(init.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::Cell {
-                element: type_,
-                initial: init,
-            }))
-        }
-        Intrinsic::CellSet {
-            element: type_,
+        Intrinsic::CellType(element) => Ok(Subterm::Intrinsic(Intrinsic::CellType(
+            reducer.reduce(element.clone())?,
+        ))),
+        Intrinsic::ChannelType(element) => Ok(Subterm::Intrinsic(Intrinsic::ChannelType(
+            reducer.reduce(element.clone())?,
+        ))),
+        Intrinsic::Cell { element } => Ok(Subterm::Intrinsic(Intrinsic::Cell {
+            element: reducer.reduce(element.clone())?,
+        })),
+        Intrinsic::CellFill {
+            element,
             cell,
             value,
-        } => {
-            let type_ = reducer.reduce(type_.clone())?;
-            let cell = reducer.reduce(cell.clone())?;
-            let value = reducer.reduce(value.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::CellSet {
-                element: type_,
-                cell,
-                value,
+        } => Ok(Subterm::Intrinsic(Intrinsic::CellFill {
+            element: reducer.reduce(element.clone())?,
+            cell: reducer.reduce(cell.clone())?,
+            value: reducer.reduce(value.clone())?,
+        })),
+        Intrinsic::CellPoll {
+            element,
+            cell,
+            universes,
+        } => Ok(Subterm::Intrinsic(Intrinsic::CellPoll {
+            element: reducer.reduce(element.clone())?,
+            cell: reducer.reduce(cell.clone())?,
+            universes: universes.clone(),
+        })),
+        Intrinsic::Channel {
+            element,
+            capacity,
+            positive,
+        } => Ok(Subterm::Intrinsic(Intrinsic::Channel {
+            element: reducer.reduce(element.clone())?,
+            capacity: reducer.reduce(capacity.clone())?,
+            positive: reducer.reduce(positive.clone())?,
+        })),
+        Intrinsic::ChannelPush {
+            element,
+            channel,
+            value,
+        } => Ok(Subterm::Intrinsic(Intrinsic::ChannelPush {
+            element: reducer.reduce(element.clone())?,
+            channel: reducer.reduce(channel.clone())?,
+            value: reducer.reduce(value.clone())?,
+        })),
+        Intrinsic::ChannelTake {
+            element,
+            channel,
+            universes,
+        } => Ok(Subterm::Intrinsic(Intrinsic::ChannelTake {
+            element: reducer.reduce(element.clone())?,
+            channel: reducer.reduce(channel.clone())?,
+            universes: universes.clone(),
+        })),
+        Intrinsic::ChannelClose { element, channel } => {
+            Ok(Subterm::Intrinsic(Intrinsic::ChannelClose {
+                element: reducer.reduce(element.clone())?,
+                channel: reducer.reduce(channel.clone())?,
             }))
         }
-        Intrinsic::CellGet {
-            element: type_,
-            cell,
-        } => {
-            let type_ = reducer.reduce(type_.clone())?;
-            let cell = reducer.reduce(cell.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::CellGet {
-                element: type_,
-                cell,
+        Intrinsic::ChannelClosed { element, channel } => {
+            Ok(Subterm::Intrinsic(Intrinsic::ChannelClosed {
+                element: reducer.reduce(element.clone())?,
+                channel: reducer.reduce(channel.clone())?,
+            }))
+        }
+        Intrinsic::ChannelCount { element, channel } => {
+            Ok(Subterm::Intrinsic(Intrinsic::ChannelCount {
+                element: reducer.reduce(element.clone())?,
+                channel: reducer.reduce(channel.clone())?,
+            }))
+        }
+        Intrinsic::ChannelCapacity { element, channel } => {
+            Ok(Subterm::Intrinsic(Intrinsic::ChannelCapacity {
+                element: reducer.reduce(element.clone())?,
+                channel: reducer.reduce(channel.clone())?,
             }))
         }
         Intrinsic::IoType(result) => {

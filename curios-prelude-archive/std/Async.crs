@@ -2,10 +2,6 @@ use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, L
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
 
---- The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
-pub mod Waker;
-pub use Waker/{let Waker};
-
 --- A value fulfilled once, which a fiber parks on until it is. What `await` waits on, and what a primitive of its own hands out.
 pub mod Future;
 pub use Future/{let Future};
@@ -23,28 +19,50 @@ pub mod Channel;
 pub use Channel/{let Channel};
 
 struct Token: Type {
-    Cell(Bool),
+    Cell({}),
 }
 
 let cancel_token(t: Token) -> Io({}) =
-    Cell/set(t.0, true);
+    let _ = Cell/fill(t.0, ())!;
+    Io/pure(());
 
 let is_cancelled(t: Token) -> Io(Bool) =
-    Cell/get(t.0);
+    let held = Cell/poll(t.0)!;
+    Io/pure(Option/is_some(held));
 
 struct Guard: Type {
-    done: Cell(Bool),
+    done: Cell({}),
     release: Io({}),
 }
 
---- One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
-pub induct Wait: pub Type
---- Until the handle is ready for what the interest names.
-| ready(handle: Handle, interest: Interest)
---- Until this much time has passed.
-| elapsed(Duration)
---- Until whoever holds the waker this hands out fires it.
-| woken(register: (Waker) -> Io({}))
+--- One condition a parked fiber waits for. Readiness is observed again whenever the scheduler becomes idle.
+induct Waiting: Type
+| handle(Handle, Interest)
+| timer(Duration)
+| probe(Io(Bool))
+end
+
+pub let Wait: Type =
+    Waiting;
+
+pub mod Wait
+    pub use /std/Async/Channel/{readable, writable};
+    use /std/{Cell, Option, Io, Handle};
+    use /std/Handle/{Interest};
+    use /std/time/{Duration};
+    use /std/Async/{Wait, Waiting};
+
+    --- Until the handle is ready for the requested interest.
+    pub let ready(handle: Handle, interest: Interest) -> Wait =
+        Waiting/handle(handle, interest);
+
+    --- Until this much time has passed after parking.
+    pub let elapsed(duration: Duration) -> Wait =
+        Waiting/timer(duration);
+
+    --- Until the write-once cell is filled.
+    pub let filled(@A: Type, cell: Cell(A)) -> Wait =
+        Waiting/probe(Io/bind(Cell/poll(cell), (held) => Io/pure(Option/is_some(held))));
 end
 
 induct Pause: Type
@@ -99,10 +117,6 @@ pub let park(waits: List(Wait)) -> Async({}) =
 pub let sleep(d: Duration) -> Async({}) =
     park([Wait/elapsed(d)]);
 
---- Park until the `Waker` handed to `register` is woken: how a primitive that waits on neither a handle nor a timer joins the scheduler.
-pub let on_waker(register: (Waker) -> Io({})) -> Async({}) =
-    park([Wait/woken(register)]);
-
 --- Park once, letting every other runnable fiber take a turn.
 pub let yield_now: Async({}) =
     suspend(Pause/yield_now());
@@ -115,7 +129,7 @@ let fork_with(child: Fiber, t: Token) -> Async({}) =
 
 --- `body` with `fin` run when it is over: on the way out, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock. Both exits, exactly once.
 pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
-    let done = Cell/new(false)!;
+    let done = Cell/new()!;
     let g = Guard { done = done, release = fin };
     let _ = acquire(g)!;
     let a = body!;
@@ -124,7 +138,7 @@ pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
 
 --- Fork `body` as a fiber of its own, which runs before the forker takes another step.
 pub let go(body: Fiber) -> Async({}) =
-    let c = Cell/new(false)!;
+    let c = Cell/new()!;
     fork_with(body, Token { c });
 
 --- Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
@@ -248,7 +262,9 @@ pub let await(@A: Type, f: Future(A)) -> Async(A) =
     match polled
     | some(a) => pure(a)
     | none() =>
-        let _ = on_waker((w) => Future/register(f, w))!;
+        let _ =
+            park([
+                Waiting/probe(Io/bind(Future/poll(f), (held) => Io/pure(Option/is_some(held))))])!;
         await(f)
     end;
 
@@ -258,18 +274,19 @@ struct Job: Type {
     guards: List(Guard),
 }
 
---- Where a parked job waits to be claimed. Every registration one park makes points at the same slot, so the first wait to fire takes the job and every other finds it gone.
-let Slot: Type =
-    Cell(Option(Job));
+--- Every alternative of one park shares this claim cell. The job is immutable and only the first claim may enqueue it.
+struct Slot: Type {
+    job: Job,
+    claimed: Cell({}),
+}
+
+let peek(s: Slot) -> Io(Option(Job)) =
+    let held = Cell/poll(s.claimed)!;
+    Io/pure(match held | some(_) => Option/none() | none() => Option/some(s.job) end);
 
 let claim(s: Slot) -> Io(Option(Job)) =
-    let held = Cell/get(s)!;
-    match held
-    | none() => Io/pure(Option/none())
-    | some(j) =>
-        let _ = Cell/set(s, Option/none())!;
-        Io/pure(Option/some(j))
-    end;
+    let taken = Cell/fill(s.claimed, ())!;
+    Io/pure(match taken | true => Option/some(s.job) | false => Option/none() end);
 
 struct Parked: Type {
     handle: Handle,
@@ -283,13 +300,8 @@ struct Sleeper: Type {
 }
 
 let run_guard(g: Guard) -> Io({}) =
-    let done = Cell/get(g.done)!;
-    match done
-    | true => Io/pure(())
-    | false =>
-        let _ = Cell/set(g.done, true)!;
-        g.release
-    end;
+    let taken = Cell/fill(g.done, ())!;
+    match taken | true => g.release | false => Io/pure(()) end;
 
 let run_guards(gs: List(Guard)) -> Io({}) =
     match gs
@@ -303,9 +315,9 @@ let live_guards(gs: List(Guard)) -> Io(List(Guard)) =
     match gs
     | [] => Io/pure([])
     | [g, ..more] =>
-        let done = Cell/get(g.done)!;
+        let done = Cell/poll(g.done)!;
         let rest = live_guards(more)!;
-        Io/pure(match done | true => rest | false => [g, ..rest] end)
+        Io/pure(match done | some(_) => rest | none() => [g, ..rest] end)
     end;
 
 let drain_jobs(js: List(Job)) -> Io({}) =
@@ -333,7 +345,7 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
     match ss
     | [] => Io/pure([])
     | [s, ..more] =>
-        let held = Cell/get(s)!;
+        let held = peek(s)!;
         match held
         | none() => sweep_parked(more)
         | some(j) =>
@@ -341,7 +353,7 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
             match dead
             | true =>
                 let _ = run_guards(j.guards)!;
-                let _ = Cell/set(s, Option/none())!;
+                let _ = claim(s)!;
                 sweep_parked(more)
             | false =>
                 let rest = sweep_parked(more)!;
@@ -363,7 +375,7 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
         match rest
         | [] => Io/pure((woken, still))
         | [p, ..tail] =>
-            let held = Cell/get(p.slot)!;
+            let held = peek(p.slot)!;
             match held
             | none() => walk(tail, i + 1, woken, still)
             | some(j) =>
@@ -427,7 +439,7 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         match rest
         | [] => Io/pure((woken, still))
         | [s, ..tail] =>
-            let held = Cell/get(s.slot)!;
+            let held = peek(s.slot)!;
             match held
             | none() => walk(tail, woken, still)
             | some(j) =>
@@ -452,94 +464,98 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         end;
     walk(sleeping, [], []);
 
---- No runnable fiber, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers wait on a waker nothing will fire.
+--- No runnable fiber, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers wait on a condition that cannot become ready.
 pub struct Deadlock: pub Type {
     parked: Nat,
 }
 
-struct Queues: Type {
-    runq: Cell(List(Job)),
-    blocked: Cell(List(Parked)),
-    sleeping: Cell(List(Sleeper)),
-    waiting: Cell(List(Slot)),
+struct Probed: Type {
+    ready: Io(Bool),
+    slot: Slot,
 }
 
-let enqueue(q: Queues, j: Job) -> Io({}) =
-    let current = Cell/get(q.runq)!;
-    Cell/set(q.runq, [..current, j]);
+struct Queues: Type {
+    runq: List(Job),
+    blocked: List(Parked),
+    sleeping: List(Sleeper),
+    waiting: List(Slot),
+    probes: List(Probed),
+}
 
-let waker_for(q: Queues, slot: Slot) -> Waker =
-    Waker/new(
-        Io/bind(
-            claim(slot),
-            (held) => match held | none() => Io/pure(()) | some(j) => enqueue(q, j) end));
+let enqueue(q: Queues, j: Job) -> Queues =
+    Queues { ..q, runq = [..q.runq, j] };
 
-let register_wait(q: Queues, slot: Slot, w: Wait) -> Io({}) =
+let register_wait(q: Queues, slot: Slot, w: Wait) -> Io(Queues) =
     match w
-    | ready(h, interest) =>
-        let current = Cell/get(q.blocked)!;
-        Cell/set(q.blocked, [Parked { handle = h, interest = interest, slot = slot }, ..current])
-    | elapsed(d) =>
+    | handle(h, interest) =>
+        Io/pure(
+            Queues {
+                ..q,
+                blocked = [..q.blocked, Parked { handle = h, interest = interest, slot = slot }],
+            })
+    | timer(d) =>
         let now = Duration/now()!;
-        let current = Cell/get(q.sleeping)!;
-        Cell/set(q.sleeping, [Sleeper { due = Duration/add(now, d), slot = slot }, ..current])
-    | woken(register) => register(waker_for(q, slot))
+        Io/pure(
+            Queues {
+                ..q,
+                sleeping = [..q.sleeping, Sleeper { due = Duration/add(now, d), slot = slot }],
+            })
+    | probe(ready) =>
+        Io/pure(Queues { ..q, probes = [..q.probes, Probed { ready = ready, slot = slot }] })
     end;
 
-let register_waits(q: Queues, slot: Slot, ws: List(Wait)) -> Io({}) =
+let register_waits(q: Queues, slot: Slot, ws: List(Wait)) -> Io(Queues) =
     match ws
-    | [] => Io/pure(())
+    | [] => Io/pure(q)
     | [w, ..more] =>
-        let _ = register_wait(q, slot, w)!;
-        register_waits(q, slot, more)
+        let updated = register_wait(q, slot, w)!;
+        register_waits(updated, slot, more)
     end;
 
-let park_job(q: Queues, job: Job, ws: List(Wait)) -> Io({}) =
-    let slot = Cell/new(Option/some(job))!;
-    let current = Cell/get(q.waiting)!;
-    let _ = Cell/set(q.waiting, [slot, ..current])!;
-    register_waits(q, slot, ws);
+let park_job(q: Queues, job: Job, ws: List(Wait)) -> Io(Queues) =
+    let claimed = Cell/new()!;
+    let slot = Slot { job = job, claimed = claimed };
+    register_waits(Queues { ..q, waiting = [slot, ..q.waiting] }, slot, ws);
 
-let serve(q: Queues, job: Job) -> Io({}) =
+let serve(q: Queues, job: Job) -> Io(Queues) =
     let dead = is_cancelled(job.token)!;
     match dead
-    | true => run_guards(job.guards)
+    | true =>
+        let _ = run_guards(job.guards)!;
+        Io/pure(q)
     | false =>
         let state = job.resume.0!;
         match state
-        | done(_) => run_guards(job.guards)
+        | done(_) =>
+            let _ = run_guards(job.guards)!;
+            Io/pure(q)
         | step(pause, next) => resume_after(q, job, pause, next)
         end
     end
-and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}) =
+and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io(Queues) =
     let resumed = Job { ..job, resume = Async { next } };
     match pause
     | park(ws) => park_job(q, resumed, ws)
     | fork(child, child_token) =>
-        let _ = enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })!;
-        enqueue(q, resumed)
+        Io/pure(
+            enqueue(
+                enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] }),
+                resumed))
     | acquire(g) =>
         let kept = live_guards(job.guards)!;
         serve(q, Job { ..resumed, guards = [g, ..kept] })
-    | yield_now() => enqueue(q, resumed)
+    | yield_now() => Io/pure(enqueue(q, resumed))
     end;
 
 let release_everything(q: Queues) -> Io({}) =
-    let runnable = Cell/get(q.runq)!;
-    let _ = drain_jobs(runnable)!;
-    let waiting = Cell/get(q.waiting)!;
-    drain_slots(waiting);
-
-let forget_cancelled(q: Queues) -> Io({}) =
-    let slots = Cell/get(q.waiting)!;
-    let live = sweep_parked(slots)!;
-    Cell/set(q.waiting, live);
+    let _ = drain_jobs(q.runq)!;
+    drain_slots(q.waiting);
 
 let live_blocked(ps: List(Parked)) -> Io(List(Parked)) =
     match ps
     | [] => Io/pure([])
     | [p, ..more] =>
-        let held = Cell/get(p.slot)!;
+        let held = peek(p.slot)!;
         let rest = live_blocked(more)!;
         Io/pure(match held | none() => rest | some(_) => [p, ..rest] end)
     end;
@@ -548,81 +564,106 @@ let live_sleeping(ss: List(Sleeper)) -> Io(List(Sleeper)) =
     match ss
     | [] => Io/pure([])
     | [s, ..more] =>
-        let held = Cell/get(s.slot)!;
+        let held = peek(s.slot)!;
         let rest = live_sleeping(more)!;
         Io/pure(match held | none() => rest | some(_) => [s, ..rest] end)
     end;
 
---- Forget the registrations of a job some other wait already claimed, so one park over several waits leaves nothing behind it.
-let prune(q: Queues) -> Io({}) =
-    let blocked = Cell/get(q.blocked)!;
-    let kept_blocked = live_blocked(blocked)!;
-    let _ = Cell/set(q.blocked, kept_blocked)!;
-    let sleeping = Cell/get(q.sleeping)!;
-    let kept_sleeping = live_sleeping(sleeping)!;
-    Cell/set(q.sleeping, kept_sleeping);
+let live_probes(ps: List(Probed)) -> Io(List(Probed)) =
+    match ps
+    | [] => Io/pure([])
+    | [p, ..more] =>
+        let held = peek(p.slot)!;
+        let rest = live_probes(more)!;
+        Io/pure(match held | none() => rest | some(_) => [p, ..rest] end)
+    end;
 
-let is_stalled(q: Queues) -> Io(Bool) =
-    let blocked = Cell/get(q.blocked)!;
-    let sleeping = Cell/get(q.sleeping)!;
-    Io/pure(List/len(blocked) == 0 && List/len(sleeping) == 0);
+--- Release cancelled jobs and forget every registration whose shared claim has been taken.
+let prune(q: Queues) -> Io(Queues) =
+    let waiting = sweep_parked(q.waiting)!;
+    let blocked = live_blocked(q.blocked)!;
+    let sleeping = live_sleeping(q.sleeping)!;
+    let probes = live_probes(q.probes)!;
+    Io/pure(
+        Queues { ..q, blocked = blocked, sleeping = sleeping, waiting = waiting, probes = probes });
 
-let wake_ready(q: Queues) -> Io({}) =
-    let sleeping = Cell/get(q.sleeping)!;
-    let timeout = sleep_timeout(sleeping)!;
-    let blocked = Cell/get(q.blocked)!;
-    let polled = poll_ready(blocked, timeout)!;
-    let expired = expire_sleepers(sleeping)!;
-    let _ = Cell/set(q.runq, [..polled.0, ..expired.0])!;
-    let _ = Cell/set(q.blocked, polled.1)!;
-    Cell/set(q.sleeping, expired.1);
+let scan_probes(q: Queues, ps: List(Probed)) -> Io(Queues) =
+    match ps
+    | [] => Io/pure(q)
+    | [p, ..more] =>
+        let held = peek(p.slot)!;
+        match held
+        | none() => scan_probes(q, more)
+        | some(_) =>
+            let ready = p.ready!;
+            match ready
+            | false => scan_probes(q, more)
+            | true =>
+                let taken = claim(p.slot)!;
+                match taken
+                | none() => scan_probes(q, more)
+                | some(job) => scan_probes(enqueue(q, job), more)
+                end
+            end
+        end
+    end;
 
-let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) -> Job =
+let wake_ready(q: Queues) -> Io(Queues) =
+    let timeout = sleep_timeout(q.sleeping)!;
+    let polled = poll_ready(q.blocked, timeout)!;
+    let expired = expire_sleepers(q.sleeping)!;
+    Io/pure(
+        Queues { ..q, runq = [..polled.0, ..expired.0], blocked = polled.1, sleeping = expired.1 });
+
+let root_job(@A: Type, root: Async(A), answer: Cell(A), token: Token) -> Job =
     Job {
-        resume = bind(root, (a) => bind(lift(Cell/set(answer, Option/some(a))), (_) => pure(()))),
+        resume = bind(root, (a) => bind(lift(Cell/fill(answer, a)), (_) => pure(()))),
         token = token,
         guards = [],
     };
 
-let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A)) =
-    let finished = Cell/get(answer)!;
+let drive(@A: Type, q: Queues, answer: Cell(A)) -> Io(Result(Deadlock, A)) =
+    let finished = Cell/poll(answer)!;
     match finished
     | some(a) =>
         let _ = release_everything(q)!;
         Io/pure(Result/success(a))
     | none() =>
-        let runnable = Cell/get(q.runq)!;
-        match runnable
+        match q.runq
         | [] =>
-            let _ = forget_cancelled(q)!;
-            let _ = prune(q)!;
-            let stalled = is_stalled(q)!;
-            match stalled
-            | true =>
-                let slots = Cell/get(q.waiting)!;
-                let _ = release_everything(q)!;
-                Io/pure(Result/failure(Deadlock { parked = List/len(slots) }))
+            let cleaned = prune(q)!;
+            let scanned = scan_probes(cleaned, cleaned.probes)!;
+            let ready = prune(scanned)!;
+            match List/len(ready.runq) > 0
+            | true => drive(ready, answer)
             | false =>
-                let _ = wake_ready(q)!;
-                drive(q, answer)
+                match List/len(ready.blocked) == 0 && List/len(ready.sleeping) == 0
+                | true =>
+                    let _ = release_everything(ready)!;
+                    Io/pure(Result/failure(Deadlock { parked = List/len(ready.waiting) }))
+                | false =>
+                    let woken = wake_ready(ready)!;
+                    drive(woken, answer)
+                end
             end
         | [job, ..rest] =>
-            let _ = Cell/set(q.runq, rest)!;
-            let _ = serve(q, job)!;
-            drive(q, answer)
+            let updated = serve(Queues { ..q, runq = rest }, job)!;
+            drive(updated, answer)
         end
     end;
 
 --- Drive `root` to its answer, or to the deadlock that stops it.
 pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
-    let runq: Cell(List(Job)) = Cell/new([])!;
-    let blocked: Cell(List(Parked)) = Cell/new([])!;
-    let sleeping: Cell(List(Sleeper)) = Cell/new([])!;
-    let waiting: Cell(List(Slot)) = Cell/new([])!;
-    let q = Queues { runq = runq, blocked = blocked, sleeping = sleeping, waiting = waiting };
-    let answer: Cell(Option(A)) = Cell/new(Option/none())!;
-    let root_cancelled: Cell(Bool) = Cell/new(false)!;
-    let _ = enqueue(q, root_job(root, answer, Token { root_cancelled }))!;
+    let answer: Cell(A) = Cell/new()!;
+    let root_cancelled: Cell({}) = Cell/new()!;
+    let q =
+        Queues {
+            runq = [root_job(root, answer, Token { root_cancelled })],
+            blocked = [],
+            sleeping = [],
+            waiting = [],
+            probes = [],
+        };
     drive(q, answer);
 
 --- Drive `main` to its end; a deadlock is reported on standard error and exits with 1.
@@ -636,7 +677,7 @@ pub let run(main: Async({})) -> Io({}) =
                 Str/flatten([
                     "async: deadlocked, no runnable work remains and ",
                     Nat/to_str(d.parked),
-                    " fiber(s) wait on a waker nothing will fire\n"]))!;
+                    " fiber(s) wait on a condition that cannot become ready\n"]))!;
         /sys/proc/exit(1)
     end;
 
@@ -649,7 +690,7 @@ pub struct Task(A: Type): Type {
 --- Fork `body` as a task whose answer `join` waits for.
 pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
     let f = Future/new()!;
-    let c = Cell/new(false)!;
+    let c = Cell/new()!;
     let t = Token { c };
     let task = Task { result = f, token = t };
     let _ =
@@ -735,7 +776,9 @@ pub let after(d: Duration) -> Io(Offer({})) =
 pub let joined(@A: Type, task: Task(A)) -> Offer(A) =
     Offer/new(
         Future/poll(task.result),
-        Io/pure(Wait/woken((w) => Future/register(task.result, w))));
+        Io/pure(
+            Waiting/probe(
+                Io/bind(Future/poll(task.result), (held) => Io/pure(Option/is_some(held))))));
 
 let spawn_all(@A: Type, tasks: List(Async(A))) -> Async(List(Task(A))) =
     match tasks

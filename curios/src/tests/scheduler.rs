@@ -1,4 +1,6 @@
-//! The `/std/Async` scheduler through its public surface: parking on a handle, a timer or a waker and resuming, tasks and fibers, brackets released on both exits, and the deadlock report.
+//! The `/std/Async` scheduler through its public surface: parking on a handle, a timer or a level condition and resuming, tasks and fibers, brackets released on both exits, and the deadlock report.
+
+mod level_tests;
 
 use {
     super::{run, run_text},
@@ -160,7 +162,7 @@ fn constructing_a_leaf_task_performs_no_effect() {
 
 #[test]
 fn finalizer_runs_for_a_child_parked_on_an_unwoken_fiber() {
-    // A `go` child registers a finalizer with `using` (it writes "released;"), then joins a task that sleeps past the test — so it parks on the task's future, a waker nothing will fire before the root is done. The root writes "root;" and finishes. Because the scheduler retains ownership of every parked fiber, `block_on`'s shutdown drains the registry and runs the child's finalizer exactly once.
+    // A `go` child registers a finalizer with `using` (it writes "released;"), then joins a task that sleeps past the test — so it parks on the task's future, a result that will not arrive before the root is done. The root writes "root;" and finishes. Because the scheduler retains ownership of every parked fiber, `block_on`'s shutdown drains the registry and runs the child's finalizer exactly once.
     let (system, io) = ticking();
     run_text(
         r#"
@@ -373,8 +375,8 @@ fn block_on_drops_a_sleeping_child_when_root_done() {
 }
 
 #[test]
-fn a_deadlock_reports_how_many_fibers_wait_on_a_waker() {
-    // Nothing runnable, nothing blocked on a handle, no sleeper: a `select` over no tasks awaits a winner no task will ever fulfil, so the root parks on a waker nothing fires. `block_on` reports the deadlock rather than hanging, and the report counts that one parked fiber.
+fn a_deadlock_reports_how_many_fibers_wait_on_unsatisfied_conditions() {
+    // Nothing runnable, nothing blocked on a handle, no sleeper: a `select` over no tasks awaits a winner no task will ever fulfil, so the root parks with no satisfiable condition. `block_on` reports the deadlock rather than hanging, and the report counts that one parked fiber.
     assert_eq!(
         run(r#"
         use /std/{Async, Str, Nat, Io};
@@ -452,25 +454,36 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
     );
 }
 
-// A capacity of zero is a rendezvous: the send cannot complete until a receiver is waiting to take it, so the forked feeder's own report lands after the receiver has parked rather than before it.
+// Enqueueing is complete before receipt. A reply cell makes the additional acknowledgement explicit, and joining the feeder keeps the root alive until it observes that fill.
 #[test]
-fn a_rendezvous_send_completes_only_once_a_receiver_waits() {
+fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     assert_eq!(
         run(r#"
-        use /std/{Str, Nat, Option, Io, Async};
+        use /std/{Nat, Cell, Option, Io, Async, print};
         use /std/Async/{Channel};
-        let feeder(s: Channel/Sender(Nat)) -> Async({}) =
-            let _ = Channel/send(s, 7)!;
-            /std/print("sent ");
+        let feeder(s: Channel/Sender({Nat, Cell({})})) -> Async({}) =
+            let ack = Cell/new()!;
+            let _ = Channel/send(s, (7, ack))!;
+            let _ = print("queued ")!;
+            let _ = Async/park([Async/Wait/filled(ack)])!;
+            print("acknowledged");
         let fiber: Async({}) =
-            let c = Channel/new(@Nat, 0)!;
-            let _ = Async/go(feeder(c.0))!;
-            let _ = /std/print("waiting ")!;
+            let c = Channel/new(@{Nat, Cell({})}, 1)!;
+            let task = Async/spawn(feeder(c.0))!;
+            let _ = print("receiving ")!;
             let got = Channel/recv(c.1)!;
-            /std/print(match got | some(n) => Nat/to_str(n) | none() => "none" end);
+            let _ = match got
+                | some((n, ack)) =>
+                    let _ = print(Nat/to_str(n))!;
+                    let _ = print(" ")!;
+                    let _ = Cell/fill(ack, ())!;
+                    Async/pure(())
+                | none() => Async/pure(())
+                end!;
+            Async/join(task);
         Async/run(fiber)
         "#),
-        b"waiting sent 7"
+        b"queued receiving 7 acknowledged"
     );
 }
 

@@ -106,6 +106,15 @@ pub(crate) enum MachineTerminator {
         op: curios_cont::CellOp,
         args: Vec<MachineOperand>,
     },
+    Channel {
+        op: curios_cont::ChannelOp,
+        args: Vec<MachineOperand>,
+        resume: MachineBlockId,
+    },
+    ChannelReturn {
+        op: curios_cont::ChannelOp,
+        args: Vec<MachineOperand>,
+    },
     Intrinsic {
         op: curios_cont::IntrinsicCall,
         args: Vec<MachineOperand>,
@@ -714,6 +723,22 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
+            curios_cont::Node::Channel {
+                op,
+                args,
+                return_to,
+            } => {
+                let args = self.lower_atoms(args, instructions);
+                if *return_to == self.function.return_cont {
+                    MachineTerminator::ChannelReturn { op: *op, args }
+                } else {
+                    MachineTerminator::Channel {
+                        op: *op,
+                        args,
+                        resume: self.queue_continuation(*return_to),
+                    }
+                }
+            }
             curios_cont::Node::Intrinsic {
                 op,
                 args,
@@ -1044,6 +1069,22 @@ impl MachineModule {
                 if args.len() != op.operand_arity() {
                     return Err(MachineVerifyError(format!(
                         "{owner} cell return has the wrong operand count"
+                    )));
+                }
+                tail_returns(owner, function, op.result_arity())?;
+            }
+            MachineTerminator::Channel { op, args, resume } => {
+                if args.len() != op.operand_arity() {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} channel operation has the wrong operand count"
+                    )));
+                }
+                verify_block_resume(function, *resume, op.result_arity())?
+            }
+            MachineTerminator::ChannelReturn { op, args } => {
+                if args.len() != op.operand_arity() {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} channel return has the wrong operand count"
                     )));
                 }
                 tail_returns(owner, function, op.result_arity())?;

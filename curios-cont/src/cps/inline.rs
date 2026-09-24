@@ -116,6 +116,7 @@ fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) 
         Node::ApplyFun { return_to, .. }
         | Node::Foreign { return_to, .. }
         | Node::Cell { return_to, .. }
+        | Node::Channel { return_to, .. }
         | Node::Intrinsic { return_to, .. } => {
             targets.insert(*return_to);
         }

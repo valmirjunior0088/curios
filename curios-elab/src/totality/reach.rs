@@ -233,7 +233,10 @@ fn annotate_node(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) -> 
 
         // The type formers name their element types.
         Subterm::Intrinsic(
-            Intrinsic::ListType(type_) | Intrinsic::CellType(type_) | Intrinsic::IoType(type_),
+            Intrinsic::ListType(type_)
+            | Intrinsic::CellType(type_)
+            | Intrinsic::ChannelType(type_)
+            | Intrinsic::IoType(type_),
         ) => push(positions, site, type_),
 
         _ => {}

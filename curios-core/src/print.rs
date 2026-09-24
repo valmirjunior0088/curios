@@ -732,6 +732,9 @@ fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<Form
         Subterm::Intrinsic(Intrinsic::ListType(payload)) => {
             bound_zero(payload).then_some(FormerEta::Intrinsic("List"))
         }
+        Subterm::Intrinsic(Intrinsic::ChannelType(payload)) => {
+            bound_zero(payload).then_some(FormerEta::Intrinsic("Channel"))
+        }
         Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
             bound_zero(payload).then_some(FormerEta::Intrinsic("Cell"))
         }
@@ -1086,19 +1089,46 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             print_call("proc/exit", vec![result], vec![code], frame)
         }
         Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
-        Intrinsic::Cell {
-            element: type_,
-            initial: init,
-        } => print_call("Cell/new", vec![type_], vec![init], frame),
-        Intrinsic::CellSet {
-            element: type_,
+        Intrinsic::ChannelType(elem) => print_former("Channel", elem, frame),
+        Intrinsic::Cell { element } => print_call("Cell/new", vec![element], vec![], frame),
+        Intrinsic::CellFill {
+            element,
             cell,
             value,
-        } => print_call("Cell/set", vec![type_], vec![cell, value], frame),
-        Intrinsic::CellGet {
-            element: type_,
-            cell,
-        } => print_call("Cell/get", vec![type_], vec![cell], frame),
+        } => print_call("Cell/fill", vec![element], vec![cell, value], frame),
+        Intrinsic::CellPoll { element, cell, .. } => {
+            print_call("Cell/poll", vec![element], vec![cell], frame)
+        }
+        Intrinsic::Channel {
+            element,
+            capacity,
+            positive,
+        } => print_call(
+            "Channel/new",
+            vec![element],
+            vec![capacity, positive],
+            frame,
+        ),
+        Intrinsic::ChannelPush {
+            element,
+            channel,
+            value,
+        } => print_call("Channel/push", vec![element], vec![channel, value], frame),
+        Intrinsic::ChannelTake {
+            element, channel, ..
+        } => print_call("Channel/take", vec![element], vec![channel], frame),
+        Intrinsic::ChannelClose { element, channel } => {
+            print_call("Channel/close", vec![element], vec![channel], frame)
+        }
+        Intrinsic::ChannelClosed { element, channel } => {
+            print_call("Channel/closed", vec![element], vec![channel], frame)
+        }
+        Intrinsic::ChannelCount { element, channel } => {
+            print_call("Channel/count", vec![element], vec![channel], frame)
+        }
+        Intrinsic::ChannelCapacity { element, channel } => {
+            print_call("Channel/capacity", vec![element], vec![channel], frame)
+        }
         Intrinsic::IoType(result) => print_former("Io", result, frame),
         Intrinsic::IoPure {
             result: type_,

@@ -1,9 +1,9 @@
 //! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies.
 
 use curios_utilities::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
-    MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, SpellDerivation,
-    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
+    LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax,
+    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -24,6 +24,16 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["sys", "Option"]),
         some: name(&["sys", "Option", "some"]),
         none: name(&["sys", "Option", "none"]),
+    },
+    channel: ChannelSyntax {
+        push: name(&["sys", "Channel", "Push"]),
+        taken: name(&["sys", "Channel", "Push", "taken"]),
+        full: name(&["sys", "Channel", "Push", "full"]),
+        closed: name(&["sys", "Channel", "Push", "closed"]),
+        take: name(&["sys", "Channel", "Take"]),
+        item: name(&["sys", "Channel", "Take", "item"]),
+        empty: name(&["sys", "Channel", "Take", "empty"]),
+        ended: name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
         bind: name(&["std", "Monad", "Monad", "bind"]),

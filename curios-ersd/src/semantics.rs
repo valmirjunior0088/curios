@@ -8,7 +8,10 @@
 mod tests;
 
 use {
-    super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
+    super::{
+        CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp,
+        Terminator,
+    },
     curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
 };
 
@@ -215,6 +218,7 @@ impl Semantics {
             Rhs::Operation { operation, .. } => Self::operation(*operation),
             Rhs::Sequence { operation, .. } => Self::sequence(*operation),
             Rhs::Cell { operation, .. } => Self::cell(*operation),
+            Rhs::Channel { operation, .. } => Self::channel(*operation),
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
             // Building an aggregate allocates an immutable value; a sequence fold materializes suffix views.
@@ -263,8 +267,21 @@ impl Semantics {
     pub fn cell(operation: CellOperation) -> LocalBehavior {
         match operation {
             CellOperation::New => LocalBehavior::alloc(Allocation::Mutable),
-            CellOperation::Get => LocalBehavior::state_read(),
-            CellOperation::Set => LocalBehavior::state_write(),
+            CellOperation::Poll { .. } => LocalBehavior::state_read(),
+            CellOperation::Fill => LocalBehavior::state_write(),
+        }
+    }
+
+    /// The local behavior of a bounded guest channel operation.
+    pub fn channel(operation: ChannelOperation) -> LocalBehavior {
+        match operation {
+            ChannelOperation::New => LocalBehavior::alloc(Allocation::Mutable),
+            ChannelOperation::Push { .. }
+            | ChannelOperation::Take { .. }
+            | ChannelOperation::Close => LocalBehavior::state_write(),
+            ChannelOperation::Closed | ChannelOperation::Count | ChannelOperation::Capacity => {
+                LocalBehavior::state_read()
+            }
         }
     }
 

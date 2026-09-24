@@ -7,10 +7,10 @@ use {
         Analysis, Atom, Block, BlockId, ConstructorId, Emitter, FamilyEncoding, FamilyId,
         FoldNatStep, FoldSequenceStep, Function, FunctionId, KnotMember, Layout, Module, Operation,
         RecGroup, RecGroupId, Rhs, SequenceFacts, SequenceGrain, SequenceOp, Statement,
-        StatementId, Terminator, UNFORCED, UnconsSequenceStep, ValueId, VariantArm, cell_op,
+        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm, cell_op,
         operation_intrinsic, sequence_census, sequence_intrinsic, sequence_len_op,
     },
-    crate::{Allocation, Intrinsic, Summary},
+    crate::{Allocation, CellOperation, ChannelOperation, Intrinsic, Summary},
     curios_abi::ForeignFunction,
     curios_num::Natural,
     curios_utilities::recurse,
@@ -222,7 +222,7 @@ impl Lowerer<'_> {
         self.lower_knot(&group, rest, terminator, target)
     }
 
-    /// Tie a recursive knot by need. Every computed member gets a cell, reserved empty before anything else so the closures built below can capture it, and a *force* function: read the cell, and by its state hand the value back, run the initializer and store what it produced, or trap — the third state is the initializer already running, and a read inside it is a cycle no order satisfies. The initializers themselves become nullary functions stored unforced in their cells; the function members bind beside the force functions; and every reference to a member, wherever it stands, is a call of its force function at the referencing region's entry (see [`Lowerer::with_cell_reads`]).
+    /// Tie a recursive knot by need. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. Every reference to a member calls its force at the referencing region's entry (see [`Lowerer::with_cell_reads`]).
     ///
     /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator already did for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program now agrees with both on every forward reference, whatever the verifier can or cannot see through. The lowering once ran the initializers eagerly in an order it computed and later in source order, handing each a cell holding a placeholder and then nothing; a member read out of order computed with the placeholder, then trapped, and now computes what it should. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
     ///
@@ -234,13 +234,13 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: curios_cont::ContinuationId,
     ) -> curios_cont::NodeId {
-        let row = self.emitter.knot_row();
         let members: Vec<KnotMember> = group
             .values
             .iter()
             .map(|member| {
                 let knot = KnotMember {
-                    cell: self.emitter.module.add_value(None),
+                    result: self.emitter.module.add_value(None),
+                    initializer: self.emitter.module.add_value(None),
                     force: self.emitter.module.reserve_function(),
                 };
                 self.emitter.knot_members.insert(member.value, knot);
@@ -249,7 +249,7 @@ impl Lowerer<'_> {
             .collect();
         for (member, knot) in group.values.iter().zip(&members) {
             self.emitter
-                .define_force(row, *knot, self.emitter.arena_value_name(member.value));
+                .define_force(*knot, self.emitter.arena_value_name(member.value));
         }
 
         // The members are in the map before any body below is lowered, so a reference to a computed sibling — from a function member, a thunk, or the rest — is a forcing read at its entry.
@@ -268,46 +268,33 @@ impl Lowerer<'_> {
             lowerer.lower_statements(rest, terminator, target)
         });
 
-        // Store every thunk unforced, inside out. The cells exist and the thunks are bound, so no read can come between a reservation and its store.
+        // Publish all initializers before the body can force any member. Each channel is fresh, open, and has capacity one, so every push is taken.
         for (knot, thunk) in members.iter().zip(&thunks).rev() {
             let after_store = self.emitter.module.reserve_continuation();
+            let status = self.emitter.module.add_value(None);
             self.emitter.module.define_continuation(
                 after_store,
                 curios_cont::Continuation {
                     debug_name: Some("knot/stored".into()),
-                    params: Vec::new(),
+                    params: vec![status],
                     body,
                 },
             );
-            let unforced = self.emitter.module.add_value(None);
-            let store = self.emitter.module.add_node(curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Set,
+            let store = self.emitter.module.add_node(curios_cont::Node::Channel {
+                op: curios_cont::ChannelOp::Push,
                 args: vec![
-                    curios_cont::Atom::Value(knot.cell),
-                    curios_cont::Atom::Value(unforced),
+                    curios_cont::Atom::Value(knot.initializer),
+                    curios_cont::Atom::Fun(*thunk),
                 ],
                 return_to: after_store,
             });
-            let store = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
                 continuations: vec![after_store],
                 body: store,
             });
-            body = self.emitter.module.add_node(curios_cont::Node::LetValue {
-                result: unforced,
-                value: curios_cont::ValueExpr::Row(
-                    row,
-                    vec![
-                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
-                            UNFORCED,
-                        ))),
-                        curios_cont::Atom::Fun(*thunk),
-                    ],
-                ),
-                next: store,
-            });
         }
 
-        // Binding order, outside in: the cells; the force functions, which capture the cells; the function members, which call the force functions; the thunks, which call both.
+        // Binding order, outside in: the cells and channels; the force functions, which capture only that storage; the function members, which call the force functions; the thunks, which call both.
         body = self.emitter.module.add_node(curios_cont::Node::LetFun {
             functions: thunks,
             body,
@@ -323,12 +310,32 @@ impl Lowerer<'_> {
             body,
         });
         for knot in members.iter().rev() {
+            let channel_bound = self.emitter.module.reserve_continuation();
+            self.emitter.module.define_continuation(
+                channel_bound,
+                curios_cont::Continuation {
+                    debug_name: Some("knot/channel".into()),
+                    params: vec![knot.initializer],
+                    body,
+                },
+            );
+            let channel = self.emitter.module.add_node(curios_cont::Node::Channel {
+                op: curios_cont::ChannelOp::New,
+                args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+                    Natural::from(1u32),
+                ))],
+                return_to: channel_bound,
+            });
+            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+                continuations: vec![channel_bound],
+                body: channel,
+            });
             let bound = self.emitter.module.reserve_continuation();
             self.emitter.module.define_continuation(
                 bound,
                 curios_cont::Continuation {
                     debug_name: Some("knot/cell".into()),
-                    params: vec![knot.cell],
+                    params: vec![knot.result],
                     body,
                 },
             );
@@ -345,7 +352,7 @@ impl Lowerer<'_> {
         body
     }
 
-    /// A member's initializer as a nullary function: what its cell holds until something forces it. It takes its own forcing reads at entry, so the members it depends on are computed before it runs — which is the by-need order, found by running rather than computed ahead.
+    /// A member's initializer as a nullary function: what its channel holds until something forces it. It takes its own forcing reads at entry, so the members it depends on are computed before it runs — which is the by-need order, found by running rather than computed ahead.
     fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cont::FunctionId {
         let thunk = self.emitter.module.reserve_function();
         let return_cont = self.emitter.module.reserve_continuation();
@@ -360,7 +367,7 @@ impl Lowerer<'_> {
                 params: Vec::new(),
                 return_cont,
                 body,
-                // A computed member's initializer runs once, on first force, and the cell it fills is what a later read answers from — so whether the *call* could be skipped is the cell's question, not this function's.
+                // Forcing owns whether initialization is needed; dropping this call independently would leave the result empty after its initializer was consumed.
                 droppable: false,
             },
         );
@@ -532,99 +539,40 @@ impl Lowerer<'_> {
             Rhs::Construct {
                 constructor,
                 fields,
-            } => match self
-                .layout
-                .family_encoding(self.layout.constructor_family(*constructor))
-            {
-                // A collapsed construction with at most one payload builds nothing: the result is the payload atom itself (or the interned zero), recorded as an alias in the value map, so downstream code reads the value where the tuple would have been. A marked single field still settles — the value *is* the store — through an ordinary binding instead of the alias.
-                FamilyEncoding::Collapsed if fields.len() <= 1 => {
-                    if let Some(&payload) = fields.first()
-                        && self.facts.indexed_only_constructor(*constructor, 0)
-                    {
-                        let atom = self.emitter.lower_atom(payload);
-                        self.straight(result, rest, terminator, target, |bound, next| {
-                            curios_cont::Node::LetIntrinsic {
-                                result: bound,
-                                op: curios_cont::Intrinsic::ListSettle,
-                                args: vec![atom],
-                                next,
-                            }
-                        })
-                    } else {
-                        let value = match fields.first() {
-                            Some(&payload) => self.emitter.lower_atom(payload),
-                            None => curios_cont::Atom::Literal(curios_cont::Literal::Nat(
-                                Natural::zero(),
-                            )),
-                        };
-                        self.emitter.values.insert(result, value);
-                        self.lower_statements(rest, terminator, target)
-                    }
-                }
-                // Its own nominal row, with no tag: nothing needs discriminating, so it encodes exactly as the struct with the same relevant row does — which is what keeps that equivalence true now that a struct's row is keyed by its schema rather than by its arity.
-                FamilyEncoding::Collapsed => {
-                    let owner = self.layout.constructor_family(*constructor);
-                    let row = self.layout.row_identity(&mut self.emitter.module, owner);
-                    let places = self
-                        .layout
-                        .constructor_slots(&mut self.emitter.module, *constructor);
-                    let width = self.layout.row_width(&mut self.emitter.module, owner);
-                    let mut atoms = (0..width)
-                        .map(|index| self.emitter.module.pad(Some(row), index))
-                        .collect::<Vec<_>>();
-                    let mut marked = vec![false; width];
-                    for (field, &atom) in fields.iter().enumerate() {
-                        atoms[places[field]] = self.emitter.lower_atom(atom);
-                        marked[places[field]] =
-                            self.facts.indexed_only_constructor(*constructor, field);
-                    }
-                    let settles = self.emitter.settle_stores(&marked, &mut atoms);
-                    let bound = self.emitter.bind_value(result);
-                    let next = self.lower_statements(rest, terminator, target);
-                    let node = self.emitter.module.add_node(curios_cont::Node::LetValue {
-                        result: bound,
-                        value: curios_cont::ValueExpr::Row(row, atoms),
-                        next,
+            } => {
+                let encoding = self
+                    .layout
+                    .family_encoding(self.layout.constructor_family(*constructor));
+                let mut atoms = fields
+                    .iter()
+                    .map(|&atom| self.emitter.lower_atom(atom))
+                    .collect::<Vec<_>>();
+                let marked = (0..fields.len())
+                    .map(|field| self.facts.indexed_only_constructor(*constructor, field))
+                    .collect::<Vec<_>>();
+                let settles = self.emitter.settle_stores(&marked, &mut atoms);
+                let bare = matches!(encoding, FamilyEncoding::Collapsed) && atoms.len() <= 1
+                    || matches!(encoding, FamilyEncoding::Immediate { constructor: bare } if bare == *constructor);
+                let node = if bare {
+                    let atom = atoms.into_iter().next().unwrap_or_else(|| {
+                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero()))
                     });
-                    self.emitter.wrap_settles(settles, node)
-                }
-                // The immediate-unary constructor rides bare: the payload is always an immediate, so the value *is* the payload and the tag is never minted. An immediate is never a list, so no settle applies.
-                FamilyEncoding::Immediate { constructor: bare } if bare == *constructor => {
-                    let payload = self.emitter.lower_atom(fields[0]);
-                    self.emitter.values.insert(result, payload);
+                    self.emitter.values.insert(result, atom);
                     self.lower_statements(rest, terminator, target)
-                }
-                FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
-                    let tag = self.layout.constructor_tag(*constructor);
-                    let owner = self.layout.constructor_family(*constructor);
-                    let family = self.layout.row_identity(&mut self.emitter.module, owner);
-                    // Every construction of a family carries every slot, so a narrow constructor is the same heap type as its widest sibling and every read of the family is one exact cast. A slot this constructor does not write takes what its field holds — zero for a register slot, the filler for a reference — and this construction is the one place that decides, so every transfer a split copies the slot into carries the same.
-                    let width = self.layout.row_width(&mut self.emitter.module, owner);
-                    let places = self
-                        .layout
-                        .constructor_slots(&mut self.emitter.module, *constructor);
-                    let mut atoms = (0..width)
-                        .map(|index| self.emitter.module.pad(Some(family), index))
-                        .collect::<Vec<_>>();
-                    let mut marked = vec![false; width];
-                    atoms[0] =
-                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(tag)));
-                    for (field, &atom) in fields.iter().enumerate() {
-                        atoms[places[field]] = self.emitter.lower_atom(atom);
-                        marked[places[field]] =
-                            self.facts.indexed_only_constructor(*constructor, field);
-                    }
-                    let settles = self.emitter.settle_stores(&marked, &mut atoms);
-                    let bound = self.emitter.bind_value(result);
-                    let next = self.lower_statements(rest, terminator, target);
-                    let node = self.emitter.module.add_node(curios_cont::Node::LetValue {
-                        result: bound,
-                        value: curios_cont::ValueExpr::Row(family, atoms),
-                        next,
-                    });
-                    self.emitter.wrap_settles(settles, node)
-                }
-            },
+                } else {
+                    let value =
+                        self.layout
+                            .constructor_row(&mut self.emitter.module, *constructor, atoms);
+                    self.straight(result, rest, terminator, target, |result, next| {
+                        curios_cont::Node::LetValue {
+                            result,
+                            value,
+                            next,
+                        }
+                    })
+                };
+                self.emitter.wrap_settles(settles, node)
+            }
             Rhs::Project {
                 schema,
                 product,
@@ -720,6 +668,20 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
+                if let CellOperation::Poll { some, none } = operation {
+                    let (join, fresh) = self.open_join(result, rest, terminator, target);
+                    return self.lower_outcome(
+                        join,
+                        fresh,
+                        2,
+                        &[(*none, false), (*some, true)],
+                        |return_to| curios_cont::Node::Cell {
+                            op,
+                            args,
+                            return_to,
+                        },
+                    );
+                }
                 self.split(
                     result,
                     op.result_arity(),
@@ -732,6 +694,58 @@ impl Lowerer<'_> {
                         return_to,
                     },
                 )
+            }
+            Rhs::Channel {
+                operation,
+                operands,
+            } => {
+                let args = operands
+                    .iter()
+                    .map(|&atom| self.emitter.lower_atom(atom))
+                    .collect();
+                let op = match operation {
+                    ChannelOperation::New => curios_cont::ChannelOp::New,
+                    ChannelOperation::Push { .. } => curios_cont::ChannelOp::Push,
+                    ChannelOperation::Take { .. } => curios_cont::ChannelOp::Take,
+                    ChannelOperation::Close => curios_cont::ChannelOp::Close,
+                    ChannelOperation::Closed => curios_cont::ChannelOp::Closed,
+                    ChannelOperation::Count => curios_cont::ChannelOp::Count,
+                    ChannelOperation::Capacity => curios_cont::ChannelOp::Capacity,
+                };
+                let outcomes = match operation {
+                    ChannelOperation::Push {
+                        taken,
+                        full,
+                        closed,
+                    } => vec![(*taken, false), (*full, false), (*closed, false)],
+                    ChannelOperation::Take { item, empty, ended } => {
+                        vec![(*item, true), (*empty, false), (*ended, false)]
+                    }
+                    _ => Vec::new(),
+                };
+                if !outcomes.is_empty() {
+                    let (join, fresh) = self.open_join(result, rest, terminator, target);
+                    self.lower_outcome(join, fresh, op.result_arity(), &outcomes, |return_to| {
+                        curios_cont::Node::Channel {
+                            op,
+                            args,
+                            return_to,
+                        }
+                    })
+                } else {
+                    self.split(
+                        result,
+                        op.result_arity(),
+                        rest,
+                        terminator,
+                        target,
+                        |return_to| curios_cont::Node::Channel {
+                            op,
+                            args,
+                            return_to,
+                        },
+                    )
+                }
             }
             Rhs::Foreign { foreign, operands } => {
                 let function = self
@@ -1749,6 +1763,86 @@ impl Lowerer<'_> {
         })
     }
 
+    /// Turn the guest operation's private status into an ordinary constructor before delivering its language result.
+    fn lower_outcome(
+        &mut self,
+        join: curios_cont::ContinuationId,
+        fresh_join: bool,
+        arity: usize,
+        outcomes: &[(ConstructorId, bool)],
+        make: impl FnOnce(curios_cont::ContinuationId) -> curios_cont::Node,
+    ) -> curios_cont::NodeId {
+        let params = (0..arity)
+            .map(|_| self.emitter.module.add_value(None))
+            .collect::<Vec<_>>();
+        let mut arms = Vec::new();
+        let mut cases = BTreeMap::new();
+        for (code, &(constructor, has_payload)) in outcomes.iter().enumerate() {
+            let fields = if has_payload {
+                vec![curios_cont::Atom::Value(params[1])]
+            } else {
+                Vec::new()
+            };
+            let family = self.layout.constructor_family(constructor);
+            let encoding = self.layout.family_encoding(family);
+            let bare = matches!(encoding, FamilyEncoding::Collapsed) && fields.len() <= 1
+                || matches!(encoding, FamilyEncoding::Immediate { constructor: bare } if bare == constructor);
+            let body = if bare {
+                let atom = fields.into_iter().next().unwrap_or_else(|| {
+                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero()))
+                });
+                self.emitter.jump(join, vec![atom])
+            } else {
+                let value =
+                    self.layout
+                        .constructor_row(&mut self.emitter.module, constructor, fields);
+                let result = self.emitter.module.add_value(None);
+                let next = self
+                    .emitter
+                    .jump(join, vec![curios_cont::Atom::Value(result)]);
+                self.emitter.module.add_node(curios_cont::Node::LetValue {
+                    result,
+                    value,
+                    next,
+                })
+            };
+            let arm = self.emitter.continuation_of(body);
+            arms.push(arm);
+            cases.insert(
+                code as u32,
+                curios_cont::Edge {
+                    target: arm,
+                    args: Vec::new(),
+                },
+            );
+        }
+        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
+            scrutinee: curios_cont::Atom::Value(params[0]),
+            cases,
+            default: None,
+        });
+        let body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            continuations: arms,
+            body: switch,
+        });
+        let resume = self.emitter.module.reserve_continuation();
+        self.emitter.module.define_continuation(
+            resume,
+            curios_cont::Continuation {
+                debug_name: Some("outcome/resume".into()),
+                params,
+                body,
+            },
+        );
+        let node = self.emitter.module.add_node(make(resume));
+        let mut continuations = if fresh_join { vec![join] } else { Vec::new() };
+        continuations.push(resume);
+        self.emitter.module.add_node(curios_cont::Node::LetCont {
+            continuations,
+            body: node,
+        })
+    }
+
     /// Lower a host call. A single-result foreign returns straight to the block's join; a multi-result foreign returns to a resume continuation that packs the results into the record tuple the consuming code projects through.
     fn lower_foreign(
         &mut self,
@@ -1833,6 +1927,7 @@ fn resume_role(node: &curios_cont::Node) -> &'static str {
     match node {
         curios_cont::Node::ApplyFun { .. } => "apply/resume",
         curios_cont::Node::Cell { .. } => "cell/resume",
+        curios_cont::Node::Channel { .. } => "channel/resume",
         curios_cont::Node::Intrinsic { .. } => "intrinsic/resume",
         curios_cont::Node::Foreign { .. } => "foreign/resume",
         _ => "resume",

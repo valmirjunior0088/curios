@@ -908,7 +908,7 @@ fn a_mixed_recursive_group_lowers_through_cells() {
         has_node(&cont, |node| matches!(
             node,
             curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Get,
+                op: curios_cont::CellOp::Poll,
                 ..
             }
         )),
@@ -918,7 +918,7 @@ fn a_mixed_recursive_group_lowers_through_cells() {
         has_node(&cont, |node| matches!(
             node,
             curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Set,
+                op: curios_cont::CellOp::Fill,
                 ..
             }
         )),

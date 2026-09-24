@@ -50,6 +50,7 @@ pub struct ConceptField {
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
     pub option: OptionSyntax,
+    pub channel: ChannelSyntax,
     pub monad: MonadSyntax,
     pub lift: LiftSyntax,
     pub operator: OperatorSyntax,
@@ -67,6 +68,7 @@ impl SyntaxRegistry {
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
             option,
+            channel,
             monad,
             lift,
             operator,
@@ -79,6 +81,7 @@ impl SyntaxRegistry {
 
         option
             .targets()
+            .chain(channel.targets())
             .chain(monad.targets())
             .chain(lift.targets())
             .chain(operator.targets())
@@ -91,10 +94,11 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only three groups hold concept methods; the other six are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only three groups hold concept methods; the other seven are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
+            channel: _,
             monad: _,
             lift,
             operator,
@@ -124,6 +128,35 @@ impl OptionSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self { family, some, none } = self;
         [family, some, none].into_iter()
+    }
+}
+
+/// Ordinary channel outcomes named by intrinsic signatures and erased construction sites.
+#[derive(Debug, Clone, Copy)]
+pub struct ChannelSyntax {
+    pub push: SyntaxName,
+    pub taken: SyntaxName,
+    pub full: SyntaxName,
+    pub closed: SyntaxName,
+    pub take: SyntaxName,
+    pub item: SyntaxName,
+    pub empty: SyntaxName,
+    pub ended: SyntaxName,
+}
+
+impl ChannelSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            push,
+            taken,
+            full,
+            closed,
+            take,
+            item,
+            empty,
+            ended,
+        } = self;
+        [push, taken, full, closed, take, item, empty, ended].into_iter()
     }
 }
 

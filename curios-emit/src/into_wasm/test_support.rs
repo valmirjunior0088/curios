@@ -192,38 +192,117 @@ pub(super) fn bin_len() -> curios_cont::Module {
     module
 }
 
-/// Allocate a cell, read it back, and exit with the value.
+/// Allocate a cell, fill and poll it, and exit with the value.
 pub(super) fn cell_roundtrip() -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let cell = module.add_value(Some("cell".into()));
+    let present = module.add_value(None);
+    let filled = module.add_value(None);
     let value = module.add_value(Some("value".into()));
     let exit = module.add_node(curios_cont::Node::Exit {
         value: Some(curios_cont::Atom::Value(value)),
     });
     let get_k = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("got".into()),
-        params: vec![value],
+        params: vec![present, value],
         body: exit,
     });
     let get = module.add_node(curios_cont::Node::Cell {
-        op: curios_cont::CellOp::Get,
+        op: curios_cont::CellOp::Poll,
         args: vec![curios_cont::Atom::Value(cell)],
         return_to: get_k,
+    });
+    let filled_k = module.add_continuation(curios_cont::Continuation {
+        debug_name: Some("filled".into()),
+        params: vec![filled],
+        body: get,
+    });
+    let fill = module.add_node(curios_cont::Node::Cell {
+        op: curios_cont::CellOp::Fill,
+        args: vec![curios_cont::Atom::Value(cell), nat(0)],
+        return_to: filled_k,
+    });
+    let operations = module.add_node(curios_cont::Node::LetCont {
+        continuations: vec![filled_k, get_k],
+        body: fill,
     });
     let new_k = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("made".into()),
         params: vec![cell],
-        body: get,
+        body: operations,
     });
     let new = module.add_node(curios_cont::Node::Cell {
-        op: curios_cont::CellOp::New,
-        args: vec![nat(0)],
+        op: curios_cont::CellOp::Reserve,
+        args: vec![],
         return_to: new_k,
     });
     let body = module.add_node(curios_cont::Node::LetCont {
-        continuations: vec![new_k, get_k],
+        continuations: vec![new_k],
+        body: new,
+    });
+    module.define_function(
+        main,
+        curios_cont::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
+pub(super) fn channel_roundtrip() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let channel = module.add_value(None);
+    let pushed = module.add_value(None);
+    let taken = module.add_value(None);
+    let payload = module.add_value(None);
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(payload)),
+    });
+    let after_take = module.add_continuation(curios_cont::Continuation {
+        debug_name: None,
+        params: vec![taken, payload],
+        body: exit,
+    });
+    let take = module.add_node(curios_cont::Node::Channel {
+        op: curios_cont::ChannelOp::Take,
+        args: vec![curios_cont::Atom::Value(channel)],
+        return_to: after_take,
+    });
+    let after_push = module.add_continuation(curios_cont::Continuation {
+        debug_name: None,
+        params: vec![pushed],
+        body: take,
+    });
+    let push = module.add_node(curios_cont::Node::Channel {
+        op: curios_cont::ChannelOp::Push,
+        args: vec![curios_cont::Atom::Value(channel), nat(0)],
+        return_to: after_push,
+    });
+    let body = module.add_node(curios_cont::Node::LetCont {
+        continuations: vec![after_push, after_take],
+        body: push,
+    });
+    let after_new = module.add_continuation(curios_cont::Continuation {
+        debug_name: None,
+        params: vec![channel],
+        body,
+    });
+    let new = module.add_node(curios_cont::Node::Channel {
+        op: curios_cont::ChannelOp::New,
+        args: vec![nat(1)],
+        return_to: after_new,
+    });
+    let body = module.add_node(curios_cont::Node::LetCont {
+        continuations: vec![after_new],
         body: new,
     });
     module.define_function(

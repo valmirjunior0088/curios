@@ -27,8 +27,15 @@ fn traps_and_effects_classify_by_operation() {
             == Allocation::Immutable
     );
     assert!(Semantics::cell(CellOperation::New).is_observable());
-    assert!(Semantics::cell(CellOperation::Get).observable.state_read);
-    assert!(Semantics::cell(CellOperation::Set).observable.state_write);
+    assert!(
+        Semantics::cell(CellOperation::Poll {
+            some: ConstructorId(0),
+            none: ConstructorId(1)
+        })
+        .observable
+        .state_read
+    );
+    assert!(Semantics::cell(CellOperation::Fill).observable.state_write);
 }
 
 #[test]

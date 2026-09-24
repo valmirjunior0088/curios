@@ -36,29 +36,31 @@ fn accumulation_loops_are_linear_by_construction() {
 
 #[test]
 fn peel_loops_are_linear_by_construction() {
-    // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout. Matching directly on `Cell/get(c)` also leans on erasure's scrutinee alias — the cell must be read once per match, not once per projection (the head read lands *after* the `Cell/set` otherwise).
+    // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a fresh write-once `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout.
     assert_eq!(
         run(r#"
-        use /std/{Byte, Bytes, Nat, Str, Cell, Io};
+        use /std/{Byte, Bytes, Nat, Str, Cell, Option, Io};
         let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
             | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let built = build(10000, x[]);
-        let c = Cell/new(built)!;
-        let drain(fuel : Nat, acc : Nat) -> Io(Nat) =
+        let c = Cell/new()!;
+        let _ = Cell/fill(c, built)!;
+        let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
             match fuel
             | 0 => Io/pure(acc)
             | f + 1; ih =>
-                match Cell/get(c)!
+                match Option/unwrap_or(Cell/poll(c)!, x[])
                 | x[] => Io/pure(acc)
                 | x[h, ..t]; ih2 =>
-                    let _ = Cell/set(c, t)!;
-                    drain(f, acc + (Byte/to_nat(h) - 48))
+                    let next = Cell/new()!;
+                    let _ = Cell/fill(next, t)!;
+                    drain(next, f, acc + (Byte/to_nat(h) - 48))
                 end
             end;
-        let total = drain(Bytes/len(built) + 1, 0)!;
+        let total = drain(c, Bytes/len(built) + 1, 0)!;
         let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(total)))!;
         /std/Io/pure(())
         "#),

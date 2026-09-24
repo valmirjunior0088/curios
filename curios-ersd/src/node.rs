@@ -82,9 +82,14 @@ pub enum Rhs {
         empty: BlockId,
         cons: UnconsSequenceStep,
     },
-    /// A mutable-cell operation (see [`CellOperation`]). A cell operation's identity is its program point: it is never deleted for an unused result, never duplicated, and never residualized by evaluation.
+    /// A write-once cell operation (see [`CellOperation`]). Its program point is observable: it is never deleted for an unused result, duplicated, or residualized by evaluation.
     Cell {
         operation: CellOperation,
+        operands: Vec<Atom>,
+    },
+    /// A bounded guest channel operation. Outcome constructors retain their ordinary nominal identities until layout selection.
+    Channel {
+        operation: ChannelOperation,
         operands: Vec<Atom>,
     },
     /// A host-observable foreign call through the canonical row registered in the module (see [`super::Module::foreign`]). Binds one language value; the host-level result shape is reconstructed by the lowering.
@@ -144,21 +149,61 @@ pub struct FoldSequenceStep {
     pub block: BlockId,
 }
 
-/// A mutable-cell operation. Operand order: `New` takes the initial value, `Get` takes the cell, `Set` takes the cell then the new value.
+/// A write-once cell operation. `New` has no operands, `Fill` takes the cell then its proposed value, and `Poll` takes the cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum CellOperation {
     New,
-    Get,
-    Set,
+    Fill,
+    Poll {
+        some: ConstructorId,
+        none: ConstructorId,
+    },
 }
 
 impl CellOperation {
     /// The exact operand count of this operation.
     pub fn arity(self) -> usize {
         match self {
-            Self::New | Self::Get => 1,
-            Self::Set => 2,
+            Self::New => 0,
+            Self::Poll { .. } => 1,
+            Self::Fill => 2,
+        }
+    }
+}
+
+/// A bounded channel operation. `New` takes the positive capacity, `Push` takes the channel then the item, and every other operation takes the channel alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum ChannelOperation {
+    New,
+    Push {
+        taken: ConstructorId,
+        full: ConstructorId,
+        closed: ConstructorId,
+    },
+    Take {
+        item: ConstructorId,
+        empty: ConstructorId,
+        ended: ConstructorId,
+    },
+    Close,
+    Closed,
+    Count,
+    Capacity,
+}
+
+impl ChannelOperation {
+    /// The exact operand count of this operation.
+    pub fn arity(self) -> usize {
+        match self {
+            Self::Push { .. } => 2,
+            Self::New
+            | Self::Take { .. }
+            | Self::Close
+            | Self::Closed
+            | Self::Count
+            | Self::Capacity => 1,
         }
     }
 }

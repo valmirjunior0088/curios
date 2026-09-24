@@ -1,8 +1,8 @@
 //! The Cont module under construction, and what each erased name has become in it.
 //!
-//! The lowering above this is a walk that decides *what* to emit; this is everything the walk emits *through*. It owns the Cont module being built and the three correspondences that make a write possible — an arena value's Cont atom, a knot member's cell and forcing function, and the row a knot cell holds — so that deciding and emitting are not the same object's business.
+//! The lowering above this is a walk that decides *what* to emit; this is everything the walk emits *through*. It owns the Cont module being built and the three correspondences that make a write possible — an arena value's Cont atom, an arena function's Cont identity, and a knot member's storage and forcing function — so that deciding and emitting are not the same object's business.
 //!
-//! Nothing here descends into a block or chooses a branch. Every method either mints one Cont node, translates one erased name, answers one question about the knot, or emits a fixed instruction sequence whose shape does not depend on what it is wrapping. [`Emitter::define_force`] is the largest and still obeys that rule: a knot member's forcing function is the same six blocks whatever the member computes.
+//! Nothing here descends into a block or chooses a branch. Every method either mints one Cont node, translates one erased name, answers one question about the knot, or emits a fixed instruction sequence whose shape does not depend on what it is wrapping. [`Emitter::define_force`] is the largest and still obeys that rule: a knot member's forcing function is the same protocol whatever the member computes.
 
 use {
     super::{
@@ -14,17 +14,13 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// One computed member of a knot as the lowering ties it: the cell holding its state and the function that forces it.
+/// One computed member: a write-once result cell, a capacity-one initializer channel, and its forcing function.
 #[derive(Clone, Copy)]
 pub(super) struct KnotMember {
-    pub(super) cell: curios_cont::ValueId,
+    pub(super) result: curios_cont::ValueId,
+    pub(super) initializer: curios_cont::ValueId,
     pub(super) force: curios_cont::FunctionId,
 }
-
-/// A knot cell's states, at the knot row's tag slot: the initializer still to run, the value it produced, and the initializer running — a read of which is a cycle.
-pub(super) const UNFORCED: u32 = 0;
-pub(super) const FORCED: u32 = 1;
-pub(super) const FORCING: u32 = 2;
 
 /// The Cont module being built, with the erased-to-Cont correspondence that every write consults.
 pub(super) struct Emitter<'a> {
@@ -32,10 +28,8 @@ pub(super) struct Emitter<'a> {
     pub(super) module: curios_cont::Module,
     pub(super) values: BTreeMap<ValueId, curios_cont::Atom>,
     pub(super) functions: BTreeMap<FunctionId, curios_cont::FunctionId>,
-    /// Computed members of recursive knots, mapped to the cell that ties each and the function that forces it. A reference to such a member lowers to a call of that function at the referencing region's entry, so the member is computed on first use, once, and the tie is invisible to everything but this lowering.
+    /// Computed members of recursive knots, mapped to its result cell, initializer channel, and forcing function. A reference to such a member lowers to a call of that function at the referencing region's entry, so the member is computed on first use, once, and the tie is invisible to everything but this lowering.
     pub(super) knot_members: BTreeMap<ValueId, KnotMember>,
-    /// The row a knot cell holds — its state and, under it, the initializer still to run or the value it produced — minted once per module, the first time a knot is lowered.
-    knot_row: Option<curios_cont::RowId>,
 }
 
 impl<'a> Emitter<'a> {
@@ -46,21 +40,7 @@ impl<'a> Emitter<'a> {
             values: BTreeMap::new(),
             functions: BTreeMap::new(),
             knot_members: BTreeMap::new(),
-            knot_row: None,
         }
-    }
-
-    /// The row a knot cell holds: a state at slot zero, and under it the unforced initializer, the value it produced, or nothing while it runs.
-    pub(super) fn knot_row(&mut self) -> curios_cont::RowId {
-        if let Some(row) = self.knot_row {
-            return row;
-        }
-        let row = self.module.add_row(curios_cont::Row {
-            debug_name: Some("knot".into()),
-            slots: vec![curios_cont::Slot::Tag, curios_cont::Slot::Opaque],
-        });
-        self.knot_row = Some(row);
-        row
     }
 
     /// Allocate the Cont value representing an arena value, carrying its source hint, and record the mapping — the single choke point for every binder that names a source value.
@@ -285,77 +265,40 @@ impl<'a> Emitter<'a> {
 
     // === Statements ======================================================
 
-    /// The function that forces one member: read its cell, and by the state found there return the value, run the initializer, or trap on the cycle.
-    pub(super) fn define_force(
-        &mut self,
-        row: curios_cont::RowId,
-        knot: KnotMember,
-        hint: Option<String>,
-    ) {
+    /// Force a member through the ordinary cell and channel operations. Before any force, every initializer has been queued. A filled result is cached; an empty result and a queued initializer is unforced; both empty means reentrant forcing. Taking the initializer releases the channel's reference before it runs, and this function captures only the storage, so completed knots do not retain initializer-only captures.
+    pub(super) fn define_force(&mut self, knot: KnotMember, hint: Option<String>) {
         let return_cont = self.module.reserve_continuation();
-        let held = self.module.add_value(None);
-        let state = self.module.add_value(None);
-
-        // Forced: the value is under the state.
-        let value = self.module.add_value(None);
-        let forced = self.jump(return_cont, vec![curios_cont::Atom::Value(value)]);
-        let forced = self.module.add_node(curios_cont::Node::LetIntrinsic {
-            result: value,
-            op: curios_cont::Intrinsic::RowGet(row, 1),
-            args: vec![curios_cont::Atom::Value(held)],
-            next: forced,
-        });
-        let forced = self.continuation_of(forced);
-
-        // Forcing: a read inside the initializer, which no order could satisfy — reachable whenever the eager verifier could not see the cycle through a closure, so it is the program's failure and says so.
-        let forcing = self
-            .module
-            .add_node(curios_cont::Node::Panic(curios_cont::Panic::Cycle));
-        let forcing = self.continuation_of(forcing);
-
-        // Unforced: mark the cell, run the initializer, store what it produced, and return it.
         let produced = self.module.add_value(None);
-        let after_store = self.module.reserve_continuation();
+        let accepted = self.module.add_value(None);
         let returning = self.jump(return_cont, vec![curios_cont::Atom::Value(produced)]);
+        let after_fill = self.module.reserve_continuation();
         self.module.define_continuation(
-            after_store,
+            after_fill,
             curios_cont::Continuation {
-                debug_name: None,
-                params: Vec::new(),
+                debug_name: Some("knot/filled".into()),
+                params: vec![accepted],
                 body: returning,
             },
         );
-        let stored = self.module.add_value(None);
-        let store = self.module.add_node(curios_cont::Node::Cell {
-            op: curios_cont::CellOp::Set,
+        let fill = self.module.add_node(curios_cont::Node::Cell {
+            op: curios_cont::CellOp::Fill,
             args: vec![
-                curios_cont::Atom::Value(knot.cell),
-                curios_cont::Atom::Value(stored),
+                curios_cont::Atom::Value(knot.result),
+                curios_cont::Atom::Value(produced),
             ],
-            return_to: after_store,
+            return_to: after_fill,
         });
-        let store = self.module.add_node(curios_cont::Node::LetCont {
-            continuations: vec![after_store],
-            body: store,
-        });
-        let store = self.module.add_node(curios_cont::Node::LetValue {
-            result: stored,
-            value: curios_cont::ValueExpr::Row(
-                row,
-                vec![
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(FORCED))),
-                    curios_cont::Atom::Value(produced),
-                ],
-            ),
-            next: store,
+        let fill = self.module.add_node(curios_cont::Node::LetCont {
+            continuations: vec![after_fill],
+            body: fill,
         });
         let receive = self.module.reserve_continuation();
         self.module.define_continuation(
             receive,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("knot/produced".into()),
                 params: vec![produced],
-                body: store,
+                body: fill,
             },
         );
         let thunk = self.module.add_value(None);
@@ -368,83 +311,70 @@ impl<'a> Emitter<'a> {
             continuations: vec![receive],
             body: run,
         });
-        let after_mark = self.module.reserve_continuation();
-        self.module.define_continuation(
-            after_mark,
-            curios_cont::Continuation {
-                debug_name: None,
-                params: Vec::new(),
-                body: run,
-            },
-        );
-        let mark = self.module.add_value(None);
-        let marking = self.module.add_node(curios_cont::Node::Cell {
-            op: curios_cont::CellOp::Set,
-            args: vec![
-                curios_cont::Atom::Value(knot.cell),
-                curios_cont::Atom::Value(mark),
-            ],
-            return_to: after_mark,
-        });
-        let marking = self.module.add_node(curios_cont::Node::LetCont {
-            continuations: vec![after_mark],
-            body: marking,
-        });
-        let marking = self.module.add_node(curios_cont::Node::LetValue {
-            result: mark,
-            value: curios_cont::ValueExpr::Row(
-                row,
-                vec![
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(FORCING))),
-                    curios_cont::Atom::Filler,
-                ],
-            ),
-            next: marking,
-        });
-        let unforced = self.module.add_node(curios_cont::Node::LetIntrinsic {
-            result: thunk,
-            op: curios_cont::Intrinsic::RowGet(row, 1),
-            args: vec![curios_cont::Atom::Value(held)],
-            next: marking,
-        });
-        let unforced = self.continuation_of(unforced);
-
-        let switch = self.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(state),
-            cases: BTreeMap::from([
-                (UNFORCED, edge(unforced)),
-                (FORCED, edge(forced)),
-                (FORCING, edge(forcing)),
-            ]),
+        let run = self.continuation_of(run);
+        let cycle = self
+            .module
+            .add_node(curios_cont::Node::Panic(curios_cont::Panic::Cycle));
+        let cycle = self.continuation_of(cycle);
+        let status = self.module.add_value(None);
+        let taken = self.module.add_node(curios_cont::Node::Switch {
+            scrutinee: curios_cont::Atom::Value(status),
+            cases: BTreeMap::from([(0, edge(run)), (1, edge(cycle))]),
             default: None,
         });
-        let switch = self.module.add_node(curios_cont::Node::LetCont {
-            continuations: vec![unforced, forced, forcing],
-            body: switch,
+        let taken = self.module.add_node(curios_cont::Node::LetCont {
+            continuations: vec![run, cycle],
+            body: taken,
         });
-        let read = self.module.add_node(curios_cont::Node::LetIntrinsic {
-            result: state,
-            op: curios_cont::Intrinsic::RowGet(row, 0),
-            args: vec![curios_cont::Atom::Value(held)],
-            next: switch,
-        });
-        let got = self.module.reserve_continuation();
+        let after_take = self.module.reserve_continuation();
         self.module.define_continuation(
-            got,
+            after_take,
             curios_cont::Continuation {
-                debug_name: None,
-                params: vec![held],
-                body: read,
+                debug_name: Some("knot/taken".into()),
+                params: vec![status, thunk],
+                body: taken,
             },
         );
-        let get = self.module.add_node(curios_cont::Node::Cell {
-            op: curios_cont::CellOp::Get,
-            args: vec![curios_cont::Atom::Value(knot.cell)],
-            return_to: got,
+        let take = self.module.add_node(curios_cont::Node::Channel {
+            op: curios_cont::ChannelOp::Take,
+            args: vec![curios_cont::Atom::Value(knot.initializer)],
+            return_to: after_take,
+        });
+        let take = self.module.add_node(curios_cont::Node::LetCont {
+            continuations: vec![after_take],
+            body: take,
+        });
+        let unforced = self.continuation_of(take);
+        let cached = self.module.add_value(None);
+        let forced = self.jump(return_cont, vec![curios_cont::Atom::Value(cached)]);
+        let forced = self.continuation_of(forced);
+        let present = self.module.add_value(None);
+        let polled = self.module.add_node(curios_cont::Node::Switch {
+            scrutinee: curios_cont::Atom::Value(present),
+            cases: BTreeMap::from([(0, edge(unforced)), (1, edge(forced))]),
+            default: None,
+        });
+        let polled = self.module.add_node(curios_cont::Node::LetCont {
+            continuations: vec![unforced, forced],
+            body: polled,
+        });
+        let after_poll = self.module.reserve_continuation();
+        self.module.define_continuation(
+            after_poll,
+            curios_cont::Continuation {
+                debug_name: Some("knot/polled".into()),
+                params: vec![present, cached],
+                body: polled,
+            },
+        );
+        let poll = self.module.add_node(curios_cont::Node::Cell {
+            op: curios_cont::CellOp::Poll,
+            args: vec![curios_cont::Atom::Value(knot.result)],
+            return_to: after_poll,
         });
         let body = self.module.add_node(curios_cont::Node::LetCont {
-            continuations: vec![got],
-            body: get,
+            continuations: vec![after_poll],
+            body: poll,
         });
         self.module.define_function(
             knot.force,
@@ -453,7 +383,7 @@ impl<'a> Emitter<'a> {
                 params: Vec::new(),
                 return_cont,
                 body,
-                // Minted here rather than lowered from a definition, so no verdict reaches it and it is kept.
+                // The private memoization effects must survive even when this particular read's result is unused.
                 droppable: false,
             },
         );

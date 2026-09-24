@@ -266,6 +266,7 @@ pub(super) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
+            | Node::Channel { .. }
             | Node::Intrinsic { .. }
             | Node::Exit { .. }
             | Node::Panic(_)
@@ -400,6 +401,7 @@ pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 if let Some(inputs) = continuation_inputs.get_mut(return_to) {
                     merge_inputs(inputs, None);

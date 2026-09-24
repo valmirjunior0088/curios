@@ -233,6 +233,10 @@ fn head(module: &Module, rhs: &Rhs) -> String {
         Rhs::UnconsSequence {
             grain, scrutinee, ..
         } => format!("UnconsSequence {grain:?} {}", atom_(module, scrutinee)),
+        Rhs::Channel {
+            operation,
+            operands,
+        } => format!("Channel {operation:?} {}", atoms(module, operands)),
         Rhs::Cell {
             operation,
             operands,
@@ -333,6 +337,7 @@ fn bodies(module: &Module, out: &mut String, depth: usize, rhs: &Rhs) {
         | Rhs::Construct { .. }
         | Rhs::Project { .. }
         | Rhs::Cell { .. }
+        | Rhs::Channel { .. }
         | Rhs::Foreign { .. }
         | Rhs::Intrinsic { .. } => {}
     }

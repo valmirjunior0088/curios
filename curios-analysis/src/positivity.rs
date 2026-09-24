@@ -724,7 +724,9 @@ impl<E: Env> Walk<'_, E> {
             Intrinsic::ListType(element) => self.walk(element, polarity),
 
             // A cell is read *and* written, so it is invariant in its element.
-            Intrinsic::CellType(element) => self.walk(element, Polarity::Mixed),
+            Intrinsic::CellType(element) | Intrinsic::ChannelType(element) => {
+                self.walk(element, Polarity::Mixed)
+            }
 
             // `Io` is covariant, and by the same reading as `List` rather than by analogy to `Cell`.
             //
@@ -824,8 +826,15 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::Handle(_)
             | Intrinsic::ProcExit { .. }
             | Intrinsic::Cell { .. }
-            | Intrinsic::CellSet { .. }
-            | Intrinsic::CellGet { .. }
+            | Intrinsic::CellFill { .. }
+            | Intrinsic::CellPoll { .. }
+            | Intrinsic::Channel { .. }
+            | Intrinsic::ChannelPush { .. }
+            | Intrinsic::ChannelTake { .. }
+            | Intrinsic::ChannelClose { .. }
+            | Intrinsic::ChannelClosed { .. }
+            | Intrinsic::ChannelCount { .. }
+            | Intrinsic::ChannelCapacity { .. }
             | Intrinsic::IoPure { .. }
             | Intrinsic::IoBind { .. } => self.opaque(term),
         }

@@ -147,46 +147,46 @@ fn clock_mono_reads_scripted_elapsed() {
 }
 
 #[test]
-fn cell_get_returns_init_value() {
-    // Round-trip: mint a cell then read it back.
+fn a_cell_polls_empty_until_its_first_fill() {
     assert_eq!(
         run(r#"
-            use /std/{Cell, Nat, Str, Io};
-            let n : Nat = 42;
-            let cell = Cell/new(n)!;
-            /std/print(Nat/to_str(Cell/get(cell)!))
+            use /std/{Cell, Nat, Option, Io, print};
+            let cell = Cell/new(@Nat)!;
+            let before = Cell/poll(cell)!;
+            let _ = print(match before | none() => "empty " | some(_) => "full " end)!;
+            let accepted = Cell/fill(cell, 42)!;
+            let _ = print(match accepted | true => "yes " | false => "no " end)!;
+            print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)))
         "#),
-        b"42",
+        b"empty yes 42",
     );
 }
 
 #[test]
-fn cell_set_overwrites_value() {
-    // Write then read: the getter sees the new value, not the init.
+fn a_later_fill_preserves_the_first_value() {
     assert_eq!(
         run(r#"
-            use /std/{Cell, Nat, Str, Io};
-            let z : Nat = 0;
-            let cell = Cell/new(z)!;
-            let _ = Cell/set(cell, 99)!;
-            /std/print(Nat/to_str(Cell/get(cell)!))
+            use /std/{Cell, Nat, Option, Io, print};
+            let cell = Cell/new()!;
+            let _ = Cell/fill(cell, 7)!;
+            let accepted = Cell/fill(cell, 99)!;
+            let _ = print(match accepted | true => "yes " | false => "no " end)!;
+            print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)))
         "#),
-        b"99",
+        b"no 7",
     );
 }
 
 #[test]
-fn cell_two_cells_are_distinct() {
-    // Two cells minted with the same value are independent heap objects. Setting one must not affect the other.
+fn filling_one_cell_leaves_another_empty() {
     assert_eq!(
         run(r#"
-            use /std/{Cell, Nat, Str, Io};
-            let n : Nat = 7;
-            let a = Cell/new(n)!;
-            let b = Cell/new(n)!;
-            let _ = Cell/set(a, 1)!;
-            /std/print(Nat/to_str(Cell/get(b)!))
+            use /std/{Cell, Nat, Option, Io, print};
+            let a = Cell/new(@Nat)!;
+            let b = Cell/new(@Nat)!;
+            let _ = Cell/fill(a, 1)!;
+            print(match Cell/poll(b)! | none() => "empty" | some(_) => "full" end)
         "#),
-        b"7",
+        b"empty",
     );
 }

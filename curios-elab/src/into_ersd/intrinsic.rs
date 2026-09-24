@@ -4,7 +4,9 @@
 
 use {
     super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
+    curios_core::Global,
     curios_num::Grain,
+    curios_utilities::SyntaxName,
 };
 
 /// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-emit` refuses one the envelope cannot box.
@@ -56,6 +58,23 @@ fn grain_element_type(grain: Grain) -> Term {
 }
 
 impl Lowering {
+    /// Resolve an outcome through the declaration's ordinary registered layout.
+    fn outcome_constructor(
+        &mut self,
+        context: &mut Context,
+        family: SyntaxName,
+        constructor: SyntaxName,
+    ) -> Result<curios_ersd::ConstructorId, Error> {
+        let name = Global::Authored(family.qualifier());
+        let row = self.induct_row(context, &name)?;
+        let index = context
+            .induct_decl(&name)
+            .expect("erase: registered outcome family")
+            .constructor_index(&constructor.last().into())
+            .expect("erase: registered outcome constructor");
+        Ok(row.constructors[index].id)
+    }
+
     /// Erase a constant to its interned atom.
     fn constant(&mut self, constant: curios_ersd::Constant) -> Outcome {
         Outcome::Emitted(curios_ersd::Atom::Constant(self.builder.constant(constant)))
@@ -168,6 +187,7 @@ pub(super) fn erase_intrinsic(
         | Intrinsic::ListType(_)
         | Intrinsic::HandleType
         | Intrinsic::CellType(_)
+        | Intrinsic::ChannelType(_)
         | Intrinsic::IoType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
         &Intrinsic::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
@@ -563,51 +583,134 @@ pub(super) fn erase_intrinsic(
             })
         }
 
-        Intrinsic::Cell {
-            element: type_,
-            initial,
-        } => {
-            let initial_atom = emitted!(lowering.walk(context, initial, type_, None)?);
-            lowering.thunk(hint.or(Some("io/cell_new")), move |lowering| {
-                Ok(lowering.bind(
-                    None,
-                    curios_ersd::Rhs::Cell {
-                        operation: curios_ersd::CellOperation::New,
-                        operands: vec![initial_atom],
-                    },
-                ))
-            })
-        }
-        Intrinsic::CellSet {
-            element: type_,
+        Intrinsic::Cell { .. } => lowering.thunk(hint.or(Some("io/cell_new")), move |lowering| {
+            Ok(lowering.bind(
+                None,
+                curios_ersd::Rhs::Cell {
+                    operation: curios_ersd::CellOperation::New,
+                    operands: vec![],
+                },
+            ))
+        }),
+        Intrinsic::CellFill {
+            element,
             cell,
             value,
         } => {
-            let cell_type: Term = Subterm::Intrinsic(Intrinsic::CellType(type_.clone())).into();
-            let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
-            let value_atom = emitted!(lowering.walk(context, value, type_, None)?);
-            lowering.thunk(hint.or(Some("io/cell_set")), move |lowering| {
+            let cell_type = Term::intrinsic(Intrinsic::CellType(element.clone()));
+            let cell = emitted!(lowering.walk(context, cell, &cell_type, None)?);
+            let value = emitted!(lowering.kept_operand(context, value, element, None)?);
+            lowering.thunk(hint.or(Some("io/cell_fill")), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Cell {
-                        operation: curios_ersd::CellOperation::Set,
-                        operands: vec![cell_atom, value_atom],
+                        operation: curios_ersd::CellOperation::Fill,
+                        operands: vec![cell, value],
                     },
                 ))
             })
         }
-        Intrinsic::CellGet {
-            element: type_,
-            cell,
-        } => {
-            let cell_type: Term = Subterm::Intrinsic(Intrinsic::CellType(type_.clone())).into();
-            let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
-            lowering.thunk(hint.or(Some("io/cell_get")), move |lowering| {
+        Intrinsic::CellPoll { element, cell, .. } => {
+            let cell_type = Term::intrinsic(Intrinsic::CellType(element.clone()));
+            let cell = emitted!(lowering.walk(context, cell, &cell_type, None)?);
+            let syntax = context.syntax().option;
+            let some = lowering.outcome_constructor(context, syntax.family, syntax.some)?;
+            let none = lowering.outcome_constructor(context, syntax.family, syntax.none)?;
+            lowering.thunk(hint.or(Some("io/cell_poll")), move |lowering| {
                 Ok(lowering.bind(
                     None,
                     curios_ersd::Rhs::Cell {
-                        operation: curios_ersd::CellOperation::Get,
-                        operands: vec![cell_atom],
+                        operation: curios_ersd::CellOperation::Poll { some, none },
+                        operands: vec![cell],
+                    },
+                ))
+            })
+        }
+        Intrinsic::Channel { capacity, .. } => {
+            let capacity = emitted!(lowering.walk(context, capacity, &nat_type(), None)?);
+            lowering.thunk(hint.or(Some("io/channel_new")), move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Channel {
+                        operation: curios_ersd::ChannelOperation::New,
+                        operands: vec![capacity],
+                    },
+                ))
+            })
+        }
+        Intrinsic::ChannelPush {
+            element,
+            channel,
+            value,
+        } => {
+            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
+            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
+            let value = emitted!(lowering.kept_operand(context, value, element, None)?);
+            let syntax = context.syntax().channel;
+            let taken = lowering.outcome_constructor(context, syntax.push, syntax.taken)?;
+            let full = lowering.outcome_constructor(context, syntax.push, syntax.full)?;
+            let closed = lowering.outcome_constructor(context, syntax.push, syntax.closed)?;
+            lowering.thunk(hint.or(Some("io/channel_push")), move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Channel {
+                        operation: curios_ersd::ChannelOperation::Push {
+                            taken,
+                            full,
+                            closed,
+                        },
+                        operands: vec![channel, value],
+                    },
+                ))
+            })
+        }
+        Intrinsic::ChannelTake {
+            element, channel, ..
+        } => {
+            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
+            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
+            let syntax = context.syntax().channel;
+            let item = lowering.outcome_constructor(context, syntax.take, syntax.item)?;
+            let empty = lowering.outcome_constructor(context, syntax.take, syntax.empty)?;
+            let ended = lowering.outcome_constructor(context, syntax.take, syntax.ended)?;
+            lowering.thunk(hint.or(Some("io/channel_take")), move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Channel {
+                        operation: curios_ersd::ChannelOperation::Take { item, empty, ended },
+                        operands: vec![channel],
+                    },
+                ))
+            })
+        }
+        Intrinsic::ChannelClose { element, channel }
+        | Intrinsic::ChannelClosed { element, channel }
+        | Intrinsic::ChannelCount { element, channel }
+        | Intrinsic::ChannelCapacity { element, channel } => {
+            let channel_type = Term::intrinsic(Intrinsic::ChannelType(element.clone()));
+            let channel = emitted!(lowering.walk(context, channel, &channel_type, None)?);
+            let (operation, name) = match intrinsic {
+                Intrinsic::ChannelClose { .. } => {
+                    (curios_ersd::ChannelOperation::Close, "io/channel_close")
+                }
+                Intrinsic::ChannelClosed { .. } => {
+                    (curios_ersd::ChannelOperation::Closed, "io/channel_closed")
+                }
+                Intrinsic::ChannelCount { .. } => {
+                    (curios_ersd::ChannelOperation::Count, "io/channel_count")
+                }
+                Intrinsic::ChannelCapacity { .. } => (
+                    curios_ersd::ChannelOperation::Capacity,
+                    "io/channel_capacity",
+                ),
+                _ => unreachable!("channel query arm"),
+            };
+            lowering.thunk(hint.or(Some(name)), move |lowering| {
+                Ok(lowering.bind(
+                    None,
+                    curios_ersd::Rhs::Channel {
+                        operation,
+                        operands: vec![channel],
                     },
                 ))
             })

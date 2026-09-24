@@ -46,7 +46,7 @@ pub(super) fn infer_intrinsic(
     }
 
     match signature.produced {
-        Produced::Fixed(type_) => Ok(type_),
+        Produced::Fixed(type_) => check_is_type(kernel, &type_),
         Produced::Sort => Ok(sort_of_intrinsic(kernel, intrinsic)?.term()),
     }
 }

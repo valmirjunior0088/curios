@@ -1514,23 +1514,69 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.term(function)?,
             ),
             Intrinsic::CellType(inner) => curios_core::Intrinsic::cell_type(self.term(inner)?),
-            Intrinsic::Cell {
-                element: type_,
-                initial: init,
-            } => curios_core::Intrinsic::cell_new(self.term(type_)?, self.term(init)?),
-            Intrinsic::CellSet {
-                element: type_,
+            Intrinsic::ChannelType(element) => {
+                curios_core::Intrinsic::ChannelType(self.term(element)?)
+            }
+            Intrinsic::Cell { element } => curios_core::Intrinsic::Cell {
+                element: self.term(element)?,
+            },
+            Intrinsic::CellFill {
+                element,
                 cell,
                 value,
-            } => curios_core::Intrinsic::cell_set(
-                self.term(type_)?,
-                self.term(cell)?,
-                self.term(value)?,
-            ),
-            Intrinsic::CellGet {
-                element: type_,
-                cell,
-            } => curios_core::Intrinsic::cell_get(self.term(type_)?, self.term(cell)?),
+            } => curios_core::Intrinsic::CellFill {
+                element: self.term(element)?,
+                cell: self.term(cell)?,
+                value: self.term(value)?,
+            },
+            Intrinsic::CellPoll { element, cell } => curios_core::Intrinsic::CellPoll {
+                element: self.term(element)?,
+                cell: self.term(cell)?,
+                universes: Vec::new(),
+            },
+            Intrinsic::Channel {
+                element,
+                capacity,
+                positive,
+            } => curios_core::Intrinsic::Channel {
+                element: self.term(element)?,
+                capacity: self.term(capacity)?,
+                positive: self.term(positive)?,
+            },
+            Intrinsic::ChannelPush {
+                element,
+                channel,
+                value,
+            } => curios_core::Intrinsic::ChannelPush {
+                element: self.term(element)?,
+                channel: self.term(channel)?,
+                value: self.term(value)?,
+            },
+            Intrinsic::ChannelTake { element, channel } => curios_core::Intrinsic::ChannelTake {
+                element: self.term(element)?,
+                channel: self.term(channel)?,
+                universes: Vec::new(),
+            },
+            Intrinsic::ChannelClose { element, channel } => curios_core::Intrinsic::ChannelClose {
+                element: self.term(element)?,
+                channel: self.term(channel)?,
+            },
+            Intrinsic::ChannelClosed { element, channel } => {
+                curios_core::Intrinsic::ChannelClosed {
+                    element: self.term(element)?,
+                    channel: self.term(channel)?,
+                }
+            }
+            Intrinsic::ChannelCount { element, channel } => curios_core::Intrinsic::ChannelCount {
+                element: self.term(element)?,
+                channel: self.term(channel)?,
+            },
+            Intrinsic::ChannelCapacity { element, channel } => {
+                curios_core::Intrinsic::ChannelCapacity {
+                    element: self.term(element)?,
+                    channel: self.term(channel)?,
+                }
+            }
             Intrinsic::IoType(result) => curios_core::Intrinsic::io_type(self.term(result)?),
             Intrinsic::IoPure {
                 result: type_,
