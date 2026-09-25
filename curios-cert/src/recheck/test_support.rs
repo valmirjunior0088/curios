@@ -1718,9 +1718,7 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
 
     let payload = match exiting {
         true => Term::foreign(
-            Arc::new(ForeignFunction::Builtin(
-                HostOp::named("proc_exit").expect("the roster names proc_exit"),
-            )),
+            Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],
         ),
         false => Term::intrinsic(Intrinsic::io_pure(

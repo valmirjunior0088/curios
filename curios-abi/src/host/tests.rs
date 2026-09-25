@@ -1,7 +1,7 @@
 use {
     super::{
-        DeclaredForeign, ForeignFunction, HostOp, Namespace, ResultShape, Status, WireReference,
-        WireResults, WireSignature, WireType, host_ops,
+        DeclaredForeign, Failure, ForeignFunction, HostOp, Namespace, Outcome, ResultShape,
+        WireReference, WireResults, WireSignature, WireType, host_ops,
     },
     crate::status,
     std::collections::BTreeSet,
@@ -25,7 +25,7 @@ fn errno_lane_is_disjoint_from_named_codes() {
     ];
 
     assert!(named.iter().all(|&code| code < status::OTHER_BASE));
-    assert_eq!(Status::Other(0).code(), status::OTHER_BASE);
+    assert_eq!(Failure::Other(0).code(), status::OTHER_BASE);
 }
 
 /// The builtin import names, byte for byte and in declaration order — the wire ABI contract between the wasm emitter and the runtime linker. A mismatch here silently strands an import, so the whole list is pinned.
@@ -214,9 +214,7 @@ fn the_guest_shape_is_read_off_the_result_count() {
 fn register_rejects_a_duplicate_name() {
     let mut store = host_ops();
 
-    store.register(ForeignFunction::Builtin(
-        HostOp::named("handle_read").expect("the roster names handle_read"),
-    ));
+    store.register(ForeignFunction::Builtin(HostOp::HandleRead));
 }
 
 /// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed substrate `emit_sys_imports` reads instead of re-deriving membership by rebuilding this same store.
@@ -229,9 +227,9 @@ fn ops_rows_are_stamped_with_the_sys_namespace() {
     );
 }
 
-/// A builtin is its roster position and a declared row its import name: neither a declared row's label nor its signature participates, and a declared row never equals the builtin whose wire name it happens to spell, since the two import under different namespaces.
+/// A builtin is its variant and a declared row its import name: neither a declared row's label nor its signature participates, and a declared row never equals the builtin whose wire name it happens to spell, since the two import under different namespaces.
 #[test]
-fn a_builtin_is_its_roster_position_and_a_declared_row_its_name() {
+fn a_builtin_is_its_variant_and_a_declared_row_its_name() {
     let declared = |name: &str, label: &str| {
         ForeignFunction::Declared(DeclaredForeign {
             name: name.to_string(),
@@ -242,7 +240,7 @@ fn a_builtin_is_its_roster_position_and_a_declared_row_its_name() {
             },
         })
     };
-    let read = HostOp::named("handle_read").expect("the roster names handle_read");
+    let read = HostOp::HandleRead;
 
     assert_eq!(
         declared("/frobnicate", "frobnicate"),
@@ -258,10 +256,10 @@ fn a_builtin_is_its_roster_position_and_a_declared_row_its_name() {
     );
 }
 
-/// Every position the roster issues names the row it was issued for, so a builtin read back through its identity is the row the table states.
+/// Every variant names the row it was declared with, so a builtin read back through its identity is the row the table states.
 #[test]
 fn a_builtin_reads_back_the_row_it_names() {
-    for op in HostOp::all() {
+    for &op in HostOp::ALL {
         assert_eq!(HostOp::named(op.name()), Some(op));
         assert_eq!(
             op.name(),
@@ -290,7 +288,10 @@ fn a_wire_name_is_its_placement_spelled_flat() {
 /// `proc_exit` is the one row that diverges, and it crosses a `Byte` out and nothing back: its call never returns, which is not the same as a row returning nothing.
 #[test]
 fn exit_is_the_one_row_that_diverges() {
-    let diverging = HostOp::all().filter(|op| op.diverges()).collect::<Vec<_>>();
+    let diverging = HostOp::ALL
+        .iter()
+        .filter(|op| op.diverges())
+        .collect::<Vec<_>>();
     assert_eq!(
         diverging.iter().map(|op| op.name()).collect::<Vec<_>>(),
         ["proc_exit"]
@@ -299,9 +300,31 @@ fn exit_is_the_one_row_that_diverges() {
     let exit = diverging[0].signature();
     assert_eq!(exit.params, [("code".to_string(), WireType::Byte)]);
     assert!(exit.results.is_empty());
-    assert!(
-        !HostOp::named("handle_close")
-            .expect("the roster names handle_close")
-            .diverges()
-    );
+    assert!(!HostOp::HandleClose.diverges());
+}
+
+/// A variant is its row's wire name in CamelCase — the one spelling the table writes twice, since a macro cannot change an identifier's case — so a row whose two names disagree fails here rather than reading as a different operation.
+#[test]
+fn a_variant_is_its_wire_name_in_camel_case() {
+    for &op in HostOp::ALL {
+        let camel = op
+            .name()
+            .split('_')
+            .map(|part| part[..1].to_uppercase() + &part[1..])
+            .collect::<String>();
+
+        assert_eq!(format!("{op:?}"), camel);
+    }
+}
+
+/// A row's outcome is its reply type's: a stream, a lookup, a fallible call, a plain value and a divergence, each read off the Rust type the row returns rather than stated beside it.
+#[test]
+fn outcomes_are_read_off_the_reply_types() {
+    assert_eq!(HostOp::HandleRead.outcome(), Outcome::Stream);
+    assert_eq!(HostOp::ProcEnv.outcome(), Outcome::Lookup);
+    assert_eq!(HostOp::FileOpen.outcome(), Outcome::Fallible);
+    assert_eq!(HostOp::SocketBind.outcome(), Outcome::Fallible);
+    assert_eq!(HostOp::HandleClose.outcome(), Outcome::Returns);
+    assert_eq!(HostOp::ClockWall.outcome(), Outcome::Returns);
+    assert_eq!(HostOp::ProcExit.outcome(), Outcome::Diverges);
 }

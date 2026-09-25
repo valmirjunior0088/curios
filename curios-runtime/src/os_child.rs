@@ -3,37 +3,31 @@
 //! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking `wait`, fills a slot, and writes one byte to a pipe whose read end is the child's handle, so `handle_poll` sees the exit as readiness and `proc_wait` drains the slot at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
 
 use {
-    super::{Status, status_from_error},
+    super::{ChildExit, Failure, failure_from_error},
     curios_abi::stdio_mode,
     rustix::process::{Pid, Signal, kill_process},
     std::{
         ffi::OsStr,
+        num::NonZeroU32,
         os::{
             fd::OwnedFd,
             unix::{ffi::OsStrExt, process::ExitStatusExt},
         },
-        process::{Command, Stdio},
+        process::{Command, ExitStatus, Stdio},
         sync::{Arc, Mutex},
         thread,
     },
 };
 
-/// How a child ended: its exit code, or the signal that ended it — exactly one is meaningful, and `signal` being zero says which.
-#[derive(Clone, Copy)]
-pub(crate) struct Exit {
-    pub(crate) code: u32,
-    pub(crate) signal: u32,
-}
-
 /// The cell the reaper fills once the child has exited, drained by the host's `proc_wait`. Cloning shares the one underlying cell — the reaper holds one handle, the host the other.
 #[derive(Clone, Default)]
 pub(crate) struct ExitSlot {
-    cell: Arc<Mutex<Option<Exit>>>,
+    cell: Arc<Mutex<Option<ChildExit>>>,
 }
 
 impl ExitSlot {
     /// Host side: the exit if the reaper has recorded it, else `None` — the child still runs. Drains the cell.
-    pub(crate) fn get(&self) -> Option<Exit> {
+    pub(crate) fn get(&self) -> Option<ChildExit> {
         self.cell.lock().unwrap().take()
     }
 }
@@ -47,11 +41,20 @@ pub(crate) struct Running {
 
 impl Running {
     /// `SIGKILL` the child. The reaper thread still reaps it, so `proc_wait` then reports the signal.
-    pub(crate) fn kill(&self) -> Status {
-        match kill_process(self.pid, Signal::KILL) {
-            Ok(()) => Status::Ok,
-            Err(errno) => status_from_error(std::io::Error::from(errno)),
-        }
+    pub(crate) fn kill(&self) -> Result<(), Failure> {
+        kill_process(self.pid, Signal::KILL)
+            .map_err(|errno| failure_from_error(std::io::Error::from(errno)))
+    }
+}
+
+/// How a reaped child ended. `wait` answers only for an exit or a kill, and a signal that ended a child is never zero; an exit code is `WEXITSTATUS`, a byte.
+fn child_exit(status: ExitStatus) -> ChildExit {
+    match status
+        .signal()
+        .and_then(|signal| NonZeroU32::new(signal.unsigned_abs()))
+    {
+        Some(signal) => ChildExit::Signal(signal),
+        None => ChildExit::Code(status.code().map_or(0, |code| code as u8)),
     }
 }
 
@@ -119,12 +122,9 @@ pub(crate) fn spawn(
     let slot = exit.clone();
     thread::spawn(move || {
         let ended = match child.wait() {
-            Ok(status) => Exit {
-                code: status.code().unwrap_or(0).unsigned_abs(),
-                signal: status.signal().unwrap_or(0).unsigned_abs(),
-            },
+            Ok(status) => child_exit(status),
             // `wait` on a child this process spawned fails only if something else reaped it; report a clean zero rather than invent a code.
-            Err(_) => Exit { code: 0, signal: 0 },
+            Err(_) => ChildExit::Code(0),
         };
 
         *slot.cell.lock().unwrap() = Some(ended);

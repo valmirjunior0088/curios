@@ -1,6 +1,6 @@
 use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
-    curios_abi::{event, file_kind, serial_op},
+    curios_abi::{event, serial_op},
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
@@ -153,8 +153,8 @@ impl OsHost {
 
     /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connecting, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.
     ///
-    /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`status_from_error`], never a quiet `Ok` — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
-    fn with_socket<F>(&self, handle: &Handle, apply: F) -> Status
+    /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`failure_from_error`], never a quiet success — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
+    fn with_socket<F>(&self, handle: &Handle, apply: F) -> Result<(), Failure>
     where
         F: FnOnce(&Socket) -> std::io::Result<()>,
     {
@@ -162,7 +162,7 @@ impl OsHost {
 
         let socket = match handle {
             // The standard streams are the process's, shared with everything else on the terminal or pipe: no socket option applies to them, so, like a file, they record nothing and succeed. They are never in the table, so asking it would answer `NotFound`, the verdict for a closed handle.
-            Handle::Stdin | Handle::Stdout | Handle::Stderr => return Status::Ok,
+            Handle::Stdin | Handle::Stdout | Handle::Stderr => return Ok(()),
             Handle::Other(_) => match table.get(handle) {
                 Some(
                     OsResource::Unconnected(socket)
@@ -180,15 +180,12 @@ impl OsHost {
                     | OsResource::Child { .. }
                     | OsResource::TlsConfig(_)
                     | OsResource::Resolving { .. },
-                ) => return Status::Ok,
-                None => return Status::NotFound,
+                ) => return Ok(()),
+                None => return Err(Failure::NotFound),
             },
         };
 
-        match apply(socket) {
-            Ok(()) => Status::Ok,
-            Err(error) => status_from_error(error),
-        }
+        apply(socket).map_err(failure_from_error)
     }
 }
 
@@ -211,8 +208,8 @@ impl Drop for OsHost {
 }
 
 impl HostOps for OsHost {
-    fn file_open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
-        let path = OsStr::from_bytes(path);
+    fn file_open(&self, path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> {
+        let path = OsStr::from_bytes(&path);
 
         let mut options = OpenOptions::new();
 
@@ -222,14 +219,14 @@ impl HostOps for OsHost {
             Mode::Append => options.append(true).create(true),
         };
 
-        match options.open(path) {
-            Ok(file) => (Status::Ok, self.mint(OsResource::File(file))),
-            Err(error) => (status_from_error(error), Handle::none()),
-        }
+        options
+            .open(path)
+            .map(|file| self.mint(OsResource::File(file)))
+            .map_err(failure_from_error)
     }
 
-    fn dns_lookup(&self, host: &[u8], port: u64) -> (Status, Handle) {
-        let host = String::from_utf8_lossy(host).into_owned();
+    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
+        let host = String::from_utf8_lossy(&host).into_owned();
         let address = format!("{host}:{port}");
 
         // Start the lookup on the pool (booted on first use). A saturated pool sheds the load as a retriable `WouldBlock`; on success the read end and result slot become a `Resolving` handle the scheduler polls.
@@ -238,80 +235,75 @@ impl HostOps for OsHost {
             .get_or_init(OsResolver::default)
             .start(address)
         {
-            Ok(Some(pending)) => (
-                Status::Ok,
-                self.mint(OsResource::Resolving {
-                    done: pending.fd,
-                    slot: pending.slot,
-                }),
-            ),
-            Ok(None) => (Status::WouldBlock, Handle::none()),
-            Err(status) => (status, Handle::none()),
+            Ok(Some(pending)) => Ok(self.mint(OsResource::Resolving {
+                done: pending.fd,
+                slot: pending.slot,
+            })),
+            Ok(None) => Err(Failure::WouldBlock),
+            Err(failure) => Err(failure),
         }
     }
 
-    fn dns_resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
+    fn dns_resolve(&self, handle: Handle) -> Result<Vec<Vec<u8>>, Failure> {
         // Drain the finished lookup. Reached only after `handle_poll` reports the handle ready, so the slot is filled; a stray early call leaves the handle intact and honestly reports `WouldBlock` so the caller can retry.
         let mut table = self.table.lock().unwrap();
 
         let ready = match table.get(&handle) {
             Some(OsResource::Resolving { slot, .. }) => slot.get(),
-            _ => return (Status::NotFound, vec![]),
+            _ => return Err(Failure::NotFound),
         };
 
         match ready {
             // Drop the handle (closing the pipe read end) only once drained.
             Some(resolved) => {
                 table.remove(&handle);
-                resolved.into_parts()
+                resolved.into_reply()
             }
-            None => (Status::WouldBlock, vec![]),
+            None => Err(Failure::WouldBlock),
         }
     }
 
-    fn socket_open(&self, addr: &[u8]) -> (Status, Handle) {
+    fn socket_open(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
         // The address blob is the canonical "ip:port" string `dns_resolve` minted.
-        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
-            Err(_) => return (Status::NotFound, Handle::none()),
+            Err(_) => return Err(Failure::NotFound),
         };
 
         // Non-blocking from birth: a peer decides when this socket progresses, so `socket_connect`, `handle_read` and `handle_write` on it answer `WouldBlock` rather than wait, and `handle_poll` is where the wait happens. `Socket::new` then `set_nonblocking` is the spelling both release targets share.
         let created = Socket::new(Domain::for_address(address), Type::STREAM, None)
             .and_then(|socket| socket.set_nonblocking(true).map(|()| socket));
 
-        match created {
-            Ok(socket) => (Status::Ok, self.mint(OsResource::Unconnected(socket))),
-            Err(error) => (status_from_error(error), Handle::none()),
-        }
+        created
+            .map(|socket| self.mint(OsResource::Unconnected(socket)))
+            .map_err(failure_from_error)
     }
 
-    fn socket_bind(&self, io: Handle, addr: &[u8]) -> Status {
+    fn socket_bind(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
         // The address blob is the canonical "ip:port" string `dns_resolve` minted.
-        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
-            Err(_) => return Status::NotFound,
+            Err(_) => return Err(Failure::NotFound),
         };
 
         match self.table.lock().unwrap().get(&io) {
-            Some(OsResource::Unconnected(socket)) => match socket.bind(&SockAddr::from(address)) {
-                Ok(()) => Status::Ok,
-                Err(error) => status_from_error(error),
-            },
-            _ => Status::NotFound,
+            Some(OsResource::Unconnected(socket)) => socket
+                .bind(&SockAddr::from(address))
+                .map_err(failure_from_error),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn socket_connect(&self, io: Handle, addr: &[u8]) -> Status {
+    fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
         // The address blob is the canonical "ip:port" string `dns_resolve` minted.
-        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
             Ok(address) => address,
-            Err(_) => return Status::NotFound,
+            Err(_) => return Err(Failure::NotFound),
         };
 
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
-            None => return Status::NotFound,
+            None => return Err(Failure::NotFound),
         };
 
         // A non-blocking connect answers at once: `Ok` when the kernel completed it synchronously, as loopback often does, `EINPROGRESS` when it is under way — the socket is re-filed as connecting for `handle_poll` to watch and `socket_finish_connect` to settle — and its refusal otherwise, on which the socket drops. `EINPROGRESS` and `EALREADY` have no `ErrorKind`, so they are matched by errno; an interrupted connect continues asynchronously by POSIX and is filed the same way.
@@ -322,7 +314,7 @@ impl HostOps for OsHost {
                     .unwrap()
                     .insert(&io, OsResource::Connected(socket));
 
-                Status::Ok
+                Ok(())
             }
             Err(error) if is_errno(&error, Errno::ISCONN) => {
                 self.table
@@ -330,7 +322,7 @@ impl HostOps for OsHost {
                     .unwrap()
                     .insert(&io, OsResource::Connected(socket));
 
-                Status::Ok
+                Ok(())
             }
             Err(error)
                 if is_errno(&error, Errno::INPROGRESS)
@@ -342,13 +334,13 @@ impl HostOps for OsHost {
                     .unwrap()
                     .insert(&io, OsResource::Connecting(socket));
 
-                Status::WouldBlock
+                Err(Failure::WouldBlock)
             }
-            Err(error) => status_from_error(error),
+            Err(error) => Err(failure_from_error(error)),
         }
     }
 
-    fn socket_finish_connect(&self, io: Handle) -> Status {
+    fn socket_finish_connect(&self, io: Handle) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
         let socket = match table.take_if(&io, |resource| match resource {
             OsResource::Connecting(socket) => Ok(socket),
@@ -358,48 +350,48 @@ impl HostOps for OsHost {
             // A connect that completed synchronously was never pending, so settling it is a no-op rather than a fault.
             None => {
                 return match table.get(&io) {
-                    Some(OsResource::Connected(_)) => Status::Ok,
-                    _ => Status::NotFound,
+                    Some(OsResource::Connected(_)) => Ok(()),
+                    _ => Err(Failure::NotFound),
                 };
             }
         };
 
         // `SO_ERROR` is zero both while the connect is pending and after it succeeded, so a clean report is followed by asking for the peer: `ENOTCONN` is the pending answer, and the socket goes back as connecting for another poll. Neither call blocks, so the lock is held across them.
         match socket.take_error() {
-            Ok(Some(error)) | Err(error) => status_from_error(error),
+            Ok(Some(error)) | Err(error) => Err(failure_from_error(error)),
             Ok(None) => match socket.peer_addr() {
                 Ok(_) => {
                     table.insert(&io, OsResource::Connected(socket));
 
-                    Status::Ok
+                    Ok(())
                 }
                 Err(error) if is_errno(&error, Errno::NOTCONN) => {
                     table.insert(&io, OsResource::Connecting(socket));
 
-                    Status::WouldBlock
+                    Err(Failure::WouldBlock)
                 }
-                Err(error) => status_from_error(error),
+                Err(error) => Err(failure_from_error(error)),
             },
         }
     }
 
-    fn tls_start(&self, io: Handle, sni: &[u8]) -> Status {
-        let server_name = match std::str::from_utf8(sni)
+    fn tls_start(&self, io: Handle, sni: Vec<u8>) -> Result<(), Failure> {
+        let server_name = match std::str::from_utf8(&sni)
             .ok()
             .and_then(|name| ServerName::try_from(name.to_owned()).ok())
         {
             Some(name) => name,
-            None => return Status::TlsError,
+            None => return Err(Failure::TlsError),
         };
 
         let socket = match self.take_connected(&io) {
             Some(socket) => socket,
-            None => return Status::NotFound,
+            None => return Err(Failure::NotFound),
         };
 
         let conn = match ClientConnection::new(CLIENT_CONFIG.clone(), server_name) {
             Ok(conn) => conn,
-            Err(_) => return Status::TlsError,
+            Err(_) => return Err(Failure::TlsError),
         };
 
         // The stream is filed with its handshake still to run: the socket is non-blocking, so the handshake is driven by the reads and writes that follow — `rustls`'s stream completes prior IO before each — and parks the fiber through `handle_poll` like any other progress. A verification or protocol failure surfaces as `TlsError` from the read or write that discovers it.
@@ -408,18 +400,19 @@ impl HostOps for OsHost {
             OsResource::ClientTls(Box::new(StreamOwned::new(conn, socket))),
         );
 
-        Status::Ok
+        Ok(())
     }
 
-    fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Handle) {
-        let certs = match rustls_pemfile::certs(&mut cert).collect::<Result<Vec<_>, _>>() {
+    fn tls_server_config(&self, cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> {
+        let certs = match rustls_pemfile::certs(&mut cert.as_slice()).collect::<Result<Vec<_>, _>>()
+        {
             Ok(certs) if !certs.is_empty() => certs,
-            _ => return (Status::TlsError, Handle::none()),
+            _ => return Err(Failure::TlsError),
         };
 
-        let key = match rustls_pemfile::private_key(&mut key) {
+        let key = match rustls_pemfile::private_key(&mut key.as_slice()) {
             Ok(Some(key)) => key,
-            _ => return (Status::TlsError, Handle::none()),
+            _ => return Err(Failure::TlsError),
         };
 
         let config = match ServerConfig::builder_with_provider(Arc::new(ring::default_provider()))
@@ -429,27 +422,27 @@ impl HostOps for OsHost {
             .with_single_cert(certs, key)
         {
             Ok(config) => Arc::new(config),
-            Err(_) => return (Status::TlsError, Handle::none()),
+            Err(_) => return Err(Failure::TlsError),
         };
 
-        (Status::Ok, self.mint(OsResource::TlsConfig(config)))
+        Ok(self.mint(OsResource::TlsConfig(config)))
     }
 
-    fn tls_start_server(&self, io: Handle, cfg: Handle) -> Status {
+    fn tls_start_server(&self, io: Handle, cfg: Handle) -> Result<(), Failure> {
         // Clone the config `Arc` out, never holding the lock across the handshake. The config handle stays in the table for reuse.
         let config = match self.table.lock().unwrap().get(&cfg) {
             Some(OsResource::TlsConfig(config)) => config.clone(),
-            _ => return Status::NotFound,
+            _ => return Err(Failure::NotFound),
         };
 
         let socket = match self.take_connected(&io) {
             Some(socket) => socket,
-            None => return Status::NotFound,
+            None => return Err(Failure::NotFound),
         };
 
         let conn = match ServerConnection::new(config) {
             Ok(conn) => conn,
-            Err(_) => return Status::TlsError,
+            Err(_) => return Err(Failure::TlsError),
         };
 
         // Filed with the handshake still to run, as `tls_start` files the client side.
@@ -458,13 +451,13 @@ impl HostOps for OsHost {
             OsResource::ServerTls(Box::new(StreamOwned::new(conn, socket))),
         );
 
-        Status::Ok
+        Ok(())
     }
 
-    fn socket_listen(&self, io: Handle, backlog: u64) -> Status {
+    fn socket_listen(&self, io: Handle, backlog: u64) -> Result<(), Failure> {
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
-            None => return Status::NotFound,
+            None => return Err(Failure::NotFound),
         };
 
         // The kernel clamps the depth to `somaxconn`, so one past what `listen(2)` takes asks for the same queue.
@@ -475,31 +468,31 @@ impl HostOps for OsHost {
                     .unwrap()
                     .insert(&io, OsResource::Listener(socket));
 
-                Status::Ok
+                Ok(())
             }
-            Err(error) => status_from_error(error),
+            Err(error) => Err(failure_from_error(error)),
         }
     }
 
-    fn socket_accept(&self, io: Handle) -> (Status, Handle) {
+    fn socket_accept(&self, io: Handle) -> Result<Handle, Failure> {
         // The listener is non-blocking, so the accept answers at once under the lock: `WouldBlock` with nothing pending, else the stream. `accept4` hands the stream over blocking whatever the listener's flag, so it is switched here, since a fiber will drain it.
         let mut table = self.table.lock().unwrap();
         let accepted = match table.get(&io) {
             Some(OsResource::Listener(socket)) => socket.accept(),
-            _ => return (Status::NotFound, Handle::none()),
+            _ => return Err(Failure::NotFound),
         };
 
-        match accepted.and_then(|(stream, _)| stream.set_nonblocking(true).map(|()| stream)) {
-            Ok(stream) => (Status::Ok, table.mint(OsResource::Connected(stream))),
-            Err(error) => (status_from_error(error), Handle::none()),
-        }
+        accepted
+            .and_then(|(stream, _)| stream.set_nonblocking(true).map(|()| stream))
+            .map(|stream| table.mint(OsResource::Connected(stream)))
+            .map_err(failure_from_error)
     }
 
-    fn socket_set_reuseaddr(&self, io: Handle, on: u32) -> Status {
+    fn socket_set_reuseaddr(&self, io: Handle, on: u32) -> Result<(), Failure> {
         self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
     }
 
-    fn handle_poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i64) -> Vec<Poll> {
+    fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, timeout_ms: i64) -> Vec<Poll> {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
@@ -575,7 +568,7 @@ impl HostOps for OsHost {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn handle_read(&self, io: Handle, count: u64) -> (Status, Vec<u8>) {
+    fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
@@ -584,7 +577,7 @@ impl HostOps for OsHost {
                 let input = stdin();
 
                 if !readable_now(input.as_fd()) {
-                    return (Status::WouldBlock, vec![]);
+                    return Err(Failure::WouldBlock);
                 }
 
                 rustix::io::read(&input, &mut buffer[..]).map_err(std::io::Error::from)
@@ -611,39 +604,38 @@ impl HostOps for OsHost {
                         return read_outcome(result.map_err(std::io::Error::from), buffer);
                     }
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
-                    _ => return (Status::NotFound, vec![]),
+                    _ => return Err(Failure::NotFound),
                 };
 
                 stream.read(&mut buffer)
             }
             // stdout/stderr are not readable.
-            _ => return (Status::Eof, vec![]),
+            _ => return Ok(None),
         };
 
         read_outcome(result, buffer)
     }
 
-    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u64) {
+    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
         // The blocking std streams write the whole buffer or fail; report the full length on success so callers see the write completed.
         match io {
             Handle::Stdout => {
-                return match stdout().write_all(bytes) {
-                    Ok(()) => (Status::Ok, bytes.len() as u64),
-                    Err(error) => (status_from_error(error), 0),
-                };
+                return stdout()
+                    .write_all(&bytes)
+                    .map(|()| bytes.len() as u64)
+                    .map_err(failure_from_error);
             }
             Handle::Stderr => {
-                return match stderr().write_all(bytes) {
-                    Ok(()) => (Status::Ok, bytes.len() as u64),
-                    Err(error) => (status_from_error(error), 0),
-                };
+                return stderr()
+                    .write_all(&bytes)
+                    .map(|()| bytes.len() as u64)
+                    .map_err(failure_from_error);
             }
             // POSIX semantics: stdin is plain fd 0, so the write succeeds when the process was handed a read-write descriptor (a terminal) and reports `EBADF` when it was opened read-only.
             Handle::Stdin => {
-                return match rustix::io::write(stdin(), bytes) {
-                    Ok(written) => (Status::Ok, written as u64),
-                    Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
-                };
+                return rustix::io::write(stdin(), &bytes)
+                    .map(|written| written as u64)
+                    .map_err(|errno| failure_from_error(std::io::Error::from(errno)));
             }
             Handle::Other(_) => {}
         }
@@ -655,45 +647,50 @@ impl HostOps for OsHost {
             Some(OsResource::Connected(socket)) => socket,
             // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `handle_close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
             Some(OsResource::ClientTls(tls)) => {
-                return match tls.write(bytes) {
-                    Ok(written) => (Status::Ok, written as u64),
-                    Err(error) => (tls_status(error), 0),
-                };
+                return tls
+                    .write(&bytes)
+                    .map(|written| written as u64)
+                    .map_err(tls_failure);
             }
             Some(OsResource::ServerTls(tls)) => {
-                return match tls.write(bytes) {
-                    Ok(written) => (Status::Ok, written as u64),
-                    Err(error) => (tls_status(error), 0),
-                };
+                return tls
+                    .write(&bytes)
+                    .map(|written| written as u64)
+                    .map_err(tls_failure);
             }
             Some(OsResource::Descriptor(fd)) => {
-                return match rustix::io::write(&*fd, bytes) {
-                    Ok(written) => (Status::Ok, written as u64),
-                    Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
-                };
+                return rustix::io::write(&*fd, &bytes)
+                    .map(|written| written as u64)
+                    .map_err(|errno| failure_from_error(std::io::Error::from(errno)));
             }
-            _ => return (Status::NotFound, 0),
+            _ => return Err(Failure::NotFound),
         };
 
         // A single non-blocking `write`: the kernel takes a prefix and reports its length. We return that count rather than looping (`write_all`), because a loop that hits `WouldBlock` mid-buffer would lose the count of what already went out and the caller would resend it.
-        match stream.write(bytes) {
-            Ok(written) => (Status::Ok, written as u64),
-            Err(error) => (status_from_error(error), 0),
-        }
+        stream
+            .write(&bytes)
+            .map(|written| written as u64)
+            .map_err(failure_from_error)
     }
 
-    fn clock_wall(&self) -> (u64, u64) {
+    fn clock_wall(&self) -> Timestamp {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
 
-        (now.as_secs(), u64::from(now.subsec_nanos()))
+        Timestamp {
+            secs: now.as_secs(),
+            nanos: u64::from(now.subsec_nanos()),
+        }
     }
 
-    fn clock_mono(&self) -> (u64, u64) {
+    fn clock_mono(&self) -> Timestamp {
         let elapsed = self.start.elapsed();
 
-        (elapsed.as_secs(), u64::from(elapsed.subsec_nanos()))
+        Timestamp {
+            secs: elapsed.as_secs(),
+            nanos: u64::from(elapsed.subsec_nanos()),
+        }
     }
 
     fn rand_bytes(&self, count: u64) -> Vec<u8> {
@@ -707,11 +704,8 @@ impl HostOps for OsHost {
         self.args.clone()
     }
 
-    fn proc_env(&self, name: &[u8]) -> (Status, Vec<u8>) {
-        match env::var_os(OsStr::from_bytes(name)) {
-            Some(value) => (Status::Ok, value.into_encoded_bytes()),
-            None => (Status::NotFound, vec![]),
-        }
+    fn proc_env(&self, name: Vec<u8>) -> Option<Vec<u8>> {
+        env::var_os(OsStr::from_bytes(&name)).map(|value| value.into_encoded_bytes())
     }
 
     // The code leaves as the guest-exit trap; the terminal records `Drop` restores are what the process leaves behind.
@@ -719,7 +713,7 @@ impl HostOps for OsHost {
         Termination(code)
     }
 
-    fn tty_raw(&self, io: Handle, on: u32) -> Status {
+    fn tty_raw(&self, io: Handle, on: u32) -> Result<(), Failure> {
         let token = io.bytes();
 
         let outcome = self.with_fd(&io, |fd| {
@@ -751,40 +745,40 @@ impl HostOps for OsHost {
         });
 
         match outcome {
-            None => Status::NotFound,
-            Some(Ok(())) => Status::Ok,
-            Some(Err(errno)) => status_from_error(std::io::Error::from(errno)),
+            None => Err(Failure::NotFound),
+            Some(Ok(())) => Ok(()),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
-    fn tty_size(&self, io: Handle) -> (Status, u64, u64) {
+    fn tty_size(&self, io: Handle) -> Result<TtySize, Failure> {
         match self.with_fd(&io, |fd| tcgetwinsize(fd)) {
-            None => (Status::NotFound, 0, 0),
-            Some(Ok(size)) => (Status::Ok, size.ws_col.into(), size.ws_row.into()),
-            Some(Err(errno)) => (status_from_error(std::io::Error::from(errno)), 0, 0),
+            None => Err(Failure::NotFound),
+            Some(Ok(size)) => Ok(TtySize {
+                cols: size.ws_col.into(),
+                rows: size.ws_row.into(),
+            }),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
     fn serial_open(
         &self,
-        path: &[u8],
+        path: Vec<u8>,
         baud: u64,
         data_bits: u64,
         parity: u64,
         stop_bits: u64,
         flow: u64,
-    ) -> (Status, Handle) {
+    ) -> Result<Handle, Failure> {
         // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
         let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
-            return (
-                status_from_error(std::io::Error::from(Errno::INVAL)),
-                Handle::none(),
-            );
+            return Err(failure_from_error(std::io::Error::from(Errno::INVAL)));
         };
 
         // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
         let opened = rustix::fs::open(
-            path,
+            path.as_slice(),
             OFlags::RDWR | OFlags::NOCTTY | OFlags::NONBLOCK | OFlags::CLOEXEC,
             rustix::fs::Mode::empty(),
         )
@@ -805,16 +799,12 @@ impl HostOps for OsHost {
             Ok(fd)
         });
 
-        match opened {
-            Ok(fd) => (Status::Ok, self.mint(OsResource::Descriptor(fd))),
-            Err(errno) => (
-                status_from_error(std::io::Error::from(errno)),
-                Handle::none(),
-            ),
-        }
+        opened
+            .map(|fd| self.mint(OsResource::Descriptor(fd)))
+            .map_err(|errno| failure_from_error(std::io::Error::from(errno)))
     }
 
-    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Status {
+    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Result<(), Failure> {
         let outcome = self.with_fd(&io, |fd| match op {
             serial_op::DTR => set_modem_lines(fd, TIOCM_DTR, on != 0),
             serial_op::RTS => set_modem_lines(fd, TIOCM_RTS, on != 0),
@@ -823,34 +813,37 @@ impl HostOps for OsHost {
         });
 
         match outcome {
-            None => Status::NotFound,
-            Some(Ok(())) => Status::Ok,
-            Some(Err(errno)) => status_from_error(std::io::Error::from(errno)),
+            None => Err(Failure::NotFound),
+            Some(Ok(())) => Ok(()),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64) {
-        let path = OsStr::from_bytes(path);
+    fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
+        let path = OsStr::from_bytes(&path);
 
         let metadata = match fs::metadata(path) {
             Ok(metadata) => metadata,
             // Following the link found nothing. `symlink_metadata` tells a dangling link from a path with nothing at all, and it is the one case the `symlink` kind is reported.
             Err(error) if error.kind() == ErrorKind::NotFound => {
                 return match fs::symlink_metadata(path) {
-                    Ok(link) if link.file_type().is_symlink() => {
-                        (Status::Ok, file_kind::SYMLINK, 0, 0, 0)
-                    }
-                    _ => (status_from_error(error), 0, 0, 0, 0),
+                    Ok(link) if link.file_type().is_symlink() => Ok(FileStat {
+                        kind: FileKind::Symlink,
+                        size: 0,
+                        mtime_secs: 0,
+                        mtime_nanos: 0,
+                    }),
+                    _ => Err(failure_from_error(error)),
                 };
             }
-            Err(error) => return (status_from_error(error), 0, 0, 0, 0),
+            Err(error) => return Err(failure_from_error(error)),
         };
 
         let file_type = metadata.file_type();
         let kind = match () {
-            () if file_type.is_dir() => file_kind::DIRECTORY,
-            () if file_type.is_file() => file_kind::FILE,
-            () => file_kind::OTHER,
+            () if file_type.is_dir() => FileKind::Directory,
+            () if file_type.is_file() => FileKind::File,
+            () => FileKind::Other,
         };
         let (mtime_secs, mtime_nanos) = metadata
             .modified()
@@ -859,63 +852,61 @@ impl HostOps for OsHost {
             .map(|since_epoch| (since_epoch.as_secs(), u64::from(since_epoch.subsec_nanos())))
             .unwrap_or((0, 0));
 
-        (Status::Ok, kind, metadata.len(), mtime_secs, mtime_nanos)
+        Ok(FileStat {
+            kind,
+            size: metadata.len(),
+            mtime_secs,
+            mtime_nanos,
+        })
     }
 
-    fn file_remove(&self, path: &[u8]) -> Status {
-        outcome(fs::remove_file(OsStr::from_bytes(path)))
+    fn file_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
+        fs::remove_file(OsStr::from_bytes(&path)).map_err(failure_from_error)
     }
 
-    fn file_rename(&self, from: &[u8], to: &[u8]) -> Status {
-        outcome(fs::rename(OsStr::from_bytes(from), OsStr::from_bytes(to)))
+    fn file_rename(&self, from: Vec<u8>, to: Vec<u8>) -> Result<(), Failure> {
+        fs::rename(OsStr::from_bytes(&from), OsStr::from_bytes(&to)).map_err(failure_from_error)
     }
 
-    fn dir_list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
-        let entries = match fs::read_dir(OsStr::from_bytes(path)) {
-            Ok(entries) => entries,
-            Err(error) => return (status_from_error(error), vec![]),
-        };
+    fn dir_list(&self, path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> {
+        let entries = fs::read_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)?;
 
         let mut names = Vec::new();
 
         for entry in entries {
-            match entry {
-                Ok(entry) => names.push(entry.file_name().into_vec()),
-                Err(error) => return (status_from_error(error), vec![]),
-            }
+            names.push(entry.map_err(failure_from_error)?.file_name().into_vec());
         }
 
         // The directory's own order is whatever the filesystem keeps; sorted, two listings of one directory agree and a test can pin one.
         names.sort();
 
-        (Status::Ok, names)
+        Ok(names)
     }
 
-    fn dir_create(&self, path: &[u8]) -> Status {
-        outcome(fs::create_dir(OsStr::from_bytes(path)))
+    fn dir_create(&self, path: Vec<u8>) -> Result<(), Failure> {
+        fs::create_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)
     }
 
-    fn dir_remove(&self, path: &[u8]) -> Status {
-        outcome(fs::remove_dir(OsStr::from_bytes(path)))
+    fn dir_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
+        fs::remove_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)
     }
 
-    fn proc_cwd(&self) -> (Status, Vec<u8>) {
-        match env::current_dir() {
-            Ok(path) => (Status::Ok, path.into_os_string().into_vec()),
-            Err(error) => (status_from_error(error), vec![]),
-        }
+    fn proc_cwd(&self) -> Result<Vec<u8>, Failure> {
+        env::current_dir()
+            .map(|path| path.into_os_string().into_vec())
+            .map_err(failure_from_error)
     }
 
     fn proc_spawn(
         &self,
-        argv: &[Vec<u8>],
-        cwd: &[u8],
-        env: &[Vec<u8>],
+        argv: Vec<Vec<u8>>,
+        cwd: Vec<u8>,
+        env: Vec<Vec<u8>>,
         stdin: u64,
         stdout: u64,
         stderr: u64,
-    ) -> (Status, Handle) {
-        match os_child::spawn(argv, cwd, env, (stdin, stdout, stderr)) {
+    ) -> Result<Handle, Failure> {
+        match os_child::spawn(&argv, &cwd, &env, (stdin, stdout, stderr)) {
             Ok(Spawned {
                 child,
                 stdin,
@@ -932,51 +923,48 @@ impl HostOps for OsHost {
                 };
                 let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
 
-                (
-                    Status::Ok,
-                    self.mint(OsResource::Child {
-                        running: child,
-                        streams,
-                    }),
-                )
+                Ok(self.mint(OsResource::Child {
+                    running: child,
+                    streams,
+                }))
             }
-            Err(error) => (status_from_error(error), Handle::none()),
+            Err(error) => Err(failure_from_error(error)),
         }
     }
 
-    fn proc_stream(&self, child: Handle, which: u64) -> (Status, Handle) {
+    fn proc_stream(&self, child: Handle, which: u64) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
-                Some(handle) => (Status::Ok, handle.clone()),
-                None => (Status::NotFound, Handle::none()),
+                Some(handle) => Ok(handle.clone()),
+                None => Err(Failure::NotFound),
             },
-            _ => (Status::NotFound, Handle::none()),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn proc_wait(&self, child: Handle) -> (Status, u64, u64) {
+    fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {
         // Reached once `handle_poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does.
         let mut table = self.table.lock().unwrap();
 
         let exit = match table.get(&child) {
             Some(OsResource::Child { running, .. }) => running.exit.get(),
-            _ => return (Status::NotFound, 0, 0),
+            _ => return Err(Failure::NotFound),
         };
 
         match exit {
             Some(exit) => {
                 table.remove(&child);
 
-                (Status::Ok, u64::from(exit.code), u64::from(exit.signal))
+                Ok(exit)
             }
-            None => (Status::WouldBlock, 0, 0),
+            None => Err(Failure::WouldBlock),
         }
     }
 
-    fn proc_kill(&self, child: Handle) -> Status {
+    fn proc_kill(&self, child: Handle) -> Result<(), Failure> {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { running, .. }) => running.kill(),
-            _ => Status::NotFound,
+            _ => Err(Failure::NotFound),
         }
     }
 }
@@ -1032,23 +1020,26 @@ fn is_errno(error: &std::io::Error, errno: Errno) -> bool {
     error.raw_os_error() == Some(errno.raw_os_error())
 }
 
-/// The status a TLS stream's read or write failure lowers to: `rustls`'s own errors — a failed verification, a protocol violation, a plaintext peer — arrive wrapped in an `InvalidData` error and collapse to `TlsError`, and everything else is the socket's, mapped as every other stream maps it.
-fn tls_status(error: std::io::Error) -> Status {
+/// The failure a TLS stream's read or write reports: `rustls`'s own errors — a failed verification, a protocol violation, a plaintext peer — arrive wrapped in an `InvalidData` error and collapse to `TlsError`, and everything else is the socket's, mapped as every other stream maps it.
+fn tls_failure(error: std::io::Error) -> Failure {
     if error
         .get_ref()
         .is_some_and(|inner| inner.is::<rustls::Error>())
     {
-        return Status::TlsError;
+        return Failure::TlsError;
     }
 
-    status_from_error(error)
+    failure_from_error(error)
 }
 
-/// A TLS read's outcome in the row's `(status, bytes)` shape: a peer that closed without `close_notify` reads as the end of the stream, since a length-framed protocol notices a truncation itself, and the rest as [`tls_status`] maps it.
-fn tls_read_outcome(result: std::io::Result<usize>, buffer: Vec<u8>) -> (Status, Vec<u8>) {
+/// A TLS read's outcome as the row's reply: a peer that closed without `close_notify` reads as the end of the stream, since a length-framed protocol notices a truncation itself, and the rest as [`tls_failure`] maps it.
+fn tls_read_outcome(
+    result: std::io::Result<usize>,
+    buffer: Vec<u8>,
+) -> Result<Option<Vec<u8>>, Failure> {
     match result {
-        Err(error) if error.kind() == ErrorKind::UnexpectedEof => (Status::Eof, vec![]),
-        Err(error) => (tls_status(error), vec![]),
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => Ok(None),
+        Err(error) => Err(tls_failure(error)),
         Ok(_) => read_outcome(result, buffer),
     }
 }
@@ -1064,24 +1055,19 @@ fn tls_interest(conn: &rustls::CommonState, requested: Poll) -> Poll {
     }
 }
 
-/// A status-only row's reply: the failure's status, or `Ok`.
-fn outcome(result: std::io::Result<()>) -> Status {
+/// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its failure. Shared by every descriptor `handle_read` serves, the raw ones included.
+fn read_outcome(
+    result: std::io::Result<usize>,
+    mut buffer: Vec<u8>,
+) -> Result<Option<Vec<u8>>, Failure> {
     match result {
-        Ok(()) => Status::Ok,
-        Err(error) => status_from_error(error),
-    }
-}
-
-/// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `handle_read` serves, the raw ones included.
-fn read_outcome(result: std::io::Result<usize>, mut buffer: Vec<u8>) -> (Status, Vec<u8>) {
-    match result {
-        Ok(0) => (Status::Eof, vec![]),
+        Ok(0) => Ok(None),
         Ok(n) => {
             buffer.truncate(n);
 
-            (Status::Ok, buffer)
+            Ok(Some(buffer))
         }
-        Err(error) => (status_from_error(error), vec![]),
+        Err(error) => Err(failure_from_error(error)),
     }
 }
 

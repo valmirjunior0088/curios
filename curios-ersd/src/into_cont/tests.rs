@@ -982,9 +982,7 @@ fn a_halt_lowers_to_its_node() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
     let three = nat(&mut builder, 3);
-    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(
-        HostOp::named("proc_exit").expect("the roster names proc_exit"),
-    )));
+    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)));
     let entry = builder.seal_block(Terminator::Halt {
         foreign: exit,
         operands: vec![three],

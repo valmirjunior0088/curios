@@ -67,7 +67,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 
 /// `proc/args` as a term carries it: the identity alone, whose row the kernel reads from the roster.
 fn proc_args() -> ForeignFunction {
-    ForeignFunction::Builtin(HostOp::named("proc_args").expect("the roster names proc_args"))
+    ForeignFunction::Builtin(HostOp::ProcArgs)
 }
 
 /// A builtin is typed by its roster row: `proc/args` inhabits `Io(List(Bytes))`, the description of the argument list the table states, with nothing on the term to say so.

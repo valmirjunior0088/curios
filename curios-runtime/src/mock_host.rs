@@ -1,6 +1,6 @@
 use {
     super::{Table, host::*},
-    curios_abi::{event, file_kind, serial_op, stdio_mode},
+    curios_abi::{event, serial_op, stdio_mode},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         sync::{Arc, Mutex},
@@ -106,29 +106,29 @@ impl MockFileSystem {
     }
 
     /// Reset `path` to empty, creating it if absent — `file_open` in write mode. `NotFound` under a directory that is not there, as the OS answers.
-    fn truncate(&self, path: &[u8]) -> Status {
+    fn truncate(&self, path: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         if disk.parent_missing(path) {
-            return Status::NotFound;
+            return Err(Failure::NotFound);
         }
 
         disk.files.insert(path.to_vec(), vec![]);
 
-        Status::Ok
+        Ok(())
     }
 
     /// Create `path` empty if absent, leaving any existing contents — `file_open` in append mode. `NotFound` under a directory that is not there, as `truncate` answers.
-    fn ensure(&self, path: &[u8]) -> Status {
+    fn ensure(&self, path: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         if disk.parent_missing(path) {
-            return Status::NotFound;
+            return Err(Failure::NotFound);
         }
 
         disk.files.entry(path.to_vec()).or_default();
 
-        Status::Ok
+        Ok(())
     }
 
     /// Append `bytes` to `path`, creating it if absent.
@@ -154,38 +154,38 @@ impl MockFileSystem {
         self.inner.lock().unwrap().files.get(path).cloned()
     }
 
-    /// `file_stat`: the kind tag and the size of what is at `path`.
-    fn stat(&self, path: &[u8]) -> Option<(u64, usize)> {
+    /// `file_stat`: the kind and the size of what is at `path`.
+    fn stat(&self, path: &[u8]) -> Option<(FileKind, usize)> {
         let disk = self.inner.lock().unwrap();
 
         match disk.files.get(path) {
-            Some(contents) => Some((file_kind::FILE, contents.len())),
-            None => disk.is_dir(path).then_some((file_kind::DIRECTORY, 0)),
+            Some(contents) => Some((FileKind::File, contents.len())),
+            None => disk.is_dir(path).then_some((FileKind::Directory, 0)),
         }
     }
 
-    fn remove_file(&self, path: &[u8]) -> Status {
+    fn remove_file(&self, path: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         match disk.files.remove(path) {
-            Some(_) => Status::Ok,
-            None if disk.is_dir(path) => Status::IsDirectory,
-            None => Status::NotFound,
+            Some(_) => Ok(()),
+            None if disk.is_dir(path) => Err(Failure::IsDirectory),
+            None => Err(Failure::NotFound),
         }
     }
 
     /// A file moves alone; a directory moves with everything beneath it, as `rename(2)` does.
-    fn rename(&self, from: &[u8], to: &[u8]) -> Status {
+    fn rename(&self, from: &[u8], to: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         if let Some(contents) = disk.files.remove(from) {
             disk.files.insert(to.to_vec(), contents);
 
-            return Status::Ok;
+            return Ok(());
         }
 
         if !disk.dirs.remove(from) {
-            return Status::NotFound;
+            return Err(Failure::NotFound);
         }
 
         let rebased = |path: &[u8]| [to, &path[from.len()..]].concat();
@@ -209,46 +209,46 @@ impl MockFileSystem {
             })
             .collect();
 
-        Status::Ok
+        Ok(())
     }
 
-    fn list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
+    fn list(&self, path: &[u8]) -> Result<Vec<Vec<u8>>, Failure> {
         let disk = self.inner.lock().unwrap();
 
         match () {
-            () if disk.files.contains_key(path) => (Status::NotDirectory, vec![]),
-            () if !disk.is_dir(path) => (Status::NotFound, vec![]),
-            () => (Status::Ok, disk.children(path)),
+            () if disk.files.contains_key(path) => Err(Failure::NotDirectory),
+            () if !disk.is_dir(path) => Err(Failure::NotFound),
+            () => Ok(disk.children(path)),
         }
     }
 
-    fn create_dir(&self, path: &[u8]) -> Status {
+    fn create_dir(&self, path: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         match () {
-            () if disk.files.contains_key(path) || disk.is_dir(path) => Status::AlreadyExists,
-            () if disk.parent_missing(path) => Status::NotFound,
+            () if disk.files.contains_key(path) || disk.is_dir(path) => Err(Failure::AlreadyExists),
+            () if disk.parent_missing(path) => Err(Failure::NotFound),
             () => {
                 disk.dirs.insert(path.to_vec());
 
-                Status::Ok
+                Ok(())
             }
         }
     }
 
-    fn remove_dir(&self, path: &[u8]) -> Status {
+    fn remove_dir(&self, path: &[u8]) -> Result<(), Failure> {
         let mut disk = self.inner.lock().unwrap();
 
         match () {
-            () if disk.files.contains_key(path) => Status::NotDirectory,
-            () if !disk.is_dir(path) => Status::NotFound,
-            () if !disk.children(path).is_empty() => Status::NotEmpty,
+            () if disk.files.contains_key(path) => Err(Failure::NotDirectory),
+            () if !disk.is_dir(path) => Err(Failure::NotFound),
+            () if !disk.children(path).is_empty() => Err(Failure::NotEmpty),
             // The root cannot be removed even when empty, as `rmdir(2)` reports it.
-            () if path == ROOT => Status::Other(EBUSY),
+            () if path == ROOT => Err(Failure::Other(EBUSY)),
             () => {
                 disk.dirs.remove(path);
 
-                Status::Ok
+                Ok(())
             }
         }
     }
@@ -277,17 +277,17 @@ impl Chunked {
     }
 
     /// Serve up to `count` bytes of the front chunk: `Eof` once no chunk is left, `WouldBlock` while the next chunk is not yet due, and the chunk's tail otherwise, disarming the stream when the chunk is spent. An empty chunk is skipped rather than served as a zero-byte read.
-    fn read(&mut self, count: u64) -> (Status, Vec<u8>) {
+    fn read(&mut self, count: u64) -> Result<Option<Vec<u8>>, Failure> {
         while self.chunks.front().is_some_and(|chunk| chunk.is_empty()) {
             self.chunks.pop_front();
         }
 
         let Some(front) = self.chunks.front() else {
-            return (Status::Eof, vec![]);
+            return Ok(None);
         };
 
         if !self.due {
-            return (Status::WouldBlock, vec![]);
+            return Err(Failure::WouldBlock);
         }
 
         let stop = front
@@ -302,7 +302,7 @@ impl Chunked {
             self.due = false;
         }
 
-        (Status::Ok, bytes)
+        Ok(Some(bytes))
     }
 
     /// Make the next chunk due — what a `handle_poll` reporting the handle readable means.
@@ -330,15 +330,13 @@ struct MockServer {
 struct MockChildScript {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
-    code: u64,
-    signal: u64,
+    exit: ChildExit,
 }
 
 /// A live scripted child: exited the moment it was spawned, its handle ready and its exit waiting for `proc_wait`, its piped streams filed and handed out through `proc_stream`.
 struct MockChild {
     program: Vec<u8>,
-    code: u64,
-    signal: u64,
+    exit: ChildExit,
     streams: [Handle; 3],
 }
 
@@ -360,7 +358,7 @@ enum MockResource {
     Resolved(Vec<Vec<u8>>),
     /// A scripted connect under way: what `socket_finish_connect` will answer — the response to serve, or the refusal — once a `handle_poll` has marked it due.
     Connecting {
-        outcome: Result<Chunked, Status>,
+        outcome: Result<Chunked, Failure>,
         due: bool,
     },
     /// A live *outbound* connection: the scripted response. Writes to it are accepted and discarded.
@@ -375,7 +373,7 @@ enum MockResource {
 
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Status::WouldBlock` until a `handle_poll` arms the next one, and reports `Status::Eof` once the script is spent. A script of lines is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
+    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a `handle_poll` arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
     input: Mutex<Chunked>,
     /// Every byte written to stdout and stderr, concatenated in write order. Shared with [`MockIo::output`], which is what a fixture reads when it only cares that something was written.
     output: Arc<Mutex<Vec<u8>>>,
@@ -439,63 +437,49 @@ impl MockHost {
 }
 
 impl HostOps for MockHost {
-    fn file_open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
-        let status = match mode {
-            Mode::Read => match self.files.contains(path) {
-                true => Status::Ok,
-                false => Status::NotFound,
+    fn file_open(&self, path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> {
+        match mode {
+            Mode::Read => match self.files.contains(&path) {
+                true => Ok(()),
+                false => Err(Failure::NotFound),
             },
-            Mode::Write => self.files.truncate(path),
-            Mode::Append => self.files.ensure(path),
-        };
+            Mode::Write => self.files.truncate(&path),
+            Mode::Append => self.files.ensure(&path),
+        }?;
 
-        if !matches!(status, Status::Ok) {
-            return (status, Handle::none());
-        }
-
-        (
-            Status::Ok,
-            self.mint(MockResource::File(MockFile {
-                path: path.to_vec(),
-                mode,
-                position: 0,
-            })),
-        )
+        Ok(self.mint(MockResource::File(MockFile {
+            path,
+            mode,
+            position: 0,
+        })))
     }
 
-    fn dns_lookup(&self, host: &[u8], port: u64) -> (Status, Handle) {
+    fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
         // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle `handle_poll` reports ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
-        let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
+        let endpoint = format!("{}:{port}", String::from_utf8_lossy(&host)).into_bytes();
 
-        (
-            Status::Ok,
-            self.mint(MockResource::Resolved(vec![endpoint])),
-        )
+        Ok(self.mint(MockResource::Resolved(vec![endpoint])))
     }
 
-    fn dns_resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
+    fn dns_resolve(&self, handle: Handle) -> Result<Vec<Vec<u8>>, Failure> {
         match self.table.lock().unwrap().remove(&handle) {
-            Some(MockResource::Resolved(addresses)) => (Status::Ok, addresses),
-            _ => (Status::NotFound, vec![]),
+            Some(MockResource::Resolved(addresses)) => Ok(addresses),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn socket_open(&self, _addr: &[u8]) -> (Status, Handle) {
-        (Status::Ok, self.mint(MockResource::Socket))
+    fn socket_open(&self, _addr: Vec<u8>) -> Result<Handle, Failure> {
+        Ok(self.mint(MockResource::Socket))
     }
 
-    fn socket_bind(&self, io: Handle, _addr: &[u8]) -> Status {
-        if matches!(
-            self.table.lock().unwrap().get(&io),
-            Some(MockResource::Socket)
-        ) {
-            Status::Ok
-        } else {
-            Status::NotFound
+    fn socket_bind(&self, io: Handle, _addr: Vec<u8>) -> Result<(), Failure> {
+        match self.table.lock().unwrap().get(&io) {
+            Some(MockResource::Socket) => Ok(()),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn socket_connect(&self, io: Handle, addr: &[u8]) -> Status {
+    fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
         // The handle must be an unconnected socket minted by `socket_open`; consume it up front so a refusal leaves no half-open handle behind.
         {
             let mut table = self.table.lock().unwrap();
@@ -504,13 +488,13 @@ impl HostOps for MockHost {
                 Some(MockResource::Socket) => {
                     table.remove(&io);
                 }
-                _ => return Status::NotFound,
+                _ => return Err(Failure::NotFound),
             }
         }
 
-        let outcome = match self.endpoints.get(addr) {
+        let outcome = match self.endpoints.get(&addr) {
             Some(response) => Ok(Chunked::new(response.clone())),
-            None => Err(Status::ConnectionRefused),
+            None => Err(Failure::ConnectionRefused),
         };
 
         // A pending connect defers its outcome, refusal included, to `socket_finish_connect` after a poll, as the OS reports a refusal through `SO_ERROR`; a synchronous one answers here, as loopback does.
@@ -523,101 +507,90 @@ impl HostOps for MockHost {
                 },
             );
 
-            return Status::WouldBlock;
+            return Err(Failure::WouldBlock);
         }
 
-        match outcome {
-            Ok(response) => {
-                self.table
-                    .lock()
-                    .unwrap()
-                    .insert(&io, MockResource::Outbound(response));
+        let response = outcome?;
 
-                Status::Ok
-            }
-            Err(status) => status,
-        }
+        self.table
+            .lock()
+            .unwrap()
+            .insert(&io, MockResource::Outbound(response));
+
+        Ok(())
     }
 
-    fn socket_finish_connect(&self, io: Handle) -> Status {
+    fn socket_finish_connect(&self, io: Handle) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
 
         match table.get(&io) {
-            Some(MockResource::Connecting { due: false, .. }) => Status::WouldBlock,
+            Some(MockResource::Connecting { due: false, .. }) => Err(Failure::WouldBlock),
             Some(MockResource::Connecting { due: true, .. }) => {
                 let Some(MockResource::Connecting { outcome, .. }) = table.remove(&io) else {
                     unreachable!("the slot was just read");
                 };
 
-                match outcome {
-                    Ok(response) => {
-                        table.insert(&io, MockResource::Outbound(response));
+                let response = outcome?;
 
-                        Status::Ok
-                    }
-                    Err(status) => status,
-                }
+                table.insert(&io, MockResource::Outbound(response));
+
+                Ok(())
             }
-            Some(MockResource::Outbound(_)) => Status::Ok,
-            _ => Status::NotFound,
+            Some(MockResource::Outbound(_)) => Ok(()),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn tls_start(&self, io: Handle, _sni: &[u8]) -> Status {
+    fn tls_start(&self, io: Handle, _sni: Vec<u8>) -> Result<(), Failure> {
         // The scripted host serves cleartext; a client TLS upgrade is a no-op identity over the existing outbound connection.
-        if matches!(
-            self.table.lock().unwrap().get(&io),
-            Some(MockResource::Outbound(_))
-        ) {
-            Status::Ok
-        } else {
-            Status::NotFound
+        match self.table.lock().unwrap().get(&io) {
+            Some(MockResource::Outbound(_)) => Ok(()),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Handle) {
+    fn tls_server_config(&self, _cert: Vec<u8>, _key: Vec<u8>) -> Result<Handle, Failure> {
         // No real config under test — just mint a token the handle table can hand back to `tls_start_server`.
-        (Status::Ok, self.mint(MockResource::TlsConfig))
+        Ok(self.mint(MockResource::TlsConfig))
     }
 
-    fn tls_start_server(&self, io: Handle, cfg: Handle) -> Status {
+    fn tls_start_server(&self, io: Handle, cfg: Handle) -> Result<(), Failure> {
         // A no-op identity over the accepted connection, given a config token.
         let table = self.table.lock().unwrap();
 
         let has_config = matches!(table.get(&cfg), Some(MockResource::TlsConfig));
         let has_conn = matches!(table.get(&io), Some(MockResource::Inbound(_)));
 
-        if has_config && has_conn {
-            Status::Ok
-        } else {
-            Status::NotFound
+        match has_config && has_conn {
+            true => Ok(()),
+            false => Err(Failure::NotFound),
         }
     }
 
-    fn socket_listen(&self, io: Handle, _backlog: u64) -> Status {
+    fn socket_listen(&self, io: Handle, _backlog: u64) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
 
         match table.get(&io) {
             Some(MockResource::Socket) => {
                 table.insert(&io, MockResource::Listener);
-                Status::Ok
+                Ok(())
             }
-            _ => Status::NotFound,
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn socket_accept(&self, io: Handle) -> (Status, Handle) {
+    fn socket_accept(&self, io: Handle) -> Result<Handle, Failure> {
         if !matches!(
             self.table.lock().unwrap().get(&io),
             Some(MockResource::Listener)
         ) {
-            return (Status::NotFound, Handle::none());
+            return Err(Failure::NotFound);
         }
 
         // Pull the next scripted request. An exhausted queue fails the accept, ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
-            None => return (Status::NotFound, Handle::none()),
+            None => return Err(Failure::NotFound),
         };
 
         let capture = {
@@ -627,20 +600,17 @@ impl HostOps for MockHost {
             index
         };
 
-        (
-            Status::Ok,
-            self.mint(MockResource::Inbound(MockServer {
-                bytes: Chunked::new(request),
-                capture,
-            })),
-        )
+        Ok(self.mint(MockResource::Inbound(MockServer {
+            bytes: Chunked::new(request),
+            capture,
+        })))
     }
 
-    fn socket_set_reuseaddr(&self, _io: Handle, _on: u32) -> Status {
-        Status::Ok
+    fn socket_set_reuseaddr(&self, _io: Handle, _on: u32) -> Result<(), Failure> {
+        Ok(())
     }
 
-    fn handle_poll(&self, handles: &[Handle], events: &[Poll], _: i64) -> Vec<Poll> {
+    fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, _: i64) -> Vec<Poll> {
         // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports nothing. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
@@ -692,20 +662,20 @@ impl HostOps for MockHost {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn handle_read(&self, io: Handle, count: u64) -> (Status, Vec<u8>) {
+    fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
         match &io {
-            // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, `Eof` once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
+            // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, the end once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
             Handle::Stdin => return self.input.lock().unwrap().read(count),
             Handle::Other(_) => {}
             // stdout/stderr are not readable.
-            _ => return (Status::Eof, vec![]),
+            _ => return Ok(None),
         }
 
         match self.table.lock().unwrap().get_mut(&io) {
             // File-backed handle: serve from the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 if open.mode != Mode::Read {
-                    return (Status::NotFound, vec![]);
+                    return Err(Failure::NotFound);
                 }
 
                 self.files.with(&open.path, |contents| {
@@ -721,23 +691,23 @@ impl HostOps for MockHost {
                 stream.read(count)
             }
             // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
-            _ => (Status::NotFound, vec![]),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u64) {
+    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
         // The in-memory sink always takes the whole buffer in one go, so a successful write reports the full length and never `WouldBlock`.
         let full = bytes.len() as u64;
 
         match &io {
             Handle::Stdout | Handle::Stderr => {
-                self.output.lock().unwrap().extend_from_slice(bytes);
+                self.output.lock().unwrap().extend_from_slice(&bytes);
 
                 if matches!(io, Handle::Stderr) {
-                    self.errors.lock().unwrap().extend_from_slice(bytes);
+                    self.errors.lock().unwrap().extend_from_slice(&bytes);
                 }
 
-                return (Status::Ok, full);
+                return Ok(full);
             }
             Handle::Other(_) => {}
             // stdin is not writable; the guest's `/sys/Handle` never issues this.
@@ -748,23 +718,23 @@ impl HostOps for MockHost {
             // File-backed handle: append to the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 if open.mode == Mode::Read {
-                    return (Status::NotFound, 0);
+                    return Err(Failure::NotFound);
                 }
 
-                self.files.append(&open.path, bytes);
+                self.files.append(&open.path, &bytes);
 
-                (Status::Ok, full)
+                Ok(full)
             }
             // Inbound (accepted) connection: capture the response bytes so a test can inspect what the server wrote back.
             Some(MockResource::Inbound(conn)) => {
-                self.captures.lock().unwrap()[conn.capture].extend_from_slice(bytes);
+                self.captures.lock().unwrap()[conn.capture].extend_from_slice(&bytes);
 
-                (Status::Ok, full)
+                Ok(full)
             }
             // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
-            Some(MockResource::Outbound(_)) => (Status::Ok, full),
+            Some(MockResource::Outbound(_)) => Ok(full),
             // A child's piped stdin: accepted and discarded too.
-            Some(MockResource::Sink) => (Status::Ok, full),
+            Some(MockResource::Sink) => Ok(full),
             // A serial port: capture the bytes under its path, so a test can see the command the program sent the device.
             Some(MockResource::Serial(port)) => {
                 self.serial_written
@@ -772,28 +742,20 @@ impl HostOps for MockHost {
                     .unwrap()
                     .entry(port.path.clone())
                     .or_default()
-                    .extend_from_slice(bytes);
+                    .extend_from_slice(&bytes);
 
-                (Status::Ok, full)
+                Ok(full)
             }
-            _ => (Status::NotFound, 0),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn clock_wall(&self) -> (u64, u64) {
-        self.clock_wall_seq
-            .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or((0, 0))
+    fn clock_wall(&self) -> Timestamp {
+        reading(self.clock_wall_seq.lock().unwrap().pop_front())
     }
 
-    fn clock_mono(&self) -> (u64, u64) {
-        self.clock_mono_seq
-            .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or((0, 0))
+    fn clock_mono(&self) -> Timestamp {
+        reading(self.clock_mono_seq.lock().unwrap().pop_front())
     }
 
     fn rand_bytes(&self, count: u64) -> Vec<u8> {
@@ -817,28 +779,25 @@ impl HostOps for MockHost {
         self.args.clone()
     }
 
-    fn proc_env(&self, name: &[u8]) -> (Status, Vec<u8>) {
-        match self.env.get(name) {
-            Some(value) => (Status::Ok, value.clone()),
-            None => (Status::NotFound, vec![]),
-        }
+    fn proc_env(&self, name: Vec<u8>) -> Option<Vec<u8>> {
+        self.env.get(&name).cloned()
     }
 
     fn proc_exit(&self, code: u8) -> Termination {
         Termination(code)
     }
 
-    fn tty_raw(&self, _io: Handle, on: u32) -> Status {
+    fn tty_raw(&self, _io: Handle, on: u32) -> Result<(), Failure> {
         if self.tty_sizes.lock().unwrap().is_empty() {
-            return Status::Other(ENOTTY);
+            return Err(Failure::Other(ENOTTY));
         }
 
         self.raw_modes.lock().unwrap().push(on != 0);
 
-        Status::Ok
+        Ok(())
     }
 
-    fn tty_size(&self, _io: Handle) -> (Status, u64, u64) {
+    fn tty_size(&self, _io: Handle) -> Result<TtySize, Failure> {
         let mut sizes = self.tty_sizes.lock().unwrap();
         let size = if sizes.len() > 1 {
             sizes.pop_front()
@@ -847,112 +806,114 @@ impl HostOps for MockHost {
         };
 
         match size {
-            Some((cols, rows)) => (Status::Ok, cols, rows),
-            None => (Status::Other(ENOTTY), 0, 0),
+            Some((cols, rows)) => Ok(TtySize { cols, rows }),
+            None => Err(Failure::Other(ENOTTY)),
         }
     }
 
     fn serial_open(
         &self,
-        path: &[u8],
+        path: Vec<u8>,
         baud: u64,
         data_bits: u64,
         parity: u64,
         stop_bits: u64,
         flow: u64,
-    ) -> (Status, Handle) {
+    ) -> Result<Handle, Failure> {
         // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
         if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
-            return (Status::Other(EINVAL), Handle::none());
+            return Err(Failure::Other(EINVAL));
         }
 
-        let Some(chunks) = self.serial_devices.get(path) else {
-            return (Status::NotFound, Handle::none());
+        let Some(chunks) = self.serial_devices.get(&path) else {
+            return Err(Failure::NotFound);
         };
 
         self.serial_opens
             .lock()
             .unwrap()
-            .push((path.to_vec(), [baud, data_bits, parity, stop_bits, flow]));
+            .push((path.clone(), [baud, data_bits, parity, stop_bits, flow]));
 
-        (
-            Status::Ok,
-            self.mint(MockResource::Serial(MockSerial {
-                path: path.to_vec(),
-                bytes: Chunked::new(chunks.clone()),
-            })),
-        )
+        Ok(self.mint(MockResource::Serial(MockSerial {
+            bytes: Chunked::new(chunks.clone()),
+            path,
+        })))
     }
 
-    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Status {
+    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
 
         let port = match table.get_mut(&io) {
             Some(MockResource::Serial(port)) => port,
             // A descriptor that is a file, a pipe or a socket has no modem lines, and the native host's ioctl says so through the errno lane.
-            Some(_) => return Status::Other(ENOTTY),
-            None => return Status::NotFound,
+            Some(_) => return Err(Failure::Other(ENOTTY)),
+            None => return Err(Failure::NotFound),
         };
 
         match op {
             serial_op::DTR | serial_op::RTS => {}
             serial_op::DISCARD_INPUT => port.bytes.discard(),
-            _ => return Status::Other(EINVAL),
+            _ => return Err(Failure::Other(EINVAL)),
         }
 
         self.serial_controls.lock().unwrap().push((op, on != 0));
 
-        Status::Ok
+        Ok(())
     }
 
-    fn file_stat(&self, path: &[u8]) -> (Status, u64, u64, u64, u64) {
+    fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
         // The scripted disk keeps no timestamps, so a modification time is the epoch.
-        match self.files.stat(path) {
-            Some((kind, size)) => (Status::Ok, kind, size as u64, 0, 0),
-            None => (Status::NotFound, 0, 0, 0, 0),
+        match self.files.stat(&path) {
+            Some((kind, size)) => Ok(FileStat {
+                kind,
+                size: size as u64,
+                mtime_secs: 0,
+                mtime_nanos: 0,
+            }),
+            None => Err(Failure::NotFound),
         }
     }
 
-    fn file_remove(&self, path: &[u8]) -> Status {
-        self.files.remove_file(path)
+    fn file_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
+        self.files.remove_file(&path)
     }
 
-    fn file_rename(&self, from: &[u8], to: &[u8]) -> Status {
-        self.files.rename(from, to)
+    fn file_rename(&self, from: Vec<u8>, to: Vec<u8>) -> Result<(), Failure> {
+        self.files.rename(&from, &to)
     }
 
-    fn dir_list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
-        self.files.list(path)
+    fn dir_list(&self, path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> {
+        self.files.list(&path)
     }
 
-    fn dir_create(&self, path: &[u8]) -> Status {
-        self.files.create_dir(path)
+    fn dir_create(&self, path: Vec<u8>) -> Result<(), Failure> {
+        self.files.create_dir(&path)
     }
 
-    fn dir_remove(&self, path: &[u8]) -> Status {
-        self.files.remove_dir(path)
+    fn dir_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
+        self.files.remove_dir(&path)
     }
 
-    fn proc_cwd(&self) -> (Status, Vec<u8>) {
-        (Status::Ok, self.cwd.clone())
+    fn proc_cwd(&self) -> Result<Vec<u8>, Failure> {
+        Ok(self.cwd.clone())
     }
 
     fn proc_spawn(
         &self,
-        argv: &[Vec<u8>],
-        _cwd: &[u8],
-        _env: &[Vec<u8>],
+        argv: Vec<Vec<u8>>,
+        _cwd: Vec<u8>,
+        _env: Vec<Vec<u8>>,
         stdin: u64,
         stdout: u64,
         stderr: u64,
-    ) -> (Status, Handle) {
+    ) -> Result<Handle, Failure> {
         // An unscripted program is one the host cannot find, as an unknown path is to `file_open`; the script is keyed by `argv[0]`.
         let Some(script) = argv
             .first()
             .and_then(|program| self.children.get(program))
             .cloned()
         else {
-            return (Status::NotFound, Handle::none());
+            return Err(Failure::NotFound);
         };
         let program = &argv[0];
 
@@ -972,54 +933,64 @@ impl HostOps for MockHost {
         ];
         let child = self.mint(MockResource::Child(MockChild {
             program: program.to_vec(),
-            code: script.code,
-            signal: script.signal,
+            exit: script.exit,
             streams,
         }));
 
-        (Status::Ok, child)
+        Ok(child)
     }
 
-    fn proc_stream(&self, child: Handle, which: u64) -> (Status, Handle) {
+    fn proc_stream(&self, child: Handle, which: u64) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
             Some(MockResource::Child(running)) => match running.streams.get(which as usize) {
-                Some(handle) => (Status::Ok, handle.clone()),
-                None => (Status::NotFound, Handle::none()),
+                Some(handle) => Ok(handle.clone()),
+                None => Err(Failure::NotFound),
             },
-            _ => (Status::NotFound, Handle::none()),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn proc_wait(&self, child: Handle) -> (Status, u64, u64) {
+    fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {
         match self.table.lock().unwrap().remove(&child) {
-            Some(MockResource::Child(ended)) => (Status::Ok, ended.code, ended.signal),
-            _ => (Status::NotFound, 0, 0),
+            Some(MockResource::Child(ended)) => Ok(ended.exit),
+            _ => Err(Failure::NotFound),
         }
     }
 
-    fn proc_kill(&self, child: Handle) -> Status {
+    fn proc_kill(&self, child: Handle) -> Result<(), Failure> {
         match self.table.lock().unwrap().get(&child) {
             Some(MockResource::Child(running)) => {
                 self.kills.lock().unwrap().push(running.program.clone());
 
-                Status::Ok
+                Ok(())
             }
-            _ => Status::NotFound,
+            _ => Err(Failure::NotFound),
         }
     }
 }
 
-/// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shape of a file read, which is always ready; a stream reads through [`Chunked`] instead.
-fn serve_from(contents: &[u8], position: &mut usize, count: u64) -> (Status, Vec<u8>) {
+/// A scripted clock reading, or the epoch once the script is spent.
+fn reading(scripted: Option<(u64, u64)>) -> Timestamp {
+    let (secs, nanos) = scripted.unwrap_or((0, 0));
+
+    Timestamp { secs, nanos }
+}
+
+/// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; the end of the stream once it reaches the end. The shape of a file read, which is always ready; a stream reads through [`Chunked`] instead.
+fn serve_from(
+    contents: &[u8],
+    position: &mut usize,
+    count: u64,
+) -> Result<Option<Vec<u8>>, Failure> {
     if *position >= contents.len() {
-        return (Status::Eof, vec![]);
+        return Ok(None);
     }
 
     let stop = contents.len().min(position.saturating_add(count as usize));
     let bytes = contents[*position..stop].to_vec();
     *position = stop;
 
-    (Status::Ok, bytes)
+    Ok(Some(bytes))
 }
 
 /// The inspectable side of a [`MockHost`]: the shared buffers the run writes into. The host is moved into the runner, so a test holds this handle to read stdout, files, and server captures back out afterwards.
@@ -1108,27 +1079,25 @@ pub struct MockHostBuilder {
 }
 
 impl MockHostBuilder {
-    /// Script the children `proc_spawn` can start: `(program, stdout, stderr, code, signal)`, the exit a signal when `signal` is nonzero. Spawning an unscripted program is `NotFound`.
+    /// Script the children `proc_spawn` can start: `(program, stdout, stderr, exit)`. Spawning an unscripted program is `NotFound`.
     pub fn children<P, O, E, I>(mut self, children: I) -> Self
     where
         P: AsRef<[u8]>,
         O: AsRef<[u8]>,
         E: AsRef<[u8]>,
-        I: IntoIterator<Item = (P, O, E, u64, u64)>,
+        I: IntoIterator<Item = (P, O, E, ChildExit)>,
     {
-        self.children.extend(children.into_iter().map(
-            |(program, stdout, stderr, code, signal)| {
+        self.children
+            .extend(children.into_iter().map(|(program, stdout, stderr, exit)| {
                 (
                     program.as_ref().to_vec(),
                     MockChildScript {
                         stdout: stdout.as_ref().to_vec(),
                         stderr: stderr.as_ref().to_vec(),
-                        code,
-                        signal,
+                        exit,
                     },
                 )
-            },
-        ));
+            }));
 
         self
     }

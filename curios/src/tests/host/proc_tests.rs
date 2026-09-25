@@ -2,9 +2,11 @@
 
 use {
     crate::tests::{run, run_text, typecheck},
+    curios_abi::ChildExit,
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    std::num::NonZeroU32,
 };
 
 #[test]
@@ -211,7 +213,7 @@ fn run_captures_both_outputs_and_the_exit() {
     );
 
     let (system, io) = MockHost::builder()
-        .children([("greet", "hello\n", "warn\n", 0, 0)])
+        .children([("greet", "hello\n", "warn\n", ChildExit::Code(0))])
         .build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"hello\n|warn\n|exited(0)");
@@ -234,7 +236,12 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     );
 
     let (system, io) = MockHost::builder()
-        .children([("crash", "", "", 0, 9)])
+        .children([(
+            "crash",
+            "",
+            "",
+            ChildExit::Signal(NonZeroU32::new(9).unwrap()),
+        )])
         .build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"signaled(9) not_found");
@@ -257,7 +264,7 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
     );
 
     let (system, io) = MockHost::builder()
-        .children([("sleepy", "", "", 0, 0)])
+        .children([("sleepy", "", "", ChildExit::Code(0))])
         .build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"cancelled");
@@ -283,7 +290,7 @@ fn a_piped_output_is_read_through_the_stream_witness() {
     );
 
     let (system, io) = MockHost::builder()
-        .children([("greet", "hello\n", "", 0, 0)])
+        .children([("greet", "hello\n", "", ChildExit::Code(0))])
         .build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"hello\n|exited(0)");

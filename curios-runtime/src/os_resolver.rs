@@ -1,5 +1,5 @@
 use {
-    super::{Status, status_from_error},
+    super::{Failure, failure_from_error},
     std::{
         net::ToSocketAddrs,
         os::fd::OwnedFd,
@@ -11,36 +11,27 @@ use {
     },
 };
 
-/// A finished lookup the worker hands back through the slot: the resolved address blobs and the status reporting whether the name resolved at all. Built only via [`Resolved::found`] / [`Resolved::not_found`], which keep the invariant that `Ok` carries a non-empty blob list and `NotFound` carries none. Distinct from the host's ABI reply, which also encodes `WouldBlock` (still in flight) — a state a completed `Resolved` never holds.
-pub(crate) struct Resolved {
-    status: Status,
-    addresses: Vec<Vec<u8>>,
-}
+/// A finished lookup the worker hands back through the slot: the resolved address blobs, or `NotFound` when the name resolved to nothing. Built only via [`Resolved::found`] / [`Resolved::not_found`], which keep the invariant that a success carries a non-empty blob list. Distinct from the host's ABI reply, which also answers `WouldBlock` (still in flight) — a state a completed `Resolved` never holds.
+pub(crate) struct Resolved(Result<Vec<Vec<u8>>, Failure>);
 
 impl Resolved {
-    /// The outcome of a successful `getaddrinfo`: `Ok` with the resolved blobs, or `NotFound` when the name resolved to an empty set.
+    /// The outcome of a successful `getaddrinfo`: the resolved blobs, or `NotFound` when the name resolved to an empty set.
     fn found(addresses: Vec<Vec<u8>>) -> Self {
         if addresses.is_empty() {
             Self::not_found()
         } else {
-            Self {
-                status: Status::Ok,
-                addresses,
-            }
+            Self(Ok(addresses))
         }
     }
 
     /// The name resolved to nothing — an empty result or a failed lookup.
     fn not_found() -> Self {
-        Self {
-            status: Status::NotFound,
-            addresses: Vec::new(),
-        }
+        Self(Err(Failure::NotFound))
     }
 
-    /// Unpack the finished lookup for the host's ABI reply.
-    pub(crate) fn into_parts(self) -> (Status, Vec<Vec<u8>>) {
-        (self.status, self.addresses)
+    /// The finished lookup, as the host's reply.
+    pub(crate) fn into_reply(self) -> Result<Vec<Vec<u8>>, Failure> {
+        self.0
     }
 }
 
@@ -178,9 +169,9 @@ impl OsResolver {
         Self { sender }
     }
 
-    /// Start an asynchronous lookup of `address`. `Ok(Some)` queued the work — poll the returned `ready` fd and drain `slot` once it fires. `Ok(None)` means the pool is saturated, so the caller sheds the load. `Err(status)` means the wakeup pipe could not be created.
-    pub(crate) fn start(&self, address: String) -> Result<Option<Pending>, Status> {
-        let (job, pending) = Job::new(address).map_err(status_from_error)?;
+    /// Start an asynchronous lookup of `address`. `Ok(Some)` queued the work — poll the returned `ready` fd and drain `slot` once it fires. `Ok(None)` means the pool is saturated, so the caller sheds the load. `Err(failure)` means the wakeup pipe could not be created.
+    pub(crate) fn start(&self, address: String) -> Result<Option<Pending>, Failure> {
+        let (job, pending) = Job::new(address).map_err(failure_from_error)?;
 
         match self.sender.try_send(job) {
             Ok(()) => Ok(Some(pending)),

@@ -1,5 +1,6 @@
 use {
-    super::{Handle, Poll, Status, Termination, engine::ExitTrap},
+    super::{Handle, engine::ExitTrap},
+    curios_abi::{WireReply, WireSink},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
         StorageType, Val, ValType,
@@ -16,17 +17,6 @@ pub trait Lower {
 impl Lower for () {
     fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Ok(())
-    }
-}
-
-/// A Curios IO status lowers as its wire code, a `Nat`.
-impl Lower for Status {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        self.code().lower(caller, results)
     }
 }
 
@@ -56,13 +46,6 @@ impl Lower for u64 {
         results[0] = Val::I64(self.cast_signed());
 
         Ok(())
-    }
-}
-
-/// A diverging row's answer never lowers to a result: it is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code. This is the one way a host ends the instance, so no host implementation of the row can return into the guest.
-impl Lower for Termination {
-    fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
-        Err(wasmtime::Error::from(ExitTrap(self.0)))
     }
 }
 
@@ -237,20 +220,6 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `handle_poll`'s `revents`: a `Bytes` with one readiness mask per handle.
-impl Lower for Vec<Poll> {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        self.into_iter()
-            .map(Poll::bits)
-            .collect::<Vec<u8>>()
-            .lower(caller, results)
-    }
-}
-
 /// `List(Bytes)`: an array of `anyref` whose elements are `Bytes` (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's uniform `list_type`, so the array's runtime type is the one downstream `ref.cast`s expect.
 impl Lower for Vec<Vec<u8>> {
     fn lower(
@@ -286,5 +255,66 @@ impl Lower for Vec<Vec<u8>> {
         ));
 
         Ok(())
+    }
+}
+
+/// A builtin's reply, lowered through the [`WireSink`] its row's types encode into — the one `Lower` the `sys` bindings answer with, so the result slots a row crosses with are the ones its reply type states.
+pub(crate) struct Replied<R>(pub(crate) R);
+
+impl<R: WireReply> Lower for Replied<R> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        self.0.encode(&mut Slots {
+            caller,
+            results,
+            next: 0,
+        })
+    }
+}
+
+/// An import's result slots, filled one at a time as a reply encodes, each through the single-value `Lower` of what it holds.
+struct Slots<'a, 'b, 'c> {
+    caller: &'a mut Caller<'b, ()>,
+    results: &'c mut [Val],
+    next: usize,
+}
+
+impl Slots<'_, '_, '_> {
+    fn fill(&mut self, value: impl Lower) -> Result<(), wasmtime::Error> {
+        value.lower(
+            &mut *self.caller,
+            &mut self.results[self.next..self.next + 1],
+        )?;
+        self.next += 1;
+
+        Ok(())
+    }
+}
+
+impl WireSink for Slots<'_, '_, '_> {
+    type Error = wasmtime::Error;
+
+    fn nat(&mut self, value: u64) -> Result<(), wasmtime::Error> {
+        self.fill(value)
+    }
+
+    fn bytes(&mut self, value: Vec<u8>) -> Result<(), wasmtime::Error> {
+        self.fill(value)
+    }
+
+    fn handle(&mut self, value: Handle) -> Result<(), wasmtime::Error> {
+        self.fill(value)
+    }
+
+    fn bytes_list(&mut self, value: Vec<Vec<u8>>) -> Result<(), wasmtime::Error> {
+        self.fill(value)
+    }
+
+    /// A termination is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code: the one way a host ends the instance, so no implementation of a diverging row can return into the guest.
+    fn terminate(&mut self, code: u8) -> Result<(), wasmtime::Error> {
+        Err(wasmtime::Error::from(ExitTrap(code)))
     }
 }

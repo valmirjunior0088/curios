@@ -28,7 +28,7 @@ fn a_standard_stream_takes_set_reuseaddr_like_a_file() {
     let host = OsHost::with_args(vec![]);
 
     for handle in [Handle::Stdin, Handle::Stdout, Handle::Stderr] {
-        assert!(matches!(host.socket_set_reuseaddr(handle, 1), Status::Ok));
+        assert_eq!(host.socket_set_reuseaddr(handle, 1), Ok(()));
     }
 }
 
@@ -41,78 +41,73 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_
     const NOT_A_TERMINAL: u32 = 19;
 
     let host = OsHost::with_args(vec![]);
-    let (status, handle) = host.file_open(b"/dev/null", Mode::Read);
+    let handle = host.file_open(b"/dev/null".to_vec(), Mode::Read).unwrap();
 
-    assert!(matches!(status, Status::Ok));
-    assert!(matches!(
+    assert_eq!(
         host.tty_raw(handle.clone(), 1),
-        Status::Other(NOT_A_TERMINAL)
-    ));
-    assert!(matches!(
+        Err(Failure::Other(NOT_A_TERMINAL))
+    );
+    assert_eq!(
         host.tty_size(handle.clone()),
-        (Status::Other(NOT_A_TERMINAL), 0, 0)
-    ));
-    assert!(matches!(host.tty_raw(handle.clone(), 0), Status::Ok));
+        Err(Failure::Other(NOT_A_TERMINAL))
+    );
+    assert_eq!(host.tty_raw(handle.clone(), 0), Ok(()));
 
     host.handle_close(handle);
 }
 
-/// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once `handle_poll` reports them; closing its stdin ends it, its stdout reads `Eof`, and `proc_wait` reaps it. These streams are what let a fiber's drain yield instead of stalling the scheduler.
+/// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once `handle_poll` reports them; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a fiber's drain yield instead of stalling the scheduler.
 #[test]
 fn a_piped_child_stream_is_filed_non_blocking() {
     let host = OsHost::with_args(vec![]);
-    let (status, child) = host.proc_spawn(
-        &[b"/bin/cat".to_vec()],
-        b"",
-        &[],
-        curios_abi::stdio_mode::PIPE,
-        curios_abi::stdio_mode::PIPE,
-        curios_abi::stdio_mode::NULL,
-    );
-    assert!(matches!(status, Status::Ok));
-    let (status, stdin) = host.proc_stream(child.clone(), 0);
-    assert!(matches!(status, Status::Ok));
-    let (status, stdout) = host.proc_stream(child.clone(), 1);
-    assert!(matches!(status, Status::Ok));
+    let child = host
+        .proc_spawn(
+            vec![b"/bin/cat".to_vec()],
+            vec![],
+            vec![],
+            curios_abi::stdio_mode::PIPE,
+            curios_abi::stdio_mode::PIPE,
+            curios_abi::stdio_mode::NULL,
+        )
+        .unwrap();
+    let stdin = host.proc_stream(child.clone(), 0).unwrap();
+    let stdout = host.proc_stream(child.clone(), 1).unwrap();
 
-    assert!(matches!(
+    assert_eq!(
         host.handle_read(stdout.clone(), 8),
-        (Status::WouldBlock, bytes) if bytes.is_empty()
-    ));
-    assert!(matches!(
-        host.handle_write(stdin.clone(), b"abc"),
-        (Status::Ok, 3)
-    ));
+        Err(Failure::WouldBlock)
+    );
+    assert_eq!(host.handle_write(stdin.clone(), b"abc".to_vec()), Ok(3));
     let ready = host.handle_poll(
-        std::slice::from_ref(&stdout),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![stdout.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    assert!(matches!(
+    assert_eq!(
         host.handle_read(stdout.clone(), 8),
-        (Status::Ok, bytes) if bytes == b"abc"
-    ));
+        Ok(Some(b"abc".to_vec()))
+    );
 
     // Another test's child may have been forked while this write end was open and hold it until its `exec`, so the end of the stream may arrive a few reads late as `WouldBlock`.
     host.handle_close(stdin);
     let mut outcome = host.handle_read(stdout.clone(), 8);
     for _ in 0..100 {
-        if !matches!(outcome, (Status::WouldBlock, _)) {
+        if outcome != Err(Failure::WouldBlock) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
         outcome = host.handle_read(stdout.clone(), 8);
     }
-    assert!(matches!(outcome, (Status::Eof, bytes) if bytes.is_empty()));
+    assert_eq!(outcome, Ok(None));
 
     let ready = host.handle_poll(
-        std::slice::from_ref(&child),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![child.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    assert!(matches!(host.proc_wait(child), (Status::Ok, 0, 0)));
+    assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
 
     host.handle_close(stdout);
 }
@@ -138,21 +133,11 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
 ///
 /// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so the earlier probe-and-release helper had the second test bind the port the first was about to — measured 2026-09-03 at three failures in fifteen runs of this module.
 fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
-    let any = b"127.0.0.1:0";
-    let (status, listener) = host.socket_open(any);
-    assert!(matches!(status, Status::Ok));
-    assert!(matches!(
-        host.socket_set_reuseaddr(listener.clone(), 1),
-        Status::Ok
-    ));
-    assert!(matches!(
-        host.socket_bind(listener.clone(), any),
-        Status::Ok
-    ));
-    assert!(matches!(
-        host.socket_listen(listener.clone(), 1),
-        Status::Ok
-    ));
+    let any = b"127.0.0.1:0".to_vec();
+    let listener = host.socket_open(any.clone()).unwrap();
+    assert_eq!(host.socket_set_reuseaddr(listener.clone(), 1), Ok(()));
+    assert_eq!(host.socket_bind(listener.clone(), any), Ok(()));
+    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
 
     let port = match host.table.lock().unwrap().get(&listener) {
         Some(OsResource::Listener(socket)) => socket
@@ -174,59 +159,48 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     let (listener, blob) = loopback_listener(&host);
     assert!(matches!(
         host.socket_accept(listener.clone()),
-        (Status::WouldBlock, _)
+        Err(Failure::WouldBlock)
     ));
 
-    let (status, client) = host.socket_open(&blob);
-    assert!(matches!(status, Status::Ok));
-    match host.socket_connect(client.clone(), &blob) {
-        Status::Ok => {}
-        Status::WouldBlock => {
+    let client = host.socket_open(blob.clone()).unwrap();
+    match host.socket_connect(client.clone(), blob) {
+        Ok(()) => {}
+        Err(Failure::WouldBlock) => {
             let ready = host.handle_poll(
-                std::slice::from_ref(&client),
-                &[Poll::from_bits(curios_abi::event::WRITE)],
+                vec![client.clone()],
+                vec![Poll::from_bits(curios_abi::event::WRITE)],
                 5_000,
             );
             assert_ne!(ready[0].bits() & curios_abi::event::WRITE, 0);
-            assert!(matches!(
-                host.socket_finish_connect(client.clone()),
-                Status::Ok
-            ));
+            assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
         }
-        other => panic!("connect answered status code {}", other.code()),
+        Err(failure) => panic!("connect answered {failure:?}"),
     }
-    assert!(matches!(
-        host.socket_finish_connect(client.clone()),
-        Status::Ok
-    ));
+    assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
 
     let ready = host.handle_poll(
-        std::slice::from_ref(&listener),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![listener.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    let (status, server) = host.socket_accept(listener.clone());
-    assert!(matches!(status, Status::Ok));
+    let server = host.socket_accept(listener.clone()).unwrap();
 
-    assert!(matches!(
+    assert_eq!(
         host.handle_read(server.clone(), 8),
-        (Status::WouldBlock, bytes) if bytes.is_empty()
-    ));
-    assert!(matches!(
-        host.handle_write(client.clone(), b"ping"),
-        (Status::Ok, 4)
-    ));
+        Err(Failure::WouldBlock)
+    );
+    assert_eq!(host.handle_write(client.clone(), b"ping".to_vec()), Ok(4));
     let ready = host.handle_poll(
-        std::slice::from_ref(&server),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![server.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    assert!(matches!(
+    assert_eq!(
         host.handle_read(server.clone(), 8),
-        (Status::Ok, bytes) if bytes == b"ping"
-    ));
+        Ok(Some(b"ping".to_vec()))
+    );
 
     host.handle_close(server);
     host.handle_close(client);
@@ -237,29 +211,21 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
 fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     let (listener, blob) = loopback_listener(host);
 
-    let (status, client) = host.socket_open(&blob);
-    assert!(matches!(status, Status::Ok));
-    if matches!(
-        host.socket_connect(client.clone(), &blob),
-        Status::WouldBlock
-    ) {
+    let client = host.socket_open(blob.clone()).unwrap();
+    if host.socket_connect(client.clone(), blob) == Err(Failure::WouldBlock) {
         host.handle_poll(
-            std::slice::from_ref(&client),
-            &[Poll::from_bits(curios_abi::event::WRITE)],
+            vec![client.clone()],
+            vec![Poll::from_bits(curios_abi::event::WRITE)],
             5_000,
         );
-        assert!(matches!(
-            host.socket_finish_connect(client.clone()),
-            Status::Ok
-        ));
+        assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
     }
     host.handle_poll(
-        std::slice::from_ref(&listener),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![listener.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    let (status, server) = host.socket_accept(listener.clone());
-    assert!(matches!(status, Status::Ok));
+    let server = host.socket_accept(listener.clone()).unwrap();
 
     (listener, client, server)
 }
@@ -270,47 +236,43 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     let host = OsHost::with_args(vec![]);
     let (listener, client, server) = loopback_pair(&host);
 
-    assert!(matches!(
-        host.tls_start(client.clone(), b"localhost"),
-        Status::Ok
-    ));
-    assert!(matches!(
+    assert_eq!(
+        host.tls_start(client.clone(), b"localhost".to_vec()),
+        Ok(())
+    );
+    assert_eq!(
         host.handle_read(server.clone(), 8),
-        (Status::WouldBlock, bytes) if bytes.is_empty()
-    ));
-    assert!(matches!(
-        host.handle_write(client.clone(), b"x"),
-        (Status::WouldBlock, 0)
-    ));
+        Err(Failure::WouldBlock)
+    );
+    assert_eq!(
+        host.handle_write(client.clone(), b"x".to_vec()),
+        Err(Failure::WouldBlock)
+    );
 
     let ready = host.handle_poll(
-        std::slice::from_ref(&server),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![server.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    let (status, hello) = host.handle_read(server.clone(), 4096);
-    assert!(matches!(status, Status::Ok));
+    let hello = host
+        .handle_read(server.clone(), 4096)
+        .unwrap()
+        .expect("the client hello");
     assert_eq!(&hello[..2], &[0x16, 0x03], "a TLS handshake record");
 
-    assert!(matches!(
-        host.handle_write(server.clone(), b"HTTP/1.0 400 Bad Request\r\n\r\n"),
-        (Status::Ok, _)
-    ));
+    assert!(
+        host.handle_write(server.clone(), b"HTTP/1.0 400 Bad Request\r\n\r\n".to_vec())
+            .is_ok()
+    );
     let ready = host.handle_poll(
-        std::slice::from_ref(&client),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![client.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    assert!(matches!(
-        host.handle_read(client.clone(), 8),
-        (Status::TlsError, _)
-    ));
-    assert!(!matches!(
-        host.handle_read(client.clone(), 8),
-        (Status::NotFound, _)
-    ));
+    assert_eq!(host.handle_read(client.clone(), 8), Err(Failure::TlsError));
+    assert_ne!(host.handle_read(client.clone(), 8), Err(Failure::NotFound));
 
     host.handle_close(server);
     host.handle_close(client);
@@ -338,13 +300,12 @@ fn a_refused_connect_reports_and_drops_the_socket() {
     drop(holder);
     let blob = format!("127.0.0.1:{port}").into_bytes();
 
-    let (status, client) = host.socket_open(&blob);
-    assert!(matches!(status, Status::Ok));
-    let outcome = match host.socket_connect(client.clone(), &blob) {
-        Status::WouldBlock => {
+    let client = host.socket_open(blob.clone()).unwrap();
+    let outcome = match host.socket_connect(client.clone(), blob) {
+        Err(Failure::WouldBlock) => {
             let ready = host.handle_poll(
-                std::slice::from_ref(&client),
-                &[Poll::from_bits(curios_abi::event::WRITE)],
+                vec![client.clone()],
+                vec![Poll::from_bits(curios_abi::event::WRITE)],
                 5_000,
             );
             // A settled connect is reported as the platform reports it: Linux answers a refused one `WRITE`, macOS `HUP`, and `ERR` rides either. `/std`'s scheduler resumes a park on any of the three for the same reason — a handle in one of those states will never become ready.
@@ -360,41 +321,39 @@ fn a_refused_connect_reports_and_drops_the_socket() {
         }
         other => other,
     };
-    assert!(matches!(outcome, Status::ConnectionRefused));
-    assert!(matches!(host.handle_read(client, 8), (Status::NotFound, _)));
+    assert_eq!(outcome, Err(Failure::ConnectionRefused));
+    assert_eq!(host.handle_read(client, 8), Err(Failure::NotFound));
 }
 
 /// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The unpiped stdin comes back as the empty handle.
 #[test]
 fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     let host = OsHost::with_args(vec![]);
-    let (status, child) = host.proc_spawn(
-        &[b"/bin/echo".to_vec(), b"hi".to_vec()],
-        b"",
-        &[],
-        curios_abi::stdio_mode::INHERIT,
-        curios_abi::stdio_mode::PIPE,
-        curios_abi::stdio_mode::NULL,
-    );
+    let child = host
+        .proc_spawn(
+            vec![b"/bin/echo".to_vec(), b"hi".to_vec()],
+            vec![],
+            vec![],
+            curios_abi::stdio_mode::INHERIT,
+            curios_abi::stdio_mode::PIPE,
+            curios_abi::stdio_mode::NULL,
+        )
+        .unwrap();
 
-    assert!(matches!(status, Status::Ok));
-    let (status, stdin) = host.proc_stream(child.clone(), 0);
-    assert!(matches!(status, Status::Ok));
-    assert!(stdin.is_none());
-    let (status, stdout) = host.proc_stream(child.clone(), 1);
-    assert!(matches!(status, Status::Ok));
+    assert!(host.proc_stream(child.clone(), 0).unwrap().is_none());
+    let stdout = host.proc_stream(child.clone(), 1).unwrap();
 
     let ready = host.handle_poll(
-        std::slice::from_ref(&child),
-        &[Poll::from_bits(curios_abi::event::READ)],
+        vec![child.clone()],
+        vec![Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
-    assert!(matches!(host.proc_wait(child), (Status::Ok, 0, 0)));
-    assert!(matches!(
+    assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
+    assert_eq!(
         host.handle_read(stdout.clone(), 64),
-        (Status::Ok, bytes) if bytes == b"hi\n"
-    ));
+        Ok(Some(b"hi\n".to_vec()))
+    );
 
     host.handle_close(stdout);
 }
@@ -413,18 +372,14 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     let name = NAME;
     fs::write(dir.join(OsStr::from_bytes(name)), b"x").expect("a file under the raw name");
 
-    let (status, names) = host.dir_list(dir.as_os_str().as_bytes());
-    assert!(matches!(status, Status::Ok));
+    let names = host.dir_list(dir.as_os_str().as_bytes().to_vec()).unwrap();
     assert_eq!(names, vec![name.to_vec()]);
 
     let path = dir.join(OsStr::from_bytes(&names[0]));
-    let (status, handle) = host.file_open(path.as_os_str().as_bytes(), Mode::Read);
-    assert!(
-        matches!(status, Status::Ok),
-        "open answered {}",
-        status.code()
-    );
-    assert!(matches!(host.handle_read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"x"));
+    let handle = host
+        .file_open(path.into_os_string().into_vec(), Mode::Read)
+        .unwrap();
+    assert_eq!(host.handle_read(handle.clone(), 8), Ok(Some(b"x".to_vec())));
 
     host.handle_close(handle);
 }
@@ -442,7 +397,7 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     let host = OsHost::with_args(vec![]);
     let open = |data_bits| {
         host.serial_open(
-            name.as_bytes(),
+            name.as_bytes().to_vec(),
             115_200,
             data_bits,
             serial_parity::NONE,
@@ -451,10 +406,9 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
         )
     };
 
-    assert!(matches!(open(5), (Status::Other(EINVAL), _)));
+    assert!(matches!(open(5), Err(Failure::Other(EINVAL))));
 
-    let (status, port) = open(8);
-    assert!(matches!(status, Status::Ok));
+    let port = open(8).unwrap();
 
     let termios = host
         .with_fd(&port, |fd| tcgetattr(fd))
@@ -471,35 +425,29 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
             .intersects(LocalModes::ICANON | LocalModes::ECHO)
     );
 
-    assert!(matches!(
-        host.handle_read(port.clone(), 8),
-        (Status::WouldBlock, bytes) if bytes.is_empty()
-    ));
+    assert_eq!(host.handle_read(port.clone(), 8), Err(Failure::WouldBlock));
     rustix::io::write(&near, b"ok").expect("the near end writes");
     let ready = host.handle_poll(
-        std::slice::from_ref(&port),
-        &[Poll::from_bits(event::READ)],
+        vec![port.clone()],
+        vec![Poll::from_bits(event::READ)],
         5_000,
     );
     assert!(ready[0].bits() & event::READ != 0);
-    assert!(matches!(
-        host.handle_read(port.clone(), 8),
-        (Status::Ok, bytes) if bytes == b"ok"
-    ));
+    assert_eq!(host.handle_read(port.clone(), 8), Ok(Some(b"ok".to_vec())));
 
-    assert!(matches!(
+    assert_eq!(
         host.serial_control(port.clone(), serial_op::DISCARD_INPUT, 0),
-        Status::Ok
-    ));
+        Ok(())
+    );
     #[cfg(target_os = "linux")]
-    assert!(matches!(
+    assert_eq!(
         host.serial_control(port.clone(), serial_op::DTR, 1),
-        Status::Other(25)
-    ));
+        Err(Failure::Other(25))
+    );
 
     host.handle_close(port.clone());
-    assert!(matches!(
+    assert_eq!(
         host.serial_control(port, serial_op::DISCARD_INPUT, 0),
-        Status::NotFound
-    ));
+        Err(Failure::NotFound)
+    );
 }

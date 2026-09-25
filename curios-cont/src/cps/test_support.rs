@@ -22,9 +22,7 @@ use {
 /// A halt through `proc/exit` reading `args` — the terminal a fixture ends a path with when what it passes must stay live.
 pub(super) fn halt(args: Vec<Atom>) -> Node {
     Node::Halt {
-        function: Arc::new(ForeignFunction::Builtin(
-            HostOp::named("proc_exit").expect("the roster names proc_exit"),
-        )),
+        function: Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
         args,
     }
 }

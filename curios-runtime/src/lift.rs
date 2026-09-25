@@ -72,7 +72,7 @@ impl Lift for f64 {
     }
 }
 
-/// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities two through seven — past the six operands of `proc_spawn` and `serial_open`, the widest rows, so an embedder's own declaration has room.
+/// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities one through seven — the one-tuple for the `sys` bindings, which lift every row's operands as a tuple whatever their count, and past the six operands of `proc_spawn` and `serial_open`, the widest rows, so an embedder's own declaration has room.
 macro_rules! lift_tuple {
     ($($name:ident $index:tt),+) => {
         impl<$($name: Lift),+> Lift for ($($name,)+) {
@@ -83,6 +83,7 @@ macro_rules! lift_tuple {
     };
 }
 
+lift_tuple!(A 0);
 lift_tuple!(A 0, B 1);
 lift_tuple!(A 0, B 1, C 2);
 lift_tuple!(A 0, B 1, C 2, D 3);

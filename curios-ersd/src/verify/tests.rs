@@ -385,9 +385,7 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
     let member = builder.value(Some("member".into()));
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
-    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(
-        HostOp::named("proc_exit").expect("the roster names proc_exit"),
-    )));
+    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)));
     let init = builder.seal_block(Terminator::Halt {
         foreign: exit,
         operands: vec![zero],

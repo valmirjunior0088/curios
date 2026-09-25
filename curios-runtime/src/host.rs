@@ -1,8 +1,11 @@
 //! The native adapter's own concerns, and the contract it speaks in.
 //!
-//! The wire contract — the [`Handle`]/[`Status`]/[`Poll`]/[`Mode`] semantic types and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a wire [`Status`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
+//! The wire contract — the [`Handle`]/[`Failure`]/[`Poll`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
-pub use curios_abi::{Handle, HostOps, Mode, Poll, Status, Termination};
+pub use curios_abi::{
+    ChildExit, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Termination, Timestamp,
+    TtySize,
+};
 
 use {
     curios_abi::{event, serial_flow, serial_parity},
@@ -45,20 +48,20 @@ pub(crate) fn serial_frame(
     Some(size | parity | stop | flow)
 }
 
-/// Map an `io::Error` to its wire [`Status`]. The named kinds map to named statuses; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. `dns_resolve` → `NotFound`) map it at the call site.
-pub(crate) fn status_from_error(error: Error) -> Status {
+/// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. `dns_resolve` → `NotFound`) map it at the call site.
+pub(crate) fn failure_from_error(error: Error) -> Failure {
     match error.kind() {
-        ErrorKind::NotFound => Status::NotFound,
-        ErrorKind::PermissionDenied => Status::PermissionDenied,
-        ErrorKind::AlreadyExists => Status::AlreadyExists,
-        ErrorKind::ConnectionRefused => Status::ConnectionRefused,
-        ErrorKind::WouldBlock => Status::WouldBlock,
-        ErrorKind::DirectoryNotEmpty => Status::NotEmpty,
-        ErrorKind::IsADirectory => Status::IsDirectory,
-        ErrorKind::NotADirectory => Status::NotDirectory,
+        ErrorKind::NotFound => Failure::NotFound,
+        ErrorKind::PermissionDenied => Failure::PermissionDenied,
+        ErrorKind::AlreadyExists => Failure::AlreadyExists,
+        ErrorKind::ConnectionRefused => Failure::ConnectionRefused,
+        ErrorKind::WouldBlock => Failure::WouldBlock,
+        ErrorKind::DirectoryNotEmpty => Failure::NotEmpty,
+        ErrorKind::IsADirectory => Failure::IsDirectory,
+        ErrorKind::NotADirectory => Failure::NotDirectory,
         _ => match error.raw_os_error() {
-            Some(errno) => Status::Other(errno as u32),
-            None => Status::Other(0),
+            Some(errno) => Failure::Other(errno as u32),
+            None => Failure::Other(0),
         },
     }
 }

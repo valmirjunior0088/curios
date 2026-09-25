@@ -1,10 +1,11 @@
 //! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers. Each of the others mirrors a guest-side notion at its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. [`Handle`] and [`Poll`] lift from and lower to that shape here; [`Status`] only lowers, since a host produces one and never reads one back; and [`Mode`] is lifted by the adapter that reads the tag off the wire. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`] and [`ChildExit`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {
-    crate::{status, stdio},
+    crate::{file_kind, status, stdio},
     curios_num::Natural,
+    std::num::NonZeroU32,
 };
 
 /// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
@@ -118,17 +119,15 @@ impl Poll {
     }
 }
 
-/// The status contract of failable host ops, mirrored by `/std/Io/Error`'s `of`. Each named status has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
-#[derive(Clone, Copy)]
-pub enum Status {
-    Ok,
-    Eof,
+/// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failure {
     NotFound,
     PermissionDenied,
     AlreadyExists,
     /// A `socket_connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
-    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the status a fiber parks on: `/std`'s scheduler matches on it to reschedule the read/write instead of treating it as a real failure.
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a fiber parks on: `/std`'s scheduler matches on it to reschedule the read/write instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`tls_start`/`tls_start_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,
@@ -142,24 +141,74 @@ pub enum Status {
     Other(u32),
 }
 
-impl Status {
-    /// The wire code the guest decodes. The named statuses have fixed tags; `Other(errno)` lowers as [`OTHER_BASE`](status::OTHER_BASE) plus its carried errno, keeping the errno lane disjoint from the named tags.
+impl Failure {
+    /// The wire code the guest decodes. The named failures have fixed tags; `Other(errno)` lowers as [`OTHER_BASE`](status::OTHER_BASE) plus its carried errno, keeping the errno lane disjoint from the named tags.
     pub fn code(self) -> u64 {
         match self {
-            Status::Ok => status::OK,
-            Status::Eof => status::EOF,
-            Status::NotFound => status::NOT_FOUND,
-            Status::PermissionDenied => status::PERMISSION_DENIED,
-            Status::AlreadyExists => status::ALREADY_EXISTS,
-            Status::ConnectionRefused => status::CONNECTION_REFUSED,
-            Status::WouldBlock => status::WOULD_BLOCK,
-            Status::TlsError => status::TLS_ERROR,
-            Status::NotEmpty => status::NOT_EMPTY,
-            Status::IsDirectory => status::IS_DIRECTORY,
-            Status::NotDirectory => status::NOT_DIRECTORY,
-            Status::Other(errno) => status::OTHER_BASE + u64::from(errno),
+            Failure::NotFound => status::NOT_FOUND,
+            Failure::PermissionDenied => status::PERMISSION_DENIED,
+            Failure::AlreadyExists => status::ALREADY_EXISTS,
+            Failure::ConnectionRefused => status::CONNECTION_REFUSED,
+            Failure::WouldBlock => status::WOULD_BLOCK,
+            Failure::TlsError => status::TLS_ERROR,
+            Failure::NotEmpty => status::NOT_EMPTY,
+            Failure::IsDirectory => status::IS_DIRECTORY,
+            Failure::NotDirectory => status::NOT_DIRECTORY,
+            Failure::Other(errno) => status::OTHER_BASE + u64::from(errno),
         }
     }
+}
+
+/// A clock reading, as `clock_wall` and `clock_mono` answer it: whole seconds, and the nanoseconds within the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timestamp {
+    pub secs: u64,
+    pub nanos: u64,
+}
+
+/// A terminal's dimensions, as `tty_size` answers them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TtySize {
+    pub cols: u64,
+    pub rows: u64,
+}
+
+/// What `file_stat` found at a path, its kind one of the closed [`file_kind`] codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileKind {
+    File,
+    Directory,
+    /// A symbolic link whose target is missing; a link that resolves reports what it resolves to.
+    Symlink,
+    Other,
+}
+
+impl FileKind {
+    /// The [`file_kind`] code the guest decodes.
+    pub fn code(self) -> u64 {
+        match self {
+            FileKind::File => file_kind::FILE,
+            FileKind::Directory => file_kind::DIRECTORY,
+            FileKind::Symlink => file_kind::SYMLINK,
+            FileKind::Other => file_kind::OTHER,
+        }
+    }
+}
+
+/// What `file_stat` answers: the kind, the size in bytes, and the modification time as `clock_wall` reads the clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileStat {
+    pub kind: FileKind,
+    pub size: u64,
+    pub mtime_secs: u64,
+    pub mtime_nanos: u64,
+}
+
+/// How a child ended: the exit code it returned, or the signal that ended it — never both, which is what `proc_wait`'s pair of fields cannot say by itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildExit {
+    Code(u8),
+    Signal(NonZeroU32),
 }
 
 /// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Its `0`/`1`/`2` tag is [`open_mode`](crate::open_mode)'s; lifting a tag is the native adapter's (`curios-runtime`'s `Lift`), which is where an out-of-range one is refused.

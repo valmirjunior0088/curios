@@ -233,9 +233,7 @@ fn an_exit_seals_the_thunk_that_describes_it() {
         &dead,
         Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
         Term::foreign(
-            Arc::new(ForeignFunction::Builtin(
-                HostOp::named("proc_exit").expect("the roster names proc_exit"),
-            )),
+            Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(3))],
         ),
         nat_lit(7),

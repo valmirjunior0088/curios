@@ -1,10 +1,11 @@
 use {
     super::{
         Handle, HostOps, Lift, Lower, Mode, Poll,
-        lower::{anyref_array_type, i8_array_type, longs_array_type, words_array_type},
+        lower::{Replied, anyref_array_type, i8_array_type, longs_array_type, words_array_type},
     },
     curios_abi::{
-        ENTRY, ForeignFunction, ForeignStore, Namespace, PANIC, WireLeaf, WireType, host_ops,
+        ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireType,
+        host_ops,
     },
     std::{
         collections::HashMap,
@@ -194,266 +195,32 @@ impl ForeignBindings {
     }
 }
 
-/// `proc_spawn`'s lifted operands — `argv`, `cwd`, `env` and the three stdio-wiring tags — a row wide enough to deserve a name.
-type SpawnOperands = (Vec<Vec<u8>>, Vec<u8>, Vec<Vec<u8>>, u64, u64, u64);
+/// Bind every row of the table to its [`HostOps`] method: each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unbound, none is bound twice, and no binding's types can differ from the row's.
+macro_rules! declare_sys_impls {
+    ($(
+        $(#[doc = $doc:literal])*
+        $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
+    )*) => {
+        /// The registry of builtin implementations: every [`host_ops()`] row bound to its [`HostOps`] method.
+        fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
+            let mut impls = ForeignBindings::new(host_ops());
 
-/// `serial_open`'s lifted operands — the path, the speed, and the four frame settings — the other row wide enough to deserve one.
-type SerialOpenOperands = (Vec<u8>, u64, u64, u64, u64, u64);
+            $(
+                impls.define(HostOp::$variant.name(), {
+                    let host = host.clone();
 
-/// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method. The store and the trait are generated from one authored list in `curios-abi`, and these hand-written bindings are cross-checked against both — each `define` name must be a real store row (asserted), and each method call must match the trait (compiler-checked) — so the three stay in agreement without a fourth independent spelling.
-fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
-    let mut impls = ForeignBindings::new(host_ops());
+                    move |($($p,)*): ($($t,)*)| Replied(host.$name($($p),*))
+                });
+            )*
 
-    impls.define("handle_read", {
-        let host = host.clone();
-
-        move |(handle, count): (Handle, u64)| host.handle_read(handle, count)
-    });
-
-    impls.define("handle_write", {
-        let host = host.clone();
-
-        move |(handle, bytes): (Handle, Vec<u8>)| host.handle_write(handle, &bytes)
-    });
-
-    impls.define("file_open", {
-        let host = host.clone();
-
-        move |(path, mode): (Vec<u8>, Mode)| host.file_open(&path, mode)
-    });
-
-    impls.define("socket_connect", {
-        let host = host.clone();
-
-        move |(handle, addr): (Handle, Vec<u8>)| host.socket_connect(handle, &addr)
-    });
-
-    impls.define("socket_finish_connect", {
-        let host = host.clone();
-
-        move |handle: Handle| host.socket_finish_connect(handle)
-    });
-
-    impls.define("tls_start", {
-        let host = host.clone();
-
-        move |(handle, sni): (Handle, Vec<u8>)| host.tls_start(handle, &sni)
-    });
-
-    impls.define("tls_server_config", {
-        let host = host.clone();
-
-        move |(cert, key): (Vec<u8>, Vec<u8>)| host.tls_server_config(&cert, &key)
-    });
-
-    impls.define("tls_start_server", {
-        let host = host.clone();
-
-        move |(handle, cfg): (Handle, Handle)| host.tls_start_server(handle, cfg)
-    });
-
-    impls.define("socket_listen", {
-        let host = host.clone();
-
-        move |(handle, backlog): (Handle, u64)| host.socket_listen(handle, backlog)
-    });
-
-    impls.define("socket_accept", {
-        let host = host.clone();
-
-        move |handle: Handle| host.socket_accept(handle)
-    });
-
-    impls.define("dns_lookup", {
-        let host = host.clone();
-
-        move |(name, port): (Vec<u8>, u64)| host.dns_lookup(&name, port)
-    });
-
-    impls.define("dns_resolve", {
-        let host = host.clone();
-
-        move |handle: Handle| host.dns_resolve(handle)
-    });
-
-    impls.define("socket_open", {
-        let host = host.clone();
-
-        move |addr: Vec<u8>| host.socket_open(&addr)
-    });
-
-    impls.define("socket_bind", {
-        let host = host.clone();
-
-        move |(handle, addr): (Handle, Vec<u8>)| host.socket_bind(handle, &addr)
-    });
-
-    impls.define("socket_set_reuseaddr", {
-        let host = host.clone();
-
-        move |(handle, on): (Handle, u32)| host.socket_set_reuseaddr(handle, on)
-    });
-
-    impls.define("handle_poll", {
-        let host = host.clone();
-
-        move |(handles, events, timeout): (Vec<Handle>, Vec<Poll>, i64)| {
-            host.handle_poll(&handles, &events, timeout)
+            impls
         }
-    });
-
-    impls.define("handle_close", {
-        let host = host.clone();
-
-        move |handle: Handle| host.handle_close(handle)
-    });
-
-    impls.define("clock_wall", {
-        let host = host.clone();
-
-        move |()| host.clock_wall()
-    });
-
-    impls.define("clock_mono", {
-        let host = host.clone();
-
-        move |()| host.clock_mono()
-    });
-
-    impls.define("rand_bytes", {
-        let host = host.clone();
-
-        move |count: u64| host.rand_bytes(count)
-    });
-
-    impls.define("proc_args", {
-        let host = host.clone();
-
-        move |()| host.proc_args()
-    });
-
-    impls.define("proc_env", {
-        let host = host.clone();
-
-        move |name: Vec<u8>| host.proc_env(&name)
-    });
-
-    impls.define("proc_exit", {
-        let host = host.clone();
-
-        move |code: u8| host.proc_exit(code)
-    });
-
-    impls.define("tty_raw", {
-        let host = host.clone();
-
-        move |(handle, on): (Handle, u32)| host.tty_raw(handle, on)
-    });
-
-    impls.define("tty_size", {
-        let host = host.clone();
-
-        move |handle: Handle| host.tty_size(handle)
-    });
-
-    impls.define("serial_open", {
-        let host = host.clone();
-
-        move |(path, baud, data_bits, parity, stop_bits, flow): SerialOpenOperands| {
-            host.serial_open(&path, baud, data_bits, parity, stop_bits, flow)
-        }
-    });
-
-    impls.define("serial_control", {
-        let host = host.clone();
-
-        move |(handle, op, on): (Handle, u64, u32)| host.serial_control(handle, op, on)
-    });
-
-    impls.define("file_stat", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.file_stat(&path)
-    });
-
-    impls.define("file_remove", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.file_remove(&path)
-    });
-
-    impls.define("file_rename", {
-        let host = host.clone();
-
-        move |(from, to): (Vec<u8>, Vec<u8>)| host.file_rename(&from, &to)
-    });
-
-    impls.define("dir_list", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.dir_list(&path)
-    });
-
-    impls.define("dir_create", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.dir_create(&path)
-    });
-
-    impls.define("dir_remove", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.dir_remove(&path)
-    });
-
-    impls.define("proc_cwd", {
-        let host = host.clone();
-
-        move |()| host.proc_cwd()
-    });
-
-    impls.define("proc_spawn", {
-        let host = host.clone();
-
-        move |(argv, cwd, env, stdin, stdout, stderr): SpawnOperands| {
-            host.proc_spawn(&argv, &cwd, &env, stdin, stdout, stderr)
-        }
-    });
-
-    impls.define("proc_stream", {
-        let host = host.clone();
-
-        move |(child, which): (Handle, u64)| host.proc_stream(child, which)
-    });
-
-    impls.define("proc_wait", {
-        let host = host.clone();
-
-        move |child: Handle| host.proc_wait(child)
-    });
-
-    impls.define("proc_kill", {
-        let host = host.clone();
-
-        move |child: Handle| host.proc_kill(child)
-    });
-
-    // Completeness — the half the per-`define` asserts cannot see: a store row with no binding would otherwise surface only when a program that imports it reaches `link`. Membership and uniqueness are asserted per `define`, so no unbound row is exactly one binding per row.
-    let missing = impls
-        .foreigns
-        .iter()
-        .filter(|function| !impls.trampolines.contains_key(function.name()))
-        .map(|function| function.name())
-        .collect::<Vec<_>>();
-    assert!(
-        missing.is_empty(),
-        "host_ops rows without a sys binding: {missing:?}"
-    );
-
-    impls
+    };
 }
 
-/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only by lowering a [`Termination`](curios_abi::Termination), so a host method answering the row cannot return into the guest.
+host_ops!(declare_sys_impls);
+
+/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]
 pub(crate) struct ExitTrap(pub(crate) u8);
 
