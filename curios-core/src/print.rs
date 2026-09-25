@@ -1085,9 +1085,6 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
         Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::ProcExit { result, code } => {
-            print_call("proc/exit", vec![result], vec![code], frame)
-        }
         Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
         Intrinsic::ChannelType(elem) => print_former("Channel", elem, frame),
         Intrinsic::Cell { element } => print_call("Cell/new", vec![element], vec![], frame),

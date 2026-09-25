@@ -296,7 +296,7 @@ impl Semantics {
     pub fn terminator(terminator: &Terminator) -> ObservableBehavior {
         match terminator {
             Terminator::Return(_) => ObservableBehavior::none(),
-            Terminator::Exit(_) => ObservableBehavior {
+            Terminator::Halt { .. } => ObservableBehavior {
                 may_exit: true,
                 ..ObservableBehavior::none()
             },

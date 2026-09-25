@@ -45,3 +45,13 @@ fn a_byte_result_past_255_is_refused_as_a_host_reply() {
     assert_contains(&wat, "call $refuse/host_reply");
     assert_contains(&wat, "ref.i31");
 }
+
+/// A diverging row is imported and called like any other, and nothing resumes after it: the call is followed by the refusal of a host that returns anyway, never by a continuation.
+#[test]
+fn a_halt_calls_its_row_and_refuses_a_host_that_returns() {
+    let wat = wat(&foreign_call("socket_bind"));
+    assert_contains(&wat, "(import \"sys\" \"proc_exit\"");
+    assert_contains(&wat, "call $host/sys/proc_exit");
+    assert_contains(&wat, "call $refuse/host_reply");
+    assert_absent(&wat, "(import \"sys\" \"exit\"");
+}

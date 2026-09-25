@@ -100,7 +100,7 @@ fn a_host_row_joins_the_module_that_declared_its_subject() {
     assert_eq!(modules[1].label, "file");
 }
 
-// The defect the declaration replaced: `exit` was placed by a `find` over the joined roster under an `if let`, so a store carrying no `proc` row dropped it silently. Declared, it survives a store that names it nowhere.
+// A declared module is kept whatever the store holds: the join adds rows to it and never decides whether it exists, so a store that names it in no row cannot drop what it declares.
 #[test]
 fn a_declared_module_survives_a_store_that_names_it_in_no_row() {
     let declared = vec![SysModule::ops("proc", vec![nat_succ()])];

@@ -15,11 +15,11 @@
 use {
     super::{Globals, Kernel, KernelError, Sort},
     curios_analysis::{Erased, group_totality},
-    curios_core::{Enter, Global, Intrinsic, Item, Module, Rec, Reducer, Subterm, Term, Totality},
+    curios_core::{Enter, Global, Item, Module, Rec, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
-/// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`.
+/// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or a call to a host row that diverges.
 ///
 /// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
 fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
@@ -31,7 +31,8 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
             None => Enter::Descend,
         },
         |state, term, mut children| {
-            let mut partial = matches!(&**term, Subterm::Intrinsic(Intrinsic::ProcExit { .. }));
+            let mut partial =
+                matches!(&**term, Subterm::Foreign(function, _) if function.diverges());
             if let Subterm::Rec(Rec { group, .. }) = &**term {
                 partial = partial || group_totality(state.0, group) == Totality::Partial;
             }

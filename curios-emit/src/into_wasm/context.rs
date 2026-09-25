@@ -7,12 +7,13 @@ use {
         EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get,
         i32_const, set, when,
     },
-    curios_abi::{WireLeaf, WireReference, WireType},
+    curios_abi::{ForeignFunction, WireLeaf, WireReference, WireType},
     curios_num::Grain,
     curios_utilities::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
         iter,
+        sync::Arc,
     },
 };
 
@@ -855,6 +856,34 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
+    /// Load `operands` at their wire types, force each reference to its flat payload, and call `function`'s import — the half of a host call that does not depend on whether it returns.
+    fn host_call_instrs(
+        &mut self,
+        function: &Arc<ForeignFunction>,
+        operands: &'a [EmissionValueName],
+    ) -> Vec<curios_wasm::Instr> {
+        let signature = function.signature();
+
+        debug_assert_eq!(
+            operands.len(),
+            signature.params.len(),
+            "{} operand count does not match its signature",
+            function.name()
+        );
+
+        let mut output = Vec::new();
+        for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
+            output.extend(self.load_value_instrs(operand, wire_type.into()));
+            output.extend(self.wire_force_instrs(wire_type));
+        }
+
+        output.push(curios_wasm::Instr::Call {
+            func_name: self.table().host_func(function),
+        });
+
+        output
+    }
+
     /// Emit a host intrinsic call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
     pub(crate) fn host_instrs(&mut self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
@@ -865,23 +894,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 operands,
                 resume,
             } => {
-                let signature = &function.signature();
+                let signature = function.signature();
 
-                debug_assert_eq!(
-                    operands.len(),
-                    signature.params.len(),
-                    "{} operand count does not match its signature",
-                    function.name()
-                );
-
-                for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
-                    output.extend(self.load_value_instrs(operand, wire_type.into()));
-                    output.extend(self.wire_force_instrs(wire_type));
-                }
-
-                output.push(curios_wasm::Instr::Call {
-                    func_name: self.table().host_func(function),
-                });
+                output.extend(self.host_call_instrs(function, operands));
 
                 // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`). Boxing works on the top of the stack only, so a row with one waits its results out in locals of their own and brings them back in order; a row without one needs only its reference embedded, which is the last to cross — `WireResults` can hold it nowhere else — and so is already on top.
                 let reference = signature
@@ -938,14 +953,10 @@ impl<'a, 'b> Context<'a, 'b> {
                     results => self.host_multi_resume(&mut output, resume, results),
                 }
             }
-            EmissionHostTarget::Exit { code } => {
-                // The exit code is a `Byte`, a machine word already, so it crosses with nothing to refuse.
-                output.extend(self.load_value_instrs(code, LoadAs::Nat));
-                output.push(curios_wasm::Instr::Call {
-                    func_name: self.table().exit_func().clone(),
-                });
-
-                output.push(curios_wasm::Instr::Unreachable);
+            // Nothing resumes after a diverging call: a host that returns from it has broken its contract, so the guest refuses rather than continue.
+            EmissionHostTarget::Halt { function, operands } => {
+                output.extend(self.host_call_instrs(function, operands));
+                output.extend(self.table().refuse_instrs(curios_cont::Panic::HostReply));
             }
         }
 

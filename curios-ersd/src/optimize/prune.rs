@@ -207,8 +207,11 @@ fn walk_subtree(module: &Module, statements: Vec<StatementId>, blocks: Vec<Block
         if let Some(block) = module.block(block) {
             statements.extend(block.statements.iter().copied());
             match &block.terminator {
-                Terminator::Return(atom) | Terminator::Exit(atom) => {
-                    use_atom(&mut subtree, *atom);
+                Terminator::Return(atom) => use_atom(&mut subtree, *atom),
+                Terminator::Halt { operands, .. } => {
+                    for &atom in operands {
+                        use_atom(&mut subtree, atom);
+                    }
                 }
                 Terminator::Unreachable => {}
             }

@@ -78,7 +78,7 @@ impl Reach {
                 | Node::Cell { .. }
                 | Node::Channel { .. }
                 | Node::Intrinsic { .. }
-                | Node::Exit { .. }
+                | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
             }
@@ -443,13 +443,12 @@ impl Printer<'_, '_, '_, '_> {
                 }
                 jobs.push(Job::Line(format!("end{suffix}")));
             }
-            Node::Exit { value } => {
-                let line = match value {
-                    Some(value) => format!("exit {}{suffix}", self.atom(value)),
-                    None => format!("exit{suffix}"),
-                };
-                jobs.push(Job::Line(line));
-            }
+            Node::Halt { function, args } => jobs.push(Job::Line(format!(
+                "halt {}/{}({}){suffix}",
+                function.namespace(),
+                function.name(),
+                self.operands(args)
+            ))),
             Node::Panic(panic) => jobs.push(Job::Line(format!("panic {panic}{suffix}"))),
             Node::Unreachable => jobs.push(Job::Line(format!("unreachable{suffix}"))),
         }

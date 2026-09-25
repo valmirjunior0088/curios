@@ -139,11 +139,19 @@ impl Lowerer<'_> {
                 let atom = self.emitter.lower_atom(*atom);
                 self.emitter.jump(target, vec![atom])
             }
-            Terminator::Exit(atom) => {
-                let atom = self.emitter.lower_atom(*atom);
+            Terminator::Halt { foreign, operands } => {
+                let function = self
+                    .source
+                    .foreign(*foreign)
+                    .expect("live foreign row")
+                    .clone();
+                let args = operands
+                    .iter()
+                    .map(|&atom| self.emitter.lower_atom(atom))
+                    .collect();
                 self.emitter
                     .module
-                    .add_node(curios_cont::Node::Exit { value: Some(atom) })
+                    .add_node(curios_cont::Node::Halt { function, args })
             }
             Terminator::Unreachable => self.emitter.module.add_node(curios_cont::Node::Unreachable),
         }

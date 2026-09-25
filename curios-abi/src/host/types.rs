@@ -1,6 +1,6 @@
 //! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! Each mirrors a guest-side notion at its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. [`Handle`] and [`Poll`] lift from and lower to that shape here; [`Status`] only lowers, since a host produces one and never reads one back; and [`Mode`] is lifted by the adapter that reads the tag off the wire. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers. Each of the others mirrors a guest-side notion at its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. [`Handle`] and [`Poll`] lift from and lower to that shape here; [`Status`] only lowers, since a host produces one and never reads one back; and [`Mode`] is lifted by the adapter that reads the tag off the wire. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{status, stdio},
@@ -169,3 +169,7 @@ pub enum Mode {
     Write,
     Append,
 }
+
+/// How a diverging row ends the instance: the code `proc/exit` hands the embedder, which the adapter carries out as its guest-exit trap. A host method that answers one cannot return into the guest, because nothing but the trap is made of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Termination(pub u8);

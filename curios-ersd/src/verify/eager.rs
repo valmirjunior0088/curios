@@ -271,10 +271,12 @@ impl Summaries {
                     Some(Statement::Functions { .. }) | None => {}
                 }
             }
-            if let Some(Atom::Value(value)) = block.terminator.atom() {
-                evaluation.direct.insert(value);
-                if let Some(init) = scope.nested.remove(&value) {
-                    blocks.push(init);
+            for atom in block.terminator.atoms() {
+                if let Atom::Value(value) = atom {
+                    evaluation.direct.insert(value);
+                    if let Some(init) = scope.nested.remove(&value) {
+                        blocks.push(init);
+                    }
                 }
             }
             if Semantics::terminator(&block.terminator).may_exit {

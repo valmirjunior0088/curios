@@ -12,17 +12,19 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** Generating the bindings too. They marshal wasmtime values, which cannot live in this leaf, so they stay hand-written and the cross-checks stand in for generation.
 
-### `exit` is not a row
+### `exit` is a row that diverges
 
-**Decision.** `exit` traps rather than returns, so no result row describes it; it stays a hardcoded intrinsic outside both the store and the trait, and only its import name lives here, as `EXIT`. Its guest declaration and type are `curios-text`'s prelude's.
+**Decision.** `proc_exit as proc/exit [code: Byte] [!]` is an ordinary row of the table whose results are `[!]`: it has no results and never returns, which is distinct from a row returning nothing. The guest declaration takes the result type as an erased operand, `(@A: Type, code: Byte) -> Io(A)`, and both checkers and the certifier's partiality obligations read divergence from `HostOp::diverges`. The `HostOps` method answers a `Termination`, which the adapter carries out as the guest-exit trap, and the emitter lowers the call as terminal control flow — no continuation, no result reconstruction, and a refusal as `host_reply` should a host return anyway.
 
-**Rationale.** A row exists to describe what comes back, and a call that never returns has nothing for a `WireSignature` to say — a row would let the store promise a result the runtime cannot deliver. The name still lives here because it is wire: stamped by the emitter and matched by the runtime linker, and a wire string spelled once at each end is exactly the drift this crate exists to remove.
+**Rationale.** Exit was the one host operation outside the table, with an intrinsic of its own, an import name beside the store and a dedicated branch at every stage from the parser to both runtimes. A row describes it with one flag: the table says the call does not come back, and every stage that already handles host calls handles it, reading divergence off the row where it once matched a special case.
+
+**Rejected.** Keeping exit as a dedicated intrinsic, for the branches above. A row that returns nothing, which would let a pass or a host treat the call as resumable. A result type field on the foreign term rather than an operand the signature states, which would admit a type for a returning row or none for a diverging one.
 
 ### `panic` is not a row either, and no program can spell it
 
-**Decision.** `panic` is the second `sys` import outside the store: a byte string in, no return. Its name lives here as `PANIC`; it has no `/sys` declaration, because it is not a language operation but the emitter's — `curios-emit` calls it wherever it refuses a computation (a `Nat` or `Int` past its carrier, a read past the end, a `Flt` decode, a compiler invariant) with one constant sentence per class, and both runtimes render what arrives as `panicked: …`. The sentences are not wire: they cross as ordinary byte strings the runtime prints verbatim, so the text is the emitter's alone. The decision is [a refusal is a panic the emitter renders](../documentation/design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md).
+**Decision.** `panic` is the one `sys` import outside the store: a byte string in, no return. Its name lives here as `PANIC`; it has no `/sys` declaration, because it is not a language operation but the emitter's — `curios-emit` calls it wherever it refuses a computation (a `Nat` or `Int` past its carrier, a read past the end, a `Flt` decode, a compiler invariant) with one constant sentence per class, and both runtimes render what arrives as `panicked: …`. The sentences are not wire: they cross as ordinary byte strings the runtime prints verbatim, so the text is the emitter's alone. The decision is [a refusal is a panic the emitter renders](../documentation/design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md).
 
-**Rationale.** The same as `exit`'s for the row, and one more for the absence of a declaration: a user-level `panic` typed at any `A` would be an axiom, and one typed at `Io(A)` is `exit` with a message, which a program already writes as a write and an exit.
+**Rationale.** A row describes what a call demands and yields for a program that makes it, and no program makes this call. A user-level `panic` typed at any `A` would be an axiom, and one typed at `Io(A)` is `exit` with a message, which a program already writes as a write and an exit.
 
 ### The wire vocabulary is a closed subset of guest types, and lists do not nest
 

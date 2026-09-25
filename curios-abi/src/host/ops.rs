@@ -2,7 +2,9 @@
 //!
 //! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the roster every [`HostOp`] names a row of, from which the `host_ops` store is built, and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
 //!
-//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `Polls`, `ListBytes`, `ListHandle`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
+//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Byte`, `Int`, `Bytes`, `Mode`, `Status`, `Polls`, `ListBytes`, `ListHandle`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs a twelfth slot kind, reconsider the vocabulary before extending it.
+//!
+//! A row whose results are `[!]` diverges: it has no results and never returns, which is distinct from a row returning nothing. `proc_exit` is the one such row. Its trait method answers a [`Termination`](super::Termination), so no host implementation can return into the guest, and the guest refuses a host that returns anyway.
 //!
 //! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket_open`, `clock`).
 
@@ -89,6 +91,9 @@ macro_rules! host_ops {
             /// Look up the environment variable `name`. `(status, value)`: `Ok` with the value, or `NotFound` with empty bytes.
             proc_env as proc/env [name: Bytes] [status: Status, value: Bytes];
 
+            /// End the instance with `code`, the status every host hands its parent whole. The call never returns: the native host carries the code out as its guest-exit trap and the browser as its exit signal, neither ending the embedding process, and a host that returns anyway is refused rather than resumed.
+            proc_exit as proc/exit [code: Byte] [!];
+
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
             tty_raw as tty/raw [h: Handle, on: Bool] [status: Status];
 
@@ -148,6 +153,9 @@ macro_rules! wire_of {
     (Bool) => {
         WireType::Bool
     };
+    (Byte) => {
+        WireType::Byte
+    };
     (Int) => {
         WireType::Int
     };
@@ -178,6 +186,9 @@ macro_rules! scalar_of {
     };
     (Bool) => {
         WireScalar::Bool
+    };
+    (Byte) => {
+        WireScalar::Byte
     };
     (Int) => {
         WireScalar::Int
@@ -236,6 +247,9 @@ macro_rules! trait_param_of {
     (Bool) => {
         u32
     };
+    (Byte) => {
+        u8
+    };
     (Int) => {
         i64
     };
@@ -260,6 +274,7 @@ macro_rules! trait_param_of {
 macro_rules! trait_result_of {
     (Handle) => { Handle };
     (Nat) => { u64 };
+    (Byte) => { u8 };
     (Bytes) => { Vec<u8> };
     (Status) => { Status };
     (ListBytes) => { Vec<Vec<u8>> };
@@ -273,14 +288,40 @@ macro_rules! result_ty {
     ($($many:ident),+ $(,)?) => { ($(trait_result_of!($many)),+) };
 }
 
+/// A row's results → its method's Rust return type: [`Termination`](super::Termination) for a diverging row, [`result_ty!`] otherwise.
+macro_rules! returns_of {
+    (!) => { super::Termination };
+    ($($r:ident : $rs:ident),* $(,)?) => { result_ty!($($rs),*) };
+}
+
+/// A row's results → the [`WireResults`] it crosses with: none for a diverging row, whose call never comes back.
+macro_rules! wire_results_of {
+    (!) => {
+        WireResults::none()
+    };
+    ($($r:ident : $rs:ident),* $(,)?) => {
+        results_of!($($r : $rs),*)
+    };
+}
+
+/// Whether a row's results are `[!]`.
+macro_rules! diverges_of {
+    (!) => {
+        true
+    };
+    ($($results:tt)*) => {
+        false
+    };
+}
+
 /// Project the op list to the typed host interface.
 macro_rules! declare_host_trait {
-    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
+    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($results:tt)*];)*) => {
         /// The host side of the builtin import surface: one method per `host_ops` store row, generated from the `host_ops!` list so the store and this trait cannot drift. Handles cross as [`Handle`], failures as [`Status`]; one shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
         pub trait HostOps {
             $(
                 $(#[doc = $doc])*
-                fn $method(&self $(, $p: trait_param_of!($ps))*) -> result_ty!($($rs),*);
+                fn $method(&self $(, $p: trait_param_of!($ps))*) -> returns_of!($($results)*);
             )*
         }
     };
@@ -292,12 +333,13 @@ struct Row {
     subject: &'static str,
     label: &'static str,
     signature: WireSignature,
+    diverges: bool,
     description: &'static str,
 }
 
 /// Project the op list to the roster every [`HostOp`] is a position in.
 macro_rules! declare_host_roster {
-    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
+    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($results:tt)*];)*) => {
         /// Every builtin row, in the table's order — the declaration order `/sys` binds them in and the runtime seeds its implementations by.
         fn roster() -> &'static [Row] {
             static ROWS: LazyLock<Vec<Row>> = LazyLock::new(|| {
@@ -308,8 +350,9 @@ macro_rules! declare_host_roster {
                         label: stringify!($label),
                         signature: WireSignature {
                             params: vec![$((stringify!($p).to_string(), wire_of!($ps))),*],
-                            results: results_of!($($r : $rs),*),
+                            results: wire_results_of!($($results)*),
                         },
+                        diverges: diverges_of!($($results)*),
                         // The row's own `///`, which is where a builtin's meaning is already written down.
                         description: concat!($($doc),*).trim(),
                     },
@@ -371,6 +414,11 @@ impl HostOp {
     /// The row's operands and results.
     pub fn signature(self) -> &'static WireSignature {
         &self.row().signature
+    }
+
+    /// Whether the row never returns — its results are `[!]`: a call to it ends the instance, so it takes the result type it describes as an operand, and nothing resumes after it.
+    pub fn diverges(self) -> bool {
+        self.row().diverges
     }
 
     /// What the operation does, in the words the roster states it in.

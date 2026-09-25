@@ -824,6 +824,10 @@ impl HostOps for MockHost {
         }
     }
 
+    fn proc_exit(&self, code: u8) -> Termination {
+        Termination(code)
+    }
+
     fn tty_raw(&self, _io: Handle, on: u32) -> Status {
         if self.tty_sizes.lock().unwrap().is_empty() {
             return Status::Other(ENOTTY);

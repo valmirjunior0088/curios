@@ -78,7 +78,11 @@ fn constructing_functions_is_dormant_and_aggregates_are_discardable() {
 fn terminators_report_exit_and_trap() {
     let unit = Atom::Constant(ConstantId(0));
     assert!(!Semantics::terminator(&Terminator::Return(unit)).is_effectful());
-    assert!(Semantics::terminator(&Terminator::Exit(unit)).may_exit);
+    let halt = Terminator::Halt {
+        foreign: ForeignId(0),
+        operands: vec![unit],
+    };
+    assert!(Semantics::terminator(&halt).may_exit);
     assert!(Semantics::terminator(&Terminator::Unreachable).may_trap);
 }
 

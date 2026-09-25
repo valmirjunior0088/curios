@@ -230,8 +230,8 @@ impl<'m> Evaluator<'m> {
         };
         let returned = match &block.terminator {
             Terminator::Return(atom) => *atom,
-            // An exit is an effect the candidate binding cannot become; the tail-call boundary converts it into a residual call instead.
-            Terminator::Exit(_) => return Outcome::Bail(Bail::Effect),
+            // A diverging host call is an effect the candidate binding cannot become; the tail-call boundary converts it into a residual call instead.
+            Terminator::Halt { .. } => return Outcome::Bail(Bail::Effect),
             Terminator::Unreachable => return Outcome::Bail(Bail::Trap),
         };
 

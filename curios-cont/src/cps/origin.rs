@@ -179,7 +179,7 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
                 }
                 Node::LetFun { .. }
                 | Node::LetCont { .. }
-                | Node::Exit { .. }
+                | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
             }

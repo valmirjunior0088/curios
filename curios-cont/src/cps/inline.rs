@@ -130,7 +130,7 @@ fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) 
         | Node::LetIntrinsic { .. }
         | Node::LetFun { .. }
         | Node::LetCont { .. }
-        | Node::Exit { .. }
+        | Node::Halt { .. }
         | Node::Panic(_)
         | Node::Unreachable => {}
     }

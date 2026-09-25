@@ -244,8 +244,11 @@ pub enum Statement {
 pub enum Terminator {
     /// Yield an atom as the block's result.
     Return(Atom),
-    /// Nonreturning process exit with the given code.
-    Exit(Atom),
+    /// A call to a host row that diverges — `proc/exit` — with its wire operands. It ends the block with no result and nothing after it, so no continuation is ever made for it.
+    Halt {
+        foreign: ForeignId,
+        operands: Vec<Atom>,
+    },
     /// An unreachable trap, seated where an arm was proved impossible.
     Unreachable,
 }

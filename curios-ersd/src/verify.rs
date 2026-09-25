@@ -726,8 +726,32 @@ impl<'m> Verifier<'m> {
 
     fn check_terminator(&mut self, id: BlockId) -> Result<(), StructuralFault> {
         match &self.block(id)?.terminator {
-            Terminator::Return(atom) | Terminator::Exit(atom) => {
+            Terminator::Return(atom) => {
                 self.check_atom_at(*atom, || format!("the terminator of block {id}"))
+            }
+            Terminator::Halt { foreign, operands } => {
+                let row = self.module.foreign(*foreign).ok_or_else(|| {
+                    fault(
+                        StructuralRule::DeadIdentity,
+                        format!("the terminator of block {id} references dead {foreign}"),
+                    )
+                })?;
+                let arity = row.signature().params.len();
+                if operands.len() != arity {
+                    return Err(fault(
+                        StructuralRule::ForeignArity,
+                        format!(
+                            "the terminator of block {id} calls {}/{} with {} operands; its wire arity is {arity}",
+                            row.namespace(),
+                            row.name(),
+                            operands.len()
+                        ),
+                    ));
+                }
+                for atom in operands {
+                    self.check_atom_at(*atom, || format!("the terminator of block {id}"))?;
+                }
+                Ok(())
             }
             Terminator::Unreachable => Ok(()),
         }

@@ -184,7 +184,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
             | Node::LetCont { .. }
             | Node::ApplyCont(_)
             | Node::Switch { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
@@ -256,7 +256,7 @@ fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<V
             | Node::Foreign { .. }
             | Node::LetFun { .. }
             | Node::LetCont { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
@@ -323,15 +323,8 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
 
                 Node::ApplyCont(edge) => edge_demands(module, edge, &offers, solver),
 
-                // The exit code crosses as a raw `i32`.
-                Node::Exit { value } => {
-                    if let Some(value) = value {
-                        demand(value, Some(Repr::Nat), &offers, solver);
-                    }
-                }
-
-                // A host call reads its scalar parameters raw and its reference parameters as shapes.
-                Node::Foreign { function, args, .. } => {
+                // A host call reads its scalar parameters raw and its reference parameters as shapes, whether or not it returns.
+                Node::Foreign { function, args, .. } | Node::Halt { function, args } => {
                     for (arg, (_, wire)) in args.iter().zip(&function.signature().params) {
                         demand(arg, wire_carrier(wire), &offers, solver);
                     }

@@ -196,7 +196,7 @@ impl Module {
                     return true;
                 }
             }
-            if block.terminator.atom() == Some(Atom::Value(member)) {
+            if block.terminator.atoms().contains(&Atom::Value(member)) {
                 return true;
             }
         }

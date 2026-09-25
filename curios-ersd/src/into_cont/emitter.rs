@@ -231,8 +231,10 @@ impl<'a> Emitter<'a> {
         let mut pending: Vec<StatementId> = statements.to_vec();
         let mut blocks: Vec<BlockId> = Vec::new();
         let mut seen = BTreeSet::new();
-        if let Some(Atom::Value(value)) = terminator.atom() {
-            refs.insert(value);
+        for atom in terminator.atoms() {
+            if let Atom::Value(value) = atom {
+                refs.insert(value);
+            }
         }
         loop {
             if let Some(statement) = pending.pop() {
@@ -255,8 +257,10 @@ impl<'a> Emitter<'a> {
             }
             if let Some(block) = self.source.block(block) {
                 pending.extend(&block.statements);
-                if let Some(Atom::Value(value)) = block.terminator.atom() {
-                    refs.insert(value);
+                for atom in block.terminator.atoms() {
+                    if let Atom::Value(value) = atom {
+                        refs.insert(value);
+                    }
                 }
             }
         }

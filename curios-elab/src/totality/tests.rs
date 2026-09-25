@@ -1,7 +1,7 @@
 use {
     super::*,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{DefinitionKind, Entrypoint, Free, Nat, UniverseContext},
+    curios_core::{DefinitionKind, Entrypoint, Free, Intrinsic, Nat, UniverseContext},
     curios_utilities::Qualifier,
 };
 

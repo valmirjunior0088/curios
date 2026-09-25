@@ -83,7 +83,10 @@ impl Remap<'_> {
     pub(crate) fn terminator(&self, terminator: &Terminator) -> Terminator {
         match terminator {
             Terminator::Return(atom) => Terminator::Return(self.atom(*atom)),
-            Terminator::Exit(atom) => Terminator::Exit(self.atom(*atom)),
+            Terminator::Halt { foreign, operands } => Terminator::Halt {
+                foreign: *foreign,
+                operands: operands.iter().map(|&atom| self.atom(atom)).collect(),
+            },
             Terminator::Unreachable => Terminator::Unreachable,
         }
     }

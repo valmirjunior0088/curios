@@ -4,7 +4,7 @@ use {
         lower::{anyref_array_type, i8_array_type, longs_array_type, words_array_type},
     },
     curios_abi::{
-        ENTRY, EXIT, ForeignFunction, ForeignStore, Namespace, PANIC, WireLeaf, WireType, host_ops,
+        ENTRY, ForeignFunction, ForeignStore, Namespace, PANIC, WireLeaf, WireType, host_ops,
     },
     std::{
         collections::HashMap,
@@ -338,6 +338,12 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |name: Vec<u8>| host.proc_env(&name)
     });
 
+    impls.define("proc_exit", {
+        let host = host.clone();
+
+        move |code: u8| host.proc_exit(code)
+    });
+
     impls.define("tty_raw", {
         let host = host.clone();
 
@@ -447,9 +453,9 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls
 }
 
-/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap.
+/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only by lowering a [`Termination`](curios_abi::Termination), so a host method answering the row cannot return into the guest.
 #[derive(Debug)]
-struct ExitTrap(u8);
+pub(crate) struct ExitTrap(pub(crate) u8);
 
 impl fmt::Display for ExitTrap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -508,18 +514,6 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
     for import in module.imports() {
         match import.module() {
             SYS => match import.name() {
-                // `exit` never returns: it traps with the code, which the caller below catches. A registry trampoline cannot trap, so it is wired directly, outside the store.
-                EXIT => {
-                    let exit_type = FuncType::new(engine, [ValType::I32], []);
-
-                    linker
-                        .func_new(SYS, EXIT, exit_type, move |mut caller, params, _| {
-                            let code = u8::lift(&mut caller, params)?;
-
-                            Err(wasmtime::Error::from(ExitTrap(code)))
-                        })
-                        .map_err(|error| format!("failed to define exit: {error}"))?;
-                }
                 // `panic` is the emitter's own refusal, `exit` with a message: the byte string it hands over is lifted as any `Bytes` operand is, and carried out as the trap the caller below renders.
                 PANIC => {
                     let bytes_ref = ValType::Ref(RefType::new(

@@ -2,7 +2,7 @@
 //!
 //! The wire contract — the [`Handle`]/[`Status`]/[`Poll`]/[`Mode`] semantic types and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a wire [`Status`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
-pub use curios_abi::{Handle, HostOps, Mode, Poll, Status};
+pub use curios_abi::{Handle, HostOps, Mode, Poll, Status, Termination};
 
 use {
     curios_abi::{event, serial_flow, serial_parity},

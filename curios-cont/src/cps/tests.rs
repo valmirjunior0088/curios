@@ -5,6 +5,7 @@ use {
         Atom, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId, Intrinsic,
         Literal, Module, Node, NodeId, Row, Slot, UseTarget, ValueExpr, ValueId,
     },
+    crate::cps::test_support::halt_zero,
     std::collections::BTreeMap,
 };
 
@@ -424,7 +425,7 @@ fn a_node_reached_from_two_places_is_refused() {
     let body = module.function(entry).unwrap().body;
 
     // Two continuations sharing one body, both bound by a group the entry enters.
-    let shared = module.add_node(Node::Exit { value: None });
+    let shared = module.add_node(halt_zero());
     let first = module.add_continuation(Continuation {
         debug_name: Some("first".into()),
         params: Vec::new(),

@@ -2,7 +2,7 @@ use curios_num::Natural;
 
 use {
     super::{Origin, origins},
-    crate::cps::test_support::module_with,
+    crate::cps::test_support::{halt, halt_zero, module_with},
     crate::{
         Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, Slot, ValueExpr, ValueId,
     },
@@ -18,7 +18,7 @@ fn a_construction_reaches_its_parameter_exactly() {
         built = module.add_value(Some("built".into()));
         param = module.add_value(Some("param".into()));
         let target = module.reserve_continuation();
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         module.define_continuation(
             target,
             Continuation {
@@ -113,7 +113,7 @@ fn merged_arities_travel_as_a_variant() {
         param = module.add_value(Some("param".into()));
         let scrutinee = module.add_value(Some("scrutinee".into()));
         let target = module.reserve_continuation();
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         module.define_continuation(
             target,
             Continuation {
@@ -201,7 +201,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
     let caller_ret = module.reserve_continuation();
     let resume = module.reserve_continuation();
     let join = module.reserve_continuation();
-    let exit = module.add_node(Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     module.define_continuation(
         join,
         Continuation {
@@ -256,7 +256,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         let callee_param = module.add_value(Some("callee/param".into()));
         let callee = module.reserve_function();
         let callee_ret = module.reserve_continuation();
-        let callee_exit = module.add_node(Node::Exit { value: None });
+        let callee_exit = module.add_node(halt_zero());
         module.define_function(
             callee,
             Function {
@@ -273,8 +273,9 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         let caller_ret = module.reserve_continuation();
         let resume = module.reserve_continuation();
         let received = module.add_value(Some("received".into()));
-        let resume_exit = module.add_node(Node::Exit {
-            value: escapes.then_some(Atom::Fun(callee)),
+        let resume_exit = module.add_node(match escapes {
+            true => halt(vec![Atom::Fun(callee)]),
+            false => halt_zero(),
         });
         module.define_continuation(
             resume,
@@ -339,7 +340,7 @@ fn a_variant_construction_carries_its_family() {
         let built = module.add_value(Some("built".into()));
         param = module.add_value(Some("param".into()));
         let target = module.reserve_continuation();
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         module.define_continuation(
             target,
             Continuation {
@@ -394,7 +395,7 @@ fn two_constructors_of_a_family_merge_to_the_family() {
         let narrow = module.add_value(Some("narrow".into()));
         param = module.add_value(Some("param".into()));
         let target = module.reserve_continuation();
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         module.define_continuation(
             target,
             Continuation {

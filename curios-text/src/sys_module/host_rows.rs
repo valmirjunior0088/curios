@@ -54,14 +54,21 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
                 .collect(),
         ),
     };
-    let output = io_of(result);
+    // A diverging row takes the type its description yields as an implicit operand ahead of its wire parameters, so an exiting arm ends a region of any type — sound because `Io` has no eliminator, and an inhabitant of `Io(False)` proves nothing.
+    let yielded = function
+        .diverges()
+        .then(|| (Plicity::Implicit, "A".to_string(), type_()));
+    let output = match yielded {
+        Some(_) => io_of(name("A")),
+        None => io_of(result),
+    };
 
     let body = Term::from(Subterm::Foreign(
         Arc::clone(function),
-        signature
-            .params
+        yielded
             .iter()
-            .map(|(param, _)| name(param))
+            .map(|(_, param, _)| name(param))
+            .chain(signature.params.iter().map(|(param, _)| name(param)))
             .collect(),
     ));
 
@@ -69,10 +76,14 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
         doc,
         vis_pub,
         label: function.label().to_string(),
-        params: signature
-            .params
-            .iter()
-            .map(|(param, type_)| (Plicity::Explicit, param.clone(), wire_type(type_)))
+        params: yielded
+            .into_iter()
+            .chain(
+                signature
+                    .params
+                    .iter()
+                    .map(|(param, type_)| (Plicity::Explicit, param.clone(), wire_type(type_))),
+            )
             .collect(),
         output,
         body,

@@ -61,6 +61,7 @@ fn names_are_the_wire_abi() {
             "rand_bytes",
             "proc_args",
             "proc_env",
+            "proc_exit",
             "tty_raw",
             "tty_size",
             "serial_open",
@@ -284,4 +285,23 @@ fn a_wire_name_is_its_placement_spelled_flat() {
             function.label(),
         );
     }
+}
+
+/// `proc_exit` is the one row that diverges, and it crosses a `Byte` out and nothing back: its call never returns, which is not the same as a row returning nothing.
+#[test]
+fn exit_is_the_one_row_that_diverges() {
+    let diverging = HostOp::all().filter(|op| op.diverges()).collect::<Vec<_>>();
+    assert_eq!(
+        diverging.iter().map(|op| op.name()).collect::<Vec<_>>(),
+        ["proc_exit"]
+    );
+
+    let exit = diverging[0].signature();
+    assert_eq!(exit.params, [("code".to_string(), WireType::Byte)]);
+    assert!(exit.results.is_empty());
+    assert!(
+        !HostOp::named("handle_close")
+            .expect("the roster names handle_close")
+            .diverges()
+    );
 }

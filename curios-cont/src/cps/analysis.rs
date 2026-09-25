@@ -268,7 +268,7 @@ pub(super) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
             | Node::Cell { .. }
             | Node::Channel { .. }
             | Node::Intrinsic { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
@@ -411,7 +411,7 @@ pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
             | Node::LetIntrinsic { .. }
             | Node::LetFun { .. }
             | Node::LetCont { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }

@@ -182,7 +182,7 @@ pub(crate) enum EmissionCallTarget {
     },
 }
 
-/// A host-provided intrinsic in tail position. Returning foreign calls carry the block that receives their results; direct process termination does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
+/// A host-provided intrinsic in tail position. Returning foreign calls carry the block that receives their results; a diverging one does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionHostTarget {
     /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result (the multi-result records arrive as parallel block parameters, exactly like the per-op variants did).
@@ -192,8 +192,11 @@ pub(crate) enum EmissionHostTarget {
         operands: Vec<EmissionValueName>,
         resume: EmissionBlockName,
     },
-    /// Terminate the process with exit `code`; this transfer never resumes.
-    Exit { code: EmissionValueName },
+    /// A call to a host row that diverges: `function`'s signature fixes the operands, and nothing resumes after it.
+    Halt {
+        function: Arc<ForeignFunction>,
+        operands: Vec<EmissionValueName>,
+    },
 }
 
 /// A guest write-once cell op in tail position. Same `resume` discipline as `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.

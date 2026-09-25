@@ -122,7 +122,7 @@ fn resolve_forwarder(module: &Module, function: FunctionId, budget: usize) -> Op
     let Some(Statement::Let { result, rhs }) = module.statement(*statement) else {
         return None;
     };
-    if block.terminator.atom() != Some(Atom::Value(*result)) {
+    if !matches!(block.terminator, Terminator::Return(atom) if atom == Atom::Value(*result)) {
         return None;
     }
     let forwards = |operands: &[Atom]| operands == [Atom::Value(*p0), Atom::Value(*p1)];
@@ -511,7 +511,7 @@ fn count_self_references(module: &Module, function: FunctionId) -> usize {
                     None => {}
                 }
             }
-            if block.terminator.atom() == Some(Atom::Function(function)) {
+            if block.terminator.atoms().contains(&Atom::Function(function)) {
                 count += 1;
             }
         }

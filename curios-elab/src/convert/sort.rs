@@ -133,7 +133,6 @@ impl Sort {
                 | Intrinsic::ChannelClosed { .. }
                 | Intrinsic::ChannelCount { .. }
                 | Intrinsic::ChannelCapacity { .. }
-                | Intrinsic::ProcExit { .. }
                 | Intrinsic::Flt(..)
                 | Intrinsic::FltAbs(..)
                 | Intrinsic::FltAdd(..)

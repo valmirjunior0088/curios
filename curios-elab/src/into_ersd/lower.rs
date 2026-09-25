@@ -375,17 +375,32 @@ impl Lowering {
             Subterm::Intrinsic(intrinsic) => {
                 intrinsic::erase_intrinsic(self, context, intrinsic, hint)
             }
-            // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row.
+            // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
             Subterm::Foreign(function, arguments) => {
                 let mut atoms = Vec::with_capacity(arguments.len());
                 for (argument, demand) in arguments.iter().zip(foreign_operands(function)) {
-                    let Operand::At(type_) = demand else {
-                        unreachable!("a returning host call demands only wire-typed operands");
-                    };
-                    atoms.push(emitted!(self.walk(context, argument, &type_, None)?));
+                    match demand {
+                        Operand::At(type_) => {
+                            atoms.push(emitted!(self.walk(context, argument, &type_, None)?));
+                        }
+                        Operand::IsType => {}
+                        Operand::Function { .. } => {
+                            unreachable!("a host call demands no function operand")
+                        }
+                    }
                 }
                 let foreign = self.builder.foreign(Arc::clone(function));
                 let described = format!("io/{}", function.name());
+
+                // A diverging call never yields a value, so the thunk's block is sealed by the terminator rather than by a return. Code after the *force* is dead; code after the construction is not.
+                if function.diverges() {
+                    return self.thunk(hint.or(Some(described.as_str())), move |_| {
+                        Ok(Outcome::Diverged(curios_ersd::Terminator::Halt {
+                            foreign,
+                            operands: atoms,
+                        }))
+                    });
+                }
                 self.thunk(hint.or(Some(described.as_str())), move |lowering| {
                     Ok(lowering.bind(
                         None,

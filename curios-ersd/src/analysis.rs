@@ -259,7 +259,7 @@ fn walk_region(
         let Some(block) = blocks.pop() else { break };
         let block = module.block(block).expect("live block");
         statements.extend(block.statements.iter().copied());
-        if let Some(atom) = block.terminator.atom() {
+        for atom in block.terminator.atoms() {
             use_atom(&mut region, atom);
         }
     }

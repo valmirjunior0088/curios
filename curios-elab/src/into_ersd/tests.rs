@@ -4,9 +4,13 @@ use curios_core::*;
 use curios_ersd::{FieldShape, test_support::shape};
 use {
     crate::*,
+    curios_abi::{ForeignFunction, HostOp},
     curios_analysis::fixture::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -224,14 +228,16 @@ entry
 fn an_exit_seals_the_thunk_that_describes_it() {
     let mut context = context();
     let dead = context.fresh(Some("dead"));
-    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead any more, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the terminator with no return after it.
+    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead any more, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
     let body = Term::let_(
         &dead,
-        Term::tuple_type_unit(),
-        Term::intrinsic(Intrinsic::proc_exit(
-            Term::tuple_type_unit(),
-            Term::intrinsic(Intrinsic::Byte(3)),
-        )),
+        Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
+        Term::foreign(
+            Arc::new(ForeignFunction::Builtin(
+                HostOp::named("proc_exit").expect("the roster names proc_exit"),
+            )),
+            vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(3))],
+        ),
         nat_lit(7),
     );
     let erased = erase(
@@ -245,7 +251,7 @@ fn an_exit_seals_the_thunk_that_describes_it() {
 entry
   Functions
     function ~f0$dead()
-      Exit Byte(3)
+      Halt ~x0 [Byte(3)]
   Return Nat(7)
 "
     );

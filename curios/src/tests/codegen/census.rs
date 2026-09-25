@@ -560,12 +560,17 @@ impl<'m> Census<'m> {
                     self.result_conts.insert(*return_to);
                     self.record_atoms(node_id, args, Consumption::UnknownCall);
                 }
-                Node::Exit { value } => {
-                    if let Some(Atom::Value(value)) = value {
-                        self.record(*value, node_id, Consumption::ExitValue);
-                    }
-                    if let Some(Atom::Fun(fun)) = value {
-                        self.closure_funs.insert(*fun);
+                Node::Halt { args, .. } => {
+                    for arg in args {
+                        match arg {
+                            Atom::Value(value) => {
+                                self.record(*value, node_id, Consumption::ExitValue);
+                            }
+                            Atom::Fun(fun) => {
+                                self.closure_funs.insert(*fun);
+                            }
+                            Atom::Literal(_) | Atom::Filler => {}
+                        }
                     }
                 }
                 Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {

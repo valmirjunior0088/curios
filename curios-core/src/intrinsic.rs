@@ -39,30 +39,56 @@ pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> F
     }
 }
 
-/// What a foreign call demands of each operand, in order: its parameter's wire type. Erasure walks these, and [`foreign_signature`] states them for the checkers.
+/// What a foreign call demands of each operand, in order: its parameter's wire type, after — for a row that diverges — the type its description yields, which erasure drops. Erasure walks these, and [`foreign_signature`] states them for the checkers.
 pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
-    function
-        .signature()
-        .params
-        .iter()
-        .map(|(_, wire_type)| Operand::At(wire_term(wire_type)))
+    let result = function.diverges().then_some(Operand::IsType);
+
+    result
+        .into_iter()
+        .chain(
+            function
+                .signature()
+                .params
+                .iter()
+                .map(|(_, wire_type)| Operand::At(wire_term(wire_type))),
+        )
         .collect()
 }
 
-/// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the kernel and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is the `Io` of the row's result shape, [`wire_results_term`]'s reading, its record labels bound by binders `fresh` mints.
+/// The type a foreign call produces over `operands`: the `Io` of the row's result shape, or for a row that diverges the `Io` of the type its first operand names.
+///
+/// A diverging call yields whatever the region that holds it wanted, which is sound because `Io` has no eliminator: an inhabitant of `Io(False)` is a description that proves nothing. `documentation/design/language/an-exit-yields-any-io-and-there-is-no-never.md` is the decision.
+pub fn foreign_produced(
+    function: &ForeignFunction,
+    operands: &[Term],
+    fresh: impl FnMut(&str) -> Free,
+) -> Term {
+    let result = match function.diverges() {
+        true => operands
+            .first()
+            .expect("a diverging call's first operand is the type it yields")
+            .clone(),
+        false => wire_results_term(&function.signature().results, fresh),
+    };
+
+    Term::intrinsic(Intrinsic::io_type(result))
+}
+
+/// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the kernel and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is [`foreign_produced`]'s over `operands`, record labels bound by binders `fresh` mints.
 ///
 /// **The row is the whole statement.** For a builtin it is the roster's, reached through the identity the term carries, and for a declared row its own; nothing the term says beside the row reaches the type.
-pub fn foreign_signature(function: &ForeignFunction, fresh: impl FnMut(&str) -> Free) -> Signature {
+pub fn foreign_signature(
+    function: &ForeignFunction,
+    operands: &[Term],
+    fresh: impl FnMut(&str) -> Free,
+) -> Signature {
     Signature {
         operands: foreign_operands(function),
-        produced: Produced::Fixed(Term::intrinsic(Intrinsic::io_type(wire_results_term(
-            &function.signature().results,
-            fresh,
-        )))),
+        produced: Produced::Fixed(foreign_produced(function, operands, fresh)),
     }
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// An intrinsic that performs an effect returns an `Io`, including guest cell and channel operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
@@ -311,13 +337,6 @@ pub enum Intrinsic {
     },
     HandleType,
     Handle(u32),
-    // End the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
-    //
-    // (@A, n : Byte) -> Io(A): the description that ends the process with `n` and yields nothing, at whatever the region wanted. The code is a `Byte` because that is the status every host carries whole: POSIX keeps a status's low eight bits, so a wider code would reach the parent as a different one. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits, and `Io(A)` is never that type: `Io` has no eliminator, so an inhabitant of `Io(False)` proves nothing — the same fact `IoType` states above and the whole effect discipline rests on. Typing the payload at `{}` was the earlier, stricter answer; it forced every exiting arm to sit in a unit region, and bought nothing the opacity does not already buy.
-    ProcExit {
-        result: Term,
-        code: Term,
-    },
     CellType(Term),
     Cell {
         element: Term,
@@ -724,14 +743,6 @@ impl Intrinsic {
         Self::IoType(result.into())
     }
 
-    /// A `ProcExit` node from a term-shaped result type and exit code.
-    pub fn proc_exit<T: Into<Term>, U: Into<Term>>(result: T, code: U) -> Self {
-        Self::ProcExit {
-            result: result.into(),
-            code: code.into(),
-        }
-    }
-
     /// An `IoPure` node from a term-shaped result type and value.
     pub fn io_pure<T, V>(type_: T, value: V) -> Self
     where
@@ -871,8 +882,7 @@ impl Intrinsic {
             | Intrinsic::IoPure {
                 result: a,
                 value: b,
-            }
-            | Intrinsic::ProcExit { result: a, code: b } => {
+            } => {
                 visit(a);
                 visit(b);
             }
@@ -1482,12 +1492,6 @@ impl Intrinsic {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::ProcExit { result: a, code: b } => {
-                traverse_binary(a, b, visit, |result, code| Intrinsic::ProcExit {
-                    result,
-                    code,
-                })
-            }
             Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
             Intrinsic::ChannelType(a) => Intrinsic::ChannelType(visit.visit_subterm(a)),
             Intrinsic::Cell { element } => Intrinsic::Cell {

@@ -2,6 +2,7 @@ use curios_num::Natural;
 
 use {
     super::{split_parameters, split_workers},
+    crate::cps::test_support::{halt, halt_zero},
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId,
         Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, optimize,
@@ -368,7 +369,7 @@ fn a_mixed_origin_is_declined() {
     let callee_param = module.add_value(Some("callee/param".into()));
     let callee = module.reserve_function();
     let callee_ret = module.reserve_continuation();
-    let callee_exit = module.add_node(Node::Exit { value: None });
+    let callee_exit = module.add_node(halt_zero());
     module.define_function(
         callee,
         Function {
@@ -385,7 +386,7 @@ fn a_mixed_origin_is_declined() {
     let join = module.reserve_continuation();
     let resume = module.reserve_continuation();
 
-    let join_exit = module.add_node(Node::Exit { value: None });
+    let join_exit = module.add_node(halt_zero());
     let project = module.add_node(Node::LetIntrinsic {
         result: read,
         op: Intrinsic::TupleGet(0),
@@ -1076,9 +1077,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
     let second = module.add_value(Some("second".into()));
     let first_result = module.add_value(Some("first".into()));
     let second_result = module.add_value(Some("second result".into()));
-    let exit = module.add_node(Node::Exit {
-        value: Some(Atom::Value(second_result)),
-    });
+    let exit = module.add_node(halt(vec![Atom::Value(second_result)]));
     let second_resume = module.add_continuation(Continuation {
         debug_name: None,
         params: vec![second_result],

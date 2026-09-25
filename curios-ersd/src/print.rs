@@ -109,6 +109,9 @@ impl Reach {
             }
             if let Some(definition) = module.block(block) {
                 statements.extend(definition.statements.iter().copied());
+                if let Terminator::Halt { foreign, .. } = &definition.terminator {
+                    reach.foreigns.insert(*foreign);
+                }
             }
         }
 
@@ -382,11 +385,19 @@ impl Printer<'_, '_, '_, '_> {
         Ok(())
     }
 
-    /// How a block leaves, as the tail term of its let-chain. `exit` and `unreachable` have no surface spelling; everything else is the atom the chain evaluates to.
+    /// How a block leaves, as the tail term of its let-chain. `halt` and `unreachable` have no surface spelling; everything else is the atom the chain evaluates to.
     fn tail(&self, terminator: &Terminator) -> String {
         match terminator {
             Terminator::Return(atom) => self.atom(*atom),
-            Terminator::Exit(atom) => format!("exit {}", self.atom(*atom)),
+            Terminator::Halt { foreign, operands } => {
+                let row = self.module.foreign(*foreign).expect("live foreign");
+                format!(
+                    "halt {}/{}({})",
+                    row.namespace(),
+                    row.name(),
+                    self.atoms(operands)
+                )
+            }
             Terminator::Unreachable => "unreachable".into(),
         }
     }

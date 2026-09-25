@@ -1,4 +1,9 @@
-use {crate::*, curios_num::Natural};
+use {
+    crate::*,
+    curios_abi::{ForeignFunction, HostOp},
+    curios_num::Natural,
+    std::sync::Arc,
+};
 
 fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(Natural::from(value)));
@@ -380,7 +385,13 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
     let member = builder.value(Some("member".into()));
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
-    let init = builder.seal_block(Terminator::Exit(zero));
+    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(
+        HostOp::named("proc_exit").expect("the roster names proc_exit"),
+    )));
+    let init = builder.seal_block(Terminator::Halt {
+        foreign: exit,
+        operands: vec![zero],
+    });
     let group = builder.rec_group(vec![], vec![(member, init)]);
     builder.item_rec(group);
     builder.open_block();

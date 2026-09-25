@@ -438,10 +438,6 @@ impl Intrinsic {
             ),
 
             // Guest coordination operations describe effects; their outcomes are ordinary declared inductives.
-            ProcExit { result, .. } => sig(
-                vec![Operand::IsType, Operand::At(byte_type())],
-                io_type(result.clone()),
-            ),
             Cell { element } => sig(vec![Operand::IsType], io_type(cell_type(element.clone()))),
             CellPoll {
                 element, universes, ..

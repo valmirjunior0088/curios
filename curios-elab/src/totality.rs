@@ -1,6 +1,6 @@
 //! The elaborator's driver for the shared size-change totality analysis.
 //!
-//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with `ProcExit` and inherited prelude partiality folded in.
+//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with diverging host calls and inherited prelude partiality folded in.
 //!
 //! Rejection is a **classification, not an error**. `/std/Async` is corecursive, `/std/Json/decode`'s parsers are nullary and productive, and the corpus fixture's `/big_nat/convert/to_str_go` recurses on a computed quotient; none passes this check and none needs to. They stay usable everywhere erasure keeps them. Only [`crate::check_type_totality`] and [`crate::check_proof_totality`] turn a `Partial` classification into a rejection, and only for the positions that erase.
 
@@ -18,8 +18,7 @@ use {
     super::{Context, Error, is_prop, zonk},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Global, Intrinsic, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
-        Totality,
+        Definition, Enter, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -29,7 +28,7 @@ use {
 
 /// Every top-level definition's totality.
 ///
-/// Group rejection is only the local part. A definition is also `Partial` if it mentions [`Intrinsic::ProcExit`] — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
+/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
 ///
 /// `inherited` carries the totality of definitions `module` references but does not define — the replayed prelude prefix. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program. Classify one definition against the verdicts already recorded, and record it.
 ///
@@ -228,7 +227,7 @@ fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<
 
 /// Every way the given positions fail to be total, with the site of each.
 ///
-/// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or an `Intrinsic::ProcExit`.
+/// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges.
 fn faults(
     context: &mut Context,
     module: &Module,
@@ -484,7 +483,7 @@ pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(
 /// Keyed on the term, whose hash is cached on the node and whose equality is already a worklist walk, so a lookup does not re-traverse what it is looking up. See [`checked_proof_positions`] for the same key and the same caveat.
 type LocalMemo = HashMap<Term, bool>;
 
-/// Whether `term` contains an `Intrinsic::ProcExit` or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
+/// Whether `term` contains a call to a diverging host row or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
 ///
 /// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so the native per-node recursion this replaces cost one stack frame per byte *and* re-walked the shared tail once per position — quadratic in the literal's length. Measured on a 640-byte literal, that was 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright. Depth is not steps, so the reduction budget cannot bound either one.
 ///
@@ -499,7 +498,8 @@ fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> 
             None => Enter::Descend,
         },
         |state, term, mut children| {
-            let mut partial = matches!(&**term, Subterm::Intrinsic(Intrinsic::ProcExit { .. }));
+            let mut partial =
+                matches!(&**term, Subterm::Foreign(function, _) if function.diverges());
             if let Subterm::Rec(Rec { group, .. }) = &**term {
                 partial = partial || group_totality(state.0, group) == Totality::Partial;
             }

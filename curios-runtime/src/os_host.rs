@@ -714,6 +714,11 @@ impl HostOps for OsHost {
         }
     }
 
+    // The code leaves as the guest-exit trap; the terminal records `Drop` restores are what the process leaves behind.
+    fn proc_exit(&self, code: u8) -> Termination {
+        Termination(code)
+    }
+
     fn tty_raw(&self, io: Handle, on: u32) -> Status {
         let token = io.bytes();
 

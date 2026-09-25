@@ -26,7 +26,7 @@ use {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[curios_archive::archived]
 pub enum Totality {
-    /// Every recursive group this definition contains descends, it does not mention `Intrinsic::ProcExit`, and neither does anything it reaches.
+    /// Every recursive group this definition contains descends, it calls no diverging host row, and neither does anything it reaches.
     Total,
     /// Not proven total. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
     #[default]

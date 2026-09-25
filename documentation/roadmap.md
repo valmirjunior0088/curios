@@ -148,7 +148,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Scheduler state threaded through its loop; opaque readiness waits and shared park claims
   - [x] `Tui/Session` state threaded through reading, size tracking and drawing; [comparison measurements](../curios/src/tests/coordination.rs) recorded with their workloads
 - [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — one contract per host operation, a builtin identity no term can contradict, and checked adapters on both sides
-  - [ ] `Byte` on the wire and exit as a diverging row
+  - [x] [`Byte` on the wire](syntax.md#foreign-declarations) and [exit as a diverging row](../curios-abi/README.md#exit-is-a-row-that-diverges)
   - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing the existing `/sys/Option`
   - [ ] Checked host outcomes, guest reply validation, buffer ownership and resource transitions
   - [ ] Single-attempt writes, an explicit flush, unbuffered standard output and classified poll failures

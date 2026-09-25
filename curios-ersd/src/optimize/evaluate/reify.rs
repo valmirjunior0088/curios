@@ -516,14 +516,16 @@ pub(super) fn free_references(
                     None => {}
                 }
             }
-            match block.terminator.atom() {
-                Some(Atom::Function(referenced)) => {
-                    functions.insert(referenced);
+            for atom in block.terminator.atoms() {
+                match atom {
+                    Atom::Function(referenced) => {
+                        functions.insert(referenced);
+                    }
+                    Atom::Value(referenced) => {
+                        values.insert(referenced);
+                    }
+                    _ => {}
                 }
-                Some(Atom::Value(referenced)) => {
-                    values.insert(referenced);
-                }
-                _ => {}
             }
         }
     }
@@ -570,8 +572,10 @@ fn outward_functions_item_bound(
                     None => {}
                 }
             }
-            if let Some(Atom::Function(referenced)) = block.terminator.atom() {
-                outward.insert(referenced);
+            for atom in block.terminator.atoms() {
+                if let Atom::Function(referenced) = atom {
+                    outward.insert(referenced);
+                }
             }
         }
     }

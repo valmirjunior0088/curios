@@ -6,7 +6,19 @@ use {
         lower,
     },
     crate::into_wasm::{EmissionHostTarget, EmissionTail},
+    curios_abi::{ForeignFunction, HostOp},
+    std::sync::Arc,
 };
+
+/// A halt through `proc/exit` reading `args`.
+fn halt(args: Vec<curios_cont::Atom>) -> curios_cont::Node {
+    curios_cont::Node::Halt {
+        function: Arc::new(ForeignFunction::Builtin(
+            HostOp::named("proc_exit").expect("the roster names proc_exit"),
+        )),
+        args,
+    }
+}
 
 #[test]
 fn return_sentinel_becomes_machine_return_without_a_block() {
@@ -99,15 +111,13 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
 }
 
 #[test]
-fn exit_stays_direct_termination_through_structurization() {
+fn a_halt_stays_terminal_through_structurization() {
     let mut source = curios_cont::Module::new();
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
-    let body = source.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Literal(curios_cont::Literal::Nat(
-            Natural::from(7u32),
-        ))),
-    });
+    let body = source.add_node(halt(vec![curios_cont::Atom::Literal(
+        curios_cont::Literal::Nat(Natural::from(7u32)),
+    )]));
     source.define_function(
         main,
         curios_cont::Function {
@@ -125,7 +135,7 @@ fn exit_stays_direct_termination_through_structurization() {
     let (_, function) = structured.funcs().first().unwrap();
     assert!(matches!(
         function.region.tail,
-        EmissionTail::Host(EmissionHostTarget::Exit { .. })
+        EmissionTail::Host(EmissionHostTarget::Halt { .. })
     ));
 }
 
@@ -291,11 +301,9 @@ fn exiting_main() -> (curios_cont::Module, curios_cont::FunctionId) {
     let mut source = curios_cont::Module::new();
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
-    let body = source.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Literal(curios_cont::Literal::Nat(
-            Natural::from(0u32),
-        ))),
-    });
+    let body = source.add_node(halt(vec![curios_cont::Atom::Literal(
+        curios_cont::Literal::Nat(Natural::from(0u32)),
+    )]));
     source.define_function(
         main,
         curios_cont::Function {
@@ -334,9 +342,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
     let bound = source.add_value(Some("bound".into()));
-    let exit = source.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(bound)),
-    });
+    let exit = source.add_node(halt(vec![curios_cont::Atom::Value(bound)]));
     let resume = source.add_continuation(curios_cont::Continuation {
         debug_name: Some("resume".into()),
         params: vec![bound],

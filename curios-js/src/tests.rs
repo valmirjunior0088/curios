@@ -1,7 +1,7 @@
 //! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
-    curios_abi::{ENTRY, EXIT, PANIC, host_ops},
+    curios_abi::{ENTRY, PANIC, host_ops},
     curios_runtime::test_support::{GuestInstance, GuestValue},
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
@@ -188,7 +188,7 @@ fn words_accessors_roundtrip_a_word() {
     }
 }
 
-/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, and the two `sys` imports that are not rows, `exit` and `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
+/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, `proc_exit` among them, and the one `sys` import that is not a row, `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
 #[test]
 fn harness_implements_every_host_op() {
     let source = include_str!("harness.js");
@@ -204,7 +204,7 @@ fn harness_implements_every_host_op() {
     for name in host_ops()
         .iter()
         .map(|function| function.name())
-        .chain([EXIT, PANIC])
+        .chain([PANIC])
     {
         assert!(
             body.contains(&format!("\n    {name}:")),

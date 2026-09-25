@@ -1,10 +1,10 @@
 // The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the `sys.*` import keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite. Only the numeric status/stdio codes arrive via `config`, built Rust-side from curios-abi (see src/abi.rs).
 //
-// A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` already are. A `Bool` and the exit code cross as plain numbers.
+// A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` already are. A `Bool` and a `Byte`, the exit code among them, cross as plain numbers.
 //
 // The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED.
 
-/** Thrown by the `exit` import to unwind the wasm stack with an exit code. */
+/** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
   constructor(code) {
     super(`exit(${code})`);
@@ -197,7 +197,12 @@ export async function run(config) {
     proc_stream: deniedHandle,
     proc_wait: () => [config.status.PERMISSION_DENIED, 0n, 0n],
     proc_kill: denied,
-    exit: (code) => {
+    // The row diverges, so this never returns: the signal unwinds the guest, and a code outside a byte is a module this compiler did not emit.
+    proc_exit: (code) => {
+      if (!Number.isInteger(code) || code < 0 || code > 255) {
+        throw new Error(`proc_exit: ${code} is not a byte`);
+      }
+
       throw new ExitSignal(code);
     },
     panic: (message) => {

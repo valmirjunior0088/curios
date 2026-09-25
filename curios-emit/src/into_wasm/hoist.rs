@@ -294,10 +294,10 @@ fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, Emi
             rename_name(target, renames);
             rename_jump_args(params, renames);
         }
-        EmissionTail::Host(EmissionHostTarget::Foreign { operands, .. }) => {
-            rename_names(operands, renames)
-        }
-        EmissionTail::Host(EmissionHostTarget::Exit { code }) => rename_name(code, renames),
+        EmissionTail::Host(
+            EmissionHostTarget::Foreign { operands, .. }
+            | EmissionHostTarget::Halt { operands, .. },
+        ) => rename_names(operands, renames),
         EmissionTail::Channel(channel) => {
             for arg in &mut channel.args {
                 rename_name(arg, renames);

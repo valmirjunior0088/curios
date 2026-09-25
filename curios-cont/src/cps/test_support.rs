@@ -12,8 +12,27 @@ use {
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
         Module, Node, NodeId, ValueExpr, ValueId,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    curios_abi::{ForeignFunction, HostOp},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
+
+/// A halt through `proc/exit` reading `args` — the terminal a fixture ends a path with when what it passes must stay live.
+pub(super) fn halt(args: Vec<Atom>) -> Node {
+    Node::Halt {
+        function: Arc::new(ForeignFunction::Builtin(
+            HostOp::named("proc_exit").expect("the roster names proc_exit"),
+        )),
+        args,
+    }
+}
+
+/// A halt reading nothing of the program's own: its code is the literal zero.
+pub(super) fn halt_zero() -> Node {
+    halt(vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))])
+}
 
 /// One function whose body is `body_of(&mut module)`, so each test states only the flow it is about.
 pub(super) fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {

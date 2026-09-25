@@ -1242,24 +1242,6 @@ fn handle_ops() -> Vec<Decl> {
     ]
 }
 
-/// The one operation placed by hand rather than by a row: `exit` is `Intrinsic::ProcExit` and traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it joins the module its subject already opened.
-///
-/// `(@A : Type, n : Byte) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
-fn proc_exit() -> Decl {
-    pub_fn_marked(
-        "exit",
-        vec![
-            (Plicity::Implicit, "A", type_()),
-            (Plicity::Explicit, "n", byte()),
-        ],
-        io_of(name("A")),
-        intrinsic(Intrinsic::ProcExit {
-            result: name("A"),
-            code: name("n"),
-        }),
-    )
-}
-
 /// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow`, `serial_op` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
 fn code_modules() -> Vec<SysModule> {
     vec![
@@ -1345,7 +1327,7 @@ fn code_modules() -> Vec<SysModule> {
     ]
 }
 
-/// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it and all but the two packed runs hoisting the type to the root, then the one module of operations that no carrier opens.
+/// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it and all but the two packed runs hoisting the type to the root.
 fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
     vec![
         SysModule::carrier(
@@ -1446,14 +1428,12 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
             items(io_ops()),
         ),
-        // Declared rather than pushed in after the join, which is what a module of operations is for: `exit` used to be placed by a `find` over the joined roster, so a store that stopped carrying a `proc` row would have dropped it with no error at all. Declaring the module is what makes that unrepresentable — and it puts `exit` ahead of the rows, since a declared module precedes every module the join opens.
-        SysModule::ops("proc", vec![proc_exit()]),
     ]
 }
 
 /// Construct the generated `/sys` surface module from the authoritative host function store.
 ///
-/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket` and `dns` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type and `proc`'s beside `exit`. Then the wire-code mirror.
+/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket`, `dns` and `proc` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type. Then the wire-code mirror.
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {

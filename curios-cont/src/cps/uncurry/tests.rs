@@ -2,6 +2,7 @@ use curios_num::Natural;
 
 use {
     super::{uncurry_returns, uncurryable},
+    crate::cps::test_support::halt_zero,
     crate::{
         Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, NodeId,
         ValueExpr,
@@ -435,7 +436,7 @@ fn a_forwarded_application_declines_uncurrying() {
     let inner_param = module.add_value(Some("inner/param".into()));
     let inner = module.reserve_function();
     let inner_ret = module.reserve_continuation();
-    let inner_exit = module.add_node(Node::Exit { value: None });
+    let inner_exit = module.add_node(halt_zero());
     module.define_function(
         inner,
         Function {

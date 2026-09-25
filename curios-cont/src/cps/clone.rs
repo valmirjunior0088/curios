@@ -10,7 +10,10 @@ use {
         NodeId, ValueExpr, ValueId,
         analysis::{function_nodes, nodes_from},
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 /// What one copy renames its original onto.
@@ -129,8 +132,9 @@ pub(super) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
             args: args.iter().map(map.atom).collect(),
             return_to: (map.cont)(*return_to),
         },
-        Node::Exit { value } => Node::Exit {
-            value: value.as_ref().map(map.atom),
+        Node::Halt { function, args } => Node::Halt {
+            function: Arc::clone(function),
+            args: args.iter().map(map.atom).collect(),
         },
         Node::Panic(panic) => Node::Panic(*panic),
         Node::Unreachable => Node::Unreachable,

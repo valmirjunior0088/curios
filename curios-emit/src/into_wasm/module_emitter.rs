@@ -7,7 +7,7 @@ use {
         refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
         rope_node_sub_type, rope_view_sub_type, words_sub_type,
     },
-    curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
+    curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::{Binary, Grain},
     std::iter,
 };
@@ -100,11 +100,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_sys_imports(&mut self) {
-        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-
-        // The store-described imports — exactly the functions whose call sites recorded themselves in the table, in minted-name order. Each function's own `namespace` (stamped at declaration time — see `ForeignFunction`) is the wasm namespace it imports under, so codegen neither rebuilds `host_ops()` to re-derive membership nor chooses a namespace itself.
+        // The store-described imports — exactly the functions whose call sites recorded themselves in the table, in minted-name order, a diverging row's among them. Each function's own `namespace` (decided by its case — see `ForeignFunction`) is the wasm namespace it imports under, so codegen neither rebuilds `host_ops()` to re-derive membership nor chooses a namespace itself.
         for function in self.table.host_funcs() {
-            let signature = &function.signature();
+            let signature = function.signature();
             let func_name = self.table.host_func(&function);
 
             self.add_host_import(
@@ -127,18 +125,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.exit_used() {
-            self.add_host_import(
-                Namespace::Sys.as_str(),
-                EXIT,
-                curios_wasm::TypeName::from("exit"),
-                self.table.exit_func().clone(),
-                curios_wasm::ResultType::from([i32_val.clone()]),
-                curios_wasm::ResultType::from([]),
-            );
-        }
-
-        // Unconditional, unlike `exit`: every module has refusal sites, and a program that reaches none still declares the import a refusal would call. The parameter is the flat `$bytes` payload every `Bytes` host operand crosses as.
+        // Unconditional, unlike a host row's: every module has refusal sites, and a program that reaches none still declares the import a refusal would call. The parameter is the flat `$bytes` payload every `Bytes` host operand crosses as.
         self.add_host_import(
             Namespace::Sys.as_str(),
             PANIC,

@@ -83,11 +83,12 @@ impl Rhs {
 }
 
 impl Terminator {
-    /// The atom this terminator yields, when it yields one.
-    pub fn atom(&self) -> Option<Atom> {
+    /// The atoms this terminator reads: the one it yields, or a halting call's operands.
+    pub fn atoms(&self) -> Vec<Atom> {
         match self {
-            Self::Return(atom) | Self::Exit(atom) => Some(*atom),
-            Self::Unreachable => None,
+            Self::Return(atom) => vec![*atom],
+            Self::Halt { operands, .. } => operands.clone(),
+            Self::Unreachable => Vec::new(),
         }
     }
 }

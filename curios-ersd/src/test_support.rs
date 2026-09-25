@@ -188,7 +188,9 @@ fn block(module: &Module, out: &mut String, depth: usize, id: BlockId) {
 
     let terminator = match &block_.terminator {
         Terminator::Return(atom) => format!("Return {}", atom_(module, atom)),
-        Terminator::Exit(atom) => format!("Exit {}", atom_(module, atom)),
+        Terminator::Halt { foreign, operands } => {
+            format!("Halt {foreign} {}", atoms(module, operands))
+        }
         Terminator::Unreachable => "Unreachable".to_string(),
     };
     line(out, depth, &terminator);

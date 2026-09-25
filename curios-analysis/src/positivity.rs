@@ -824,7 +824,6 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ListMap { .. }
             | Intrinsic::ListFold { .. }
             | Intrinsic::Handle(_)
-            | Intrinsic::ProcExit { .. }
             | Intrinsic::Cell { .. }
             | Intrinsic::CellFill { .. }
             | Intrinsic::CellPoll { .. }

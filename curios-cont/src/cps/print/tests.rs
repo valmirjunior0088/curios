@@ -1,6 +1,7 @@
 //! What the printed continuation IR states: the nesting, the elision rule's two clauses, and the spellings that make a transfer legible.
 
 use {
+    crate::cps::test_support::{halt, halt_zero},
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, Intrinsic, Literal, Module,
         Node, NodeId, Row, Slot, ValueExpr,
@@ -62,9 +63,7 @@ fn representative() -> Module {
 
         let join = module.reserve_continuation();
         let total = module.add_value(Some("total".into()));
-        let join_body = module.add_node(Node::Exit {
-            value: Some(Atom::Value(total)),
-        });
+        let join_body = module.add_node(halt(vec![Atom::Value(total)]));
         module.define_continuation(
             join,
             Continuation {
@@ -100,7 +99,7 @@ entry ~f0$main() =
         let ~v1 = Nat/add(~v0$n, 1);
         return ~v1;
     cont ~k2$join(~v2$total) =
-        exit ~v2$total;
+        halt sys/proc_exit(~v2$total);
     ~f1$helper(2) -> ~k2$join;
 "
     );
@@ -142,9 +141,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
         let outer = module.reserve_continuation();
         let x = module.add_value(Some("x".into()));
         let inner = module.reserve_continuation();
-        let inner_body = module.add_node(Node::Exit {
-            value: Some(Atom::Value(x)),
-        });
+        let inner_body = module.add_node(halt(vec![Atom::Value(x)]));
         module.define_continuation(
             inner,
             Continuation {
@@ -185,7 +182,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
 entry ~f0$main() =
     cont ~k1$outer(~v0$x) =
         cont ~k2$inner() =
-            exit ~v0$x;
+            halt sys/proc_exit(~v0$x);
         jump ~k2$inner();
     jump ~k1$outer(1);
 "
@@ -198,9 +195,7 @@ fn a_join_is_defined_once_and_named_at_every_predecessor() {
     let module = module_with(|module, _| {
         let join = module.reserve_continuation();
         let answer = module.add_value(None);
-        let join_body = module.add_node(Node::Exit {
-            value: Some(Atom::Value(answer)),
-        });
+        let join_body = module.add_node(halt(vec![Atom::Value(answer)]));
         module.define_continuation(
             join,
             Continuation {
@@ -242,7 +237,7 @@ fn a_join_is_defined_once_and_named_at_every_predecessor() {
         "\
 entry ~f0$main() =
     cont ~k1$join(~v0) =
-        exit ~v0;
+        halt sys/proc_exit(~v0);
     switch 0
     | 0 => ~k1$join(1)
     | 1 => ~k1$join(2)
@@ -298,7 +293,7 @@ entry ~f0$main() =
 fn a_continuation_prints_the_role_its_hint_names() {
     let module = module_with(|module, _| {
         let arm = module.reserve_continuation();
-        let arm_body = module.add_node(Node::Exit { value: None });
+        let arm_body = module.add_node(halt_zero());
         module.define_continuation(
             arm,
             Continuation {
@@ -339,9 +334,7 @@ fn an_unreached_row_is_not_declared_and_a_slot_pulls_its_row_in() {
             slots: vec![Slot::Opaque],
         });
         let built = module.add_value(None);
-        let exit = module.add_node(Node::Exit {
-            value: Some(Atom::Value(built)),
-        });
+        let exit = module.add_node(halt(vec![Atom::Value(built)]));
         module.add_node(Node::LetValue {
             result: built,
             value: ValueExpr::Row(outer, vec![Atom::Filler]),
@@ -357,7 +350,7 @@ row ~r1$Outer(~r0)
 
 entry ~f0$main() =
     let ~v0 = ~r1$Outer(pad);
-    exit ~v0;
+    halt sys/proc_exit(~v0);
 "
     );
 }
@@ -368,7 +361,7 @@ fn an_unread_binder_spells_a_hole_only_when_it_is_also_hintless() {
     let module = module_with(|module, _| {
         let anonymous = module.add_value(None);
         let named = module.add_value(Some("kept".into()));
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         let second = module.add_node(Node::LetValue {
             result: named,
             value: ValueExpr::Literal(Literal::Nat(Natural::from(3u32))),
@@ -387,7 +380,7 @@ fn an_unread_binder_spells_a_hole_only_when_it_is_also_hintless() {
 entry ~f0$main() =
     let _ = 2;
     let ~v1$kept = 3;
-    exit;
+    halt sys/proc_exit(0);
 "
     );
 }
@@ -397,9 +390,7 @@ entry ~f0$main() =
 fn a_single_use_binding_is_not_inlined() {
     let module = module_with(|module, _| {
         let only = module.add_value(None);
-        let exit = module.add_node(Node::Exit {
-            value: Some(Atom::Value(only)),
-        });
+        let exit = module.add_node(halt(vec![Atom::Value(only)]));
         module.add_node(Node::LetValue {
             result: only,
             value: ValueExpr::Literal(Literal::Nat(Natural::from(5u32))),
@@ -412,7 +403,7 @@ fn a_single_use_binding_is_not_inlined() {
         "\
 entry ~f0$main() =
     let ~v0 = 5;
-    exit ~v0;
+    halt sys/proc_exit(~v0);
 "
     );
 }
@@ -421,7 +412,7 @@ entry ~f0$main() =
 #[test]
 fn a_node_reached_twice_is_reported_rather_than_duplicated() {
     let module = module_with(|module, _| {
-        let shared = module.add_node(Node::Exit { value: None });
+        let shared = module.add_node(halt_zero());
         let first = module.reserve_continuation();
         module.define_continuation(
             first,
@@ -455,7 +446,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
         "\
 entry ~f0$main() =
     cont ~k1$first() =
-        exit
+        halt sys/proc_exit(0)
     and ~k2$second() =
         <~n0 again>;
     jump ~k1$first();
@@ -471,9 +462,7 @@ fn a_split_parameter_run_prints_as_one_bracketed_group() {
         let head = module.add_value(Some("head".into()));
         let left = module.add_value(None);
         let right = module.add_value(None);
-        let body = module.add_node(Node::Exit {
-            value: Some(Atom::Value(left)),
-        });
+        let body = module.add_node(halt(vec![Atom::Value(left)]));
         module.define_continuation(
             target,
             Continuation {
@@ -503,7 +492,7 @@ fn a_split_parameter_run_prints_as_one_bracketed_group() {
 /// A module the lexical walk does not cover is malformed, and this printer is read while debugging exactly those — so what the walk missed prints anyway rather than vanishing.
 #[test]
 fn a_function_the_walk_never_reaches_still_prints() {
-    let mut module = module_with(|module, _| module.add_node(Node::Exit { value: None }));
+    let mut module = module_with(|module, _| module.add_node(halt_zero()));
     let orphan = module.reserve_function();
     let orphan_return = module.reserve_continuation();
     let body = module.add_node(Node::ApplyCont(Edge {
@@ -525,7 +514,7 @@ fn a_function_the_walk_never_reaches_still_prints() {
         module.to_string(),
         "\
 entry ~f0$main() =
-    exit;
+    halt sys/proc_exit(0);
 
 unreached
     let ~f1$orphan() =
@@ -541,9 +530,7 @@ fn an_operand_names_its_kind_by_its_sigil() {
         let closure = module.add_value(Some("f".into()));
         let target = module.reserve_continuation();
         let result = module.add_value(None);
-        let exit = module.add_node(Node::Exit {
-            value: Some(Atom::Value(result)),
-        });
+        let exit = module.add_node(halt(vec![Atom::Value(result)]));
         module.define_continuation(
             target,
             Continuation {
@@ -574,7 +561,7 @@ fn an_operand_names_its_kind_by_its_sigil() {
 entry ~f0$main() =
     let ~v0$f = (0);
     cont ~k1$resume(~v1) =
-        exit ~v1;
+        halt sys/proc_exit(~v1);
     ~v0$f(pad, 4) -> ~k1$resume;
 "
     );
@@ -591,9 +578,7 @@ fn a_row_read_and_a_tuple_read_print_as_projections() {
         let built = module.add_value(None);
         let field = module.add_value(None);
         let element = module.add_value(None);
-        let exit = module.add_node(Node::Exit {
-            value: Some(Atom::Value(element)),
-        });
+        let exit = module.add_node(halt(vec![Atom::Value(element)]));
         let tuple_read = module.add_node(Node::LetIntrinsic {
             result: element,
             op: Intrinsic::TupleGet(1),
@@ -622,7 +607,7 @@ entry ~f0$main() =
     let ~v0 = ~r0$Pair(1, pad);
     let ~v1 = ~v0.~r0/0;
     let ~v2 = ~v1.1;
-    exit ~v2;
+    halt sys/proc_exit(~v2);
 "
     );
 }
@@ -651,7 +636,7 @@ fn a_function_group_prints_as_one_and_chain() {
             );
             members.push(function);
         }
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         module.add_node(Node::LetFun {
             functions: members,
             body: exit,
@@ -666,7 +651,7 @@ entry ~f0$main() =
         return
     and ~f2$second() =
         return;
-    exit;
+    halt sys/proc_exit(0);
 "
     );
 }
@@ -701,9 +686,7 @@ fn an_intrinsic_spells_its_carrier_and_operation() {
     ] {
         let module = module_with(|module, _| {
             let result = module.add_value(None);
-            let exit = module.add_node(Node::Exit {
-                value: Some(Atom::Value(result)),
-            });
+            let exit = module.add_node(halt(vec![Atom::Value(result)]));
             module.add_node(Node::LetIntrinsic {
                 result,
                 op,
@@ -720,7 +703,7 @@ fn an_intrinsic_spells_its_carrier_and_operation() {
 #[test]
 fn an_empty_binding_group_prints_nothing() {
     let module = module_with(|module, _| {
-        let exit = module.add_node(Node::Exit { value: None });
+        let exit = module.add_node(halt_zero());
         let conts = module.add_node(Node::LetCont {
             continuations: Vec::new(),
             body: exit,
@@ -735,7 +718,7 @@ fn an_empty_binding_group_prints_nothing() {
         module.to_string(),
         "\
 entry ~f0$main() =
-    exit;
+    halt sys/proc_exit(0);
 "
     );
 }
@@ -745,7 +728,7 @@ entry ~f0$main() =
 fn a_switch_arm_to_the_sentinel_spells_the_return() {
     let module = module_with(|module, ret| {
         let other = module.reserve_continuation();
-        let other_body = module.add_node(Node::Exit { value: None });
+        let other_body = module.add_node(halt_zero());
         module.define_continuation(
             other,
             Continuation {
@@ -781,7 +764,7 @@ fn a_switch_arm_to_the_sentinel_spells_the_return() {
         "\
 entry ~f0$main() =
     cont ~k1$arm() =
-        exit;
+        halt sys/proc_exit(0);
     switch 0
     | 0 => ~k1$arm()
     | _ => return 9

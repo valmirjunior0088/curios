@@ -8,10 +8,25 @@ use curios_num::{Integer, Natural};
 
 use {
     crate::into_wasm,
-    curios_abi::{ForeignFunction, host_ops},
+    curios_abi::{ForeignFunction, HostOp, host_ops},
     curios_num::{Binary, Floating, Grain},
     std::{collections::BTreeMap, sync::Arc},
 };
+
+/// A halt through `proc/exit` reading `args` — the terminal a fixture ends with when what it passes must stay live.
+pub(super) fn halt(args: Vec<curios_cont::Atom>) -> curios_cont::Node {
+    curios_cont::Node::Halt {
+        function: Arc::new(ForeignFunction::Builtin(
+            HostOp::named("proc_exit").expect("the roster names proc_exit"),
+        )),
+        args,
+    }
+}
+
+/// A halt reading nothing of the program's own: its code is the literal zero.
+pub(super) fn halt_zero() -> curios_cont::Node {
+    halt(vec![nat(0)])
+}
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
 pub(super) fn wat(module: &curios_cont::Module) -> String {
@@ -32,9 +47,11 @@ pub(super) fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// The refusal calls a module makes besides its exit's: a fixture exits with the value it computed, and an exit code crosses the wire as any `Nat` argument does, so its narrowing can refuse whatever the operation under test did.
+/// The refusal calls a module makes besides its closing halt's: a fixture halts with the value it computed, whose narrowing to the wire can refuse whatever the operation under test did, and the halt refuses a host that returns from it.
 pub(super) fn refusals_besides_the_exit(wat: &str) -> usize {
-    count(wat, "call $refuse/") - count(wat, "call $refuse/nat_wire")
+    count(wat, "call $refuse/")
+        - count(wat, "call $refuse/nat_wire")
+        - count(wat, "call $refuse/host_reply")
 }
 
 pub(super) fn nat(value: u32) -> curios_cont::Atom {
@@ -58,9 +75,7 @@ pub(super) fn intrinsic_main(
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let result = module.add_value(Some("result".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(result)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(result)]));
     let body = module.add_node(curios_cont::Node::LetIntrinsic {
         result,
         op,
@@ -90,9 +105,7 @@ pub(super) fn tuple_project() -> curios_cont::Module {
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()));
     let field = module.add_value(Some("field".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(field)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(field)]));
     let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: field,
         op: curios_cont::Intrinsic::TupleGet(0),
@@ -125,9 +138,7 @@ pub(super) fn list_len() -> curios_cont::Module {
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let len = module.add_value(Some("len".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(len)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(len)]));
     let measure = module.add_node(curios_cont::Node::LetIntrinsic {
         result: len,
         op: curios_cont::Intrinsic::ListLen,
@@ -160,9 +171,7 @@ pub(super) fn bin_len() -> curios_cont::Module {
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()));
     let len = module.add_value(Some("len".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(len)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(len)]));
     let measure = module.add_node(curios_cont::Node::LetIntrinsic {
         result: len,
         op: curios_cont::Intrinsic::BinLen(Grain::X),
@@ -201,9 +210,7 @@ pub(super) fn cell_roundtrip() -> curios_cont::Module {
     let present = module.add_value(None);
     let filled = module.add_value(None);
     let value = module.add_value(Some("value".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(value)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(value)]));
     let get_k = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("got".into()),
         params: vec![present, value],
@@ -264,9 +271,7 @@ pub(super) fn channel_roundtrip() -> curios_cont::Module {
     let pushed = module.add_value(None);
     let taken = module.add_value(None);
     let payload = module.add_value(None);
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(payload)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(payload)]));
     let after_take = module.add_continuation(curios_cont::Continuation {
         debug_name: None,
         params: vec![taken, payload],
@@ -342,8 +347,9 @@ pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Mo
     let bound = (0..results)
         .map(|i| module.add_value(Some(format!("result{i}"))))
         .collect::<Vec<_>>();
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: bound.first().copied().map(curios_cont::Atom::Value),
+    let exit = module.add_node(match bound.first() {
+        Some(&first) => halt(vec![curios_cont::Atom::Value(first)]),
+        None => halt_zero(),
     });
     let resume = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("resume".into()),
@@ -456,9 +462,7 @@ pub(super) fn list_read() -> curios_cont::Module {
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let elem = module.add_value(Some("elem".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(elem)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(elem)]));
     let read = module.add_node(curios_cont::Node::LetIntrinsic {
         result: elem,
         op: curios_cont::Intrinsic::ListGet,
@@ -509,9 +513,7 @@ pub(super) fn list_map() -> curios_cont::Module {
 
     let list = module.add_value(Some("list".into()));
     let mapped = module.add_value(Some("mapped".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(mapped)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(mapped)]));
     let resume = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("mapped".into()),
         params: vec![mapped],
@@ -561,9 +563,7 @@ pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
     let values = (0..depth)
         .map(|i| module.add_value(Some(format!("v{i}"))))
         .collect::<Vec<_>>();
-    let mut next = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(values[depth - 1])),
-    });
+    let mut next = module.add_node(halt(vec![curios_cont::Atom::Value(values[depth - 1])]));
     for i in (0..depth).rev() {
         let carrier = if i == 0 {
             bin_lit(vec![0])
@@ -713,9 +713,7 @@ pub(super) fn constant_tuple_pair() -> curios_cont::Module {
     let first = module.add_value(Some("first".into()));
     let second = module.add_value(Some("second".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(got)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(got)]));
     let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
         op: curios_cont::Intrinsic::TupleGet(0),
@@ -754,9 +752,7 @@ pub(super) fn runtime_tuple() -> curios_cont::Module {
     let sum = module.add_value(Some("sum".into()));
     let tuple = module.add_value(Some("tuple".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(got)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(got)]));
     let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
         op: curios_cont::Intrinsic::TupleGet(0),
@@ -795,9 +791,7 @@ pub(super) fn big_tuple() -> curios_cont::Module {
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(got)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(got)]));
     let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
         op: curios_cont::Intrinsic::TupleGet(0),

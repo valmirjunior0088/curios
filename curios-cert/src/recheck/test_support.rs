@@ -8,7 +8,7 @@
 
 use {
     crate::{Globals, Kernel, Verdict},
-    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductDecl,
         InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope,
@@ -30,7 +30,7 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        // Non-recursive and `ProcExit`-free, so the honest flag; `partial_definitions` recomputes it.
+        // Non-recursive and free of diverging host calls, so the honest flag; `partial_definitions` recomputes it.
         totality: Totality::Total,
         type_,
         body,
@@ -1689,7 +1689,7 @@ pub(super) fn carried_proof_module() -> Module {
     }
 }
 
-/// `induct Held : Prop | qed(u : {})`, with `bad : Held` built either from `exit(0)` or from `()`.
+/// `induct Held : Prop | qed(u : Io({}))`, with `bad : Held` built either from `exit(@{}, 0)` or from `Io/pure(())`.
 pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
@@ -1701,7 +1701,10 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
             Atom::from("qed"),
             InductParam::new(
                 Telescope::build(
-                    [(Free::local(910, Some("u")), Term::tuple_type_unit())],
+                    [(
+                        Free::local(910, Some("u")),
+                        Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
+                    )],
                     Vec::new(),
                 ),
                 vec![Plicity::Explicit],
@@ -1714,11 +1717,16 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
     };
 
     let payload = match exiting {
-        true => Term::intrinsic(Intrinsic::proc_exit(
+        true => Term::foreign(
+            Arc::new(ForeignFunction::Builtin(
+                HostOp::named("proc_exit").expect("the roster names proc_exit"),
+            )),
+            vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],
+        ),
+        false => Term::intrinsic(Intrinsic::io_pure(
             Term::tuple_type_unit(),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            Term::tuple(Vec::<Term>::new()),
         )),
-        false => Term::tuple(Vec::<Term>::new()),
     };
 
     let mut induct_decls = BTreeMap::new();

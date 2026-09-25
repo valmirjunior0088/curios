@@ -32,13 +32,13 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
     );
 }
 
-/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or an `Intrinsic::ProcExit`.
+/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a call to a host row that diverges.
 ///
 /// Instrumented across a kernel walk of the whole prelude and every program in `curios`'s test corpus, the named route refused 9 times — 8 at a proof position, 1 at a type position — and the anonymous route refused **zero**, with no test in this crate asserting a `NotTotal` verdict at all. The reason is the one this module documents: every surface spelling that would reach it is refused during elaboration, so no module carries it here. `rec b : False = b; b`, the shape three of `curios`'s `tests::soundness` fixtures use, never arrives.
 ///
-/// `Intrinsic::ProcExit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields the unit, the type `qed` holds, and `Held/qed(exit(0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
+/// A call to `proc/exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields `Io({})`, the type `qed` holds, and `Held/qed(exit(@{}, 0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///
-/// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
+/// The control is the same module with `Io/pure(())` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
     let verdicts = fixture_verdicts(
@@ -60,7 +60,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
     );
 }
 
-/// The control for the fixture above: the same proposition built from the unit value stays accepted.
+/// The control for the fixture above: the same proposition built from a description that does nothing stays accepted.
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(

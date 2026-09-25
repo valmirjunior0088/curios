@@ -263,7 +263,7 @@ pub(crate) fn offenders(
 
 /// Why one position fails its obligation.
 ///
-/// A position can fail without naming anything: an inline `rec` that does not descend, or an `Intrinsic::ProcExit`, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
+/// A position can fail without naming anything: an inline `rec` that does not descend, or a call to a diverging host row, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
 pub(crate) enum Fault {
     Named(Global),
     Inline,

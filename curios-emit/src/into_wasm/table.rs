@@ -271,15 +271,15 @@ pub(crate) struct Table<'a> {
     list_rope_node_type: curios_wasm::TypeName,
     list_rope_view_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
-    exit: OnceCell<curios_wasm::FuncName>,
+
     panic: OnceCell<curios_wasm::FuncName>,
-    // One slot per class, in `Panic::ALL`'s order, minted lazily like `exit`: a module declares the refusals its code can reach and no others.
+    // One slot per class, in `Panic::ALL`'s order, minted lazily: a module declares the refusals its code can reach and no others.
     refuse: [OnceCell<curios_wasm::FuncName>; curios_cont::Panic::ALL.len()],
     // One slot per big-number helper, in `BigHelper::ALL`'s order, minted lazily like `refuse`: a module declares the helpers its code and its other helpers reach and no others.
     big: [OnceCell<curios_wasm::FuncName>; BigHelper::ALL.len()],
     // One slot per float helper, in `FltHelper::ALL`'s order, minted lazily like `big`.
     flt: [OnceCell<curios_wasm::FuncName>; FltHelper::ALL.len()],
-    // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
+    // The shared rope helpers, minted lazily: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
     list_force: OnceCell<curios_wasm::FuncName>,
@@ -315,7 +315,7 @@ pub(crate) struct Table<'a> {
     bytes_to_bits: OnceCell<curios_wasm::FuncName>,
     bits_to_bytes: OnceCell<curios_wasm::FuncName>,
     list_map: OnceCell<curios_wasm::FuncName>,
-    // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
+    // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Lazy used-tracking: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
@@ -368,7 +368,6 @@ impl<'a> Table<'a> {
             list_rope_node_type: curios_wasm::TypeName::from("rope/list/node"),
             list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
             cell_type: curios_wasm::TypeName::from("cell"),
-            exit: OnceCell::new(),
             panic: OnceCell::new(),
             refuse: Default::default(),
             big: Default::default(),
@@ -711,15 +710,6 @@ impl<'a> Table<'a> {
     /// The foreign functions the emitted code referenced, in minted-name order.
     pub(crate) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
         self.host_funcs.borrow().values().cloned().collect()
-    }
-
-    pub(crate) fn exit_func(&self) -> &curios_wasm::FuncName {
-        self.exit
-            .get_or_init(|| curios_wasm::FuncName::from("exit"))
-    }
-
-    pub(crate) fn exit_used(&self) -> bool {
-        self.exit.get().is_some()
     }
 
     /// The `sys.panic` import: a byte string in, no return. Declared by every module, since every module refuses somewhere.

@@ -1,6 +1,8 @@
 use {
     crate::*,
+    curios_abi::{ForeignFunction, HostOp},
     curios_num::{Binary, Grain, Natural},
+    std::sync::Arc,
 };
 
 fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
@@ -976,16 +978,22 @@ fn a_value_only_knot_lowers_through_cells() {
 }
 
 #[test]
-fn exit_and_unreachable_lower_to_their_nodes() {
+fn a_halt_lowers_to_its_node() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
     let three = nat(&mut builder, 3);
-    let entry = builder.seal_block(Terminator::Exit(three));
+    let exit = builder.foreign(Arc::new(ForeignFunction::Builtin(
+        HostOp::named("proc_exit").expect("the roster names proc_exit"),
+    )));
+    let entry = builder.seal_block(Terminator::Halt {
+        foreign: exit,
+        operands: vec![three],
+    });
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let cont = lowered(&module);
     assert!(
-        has_node(&cont, |node| matches!(node, curios_cont::Node::Exit { .. })),
+        has_node(&cont, |node| matches!(node, curios_cont::Node::Halt { .. })),
         "{cont}"
     );
 }

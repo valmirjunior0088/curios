@@ -2,6 +2,7 @@ use curios_num::Natural;
 
 use {
     super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
+    crate::cps::test_support::halt_zero,
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
         Module, Node, Row, RowId, Slot, ValueExpr,
@@ -44,7 +45,7 @@ fn projecting_resume(module: &mut Module, name: &str) -> ContinuationId {
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     let second = module.add_node(Node::LetIntrinsic {
         result: payload,
         op: Intrinsic::TupleGet(1),
@@ -74,7 +75,7 @@ fn opaque_resume(module: &mut Module, name: &str) -> ContinuationId {
     let held = module.add_value(Some(format!("{name}/held")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     let hold = module.add_node(Node::LetValue {
         result: held,
         value: ValueExpr::Tuple(vec![Atom::Value(result)]),
@@ -377,7 +378,7 @@ fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> Continu
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     let second = module.add_node(Node::LetIntrinsic {
         result: payload,
         op: Intrinsic::RowGet(row, 1),

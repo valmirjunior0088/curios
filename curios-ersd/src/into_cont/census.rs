@@ -181,7 +181,12 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
     for block in module.blocks().iter().flatten() {
         let Block { terminator, .. } = block;
         match terminator {
-            Terminator::Return(atom) | Terminator::Exit(atom) => record(atom, UseKind::Poison),
+            Terminator::Return(atom) => record(atom, UseKind::Poison),
+            Terminator::Halt { operands, .. } => {
+                for atom in operands {
+                    record(atom, UseKind::Poison);
+                }
+            }
             Terminator::Unreachable => {}
         }
     }

@@ -59,14 +59,15 @@ fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
-    // One class: the narrowing's own guard. The exit's code is a `Byte`, a word already, so it crosses with nothing to refuse.
+    // Two classes: the narrowing's own guard, and the closing halt's refusal of a host that returns from it. The halt's code is a `Byte`, a word already, so it crosses with nothing to refuse.
     assert_eq!(
         count(&wat, "(func $refuse/"),
-        1,
+        2,
         "one helper per class the code reaches"
     );
     assert_eq!(count(&wat, "(func $refuse/invariant"), 1);
-    assert_eq!(count(&wat, "(data $refusal/"), 1);
+    assert_eq!(count(&wat, "(func $refuse/host_reply"), 1);
+    assert_eq!(count(&wat, "(data $refusal/"), 2);
     assert_absent(&wat, "(global $refusal/");
     assert_contains(&wat, "call $refuse/invariant");
 

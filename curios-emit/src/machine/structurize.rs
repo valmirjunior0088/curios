@@ -307,12 +307,11 @@ impl<'a> MachineFunctionBridge<'a> {
                 op: curios_cont::IntrinsicCall::ListMap,
                 args,
             } => self.list_map(args, self.resume.clone(), values),
-            MachineTerminator::Exit(value) => {
-                let code = match value {
-                    Some(value) => self.operand(value, values),
-                    None => self.literal(&curios_cont::Literal::Nat(Natural::zero()), values),
-                };
-                EmissionTail::Host(EmissionHostTarget::Exit { code })
+            MachineTerminator::Halt { function, args } => {
+                EmissionTail::Host(EmissionHostTarget::Halt {
+                    function: function.clone(),
+                    operands: self.operands(args, values),
+                })
             }
             MachineTerminator::Panic(panic) => EmissionTail::Panic(*panic),
             MachineTerminator::Unreachable => EmissionTail::Unreachable,
@@ -597,6 +596,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
         | MachineTerminator::TailDirectCall { args, .. }
         | MachineTerminator::Foreign { args, .. }
         | MachineTerminator::ForeignReturn { args, .. }
+        | MachineTerminator::Halt { args, .. }
         | MachineTerminator::Cell { args, .. }
         | MachineTerminator::Channel { args, .. }
         | MachineTerminator::CellReturn { args, .. }
@@ -608,7 +608,6 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
             insert(&MachineOperand::Value(*closure));
             args.iter().for_each(&mut insert);
         }
-        MachineTerminator::Exit(operand) => operand.iter().for_each(&mut insert),
         MachineTerminator::Panic(_) | MachineTerminator::Unreachable => {}
     }
     values

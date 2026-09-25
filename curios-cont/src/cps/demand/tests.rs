@@ -1,5 +1,6 @@
 use {
     super::{Demand, demand_of, demands},
+    crate::cps::test_support::halt_zero,
     crate::{
         Atom, Callee, Continuation, Edge, Function, Intrinsic, Module, Node, ValueExpr, ValueId,
     },
@@ -15,7 +16,7 @@ fn module() -> (Module, ValueId, ValueId, ValueId) {
     let field = module.add_value(Some("field".into()));
     let built = module.add_value(Some("built".into()));
 
-    let exit = module.add_node(Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     let construct = module.add_node(Node::LetValue {
         result: built,
         value: ValueExpr::Tuple(vec![Atom::Value(whole)]),
@@ -81,7 +82,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
 
     let callee = module.reserve_function();
     let callee_ret = module.reserve_continuation();
-    let callee_exit = module.add_node(Node::Exit { value: None });
+    let callee_exit = module.add_node(halt_zero());
     let callee_body = module.add_node(Node::LetIntrinsic {
         result: field,
         op: Intrinsic::TupleGet(1),
@@ -102,7 +103,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     let caller = module.reserve_function();
     let caller_ret = module.reserve_continuation();
     let resume = module.reserve_continuation();
-    let resume_exit = module.add_node(Node::Exit { value: None });
+    let resume_exit = module.add_node(halt_zero());
     module.define_continuation(
         resume,
         Continuation {
@@ -157,7 +158,7 @@ fn deferral_reaches_unused_through_a_chain() {
     let inner = module.reserve_continuation();
     let outer = module.reserve_continuation();
 
-    let inner_exit = module.add_node(Node::Exit { value: None });
+    let inner_exit = module.add_node(halt_zero());
     module.define_continuation(
         inner,
         Continuation {

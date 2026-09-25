@@ -1334,9 +1334,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::NatToInt(inner) => curios_core::Intrinsic::nat_to_int(self.term(inner)?),
             Intrinsic::HandleType => curios_core::Intrinsic::HandleType,
             Intrinsic::Handle(token) => curios_core::Intrinsic::Handle(*token),
-            Intrinsic::ProcExit { result, code } => {
-                curios_core::Intrinsic::proc_exit(self.term(result)?, self.term(code)?)
-            }
             Intrinsic::NatToFlt(rounding, inner) => {
                 curios_core::Intrinsic::nat_to_flt(*rounding, self.term(inner)?)
             }

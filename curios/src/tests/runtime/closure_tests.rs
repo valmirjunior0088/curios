@@ -145,9 +145,12 @@ fn folds_constant_arg_through_let_function() {
     assert!(
         optimized.nodes().iter().flatten().any(|node| matches!(
             node,
-            curios_cont::Node::Exit {
-                value: Some(curios_cont::Atom::Literal(curios_cont::Literal::Nat(folded)))
-            } if u32::try_from(folded).ok() == Some(4)
+            curios_cont::Node::Halt { args, .. }
+                if matches!(
+                    args.as_slice(),
+                    [curios_cont::Atom::Literal(curios_cont::Literal::Nat(folded))]
+                        if u32::try_from(folded).ok() == Some(4)
+                )
         )),
         "expected the folded 4 to reach the exit, got:\n{optimized}",
     );

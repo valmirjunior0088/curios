@@ -124,7 +124,11 @@ pub(crate) enum MachineTerminator {
         op: curios_cont::IntrinsicCall,
         args: Vec<MachineOperand>,
     },
-    Exit(Option<MachineOperand>),
+    /// A call to a host row that diverges; see [`curios_cont::Node::Halt`].
+    Halt {
+        function: Arc<ForeignFunction>,
+        args: Vec<MachineOperand>,
+    },
     /// A deliberate failure of the given class; see [`curios_cont::Node::Panic`].
     Panic(curios_cont::Panic),
     Unreachable,
@@ -755,11 +759,10 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cont::Node::Exit { value } => MachineTerminator::Exit(
-                value
-                    .as_ref()
-                    .map(|value| self.lower_atom(value, instructions)),
-            ),
+            curios_cont::Node::Halt { function, args } => MachineTerminator::Halt {
+                function: function.clone(),
+                args: self.lower_atoms(args, instructions),
+            },
             curios_cont::Node::Panic(panic) => MachineTerminator::Panic(*panic),
             curios_cont::Node::Unreachable => MachineTerminator::Unreachable,
             _ => unreachable!("non-terminal CPS node reached terminal lowering"),
@@ -1089,9 +1092,17 @@ impl MachineModule {
                 }
                 tail_returns(owner, function, op.result_arity())?;
             }
-            MachineTerminator::Exit(_)
-            | MachineTerminator::Panic(_)
-            | MachineTerminator::Unreachable => {}
+            MachineTerminator::Halt {
+                function: foreign,
+                args,
+            } => {
+                if args.len() != foreign.signature().params.len() {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} halting call argument count does not match its ABI"
+                    )));
+                }
+            }
+            MachineTerminator::Panic(_) | MachineTerminator::Unreachable => {}
         }
         Ok(())
     }

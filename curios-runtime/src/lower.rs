@@ -1,5 +1,5 @@
 use {
-    super::{Handle, Poll, Status},
+    super::{Handle, Poll, Status, Termination, engine::ExitTrap},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
         StorageType, Val, ValType,
@@ -56,6 +56,13 @@ impl Lower for u64 {
         results[0] = Val::I64(self.cast_signed());
 
         Ok(())
+    }
+}
+
+/// A diverging row's answer never lowers to a result: it is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code. This is the one way a host ends the instance, so no host implementation of the row can return into the guest.
+impl Lower for Termination {
+    fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
+        Err(wasmtime::Error::from(ExitTrap(self.0)))
     }
 }
 

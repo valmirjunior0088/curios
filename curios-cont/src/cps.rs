@@ -682,8 +682,10 @@ pub enum Node {
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
-    Exit {
-        value: Option<Atom>,
+    /// A call to a host row that diverges — `proc/exit` — with its wire operands. Terminal like [`Node::Panic`]: it has no continuation, so no pass can give one to it, and the emitter refuses as [`Panic::HostReply`] should a host return anyway.
+    Halt {
+        function: Arc<ForeignFunction>,
+        args: Vec<Atom>,
     },
     /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — today the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`Node::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
     Panic(Panic),
@@ -1727,7 +1729,7 @@ impl Module {
             | Node::Cell { .. }
             | Node::Channel { .. }
             | Node::Intrinsic { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
@@ -1802,7 +1804,7 @@ impl Module {
                 | Node::Cell { .. }
                 | Node::Channel { .. }
                 | Node::Intrinsic { .. }
-                | Node::Exit { .. }
+                | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
             }
@@ -2002,7 +2004,22 @@ impl Module {
                     )));
                 }
             }
-            Node::Exit { .. } | Node::Panic(_) | Node::Unreachable => {}
+            Node::Halt { function, args } => {
+                if !function.diverges() {
+                    return Err(VerifyError(format!(
+                        "{id} halts through {}, which returns",
+                        function.name()
+                    )));
+                }
+                if args.len() != function.signature().params.len() {
+                    return Err(VerifyError(format!(
+                        "{id} halting call expects {} operands, got {}",
+                        function.signature().params.len(),
+                        args.len()
+                    )));
+                }
+            }
+            Node::Panic(_) | Node::Unreachable => {}
         }
 
         for atom in atoms(node) {
@@ -2104,6 +2121,7 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
         Node::LetIntrinsic { args, .. }
         | Node::ApplyFun { args, .. }
         | Node::Foreign { args, .. }
+        | Node::Halt { args, .. }
         | Node::Cell { args, .. }
         | Node::Channel { args, .. }
         | Node::Intrinsic { args, .. } => output.extend(args),
@@ -2121,7 +2139,6 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
                 output.extend(&edge.args);
             }
         }
-        Node::Exit { value, .. } => output.extend(value),
         Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {}
     }
     output
@@ -2138,6 +2155,7 @@ pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Ato
         Node::LetIntrinsic { args, .. }
         | Node::ApplyFun { args, .. }
         | Node::Foreign { args, .. }
+        | Node::Halt { args, .. }
         | Node::Cell { args, .. }
         | Node::Channel { args, .. }
         | Node::Intrinsic { args, .. } => args.iter_mut().for_each(visitor),
@@ -2153,11 +2171,6 @@ pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Ato
             }
             if let Some(edge) = default {
                 edge.args.iter_mut().for_each(visitor);
-            }
-        }
-        Node::Exit { value, .. } => {
-            if let Some(value) = value {
-                visitor(value);
             }
         }
         Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {}

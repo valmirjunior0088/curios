@@ -26,9 +26,7 @@ fn small_packed_literal_rides_the_immediate() {
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(bin)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(bin)]));
     let build = module.add_node(curios_cont::Node::LetValue {
         result: bin,
         value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
@@ -103,9 +101,7 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
     let aggregate = module.add_value(Some("aggregate".into()));
 
     // The parameter's one use demands a raw `Flt`, which is what raises it out of a reference.
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(sum)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(sum)]));
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
         op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
@@ -162,9 +158,7 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     let sum = module.add_value(Some("sum".into()));
     let aggregate = module.add_value(Some("aggregate".into()));
 
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(sum)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(sum)]));
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
         op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
@@ -236,9 +230,7 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     let return_cont = module.reserve_continuation();
     let built = module.add_value(Some("built".into()));
     let field = module.add_value(Some("field".into()));
-    let exit = module.add_node(curios_cont::Node::Exit {
-        value: Some(curios_cont::Atom::Value(field)),
-    });
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(field)]));
     let read = module.add_node(curios_cont::Node::LetIntrinsic {
         result: field,
         op: curios_cont::Intrinsic::RowGet(row, 1),
@@ -291,7 +283,7 @@ fn a_short_variant_construction_is_refused() {
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let built = module.add_value(Some("built".into()));
-    let exit = module.add_node(curios_cont::Node::Exit { value: None });
+    let exit = module.add_node(halt_zero());
     let build = module.add_node(curios_cont::Node::LetValue {
         result: built,
         value: curios_cont::ValueExpr::Row(row, vec![nat(0)]),

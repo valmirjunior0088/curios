@@ -62,7 +62,7 @@ pub(super) fn prune_unreachable(module: &mut Module) -> bool {
             | Node::Cell { return_to, .. }
             | Node::Channel { return_to, .. }
             | Node::Intrinsic { return_to, .. } => queue_cont(*return_to),
-            Node::Exit { .. } | Node::Panic(_) | Node::Unreachable => {}
+            Node::Halt { .. } | Node::Panic(_) | Node::Unreachable => {}
         }
     }
 

@@ -872,7 +872,7 @@ fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
             | Node::Cell { .. }
             | Node::Channel { .. }
             | Node::Intrinsic { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
@@ -915,7 +915,7 @@ pub(super) fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
             | Node::Cell { .. }
             | Node::Channel { .. }
             | Node::Intrinsic { .. }
-            | Node::Exit { .. }
+            | Node::Halt { .. }
             | Node::Panic(_)
             | Node::Unreachable => {}
         }
