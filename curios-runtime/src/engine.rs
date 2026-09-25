@@ -5,7 +5,7 @@ use {
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireType,
-        host_ops,
+        for_each_host_op, host_ops,
     },
     std::{
         collections::HashMap,
@@ -201,7 +201,7 @@ macro_rules! declare_sys_impls {
         $(#[doc = $doc:literal])*
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
     )*) => {
-        /// The registry of builtin implementations: every [`host_ops()`] row bound to its [`HostOps`] method.
+        /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method.
         fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
             let mut impls = ForeignBindings::new(host_ops());
 
@@ -218,7 +218,7 @@ macro_rules! declare_sys_impls {
     };
 }
 
-host_ops!(declare_sys_impls);
+for_each_host_op!(declare_sys_impls);
 
 /// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]

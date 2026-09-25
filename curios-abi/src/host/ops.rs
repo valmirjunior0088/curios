@@ -1,6 +1,6 @@
 //! The single authored table of builtin host operations, and what `curios-abi` derives from it.
 //!
-//! `host_ops!` is the one place a builtin operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then where the guest surfaces it, `as Handle/read`, then a brace group of what its types cannot say: `yields`, the label a lone payload crosses under (`value` when omitted). The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a builtin operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then where the guest surfaces it, `as Handle/read`, then a brace group of what its types cannot say: `yields`, the label a lone payload crosses under (`value` when omitted). The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
 //! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-runtime` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
 //!
@@ -16,12 +16,12 @@ use {
     std::sync::LazyLock,
 };
 
-/// The one authored table of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply as Subject/label { yields: label }`: the variant is the row's [`HostOp`], the method name the wasm import name and the [`HostOps`] method; `Subject/label` is where the guest surfaces it under `/sys`; and the brace group holds what the types cannot say.
+/// The one authored table of builtin host operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply as Subject/label { yields: label }`: the variant is the row's [`HostOp`], the method name the wasm import name and the [`HostOps`] method; `Subject/label` is where the guest surfaces it under `/sys`; and the brace group holds what the types cannot say.
 ///
 /// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! host_ops {
+macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
             /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
@@ -193,7 +193,7 @@ macro_rules! declare_host_rows {
     };
 }
 
-host_ops!(declare_host_rows);
+for_each_host_op!(declare_host_rows);
 
 /// One row as the table states it. Private: a caller names a row by its [`HostOp`] and reads it through that, so the table has no second spelling outside this module.
 struct Row {

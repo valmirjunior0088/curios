@@ -188,7 +188,7 @@ fn words_accessors_roundtrip_a_word() {
     }
 }
 
-/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, `proc_exit` among them, and the one `sys` import that is not a row, `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
+/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `for_each_host_op!` row, `proc_exit` among them, and the one `sys` import that is not a row, `panic`. The harness spells the wire names by hand, like any embedder — so without this check, a new `for_each_host_op!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
 #[test]
 fn harness_implements_every_host_op() {
     let source = include_str!("harness.js");
