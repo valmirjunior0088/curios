@@ -9,7 +9,7 @@ pub use curios_abi::{
 
 use {
     curios_abi::event,
-    rustix::{event::PollFlags, termios::ControlModes},
+    rustix::{event::PollFlags, io::Errno, termios::ControlModes},
     std::io::{Error, ErrorKind},
 };
 
@@ -51,6 +51,19 @@ pub(crate) fn serial_frame(
 pub(crate) enum Direction {
     Read,
     Write,
+}
+
+/// The `host:port` a lookup asks for, or the failure that refuses it before any lookup starts: a host that is not UTF-8 names nothing a resolver can find, which is `NotFound`, and a port past 65535 is no port, which is `EINVAL`. Both hosts ask it, so a lookup the native host refuses is one the scripted host refuses too.
+pub(crate) fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> {
+    let host = str::from_utf8(host).map_err(|_| Failure::NotFound)?;
+    let port = u16::try_from(port).map_err(|_| failure_from_error(Error::from(Errno::INVAL)))?;
+
+    Ok(format!("{host}:{port}"))
+}
+
+/// Whether `name` can name an environment variable at all: an empty name cannot, nor one holding the `=` that ends a name in `NAME=VALUE` or the NUL that ends a C string. Both hosts ask it, so such a name is absent from either.
+pub(crate) fn names_a_variable(name: &[u8]) -> bool {
+    !name.is_empty() && !name.contains(&b'=') && !name.contains(&0)
 }
 
 /// Where a child's `which` stream sits in the `[stdin, stdout, stderr]` both hosts file a child's streams in.

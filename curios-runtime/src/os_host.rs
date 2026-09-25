@@ -248,8 +248,7 @@ impl HostOps for OsHost {
     }
 
     fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
-        let host = String::from_utf8_lossy(&host).into_owned();
-        let address = format!("{host}:{port}");
+        let address = lookup_address(&host, port)?;
 
         // Start the lookup on the pool (booted on first use). A saturated pool sheds the load as a retriable `WouldBlock`; on success the read end and result slot become a `Resolving` handle the scheduler polls.
         match self
@@ -406,14 +405,15 @@ impl HostOps for OsHost {
             None => return Err(Failure::TlsError),
         };
 
-        let socket = match self.take_connected(&io) {
-            Some(socket) => socket,
-            None => return Err(Failure::NotFound),
-        };
-
+        // The connection is built before the socket is taken, so failing to build it leaves the socket connected, as the row promises.
         let conn = match ClientConnection::new(CLIENT_CONFIG.clone(), server_name) {
             Ok(conn) => conn,
             Err(_) => return Err(Failure::TlsError),
+        };
+
+        let socket = match self.take_connected(&io) {
+            Some(socket) => socket,
+            None => return Err(Failure::NotFound),
         };
 
         // The stream is filed with its handshake still to run: the socket is non-blocking, so the handshake is driven by the reads and writes that follow — `rustls`'s stream completes prior IO before each — and parks the fiber through `handle_poll` like any other progress. A verification or protocol failure surfaces as `TlsError` from the read or write that discovers it.
@@ -457,14 +457,15 @@ impl HostOps for OsHost {
             _ => return Err(Failure::NotFound),
         };
 
-        let socket = match self.take_connected(&io) {
-            Some(socket) => socket,
-            None => return Err(Failure::NotFound),
-        };
-
+        // Built before the socket is taken, as `tls_start` builds its own, so a failure leaves the socket connected.
         let conn = match ServerConnection::new(config) {
             Ok(conn) => conn,
             Err(_) => return Err(Failure::TlsError),
+        };
+
+        let socket = match self.take_connected(&io) {
+            Some(socket) => socket,
+            None => return Err(Failure::NotFound),
         };
 
         // Filed with the handshake still to run, as `tls_start` files the client side.
@@ -492,7 +493,15 @@ impl HostOps for OsHost {
 
                 Ok(())
             }
-            Err(error) => Err(failure_from_error(error)),
+            // A refused listen leaves the socket as it found it, unconnected, as the row promises.
+            Err(error) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(&io, OsResource::Unconnected(socket));
+
+                Err(failure_from_error(error))
+            }
         }
     }
 
@@ -776,6 +785,10 @@ impl HostOps for OsHost {
     }
 
     fn proc_env(&self, name: Vec<u8>) -> Option<Vec<u8>> {
+        if !names_a_variable(&name) {
+            return None;
+        }
+
         env::var_os(OsStr::from_bytes(&name)).map(|value| value.into_encoded_bytes())
     }
 

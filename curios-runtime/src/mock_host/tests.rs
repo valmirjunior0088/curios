@@ -440,3 +440,23 @@ fn a_scripted_flush_waits_then_drains() {
         Err(Failure::NotFound)
     );
 }
+
+/// The scripted host refuses what the native host refuses before asking anything: a lookup of a host that is not UTF-8 or of a port past sixteen bits, and a variable whose name no variable can have.
+#[test]
+fn a_lookup_and_a_variable_are_refused_as_the_native_host_refuses_them() {
+    let (host, _io) = MockHost::builder().env([("A", "1")]).build();
+
+    assert_eq!(
+        host.dns_lookup(b"\xff".to_vec(), 80),
+        Err(Failure::NotFound)
+    );
+    assert_eq!(
+        host.dns_lookup(b"example.com".to_vec(), 65_536),
+        Err(Failure::Other(22))
+    );
+    assert!(host.dns_lookup(b"example.com".to_vec(), 80).is_ok());
+
+    assert_eq!(host.proc_env(b"A".to_vec()), Some(b"1".to_vec()));
+    assert_eq!(host.proc_env(b"A=".to_vec()), None);
+    assert_eq!(host.proc_env(vec![]), None);
+}

@@ -498,7 +498,7 @@ impl HostOps for MockHost {
 
     fn dns_lookup(&self, host: Vec<u8>, port: u64) -> Result<Handle, Failure> {
         // One synthetic address blob: the `host:port` key `net` uses, so `socket_connect` can recover the scripted endpoint from the blob. Stashed behind a handle `handle_poll` reports ready and `dns_resolve` drains, mirroring the async OS path without a real pipe.
-        let endpoint = format!("{}:{port}", String::from_utf8_lossy(&host)).into_bytes();
+        let endpoint = lookup_address(&host, port)?.into_bytes();
 
         Ok(self.mint(MockResource::Resolved(vec![endpoint])))
     }
@@ -853,7 +853,9 @@ impl HostOps for MockHost {
     }
 
     fn proc_env(&self, name: Vec<u8>) -> Option<Vec<u8>> {
-        self.env.get(&name).cloned()
+        names_a_variable(&name)
+            .then(|| self.env.get(&name).cloned())
+            .flatten()
     }
 
     fn proc_exit(&self, code: u8) -> Termination {

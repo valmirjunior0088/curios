@@ -673,16 +673,24 @@ fn slots_naming_one_descriptor_are_answered_each_for_its_interest() {
     let (listener, client, server) = loopback_pair(&host);
 
     assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
-    let wait = |interest| {
-        host.handle_poll(
-            vec![server.clone(), server.clone()],
-            vec![Poll::from_bits(event::READ), Poll::from_bits(interest)],
+
+    // The byte is waited for alone first: a poll answers once any slot is ready, and the writing one is ready at once, possibly before the byte has crossed the loopback.
+    let arrived = host
+        .handle_poll(
+            vec![server.clone()],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
-        .unwrap()
-    };
+        .unwrap();
+    assert_ne!(arrived[0].bits() & event::READ, 0);
 
-    let ready = wait(event::WRITE);
+    let ready = host
+        .handle_poll(
+            vec![server.clone(), server.clone()],
+            vec![Poll::from_bits(event::READ), Poll::from_bits(event::WRITE)],
+            0,
+        )
+        .unwrap();
     assert_eq!(ready[0].bits() & (event::READ | event::WRITE), event::READ);
     assert_eq!(ready[1].bits() & (event::READ | event::WRITE), event::WRITE);
 
@@ -698,4 +706,59 @@ fn randomness_answers_exactly_what_was_asked_or_refuses() {
 
     assert_eq!(host.rand_bytes(32).map(|bytes| bytes.len()), Ok(32));
     assert!(host.rand_bytes(u64::MAX).is_err());
+}
+
+/// A lookup is refused before it starts when it names nothing a resolver could find — a host that is not UTF-8 — or a port past the sixteen bits a port is.
+#[test]
+fn a_lookup_of_no_host_or_no_port_is_refused_before_it_starts() {
+    const EINVAL: u32 = 22;
+
+    let host = OsHost::with_args(vec![]);
+
+    assert_eq!(
+        host.dns_lookup(b"\xffhost".to_vec(), 80),
+        Err(Failure::NotFound)
+    );
+    assert_eq!(
+        host.dns_lookup(b"localhost".to_vec(), 65_536),
+        Err(Failure::Other(EINVAL))
+    );
+}
+
+/// A name that is empty or holds `=` or NUL names no variable, so it is absent without the environment being asked how the platform reads such a name.
+#[test]
+fn a_name_no_variable_can_have_is_absent() {
+    let host = OsHost::with_args(vec![]);
+
+    for name in [&b""[..], b"PATH=", b"PA\0TH"] {
+        assert_eq!(host.proc_env(name.to_vec()), None);
+    }
+    assert!(host.proc_env(b"PATH".to_vec()).is_some());
+}
+
+/// An upgrade that cannot start leaves the socket as it was: connected, and still serving plaintext.
+#[test]
+fn a_tls_upgrade_that_cannot_start_leaves_the_socket_connected() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, client, server) = loopback_pair(&host);
+
+    assert_eq!(
+        host.tls_start(client.clone(), b"\xff".to_vec()),
+        Err(Failure::TlsError)
+    );
+    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
+
+    let ready = host
+        .handle_poll(
+            vec![server.clone()],
+            vec![Poll::from_bits(event::READ)],
+            5_000,
+        )
+        .unwrap();
+    assert_ne!(ready[0].bits() & event::READ, 0);
+    assert_eq!(host.handle_read(server.clone(), 8), Ok(Some(b"x".to_vec())));
+
+    host.handle_close(server);
+    host.handle_close(client);
+    host.handle_close(listener);
 }
