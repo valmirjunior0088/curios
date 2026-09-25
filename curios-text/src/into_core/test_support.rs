@@ -7,7 +7,7 @@ use curios_abi::host_ops;
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
     LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, Qualifier,
-    RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
     test_support::Temporary,
 };
 use std::{fs, path::Path};
@@ -31,6 +31,11 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: registry_name(&["sys", "Option"]),
         some: registry_name(&["sys", "Option", "some"]),
         none: registry_name(&["sys", "Option", "none"]),
+    },
+    result: ResultSyntax {
+        family: registry_name(&["sys", "Result"]),
+        success: registry_name(&["sys", "Result", "success"]),
+        failure: registry_name(&["sys", "Result", "failure"]),
     },
     channel: ChannelSyntax {
         push: registry_name(&["sys", "Channel", "Push"]),

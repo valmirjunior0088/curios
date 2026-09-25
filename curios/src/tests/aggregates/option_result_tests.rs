@@ -31,3 +31,22 @@ fn reexported_option_serves_repeated_occurrences_and_higher_universes() {
     "#;
     assert_eq!(crate::tests::run(source), b"Option/some(Option/some(7))");
 }
+
+#[test]
+fn reexported_result_serves_repeated_occurrences_and_higher_universes() {
+    let source = r#"
+        use /std/{Result, Nat, Str, Spell, Io};
+        use /std/Result/{success, failure};
+        let pair(@E: Type, @A: Type, a: A, e: E) -> {Result(E, A), Result(E, A)} =
+            (success(a), failure(e));
+        let small: {Result(Str, Nat), Result(Str, Nat)} = pair(7, "no");
+        let large: {Result(Type, Type), Result(Type, Type)} = pair(Nat, Str);
+        let carried: Type = match large.0 | success(t) => t | failure(t) => t end;
+        let nested: Result(Str, Result(Str, Nat)) = success(small.0);
+        /std/print(Spell/spell(nested))
+    "#;
+    assert_eq!(
+        crate::tests::run(source),
+        b"Result/success(Result/success(7))"
+    );
+}

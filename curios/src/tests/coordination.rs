@@ -12,7 +12,8 @@ use {
     },
 };
 
-fn listing_host() -> (MockHost, MockIo) {
+// Shared with the host boundary measurement, which drives the same session.
+pub(super) fn listing_host() -> (MockHost, MockIo) {
     let mut keys = vec![b"\x1b[".to_vec(), b"B".to_vec(), b"\x1b[A".to_vec()];
     for _ in 1..100 {
         keys.extend([b"\x1b[B".to_vec(), b"\x1b[A".to_vec()]);
@@ -26,7 +27,7 @@ fn listing_host() -> (MockHost, MockIo) {
         .build()
 }
 
-fn assert_listing(io: &MockIo) {
+pub(super) fn assert_listing(io: &MockIo) {
     let output = String::from_utf8(io.output()).expect("terminal output is UTF-8");
     assert!(output.starts_with("\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[>1u"));
     assert!(output.ends_with("\x1b[<u\x1b[?2004l\x1b[?25h\x1b[?1049lone"));

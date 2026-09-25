@@ -136,7 +136,7 @@ impl Reader<'_> {
 
     /// The path a consumer writes for the declaration at `referent`.
     ///
-    /// **A member is addressed under the declaration that holds it, never under a name a glob gave it.** A constructor and a concept method live in their owner's block on their owner's page, so `/std/Result/Result/success` is where a mark finds `success` even where `pub use Result/*` also spells it `/std/Result/success` — the shorter spelling is a way to write the name, not a second place it lives.
+    /// **A member is addressed under the declaration that holds it, never under a name a glob gave it.** A constructor and a concept method live in their owner's block on their owner's page, so `/std/Ordering/Ordering/lt` is where a mark finds `lt` even where `pub use Ordering/*` also spells it `/std/Ordering/lt` — the shorter spelling is a way to write the name, not a second place it lives.
     ///
     /// **A declaration whose own module has a page is already named the way a consumer writes it.** One whose module has none — a private child, or a root this unit keeps to itself — is the consumer's only through the re-export that shows it, so it takes that page's name. And one this bundle exposes nowhere has no consumer-facing name at all, which is a hole in the documented interface rather than a fact to render: it is refused here, naming both ends, rather than quietly rendered as a path the reader is not allowed to write. A name belonging to neither this unit's documented mount nor a root it adopts is nobody here's to rename, and renders as written.
     fn public_name(&self, referent: &Qualifier) -> Qualifier {

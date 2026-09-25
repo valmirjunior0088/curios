@@ -142,14 +142,14 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] `List`
 - [x] `Cell` (write-once storage over any carrier, with empty construction, first-write `fill` and optional `poll`)
 - [x] [Guest coordination](design/language/guest-coordination-uses-write-once-cells-and-bounded-channels.md) — write-once cells, bounded channels, level waiting and threaded session state
-  - [x] [Ordinary `/sys/Option`](../curios-prelude-archive/README.md#optional-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
+  - [x] [Ordinary `/sys/Option`](../curios-prelude-archive/README.md#optional-and-fallible-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
   - [x] [Knot memoization](../curios-cont/README.md#mutation-hides-behind-instruction-atomicity) through a write-once result cell and a capacity-one initializer channel
   - [x] [Guest channel storage](../curios-emit/README.md#cells-and-channels-occupy-the-guest-heap) with a positive-capacity obligation, atomic outcomes and consumed-slot release
   - [x] Scheduler state threaded through its loop; opaque readiness waits and shared park claims
   - [x] `Tui/Session` state threaded through reading, size tracking and drawing; [comparison measurements](../curios/src/tests/coordination.rs) recorded with their workloads
 - [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — one contract per host operation, a builtin identity no term can contradict, and checked adapters on both sides
   - [x] [`Byte` on the wire](syntax.md#foreign-declarations) and [exit as a diverging row](../curios-abi/README.md#exit-is-a-row-that-diverges)
-  - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing the existing `/sys/Option`
+  - [x] [`Result` declared in `/sys`](../curios-prelude-archive/README.md#optional-and-fallible-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
   - [ ] Checked host outcomes, guest reply validation, buffer ownership and resource transitions
   - [ ] Single-attempt writes, an explicit flush, unbuffered standard output and classified poll failures
   - [ ] Ordinary `/sys` outcome wrappers over wire-shaped Core calls; domain vocabulary retained in `/std`

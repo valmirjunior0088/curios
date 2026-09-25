@@ -64,22 +64,22 @@ fn the_standard_library_documents_from_the_archive() {
         documentation.description
     );
 
-    let result = documentation
+    let ordering = documentation
         .modules
         .iter()
-        .find(|module| module.path.join() == "/std/Result")
-        .expect("a Result module");
-    let induct = result
+        .find(|module| module.path.join() == "/std/Ordering")
+        .expect("an Ordering module");
+    let induct = ordering
         .declarations
         .iter()
-        .find(|declaration| declaration.name == "Result")
-        .expect("the Result type");
+        .find(|declaration| declaration.name == "Ordering")
+        .expect("the Ordering type");
     assert_eq!(induct.kind, Kind::Inductive);
     assert!(
         induct
             .prose
             .as_ref()
-            .is_some_and(|lines| lines[0].starts_with("Success or failure")),
+            .is_some_and(|lines| lines[0].starts_with("The three-way answer")),
         "the type's prose is the `---` block written above it: {:?}",
         induct.prose
     );
@@ -89,7 +89,7 @@ fn the_standard_library_documents_from_the_archive() {
             .iter()
             .map(|member| member.name.as_str())
             .collect::<Vec<_>>(),
-        ["success", "failure"],
+        ["lt", "eq", "gt"],
         "a public representation lists its constructors"
     );
     assert!(!induct.opaque);
@@ -139,48 +139,45 @@ fn the_standard_library_documents_from_the_archive() {
     );
 
     // A signature's reference to a declaration of the same unit links within the bundle.
-    let pure = result
+    let flip = ordering
         .declarations
         .iter()
-        .find(|declaration| declaration.name == "pure")
-        .expect("Result/pure");
+        .find(|declaration| declaration.name == "flip")
+        .expect("Ordering/flip");
     assert!(
-        pure.signature
+        flip.signature
             .marks
             .iter()
-            .any(|mark| mark.referent.join() == "/std/Result/Result" && mark.within),
+            .any(|mark| mark.referent.join() == "/std/Ordering/Ordering" && mark.within),
         "{:?}",
-        pure.signature
+        flip.signature
     );
 
-    // `pub use Result/*` puts the constructors in the module beside the type, which is where a consumer reaches them: `Result/success` and `Result` are siblings, so the page lists both. The constructor stays a member of its type as well, since that is where its shape belongs.
-    let declared = result
+    // `pub use Ordering/*` puts the constructors in the module beside the type, which is where a consumer reaches them: `Ordering/lt` and `Ordering` are siblings, so the page lists both. The constructor stays a member of its type as well, since that is where its shape belongs.
+    let declared = ordering
         .declarations
         .iter()
-        .find(|declaration| declaration.name == "Result")
-        .expect("Result");
+        .find(|declaration| declaration.name == "Ordering")
+        .expect("Ordering");
     assert!(
-        declared
-            .members
-            .iter()
-            .any(|member| member.name == "success"),
+        declared.members.iter().any(|member| member.name == "lt"),
         "{:?}",
         declared.members
     );
 
-    let constructor = result
+    let constructor = ordering
         .declarations
         .iter()
-        .find(|declaration| declaration.name == "success")
+        .find(|declaration| declaration.name == "lt")
         .expect("the constructor beside its type");
-    assert_eq!(constructor.home.join(), "/std/Result");
+    assert_eq!(constructor.home.join(), "/std/Ordering");
     assert_eq!(
         constructor.source.as_ref().map(Qualifier::join).as_deref(),
-        Some("/std/Result/Result"),
+        Some("/std/Ordering/Ordering"),
         "a member's card names the declaration that holds it, and links to the row inside it"
     );
     assert!(
-        constructor.signature.text.starts_with("success("),
+        constructor.signature.text.starts_with("lt("),
         "{:?}",
         constructor.signature
     );

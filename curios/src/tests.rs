@@ -18,6 +18,8 @@ mod fixpoint;
 mod fmt;
 mod harness;
 mod host;
+#[cfg(feature = "profile")]
+mod host_boundary;
 mod inference;
 mod laws;
 mod lint;

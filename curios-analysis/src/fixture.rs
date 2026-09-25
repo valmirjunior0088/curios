@@ -7,7 +7,7 @@
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
     LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax,
-    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -26,6 +26,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["sys", "Option"]),
         some: name(&["sys", "Option", "some"]),
         none: name(&["sys", "Option", "none"]),
+    },
+    result: ResultSyntax {
+        family: name(&["sys", "Result"]),
+        success: name(&["sys", "Result", "success"]),
+        failure: name(&["sys", "Result", "failure"]),
     },
     channel: ChannelSyntax {
         push: name(&["sys", "Channel", "Push"]),
