@@ -7,10 +7,19 @@
 //! **Behind `test-support`, which implies `cranelift`:** instantiating compiles, so this cannot exist in a runtime-only build. That it is a feature rather than `#[cfg(test)]` is not a stylistic choice — `cfg(test)` is set only while *this* crate is compiled as its own test harness, so a `cfg(test)` item is invisible to another crate's tests, which is exactly the case here.
 //!
 //! Calls are untyped, and deliberately: they type-check dynamically against the module's declared signatures, so a call succeeding *is* the assertion that the emitted shapes are right.
+//!
+//! It also runs a compiled program against replies no checked host would give: [`run_raw`](crate::test_support::run_raw) answers chosen builtin rows, and [`raw_reply`](crate::test_support::raw_reply) an embedder's own, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the guest's own checks of a reply are put under test, since the native adapter refuses the same replies before they cross.
 
 use {
-    super::shared_engine,
-    wasmtime::{Instance, Linker, Memory, Module, Store, Val},
+    super::{
+        ForeignBindings, HostOps, Lower,
+        engine::{instantiate, sys_impls},
+        lower::{lower_scalars, words_array_type},
+        shared_engine,
+    },
+    curios_abi::HostOp,
+    std::sync::Arc,
+    wasmtime::{Caller, Instance, Linker, Memory, Module, Store, Val},
 };
 
 /// One wasm value crossing into or out of a guest call, opaque by construction.
@@ -132,4 +141,84 @@ impl GuestInstance {
             .get_memory(&mut self.store, export)
             .ok_or_else(|| format!("missing memory export `{export}`"))
     }
+}
+
+/// One value of a raw host reply, written into the guest's result slot as it stands. No row's contract is consulted, so a reply can hold what no checked host would give: a status its row never answers, a `Bool` word past `1`, an empty handle beside `ok`.
+#[derive(Debug, Clone)]
+pub enum RawValue {
+    /// A `Nat` or a status, as the unsigned bits it crosses as.
+    Nat(u64),
+    Int(i64),
+    /// A `Bool` or a `Byte`, as the word it crosses as — any word at all.
+    Word(i32),
+    /// A `Bytes`, or a handle as its token.
+    Bytes(Vec<u8>),
+    BytesList(Vec<Vec<u8>>),
+    /// A `List(Bool)`, as the words it crosses as.
+    Words(Vec<i32>),
+}
+
+/// Write `values` into an import's result slots, one each, through the plain encodings and nothing else.
+fn write_raw(
+    mut caller: Caller<'_, ()>,
+    values: &[RawValue],
+    results: &mut [Val],
+) -> wasmtime::Result<()> {
+    for (value, slot) in values.iter().zip(results.iter_mut()) {
+        let slot = std::slice::from_mut(slot);
+
+        match value {
+            RawValue::Nat(value) => value.lower(&mut caller, slot)?,
+            RawValue::Int(value) => value.lower(&mut caller, slot)?,
+            RawValue::Word(word) => slot[0] = Val::I32(*word),
+            RawValue::Bytes(bytes) => bytes.clone().lower(&mut caller, slot)?,
+            RawValue::BytesList(list) => list.clone().lower(&mut caller, slot)?,
+            RawValue::Words(words) => {
+                let array_type = words_array_type(caller.engine());
+
+                lower_scalars(
+                    &mut caller,
+                    array_type,
+                    words.iter().map(|word| Val::I32(*word)),
+                    slot,
+                )?
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Implement the `ffi` row `name` in `bindings` by answering `values` on every call, raw: how a test puts an embedder's reply in front of the guest that no typed binding could give.
+pub fn raw_reply(bindings: &mut ForeignBindings, name: &str, values: Vec<RawValue>) {
+    bindings.define_raw(name, move |caller, _, results| {
+        write_raw(caller, &values, results)
+    });
+}
+
+/// Run the precompiled `payload` under `host`, except that each builtin row in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`run_bytes`](super::run_bytes)'s does.
+///
+/// # Safety
+///
+/// As [`run_bytes`](super::run_bytes): `payload` must be unmodified output of [`precompile`](super::precompile) for this engine.
+pub unsafe fn run_raw<H: HostOps + Send + Sync + 'static>(
+    payload: &[u8],
+    host: H,
+    raw: Vec<(HostOp, Vec<RawValue>)>,
+    bindings: ForeignBindings,
+) -> Result<u8, String> {
+    let engine = shared_engine();
+
+    // SAFETY: the caller's, restated in this function's contract.
+    let module = unsafe { Module::deserialize(engine, payload) }
+        .map_err(|error| format!("failed to load wasm module: {error}"))?;
+    let mut impls = sys_impls(Arc::new(host));
+
+    for (op, values) in raw {
+        impls.replace_raw(op.name(), move |caller, _, results| {
+            write_raw(caller, &values, results)
+        });
+    }
+
+    instantiate(engine, &module, impls, bindings)
 }

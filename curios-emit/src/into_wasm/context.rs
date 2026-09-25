@@ -1,13 +1,16 @@
 mod coordination;
 
+mod reply;
+use reply::Waiting;
+
 use {
     super::{
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get,
-        i32_const, set, when,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get, set,
+        tee,
     },
-    curios_abi::{ForeignFunction, WireLeaf, WireReference, WireType},
+    curios_abi::{ForeignFunction, WireLeaf, WireReference, WireShape, WireType},
     curios_num::Grain,
     curios_utilities::Entropy,
     std::{
@@ -856,12 +859,13 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
-    /// Load `operands` at their wire types, force each reference to its flat payload, and call `function`'s import — the half of a host call that does not depend on whether it returns.
+    /// Load `operands` at their wire types, force each reference to its flat payload, and call `function`'s import — the half of a host call that does not depend on whether it returns. The operands named in `kept` are also left in locals as they cross, at their row positions, for the checks of the reply that read them.
     fn host_call_instrs(
         &mut self,
         function: &Arc<ForeignFunction>,
         operands: &'a [EmissionValueName],
-    ) -> Vec<curios_wasm::Instr> {
+        kept: &[&str],
+    ) -> (Vec<curios_wasm::Instr>, Vec<Option<Waiting>>) {
         let signature = function.signature();
 
         debug_assert_eq!(
@@ -872,16 +876,30 @@ impl<'a, 'b> Context<'a, 'b> {
         );
 
         let mut output = Vec::new();
-        for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
+        let mut waiting = Vec::with_capacity(operands.len());
+        for (operand, (name, wire_type)) in operands.iter().zip(&signature.params) {
             output.extend(self.load_value_instrs(operand, wire_type.into()));
             output.extend(self.wire_force_instrs(wire_type));
+
+            waiting.push(kept.contains(&name.as_str()).then(|| {
+                let val_type = nullable(self.table().wire_type(wire_type));
+                let local = self.push_local("operand", val_type);
+
+                // A local admits null so it starts with a default, and a tee leaves the value at the local's type, so a reference is asserted back to the non-null the import takes.
+                output.push(tee(&local));
+                if matches!(wire_type.shape(), WireShape::Reference(_)) {
+                    output.push(curios_wasm::Instr::RefAsNonNull);
+                }
+
+                (*wire_type, local)
+            }));
         }
 
         output.push(curios_wasm::Instr::Call {
             func_name: self.table().host_func(function),
         });
 
-        output
+        (output, waiting)
     }
 
     /// Emit a host intrinsic call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
@@ -895,10 +913,12 @@ impl<'a, 'b> Context<'a, 'b> {
                 resume,
             } => {
                 let signature = function.signature();
+                let kept = Self::measured_operands(function);
+                let (call, operands) = self.host_call_instrs(function, operands, &kept);
 
-                output.extend(self.host_call_instrs(function, operands));
+                output.extend(call);
 
-                // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`). Boxing works on the top of the stack only, so a row with one waits its results out in locals of their own and brings them back in order; a row without one needs only its reference embedded, which is the last to cross — `WireResults` can hold it nowhere else — and so is already on top.
+                // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`). Boxing works on the top of the stack only, so a row with one waits its results out in locals of their own and brings them back in order, and so does a row whose reply is checked, since a check reads its values before any is boxed; a row with neither needs only its reference embedded, which is the last to cross — `WireResults` can hold it nowhere else — and so is already on top.
                 let reference = signature
                     .results
                     .reference()
@@ -909,31 +929,29 @@ impl<'a, 'b> Context<'a, 'b> {
                     .map(|(_, wire_type)| wire_type)
                     .collect::<Vec<_>>();
 
-                if results.iter().any(|wire_type| {
-                    matches!(
-                        wire_type,
-                        WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int
-                    )
-                }) {
+                if Self::reply_checked(function)
+                    || results.iter().any(|wire_type| {
+                        matches!(
+                            wire_type,
+                            WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int
+                        )
+                    })
+                {
                     let waiting = results
                         .iter()
                         .map(|wire_type| {
                             let val_type = nullable(self.table().wire_type(wire_type));
-                            self.push_local("result", val_type)
+
+                            (*wire_type, self.push_local("result", val_type))
                         })
                         .collect::<Vec<_>>();
 
-                    output.extend(waiting.iter().rev().map(set));
+                    output.extend(waiting.iter().rev().map(|(_, local)| set(local)));
 
-                    for (index, (wire_type, local)) in results.iter().zip(&waiting).enumerate() {
-                        // A `Byte` crosses as a word the host chose, so one past 255 is refused here rather than boxed into an i31 no `Byte` can be.
-                        if matches!(wire_type, WireType::Byte) {
-                            output.extend([get(local), i32_const(255), curios_wasm::Instr::I32GtU]);
-                            output.push(when(
-                                self.table().refuse_instrs(curios_cont::Panic::HostReply),
-                            ));
-                        }
+                    // Held to the row before the program reads any of it: a value its wire type cannot be, a status the row never answers, or a success that breaks the row's checks refuses as `host_reply` (`reply.rs`).
+                    output.extend(self.reply_check_instrs(function, &waiting, &operands));
 
+                    for (index, (wire_type, local)) in waiting.iter().enumerate() {
                         output.push(get(local));
                         match (reference, index + 1 == results.len()) {
                             (Some(reference), true) => {
@@ -955,7 +973,7 @@ impl<'a, 'b> Context<'a, 'b> {
             }
             // Nothing resumes after a diverging call: a host that returns from it has broken its contract, so the guest refuses rather than continue.
             EmissionHostTarget::Halt { function, operands } => {
-                output.extend(self.host_call_instrs(function, operands));
+                output.extend(self.host_call_instrs(function, operands, &[]).0);
                 output.extend(self.table().refuse_instrs(curios_cont::Panic::HostReply));
             }
         }

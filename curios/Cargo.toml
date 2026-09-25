@@ -35,6 +35,8 @@ clap = { version = "4.6.1", features = ["derive"] }
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]
+# The runtime's test support too, for the replies no checked host gives that the guest's own checks of a reply are tested against.
+curios-runtime = { workspace = true, features = ["cranelift", "test-support"] }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-cont = { workspace = true }

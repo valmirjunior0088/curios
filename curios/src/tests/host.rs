@@ -4,6 +4,7 @@
 
 mod test_support;
 
+mod boundary_tests;
 mod contract_tests;
 mod file_tests;
 mod fs_tests;

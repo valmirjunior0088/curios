@@ -291,6 +291,8 @@ pub(crate) struct Table<'a> {
     bytes_norm: OnceCell<curios_wasm::FuncName>,
     bits_box: OnceCell<curios_wasm::FuncName>,
     bits_norm: OnceCell<curios_wasm::FuncName>,
+    reply_masks: OnceCell<curios_wasm::FuncName>,
+    reply_bools: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
     /// The scalar leaves whose list crosses to a host, each through `$list/<leaf>/to_<payload>`.
     scalars_forces: RefCell<Vec<WireLeaf>>,
@@ -383,6 +385,8 @@ impl<'a> Table<'a> {
             bytes_norm: OnceCell::new(),
             bits_box: OnceCell::new(),
             bits_norm: OnceCell::new(),
+            reply_masks: OnceCell::new(),
+            reply_bools: OnceCell::new(),
             list_embed: OnceCell::new(),
             scalars_forces: RefCell::new(Vec::new()),
             scalars_embeds: RefCell::new(Vec::new()),
@@ -869,6 +873,28 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bits_norm_used(&self) -> bool {
         self.bits_norm.get().is_some()
+    }
+
+    /// `$reply/masks (ref $bytes, i32) -> i32`: whether every byte of a host's reply holds no bit outside the mask — the readiness bits a poll answers. First use marks it for emission.
+    pub(crate) fn reply_masks_func(&self) -> curios_wasm::FuncName {
+        self.reply_masks
+            .get_or_init(|| curios_wasm::FuncName::from("reply/masks"))
+            .clone()
+    }
+
+    pub(crate) fn reply_masks_used(&self) -> bool {
+        self.reply_masks.get().is_some()
+    }
+
+    /// `$reply/bools (ref $words) -> i32`: whether every word of a host's `List(Bool)` reply is `0` or `1`. First use marks it for emission.
+    pub(crate) fn reply_bools_func(&self) -> curios_wasm::FuncName {
+        self.reply_bools
+            .get_or_init(|| curios_wasm::FuncName::from("reply/bools"))
+            .clone()
+    }
+
+    pub(crate) fn reply_bools_used(&self) -> bool {
+        self.reply_bools.get().is_some()
     }
 
     /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.

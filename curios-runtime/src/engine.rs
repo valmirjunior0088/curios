@@ -185,6 +185,20 @@ impl ForeignBindings {
         );
     }
 
+    /// Replace the implementation of the row named `name` with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked implementation would give.
+    #[cfg(feature = "test-support")]
+    pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
+    where
+        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+    {
+        assert!(
+            self.foreigns.get(name).is_some(),
+            "'{name}' is not in the foreign store"
+        );
+
+        self.trampolines.insert(name.to_string(), Arc::new(f));
+    }
+
     /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
     fn link(
         &self,
@@ -229,7 +243,7 @@ macro_rules! declare_sys_impls {
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident { $($contract:tt)* }
     )*) => {
         /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method.
-        fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
+        pub(crate) fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
             let mut impls = ForeignBindings::new(host_ops());
 
             $(
@@ -291,17 +305,16 @@ pub unsafe fn run_bytes<H: HostOps + Send + Sync + 'static>(
     let module = unsafe { Module::deserialize(engine, payload) }
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 
-    instantiate(engine, &module, host, bindings)
+    instantiate(engine, &module, sys_impls(Arc::new(host)), bindings)
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none). The deserialize/instantiate split [`run_bytes`] factors out.
-fn instantiate<H: HostOps + Send + Sync + 'static>(
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none). The deserialize/instantiate split [`run_bytes`] factors out.
+pub(crate) fn instantiate(
     engine: &Engine,
     module: &Module,
-    host: H,
+    impls: ForeignBindings,
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
-    let impls = sys_impls(Arc::new(host));
     let mut linker = Linker::new(engine);
 
     // The namespaces as the emitter spells them — `curios-abi`'s, read rather than restated, so the two ends of the wire cannot drift on the one string they link on.

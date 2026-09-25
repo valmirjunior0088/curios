@@ -169,7 +169,7 @@ pub(crate) fn words_array_type(engine: &Engine) -> ArrayType {
 }
 
 /// Lower `values` as a flat array of `array_type`, the guest's `$longs` or `$words`.
-fn lower_scalars(
+pub(crate) fn lower_scalars(
     caller: &mut Caller<'_, ()>,
     array_type: ArrayType,
     values: impl IntoIterator<Item = Val>,

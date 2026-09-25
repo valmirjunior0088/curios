@@ -770,6 +770,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_list_bin_embed_func(Grain::B, self.table.list_bits_embed_func());
         }
 
+        // A reply check's loops call nothing, so they may be emitted wherever the walk reaches them.
+        if self.table.reply_masks_used() {
+            ropes.emit_reply_masks_func(self.table.reply_masks_func());
+        }
+
+        if self.table.reply_bools_used() {
+            ropes.emit_reply_bools_func(self.table.reply_bools_func());
+        }
+
         if self.table.bytes_norm_used() {
             ropes.emit_norm_func(
                 Grain::X,

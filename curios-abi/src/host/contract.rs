@@ -99,10 +99,17 @@ impl HostOp {
         match self.outcome() {
             Outcome::Diverges => return Ok(()),
             Outcome::Returns => {}
-            outcome => {
+            _ => {
                 let (_, status) = fields.remove(0);
+                let code = nat(status);
 
-                if !self.succeeded(outcome, nat(status))? {
+                if !self.answers(code) {
+                    return Err(format!(
+                        "answered status {code}, which this row never answers"
+                    ));
+                }
+
+                if code != status::OK {
                     return Ok(());
                 }
             }
@@ -221,10 +228,12 @@ impl HostOp {
         Ok(())
     }
 
-    /// Whether `code` is a success, or a failure the row may answer — refusing any other.
-    fn succeeded(self, outcome: Outcome, code: u64) -> Result<bool, String> {
-        let answers = match code {
-            status::OK => return Ok(true),
+    /// Whether a row whose reply carries a status may answer `code` at all: its success, the absence a lookup answers, the end a stream answers, and every failure its contract admits — the operating system's statuses and the errno lane, and `would_block` and `tls` where the row is marked for them. A lookup answers nothing else, and every errno in the lane is answered alike, so the lane is all or nothing.
+    pub fn answers(self, code: u64) -> bool {
+        let outcome = self.outcome();
+
+        match code {
+            status::OK => true,
             status::NOT_FOUND if outcome == Outcome::Lookup => true,
             _ if outcome == Outcome::Lookup => false,
             status::EOF => outcome == Outcome::Stream,
@@ -232,13 +241,6 @@ impl HostOp {
             status::TLS_ERROR => self.tls(),
             _ if SYSTEM.contains(&code) => true,
             _ => (status::OTHER_BASE..=status::OTHER_BASE + status::ERRNO_MAX).contains(&code),
-        };
-
-        match answers {
-            true => Ok(false),
-            false => Err(format!(
-                "answered status {code}, which this row never answers"
-            )),
         }
     }
 

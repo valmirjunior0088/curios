@@ -1,4 +1,4 @@
-//! The shared rope helper functions — the only module-level functions the emitter mints beyond the program's own (everything else is inlined at its use site — straight-line sequences only; anything the emitter lowers to a *loop* lives here, so its mutable scratch locals are zeroed by the fresh activation instead of leaking across executions of one call site). Seven rows:
+//! The shared rope helper functions — the only module-level functions the emitter mints beyond the program's own (everything else is inlined at its use site — straight-line sequences only; anything the emitter lowers to a *loop* lives here, so its mutable scratch locals are zeroed by the fresh activation instead of leaking across executions of one call site). Eight rows:
 //!
 //! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
@@ -7,6 +7,7 @@
 //! - `$bits/force` performs the same iterative walk in logical bit units, filling a zeroed packed payload and memoizing it on an entry node.
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
 //! - `$list/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
+//! - `$reply/masks` and `$reply/bools` walk a host's flat reply for the guest's checks of it (`context/reply.rs`): every mask byte within the bits a row allows, every `List(Bool)` word `0` or `1`. Each answers whether its values hold, and the call site refuses.
 //!
 //! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back. A list of scalars crosses flat, one element per value — `$longs` for a `Nat` or `Int`, `$words` for a `Bool`: `$list/<leaf>/to_<payload>` narrows each element on the way out and `$list/<leaf>/of_<payload>` boxes each on the way back, so a host never builds or reads a guest box.
 
@@ -16,8 +17,8 @@ use force_walk::*;
 use {
     super::{
         BigHelper, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
-        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, null, repeat,
-        set,
+        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type, null,
+        repeat, set, when,
     },
     curios_abi::{WireLeaf, WireType},
     curios_num::Grain,
@@ -1855,6 +1856,71 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 (i, curios_wasm::ValType::Num(curios_wasm::NumType::I32)),
                 (x, Table::top_type(true)),
             ],
+            instrs,
+        );
+    }
+
+    /// `$reply/masks (ref $bytes, i32) -> i32`: `1` when no byte of `bytes` holds a bit outside `allowed`, `0` at the first that does — the loop half of a check on a host's reply, which the call site refuses on.
+    pub(crate) fn emit_reply_masks_func(&mut self, func_name: curios_wasm::FuncName) {
+        let bytes = curios_wasm::LocalName::from("bytes");
+        let allowed = curios_wasm::LocalName::from("allowed");
+        let i = curios_wasm::LocalName::from("i");
+
+        let body = vec![
+            get(&bytes),
+            get(&i),
+            curios_wasm::Instr::ArrayGetU {
+                type_name: self.table.bytes_type(),
+            },
+            get(&allowed),
+            i32_const(-1),
+            curios_wasm::Instr::I32Xor,
+            curios_wasm::Instr::I32And,
+            when(vec![i32_const(0), curios_wasm::Instr::Return]),
+        ];
+        let instrs = each(&i, &bytes, body)
+            .into_iter()
+            .chain([i32_const(1)])
+            .collect();
+
+        self.add_helper(
+            func_name,
+            vec![
+                (bytes, concrete_val(self.table.bytes_type(), false)),
+                (allowed, i32_type()),
+            ],
+            i32_type(),
+            vec![(i, i32_type())],
+            instrs,
+        );
+    }
+
+    /// `$reply/bools (ref $words) -> i32`: `1` when every word of a host's `List(Bool)` is `0` or `1`, `0` at the first that is not.
+    pub(crate) fn emit_reply_bools_func(&mut self, func_name: curios_wasm::FuncName) {
+        let words = curios_wasm::LocalName::from("words");
+        let i = curios_wasm::LocalName::from("i");
+        let words_type = self.table.scalars_type(WireLeaf::Bool);
+
+        let body = vec![
+            get(&words),
+            get(&i),
+            curios_wasm::Instr::ArrayGet {
+                type_name: words_type.clone(),
+            },
+            i32_const(1),
+            curios_wasm::Instr::I32GtU,
+            when(vec![i32_const(0), curios_wasm::Instr::Return]),
+        ];
+        let instrs = each(&i, &words, body)
+            .into_iter()
+            .chain([i32_const(1)])
+            .collect();
+
+        self.add_helper(
+            func_name,
+            vec![(words, concrete_val(words_type, false))],
+            i32_type(),
+            vec![(i, i32_type())],
             instrs,
         );
     }
