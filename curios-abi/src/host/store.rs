@@ -108,6 +108,23 @@ impl WireType {
     }
 }
 
+/// A wire type as a `foreign` declaration spells it — `Nat`, `List(Bool)` — the one spelling the printer and every description of a row handed to an embedder read.
+impl Display for WireType {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            WireType::Nat => formatter.write_str("Nat"),
+            WireType::Int => formatter.write_str("Int"),
+            WireType::Bool => formatter.write_str("Bool"),
+            WireType::Byte => formatter.write_str("Byte"),
+            WireType::Flt => formatter.write_str("Flt"),
+            WireType::Bytes => formatter.write_str("Bytes"),
+            WireType::Bits => formatter.write_str("Bits"),
+            WireType::Handle => formatter.write_str("Handle"),
+            WireType::List(leaf) => write!(formatter, "List({})", WireType::from(*leaf)),
+        }
+    }
+}
+
 impl From<WireScalar> for WireType {
     fn from(scalar: WireScalar) -> Self {
         match scalar {

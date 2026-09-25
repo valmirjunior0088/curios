@@ -106,14 +106,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-      - name: Build curios-js
-        run: cargo x js
+      - name: Build curios-js and run its Node suite
+        run: cargo x js-test
 
   grammar:
     name: Grammar parser

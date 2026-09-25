@@ -118,6 +118,11 @@ enum Recipe {
     Js,
 
     #[command(
+        about = "Build the browser bundle, then run its Node suite under curios-js/tests against it"
+    )]
+    JsTest,
+
+    #[command(
         about = "Build the launcher, then the workspace's Rust documentation under target/doc, with a root redirect to the compiler's"
     )]
     RustDocs,
@@ -230,6 +235,7 @@ fn main() -> ExitCode {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
         }
         Recipe::Js => js(),
+        Recipe::JsTest => js_test(),
         Recipe::RustDocs => rust_docs(),
         Recipe::StdDocs => std_docs(),
         Recipe::Installer { version } => installer(&version),

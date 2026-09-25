@@ -1,6 +1,6 @@
 use {
     super::{Table, host::*},
-    curios_abi::{ClosedCode, event},
+    curios_abi::{ClosedCode, errno, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         num::NonZeroU32,
@@ -424,9 +424,6 @@ pub struct MockHost {
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
 
-/// `EBADF`, the errno a stream used in a direction it is not open for reports — `9` on both release targets.
-const EBADF: u32 = 9;
-
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
 const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
 
@@ -441,7 +438,7 @@ impl MockHost {
 
     /// Whether `handle` names a stream that moves bytes in `direction`, as the native host answers it: a stream open only the other way — a standard stream, a file opened for the other, a child's pipe — is `EBADF`, and anything that is not a stream at all is `NotFound`.
     fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
-        let wrong_way = Err(Failure::Other(EBADF));
+        let wrong_way = Err(Failure::Other(errno::EBADF));
 
         match (handle, direction) {
             (Handle::Stdin, Direction::Read)

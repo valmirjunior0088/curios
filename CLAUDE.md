@@ -116,7 +116,7 @@ cargo x test
 cargo x doctest
 cargo x rust-docs
 cargo x std-docs
-cargo x js
+cargo x js-test
 cargo x grammar-install
 cargo x grammar-test
 cargo x vscode-install
@@ -128,7 +128,7 @@ cargo x zed-build
 cargo x zed-test
 ```
 
-Why the gate holds these steps and no others — what each is the sole check for, and what was left out — is [every gate step catches what no other step does](documentation/design/toolchain/every-gate-step-catches-what-no-other-step-does.md). The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets installed and `npm` on `PATH`. Measure a step and name the step; never quote a whole-gate total.
+Why the gate holds these steps and no others — what each is the sole check for, and what was left out — is [every gate step catches what no other step does](documentation/design/toolchain/every-gate-step-catches-what-no-other-step-does.md). The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets installed and Node 22 or later and `npm` on `PATH`. Measure a step and name the step; never quote a whole-gate total.
 
 ### Additional gates
 

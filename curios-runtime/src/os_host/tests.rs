@@ -1,5 +1,6 @@
 use {
     super::*,
+    curios_abi::errno,
     curios_utilities::test_support::Temporary,
     rustix::{
         pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
@@ -568,29 +569,26 @@ fn spawning_refuses_what_no_program_can_be() {
     assert_eq!(spawn(vec![b"/bin/echo".to_vec()], vec![vec![]]), refused);
 }
 
-/// `EBADF`, the errno every host answers a stream used in the direction it is not open for — `9` on both release targets.
-const EBADF: u32 = 9;
-
-/// The standard streams are open one way each, and using one the other way is `EBADF`, as it is for any descriptor opened one way — never an invented end of stream, and never a write into a terminal the program only reads.
+/// The standard streams are open one way each, and using one the other way is `EBADF` — the operating system's own, which is the one the hosts without one answer in its place — as it is for any descriptor opened one way: never an invented end of stream, and never a write into a terminal the program only reads.
 #[test]
 fn a_standard_stream_is_open_one_way() {
     let host = OsHost::with_args(vec![]);
 
     assert_eq!(
         host.handle_read(Handle::Stdout, 8),
-        Err(Failure::Other(EBADF))
+        Err(Failure::Other(errno::EBADF))
     );
     assert_eq!(
         host.handle_read(Handle::Stderr, 0),
-        Err(Failure::Other(EBADF))
+        Err(Failure::Other(errno::EBADF))
     );
     assert_eq!(
         host.handle_write(Handle::Stdin, b"x".to_vec()),
-        Err(Failure::Other(EBADF))
+        Err(Failure::Other(errno::EBADF))
     );
     assert_eq!(
         host.handle_write(Handle::Stdin, vec![]),
-        Err(Failure::Other(EBADF))
+        Err(Failure::Other(errno::EBADF))
     );
 }
 

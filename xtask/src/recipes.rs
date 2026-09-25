@@ -4,7 +4,7 @@
 
 use {
     crate::{
-        commands::{bindgen_web, cargo, run},
+        commands::{ask, bindgen_web, cargo, run},
         filing::file_with_inputs,
         places::{
             BROWSER_TRIPLE, HOST_TRIPLE, artifact, built, inputs, modified, root, target_directory,
@@ -65,6 +65,35 @@ pub(crate) fn js() -> Result<(), String> {
     bindgen_web(
         &built(BROWSER_TRIPLE, "curios_js.wasm"),
         &artifact("curios-js", BROWSER_TRIPLE),
+    )?;
+
+    Ok(())
+}
+
+/// The oldest Node the browser suite runs under: the first whose engine runs WebAssembly GC unflagged and whose test runner expands a pattern itself.
+const NODE_FLOOR: u32 = 22;
+
+/// The browser bundle's own suite: `js` builds and files the bundle, and Node's built-in test runner runs every `curios-js/tests/*.test.mjs` against what was filed. The pattern is Node's to expand rather than a shell's, so the recipe spawns no shell; the runner and the engine are Node's own, so the suite has no package to install. A Node older than [`NODE_FLOOR`] is refused before anything is built, naming the version it found, since under one the suite fails in ways that do not say why.
+pub(crate) fn js_test() -> Result<(), String> {
+    let version = ask(Command::new("node"), &["--version"])?;
+    let version = version.trim();
+    let major = version
+        .trim_start_matches('v')
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u32>().ok());
+
+    if major.is_none_or(|major| major < NODE_FLOOR) {
+        return Err(format!(
+            "js-test needs Node {NODE_FLOOR} or later, and `node --version` answered {version}"
+        ));
+    }
+
+    js()?;
+
+    run(
+        Command::new("node"),
+        &["--test", "curios-js/tests/*.test.mjs"],
     )?;
 
     Ok(())

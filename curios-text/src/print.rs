@@ -1600,19 +1600,7 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
 }
 
 fn print_wire_type(type_: WireType) -> Printer {
-    match type_ {
-        WireType::Nat => pure("Nat"),
-        WireType::Int => pure("Int"),
-        WireType::Bool => pure("Bool"),
-        WireType::Byte => pure("Byte"),
-        WireType::Flt => pure("Flt"),
-        WireType::Bytes => pure("Bytes"),
-        WireType::Bits => pure("Bits"),
-        WireType::Handle => pure("Handle"),
-        WireType::List(element) => {
-            flat([pure("List("), print_wire_type(element.into()), pure(")")])
-        }
-    }
+    pure(type_.to_string())
 }
 
 // A result as the surface spells it, which is the shape `WireResults` already decides: nothing is `{}`, one is the bare type forwarded through, and several are the tuple type the guest projects by — each field labelled, because a tuple's labels are part of its identity and dropping one would print a different type from the one declared.

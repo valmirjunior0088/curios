@@ -1,8 +1,8 @@
-//! The numeric wire codes a JavaScript host needs, surfaced as one JS object — derived from `curios-abi`, so the browser harness cannot drift from the compiler and runtime the way a hand-copied constants file can. The wire *names* (import namespaces, `sys.*` keys, the entry export) are spelled directly in `harness.js`, exactly as any embedder spells them.
+//! The wire codes a JavaScript host needs, surfaced as one JS object — derived from `curios-abi`, so the browser harness cannot drift from the compiler and runtime the way a hand-copied constants file can. The wire *names* (import namespaces, `sys.*` keys, the entry export) are spelled directly in `harness.js`, exactly as any embedder spells them.
 
 use {
     crate::set,
-    curios_abi::{file_kind, status, stdio, stdio_mode},
+    curios_abi::{Handle, Poll, errno, event, file_kind, status, stdio_mode},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -18,8 +18,8 @@ fn codes(entries: &[(&str, u64)]) -> Object {
     object
 }
 
-/// The stdio handle tokens as plain numbers: a handle crosses as its token's bytes, which the harness decodes into a number.
-fn tokens(entries: &[(&str, u32)]) -> Object {
+/// A table of plain numbers: the poll masks, which cross as the bytes of a `Bytes` rather than as `Nat`s.
+fn masks(entries: &[(&str, u8)]) -> Object {
     let object = Object::new();
 
     for (key, value) in entries {
@@ -29,7 +29,24 @@ fn tokens(entries: &[(&str, u32)]) -> Object {
     object
 }
 
-/// The numeric wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, and the `stdio` tokens as numbers.
+/// The standard streams' tokens as the hex of their exact bytes. A handle crosses as its token's bytes and the harness keys every token on their hex, so a token is only ever the bytes it is: the empty token is not stdin's, and a padded or a long one names no stream.
+fn tokens(entries: &[(&str, Handle)]) -> Object {
+    let object = Object::new();
+
+    for (key, handle) in entries {
+        let hex = handle
+            .bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        set(&object, key, &JsValue::from_str(&hex));
+    }
+
+    object
+}
+
+/// The wire codes as a JS object: the `status`/`file_kind`/`stdio_mode` code tables as `BigInt`s, the `event` masks as numbers, and the `stdio` tokens as hex.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
     set(
@@ -47,6 +64,7 @@ pub(crate) fn abi() -> Object {
             ("NOT_EMPTY", status::NOT_EMPTY),
             ("IS_DIRECTORY", status::IS_DIRECTORY),
             ("NOT_DIRECTORY", status::NOT_DIRECTORY),
+            ("EBADF", status::OTHER_BASE + u64::from(errno::EBADF)),
         ]),
     );
     set(
@@ -70,11 +88,21 @@ pub(crate) fn abi() -> Object {
     );
     set(
         &object,
+        "event",
+        &masks(&[
+            ("READ", event::READ),
+            ("WRITE", event::WRITE),
+            ("ERR", event::ERR),
+            ("INTEREST", Poll::INTEREST),
+        ]),
+    );
+    set(
+        &object,
         "stdio",
         &tokens(&[
-            ("STDIN", stdio::STDIN),
-            ("STDOUT", stdio::STDOUT),
-            ("STDERR", stdio::STDERR),
+            ("STDIN", Handle::Stdin),
+            ("STDOUT", Handle::Stdout),
+            ("STDERR", Handle::Stderr),
         ]),
     );
 
