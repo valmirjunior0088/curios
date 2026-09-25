@@ -3,13 +3,16 @@
 //! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`] and [`ChildExit`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {
-    crate::{file_kind, status, stdio},
+    crate::{
+        event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status, stdio,
+        stdio_mode,
+    },
     curios_num::Natural,
     std::num::NonZeroU32,
 };
 
 /// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Handle {
     Stdin,
     Stdout,
@@ -66,6 +69,15 @@ impl Handle {
     }
 }
 
+/// A handle is its token: two are one handle exactly when their bytes are, so a standard stream equals the minted spelling of its token and the empty token equals nothing but itself.
+impl PartialEq for Handle {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes() == other.bytes()
+    }
+}
+
+impl Eq for Handle {}
+
 /// The monotonic source a host mints handle tokens from, seeded one past the stdio band so a minted token never collides with stdin/stdout/stderr.
 ///
 /// It lives beside [`Handle`] rather than in the host that drives it because the token encoding is wire contract, not host policy: [`Handle::bytes`] reads back the same little-endian convention this writes. A host owns *when* to mint and what to file under the result; it does not get its own opinion about what a token looks like.
@@ -103,9 +115,20 @@ impl Default for TokenMint {
 pub struct Poll(u8);
 
 impl Poll {
+    /// The bits a guest may ask for: readiness to read and to write.
+    pub const INTEREST: u8 = event::READ | event::WRITE;
+
+    /// The bits a host may report: the interest bits, and the result-only `ERR` and `HUP`.
+    pub const READINESS: u8 = Self::INTEREST | event::ERR | event::HUP;
+
     /// The empty mask — no interest, or no readiness.
     pub const fn empty() -> Self {
         Self(0)
+    }
+
+    /// The interest a guest's byte asks for, or `None` for a bit outside [`INTEREST`](Self::INTEREST): readiness it cannot ask for is a malformed argument rather than a request the host may drop.
+    pub fn interest(bits: u8) -> Option<Self> {
+        (bits & !Self::INTEREST == 0).then_some(Self(bits))
     }
 
     /// The mask a byte of the guest's `Bytes` holds.
@@ -184,6 +207,14 @@ pub enum FileKind {
 }
 
 impl FileKind {
+    /// Every kind's code: the set a `file_stat` reply's kind is checked against.
+    pub const WIRE_CODES: &'static [u64] = &[
+        file_kind::FILE,
+        file_kind::DIRECTORY,
+        file_kind::SYMLINK,
+        file_kind::OTHER,
+    ];
+
     /// The [`file_kind`] code the guest decodes.
     pub fn code(self) -> u64 {
         match self {
@@ -211,12 +242,121 @@ pub enum ChildExit {
     Signal(NonZeroU32),
 }
 
-/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Its `0`/`1`/`2` tag is [`open_mode`](crate::open_mode)'s; lifting a tag is the native adapter's (`curios-runtime`'s `Lift`), which is where an out-of-range one is refused.
-#[derive(Clone, Copy, PartialEq)]
+/// A closed code: an enum whose variants are exactly the codes a wire `Nat` may carry for it. An operand of one decodes through [`from_code`](Self::from_code), and a code outside the table is a malformed argument, which the adapter refuses rather than reading as some nearby variant.
+pub trait ClosedCode: Copy + PartialEq + 'static {
+    /// Every variant with its code.
+    const CODES: &'static [(Self, u64)];
+
+    /// The variant `code` names, if any.
+    fn from_code(code: u64) -> Option<Self> {
+        Self::CODES
+            .iter()
+            .find(|(_, known)| *known == code)
+            .map(|(variant, _)| *variant)
+    }
+
+    /// The code the variant crosses as.
+    fn code(self) -> u64 {
+        Self::CODES
+            .iter()
+            .find(|(variant, _)| *variant == self)
+            .map(|(_, code)| *code)
+            .expect("every variant has a code")
+    }
+}
+
+/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive, its tags [`open_mode`]'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Read,
     Write,
     Append,
+}
+
+impl ClosedCode for Mode {
+    const CODES: &'static [(Self, u64)] = &[
+        (Mode::Read, open_mode::READ),
+        (Mode::Write, open_mode::WRITE),
+        (Mode::Append, open_mode::APPEND),
+    ];
+}
+
+/// How `proc/spawn` wires one of a child's standard streams, its tags [`stdio_mode`]'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StdioMode {
+    Inherit,
+    Pipe,
+    Null,
+}
+
+impl ClosedCode for StdioMode {
+    const CODES: &'static [(Self, u64)] = &[
+        (StdioMode::Inherit, stdio_mode::INHERIT),
+        (StdioMode::Pipe, stdio_mode::PIPE),
+        (StdioMode::Null, stdio_mode::NULL),
+    ];
+}
+
+/// Which of a child's standard streams `proc/stream` hands out, its tags the [`stdio`] tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildStream {
+    Stdin,
+    Stdout,
+    Stderr,
+}
+
+impl ClosedCode for ChildStream {
+    const CODES: &'static [(Self, u64)] = &[
+        (ChildStream::Stdin, stdio::STDIN as u64),
+        (ChildStream::Stdout, stdio::STDOUT as u64),
+        (ChildStream::Stderr, stdio::STDERR as u64),
+    ];
+}
+
+/// The parity `serial/open` frames a character with, its tags [`serial_parity`]'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialParity {
+    None,
+    Even,
+    Odd,
+}
+
+impl ClosedCode for SerialParity {
+    const CODES: &'static [(Self, u64)] = &[
+        (SerialParity::None, serial_parity::NONE),
+        (SerialParity::Even, serial_parity::EVEN),
+        (SerialParity::Odd, serial_parity::ODD),
+    ];
+}
+
+/// How `serial/open` paces the wire, its tags [`serial_flow`]'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialFlow {
+    None,
+    Hardware,
+}
+
+impl ClosedCode for SerialFlow {
+    const CODES: &'static [(Self, u64)] = &[
+        (SerialFlow::None, serial_flow::NONE),
+        (SerialFlow::Hardware, serial_flow::HARDWARE),
+    ];
+}
+
+/// What `serial/control` does to a port, its tags [`serial_op`]'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialOp {
+    Dtr,
+    Rts,
+    DiscardInput,
+}
+
+impl ClosedCode for SerialOp {
+    const CODES: &'static [(Self, u64)] = &[
+        (SerialOp::Dtr, serial_op::DTR),
+        (SerialOp::Rts, serial_op::RTS),
+        (SerialOp::DiscardInput, serial_op::DISCARD_INPUT),
+    ];
 }
 
 /// How a diverging row ends the instance: the code `proc/exit` hands the embedder, which the adapter carries out as its guest-exit trap. A host method that answers one cannot return into the guest, because nothing but the trap is made of it.

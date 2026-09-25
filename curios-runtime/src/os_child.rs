@@ -3,8 +3,7 @@
 //! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking `wait`, fills a slot, and writes one byte to a pipe whose read end is the child's handle, so `handle_poll` sees the exit as readiness and `proc_wait` drains the slot at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
 
 use {
-    super::{ChildExit, Failure, failure_from_error},
-    curios_abi::stdio_mode,
+    super::{ChildExit, Failure, StdioMode, failure_from_error},
     rustix::process::{Pid, Signal, kill_process},
     std::{
         ffi::OsStr,
@@ -66,12 +65,12 @@ pub(crate) struct Spawned {
     pub(crate) stderr: Option<OwnedFd>,
 }
 
-/// One standard stream's wiring from its [`stdio_mode`] tag; an unknown tag inherits, the harmless reading.
-fn wiring(tag: u64) -> Stdio {
-    match tag {
-        stdio_mode::PIPE => Stdio::piped(),
-        stdio_mode::NULL => Stdio::null(),
-        _ => Stdio::inherit(),
+/// One standard stream's wiring.
+fn wiring(mode: StdioMode) -> Stdio {
+    match mode {
+        StdioMode::Inherit => Stdio::inherit(),
+        StdioMode::Pipe => Stdio::piped(),
+        StdioMode::Null => Stdio::null(),
     }
 }
 
@@ -80,7 +79,7 @@ pub(crate) fn spawn(
     argv: &[Vec<u8>],
     cwd: &[u8],
     env: &[Vec<u8>],
-    (stdin, stdout, stderr): (u64, u64, u64),
+    (stdin, stdout, stderr): (StdioMode, StdioMode, StdioMode),
 ) -> std::io::Result<Spawned> {
     let Some((program, args)) = argv.split_first() else {
         return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));

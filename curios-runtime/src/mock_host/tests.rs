@@ -2,19 +2,19 @@
 
 use {
     super::{super::host::*, EBUSY, ENOTTY, MockHost},
-    curios_abi::{event, serial_flow, serial_op, serial_parity},
+    curios_abi::event,
 };
 
 #[test]
 fn terminal_sizes_advance_on_queries_and_repeat_the_last() {
     let (host, io) = MockHost::builder().tty_sizes([(12, 5), (16, 6)]).build();
 
-    assert_eq!(host.tty_raw(Handle::Stdin, 1), Ok(()));
+    assert_eq!(host.tty_raw(Handle::Stdin, true), Ok(()));
     assert_eq!(
         host.tty_size(Handle::Stdin),
         Ok(TtySize { cols: 12, rows: 5 })
     );
-    assert_eq!(host.tty_raw(Handle::Stdin, 0), Ok(()));
+    assert_eq!(host.tty_raw(Handle::Stdin, false), Ok(()));
     for _ in 0..3 {
         assert_eq!(
             host.tty_size(Handle::Stdin),
@@ -36,7 +36,10 @@ fn a_fixed_terminal_size_repeats_and_an_empty_script_has_no_terminal() {
 
     let (host, io) = MockHost::builder().tty_size(20, 5).tty_sizes([]).build();
     assert_eq!(host.tty_size(Handle::Stdin), Err(Failure::Other(ENOTTY)));
-    assert_eq!(host.tty_raw(Handle::Stdin, 1), Err(Failure::Other(ENOTTY)));
+    assert_eq!(
+        host.tty_raw(Handle::Stdin, true),
+        Err(Failure::Other(ENOTTY))
+    );
     assert!(io.raw_modes().is_empty());
 }
 
@@ -280,14 +283,14 @@ fn a_serial_discard_drops_only_what_arrived() {
             b"/dev/ttyUSB0".to_vec(),
             9600,
             8,
-            serial_parity::NONE,
+            SerialParity::None,
             1,
-            serial_flow::NONE,
+            SerialFlow::None,
         )
         .unwrap();
 
     assert_eq!(
-        host.serial_control(port.clone(), serial_op::DISCARD_INPUT, 0),
+        host.serial_control(port.clone(), SerialOp::DiscardInput, false),
         Ok(())
     );
     assert_eq!(host.handle_read(port.clone(), 16), Err(Failure::WouldBlock));

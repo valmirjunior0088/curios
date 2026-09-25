@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the host vocabulary's `Failure`, `Poll` and closed-code types cite these constants for the codes they cross as, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Io/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
@@ -26,6 +26,8 @@ pub mod status {
     pub const NOT_DIRECTORY: u64 = 10;
     /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `Io/Error/of` subtracts it back out.
     pub const OTHER_BASE: u64 = NOT_DIRECTORY + 1;
+    /// The largest errno the lane carries: an OS reports a positive `int`, so a code past `OTHER_BASE + ERRNO_MAX` is no failure any host can answer.
+    pub const ERRNO_MAX: u64 = i32::MAX as u64;
 }
 
 /// `handle_poll` interest/readiness flags — a bitmask of one byte, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.

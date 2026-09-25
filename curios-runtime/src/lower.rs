@@ -1,6 +1,6 @@
 use {
     super::{Handle, engine::ExitTrap},
-    curios_abi::{WireReply, WireSink},
+    curios_abi::{Encoded, HostOp, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
         StorageType, Val, ValType,
@@ -9,12 +9,19 @@ use {
 
 /// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half). Each impl produces the exact shape the generated code expects on that wire type (a scalar as its raw number, `Bytes` as an i8 array, `List` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
 pub trait Lower {
+    /// The wire types this encodes, in order: what `ForeignBindings::define` holds a binding's results to against its row.
+    fn shape() -> Vec<WireType>;
+
     /// Encode `self` into the import's `results` slots, allocating any GC values through `caller`. Contract: every single-value impl fills exactly `results[0]` — the alignment the tuple impls rely on to re-slice per component.
     fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
     -> Result<(), wasmtime::Error>;
 }
 
 impl Lower for () {
+    fn shape() -> Vec<WireType> {
+        vec![]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Ok(())
     }
@@ -22,6 +29,10 @@ impl Lower for () {
 
 /// A descriptor lowers as its wire token bytes — a `Bytes` (an i8 array), the same uniform shape the runtime keys handles on.
 impl Lower for Handle {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Handle]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -33,6 +44,10 @@ impl Lower for Handle {
 
 /// An `Int` result, as the raw `i64` it is: the guest boxes it after the call, into the i31 or past it into the boxed magnitude, neither of which this side needs to know.
 impl Lower for i64 {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Int]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I64(self);
 
@@ -42,6 +57,10 @@ impl Lower for i64 {
 
 /// A `Nat` result, as the raw `i64` its bits fill: the guest reads them unsigned and boxes the number, so every `u64` crosses whole.
 impl Lower for u64 {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Nat]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I64(self.cast_signed());
 
@@ -51,6 +70,10 @@ impl Lower for u64 {
 
 /// A `Byte` result, as its word. The type holds it below 256, which is the range the guest refuses a reply outside of.
 impl Lower for u8 {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Byte]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I32(i32::from(self));
 
@@ -59,9 +82,13 @@ impl Lower for u8 {
 }
 
 /// A `Bool` result, as its word `0` or `1`.
-impl Lower for u32 {
+impl Lower for bool {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Bool]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
-        results[0] = Val::I32(self.cast_signed());
+        results[0] = Val::I32(i32::from(self));
 
         Ok(())
     }
@@ -69,6 +96,10 @@ impl Lower for u32 {
 
 /// An `Flt` result, as the raw binary64 it is: the guest wraps it in the `Flt` struct after the call, whose shape is `curios-emit`'s and nothing here should have to know.
 impl Lower for f64 {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Flt]
+    }
+
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::F64(self.to_bits());
 
@@ -80,6 +111,10 @@ impl Lower for f64 {
 macro_rules! lower_tuple {
     ($($name:ident $value:ident $index:tt),+) => {
         impl<$($name: Lower),+> Lower for ($($name,)+) {
+            fn shape() -> Vec<WireType> {
+                [$($name::shape()),+].concat()
+            }
+
             fn lower(
                 self,
                 caller: &mut Caller<'_, ()>,
@@ -152,6 +187,10 @@ fn lower_scalars(
 
 /// `List(Nat)`: each element's bits as an `i64`, which the guest reads unsigned.
 impl Lower for Vec<u64> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Nat)]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -167,6 +206,10 @@ impl Lower for Vec<u64> {
 
 /// `List(Int)`: each element as the `i64` it is.
 impl Lower for Vec<i64> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Int)]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -182,6 +225,10 @@ impl Lower for Vec<i64> {
 
 /// `List(Bool)`: each element as the word `0` or `1`.
 impl Lower for Vec<bool> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Bool)]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -196,6 +243,10 @@ impl Lower for Vec<bool> {
 }
 
 impl Lower for Vec<u8> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::Bytes]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -222,6 +273,10 @@ impl Lower for Vec<u8> {
 
 /// `List(Bytes)`: an array of `anyref` whose elements are `Bytes` (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's uniform `list_type`, so the array's runtime type is the one downstream `ref.cast`s expect.
 impl Lower for Vec<Vec<u8>> {
+    fn shape() -> Vec<WireType> {
+        vec![WireType::List(WireLeaf::Bytes)]
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -258,63 +313,65 @@ impl Lower for Vec<Vec<u8>> {
     }
 }
 
-/// A builtin's reply, lowered through the [`WireSink`] its row's types encode into — the one `Lower` the `sys` bindings answer with, so the result slots a row crosses with are the ones its reply type states.
-pub(crate) struct Replied<R>(pub(crate) R);
+/// A builtin's call as its binding answers it: the row, the measures of the operands its contract reads, and the reply — or the refusal of a call whose operands broke a requirement, in which case the host was never asked.
+///
+/// Lowering holds the reply to its row's contract before a single value is written, so a host that answers outside it refuses the call rather than hand the guest a reply its row does not allow: a host's fault is reported as the host's, naming the import.
+pub(crate) struct Replied<R, const N: usize> {
+    op: HostOp,
+    operands: [Option<u64>; N],
+    reply: Result<R, String>,
+}
 
-impl<R: WireReply> Lower for Replied<R> {
+impl<R: WireReply, const N: usize> Replied<R, N> {
+    /// Admit `operands` to `op`'s requirements, and answer the call only if they hold.
+    pub(crate) fn new(op: HostOp, operands: [Option<u64>; N], call: impl FnOnce() -> R) -> Self {
+        let reply = op.admit(&operands).map(|()| call());
+
+        Self {
+            op,
+            operands,
+            reply,
+        }
+    }
+}
+
+impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
+    fn shape() -> Vec<WireType> {
+        R::results("value")
+            .iter()
+            .map(|(_, wire_type)| wire_type)
+            .collect()
+    }
+
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        self.0.encode(&mut Slots {
-            caller,
-            results,
-            next: 0,
-        })
-    }
-}
+        let refused =
+            |sentence: String| wasmtime::Error::msg(format!("sys.{}: {sentence}", self.op.name()));
 
-/// An import's result slots, filled one at a time as a reply encodes, each through the single-value `Lower` of what it holds.
-struct Slots<'a, 'b, 'c> {
-    caller: &'a mut Caller<'b, ()>,
-    results: &'c mut [Val],
-    next: usize,
-}
+        let values = match self.reply.map_err(refused)?.encode() {
+            Encoded::Reply(values) => values,
+            // A termination is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code: the one way a host ends the instance, so no implementation of a diverging row can return into the guest.
+            Encoded::Terminate(code) => return Err(wasmtime::Error::from(ExitTrap(code))),
+        };
 
-impl Slots<'_, '_, '_> {
-    fn fill(&mut self, value: impl Lower) -> Result<(), wasmtime::Error> {
-        value.lower(
-            &mut *self.caller,
-            &mut self.results[self.next..self.next + 1],
-        )?;
-        self.next += 1;
+        self.op
+            .check_reply(&values, &self.operands)
+            .map_err(refused)?;
+
+        for (value, slot) in values.into_iter().zip(results.iter_mut()) {
+            let slot = std::slice::from_mut(slot);
+
+            match value {
+                WireValue::Nat(value) => value.lower(caller, slot)?,
+                WireValue::Bytes(bytes) => bytes.lower(caller, slot)?,
+                WireValue::Handle(handle) => handle.lower(caller, slot)?,
+                WireValue::BytesList(list) => list.lower(caller, slot)?,
+            }
+        }
 
         Ok(())
-    }
-}
-
-impl WireSink for Slots<'_, '_, '_> {
-    type Error = wasmtime::Error;
-
-    fn nat(&mut self, value: u64) -> Result<(), wasmtime::Error> {
-        self.fill(value)
-    }
-
-    fn bytes(&mut self, value: Vec<u8>) -> Result<(), wasmtime::Error> {
-        self.fill(value)
-    }
-
-    fn handle(&mut self, value: Handle) -> Result<(), wasmtime::Error> {
-        self.fill(value)
-    }
-
-    fn bytes_list(&mut self, value: Vec<Vec<u8>>) -> Result<(), wasmtime::Error> {
-        self.fill(value)
-    }
-
-    /// A termination is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code: the one way a host ends the instance, so no implementation of a diverging row can return into the guest.
-    fn terminate(&mut self, code: u8) -> Result<(), wasmtime::Error> {
-        Err(wasmtime::Error::from(ExitTrap(code)))
     }
 }

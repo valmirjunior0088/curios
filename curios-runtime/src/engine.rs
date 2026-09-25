@@ -1,11 +1,12 @@
 use {
     super::{
-        Handle, HostOps, Lift, Lower, Mode, Poll,
+        ChildStream, Handle, HostOps, Lift, Lower, Mode, Poll, SerialFlow, SerialOp, SerialParity,
+        StdioMode,
         lower::{Replied, anyref_array_type, i8_array_type, longs_array_type, words_array_type},
     },
     curios_abi::{
-        ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireType,
-        for_each_host_op, host_ops,
+        ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
+        WireType, for_each_host_op, host_ops,
     },
     std::{
         collections::HashMap,
@@ -18,6 +19,9 @@ use {
         Val, ValType,
     },
 };
+
+#[cfg(test)]
+mod tests;
 
 /// Reject a malformed module, against the same engine that will run it.
 ///
@@ -123,17 +127,31 @@ impl ForeignBindings {
         Self::new(ForeignStore::new())
     }
 
-    /// Implement the store row named `name` with a typed closure. A `foreign` declaration's row is named by its fully qualified name (e.g. `/foo/double`). Every row must be implemented exactly once, and only rows can be implemented — violations are construction bugs, so they panic.
+    /// Implement the store row named `name` with a typed closure. A `foreign` declaration's row is named by its fully qualified name (e.g. `/foo/double`). Every row must be implemented exactly once, only rows can be implemented, and a closure's operand and result types must cross as the row's do — violations are construction bugs, so they panic.
     pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
     where
         Li: Lift,
         Lo: Lower,
         F: Fn(Li) -> Lo + Send + Sync + 'static,
     {
-        assert!(
-            self.foreigns.get(name).is_some(),
-            "'{name}' is not in the foreign store"
-        );
+        let signature = self
+            .foreigns
+            .get(name)
+            .unwrap_or_else(|| panic!("'{name}' is not in the foreign store"))
+            .signature();
+        let params = signature
+            .params
+            .iter()
+            .map(|(_, wire_type)| codec(*wire_type))
+            .collect::<Vec<_>>();
+        let results = signature
+            .results
+            .iter()
+            .map(|(_, wire_type)| codec(wire_type))
+            .collect::<Vec<_>>();
+
+        assert_eq!(Li::shape(), params, "'{name}' takes {params:?}");
+        assert_eq!(Lo::shape(), results, "'{name}' answers {results:?}");
 
         let trampoline: Trampoline = Arc::new(move |mut caller, params, results| {
             f(Li::lift(&mut caller, params)?).lower(&mut caller, results)
@@ -195,7 +213,16 @@ impl ForeignBindings {
     }
 }
 
-/// Bind every row of the table to its [`HostOps`] method: each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`]. Generated from the rows it binds, so no row goes unbound, none is bound twice, and no binding's types can differ from the row's.
+/// The wire type whose codec reads `wire_type`: a `Bits` value crosses as the packed bytes a `Bytes` codec reads, and is sealed at its length by the guest rather than the host, so a binding reads it as `Bytes` — and every other type is read by its own codec.
+fn codec(wire_type: WireType) -> WireType {
+    match wire_type {
+        WireType::Bits => WireType::Bytes,
+        WireType::List(WireLeaf::Bits) => WireType::List(WireLeaf::Bytes),
+        other => other,
+    }
+}
+
+/// Bind every row of the table to its [`HostOps`] method: each import lifts its operands as the row types them, measures the ones its contract reads, calls the method once its requirements hold, and lowers the reply through [`Replied`], which holds it to the row's checks. Generated from the rows it binds, so no row goes unbound, none is bound twice, and no binding's types can differ from the row's.
 macro_rules! declare_sys_impls {
     ($(
         $(#[doc = $doc:literal])*
@@ -209,7 +236,11 @@ macro_rules! declare_sys_impls {
                 impls.define(HostOp::$variant.name(), {
                     let host = host.clone();
 
-                    move |($($p,)*): ($($t,)*)| Replied(host.$name($($p),*))
+                    move |($($p,)*): ($($t,)*)| {
+                        let operands = [$(WireOperand::measure(&$p)),*];
+
+                        Replied::new(HostOp::$variant, operands, || host.$name($($p),*))
+                    }
                 });
             )*
 

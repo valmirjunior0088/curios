@@ -1,10 +1,11 @@
 use {
     super::{
-        DeclaredForeign, Failure, ForeignFunction, HostOp, Namespace, Outcome, ResultShape,
-        WireReference, WireResults, WireSignature, WireType, host_ops,
+        Check, ChildStream, ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction,
+        HostOp, Mode, Namespace, Outcome, Poll, Requirement, ResultShape, SerialFlow, SerialOp,
+        SerialParity, StdioMode, WireReference, WireResults, WireSignature, WireType, host_ops,
     },
-    crate::status,
-    std::collections::BTreeSet,
+    crate::{event, status},
+    std::{collections::BTreeSet, fmt::Debug},
 };
 
 /// Every named code sits below `OTHER_BASE` and the errno passthrough lowers at or above it, so a raw OS errno — including the errno-less `Other(0)` — can never decode as `OK` or a named failure.
@@ -327,4 +328,130 @@ fn outcomes_are_read_off_the_reply_types() {
     assert_eq!(HostOp::HandleClose.outcome(), Outcome::Returns);
     assert_eq!(HostOp::ClockWall.outcome(), Outcome::Returns);
     assert_eq!(HostOp::ProcExit.outcome(), Outcome::Diverges);
+}
+
+/// A check reads its row by name, and the evaluator trusts the table that the name is there and of the shape it reads: a request or a buffer is a measured operand, a row's own check reads its one payload, and a field check a result of the type it compares.
+#[test]
+fn every_check_reads_what_its_row_has() {
+    let is_list = |wire_type: WireType| matches!(wire_type, WireType::Bytes | WireType::List(_));
+
+    for &op in HostOp::ALL {
+        let signature = op.signature();
+        let operand = |name: &str| {
+            signature
+                .params
+                .iter()
+                .find(|(param, _)| param == name)
+                .map(|(_, wire_type)| *wire_type)
+                .unwrap_or_else(|| panic!("{op:?} checks an operand `{name}` it does not take"))
+        };
+        let result = |name: &str| {
+            signature
+                .results
+                .iter()
+                .find(|(label, _)| *label == name)
+                .map(|(_, wire_type)| wire_type)
+                .unwrap_or_else(|| panic!("{op:?} checks a field `{name}` it does not answer"))
+        };
+        // A row's own checks read its one payload: every result but the status.
+        let payload = || {
+            let mut results = signature.results.iter().map(|(_, wire_type)| wire_type);
+            let payload = match op.outcome() {
+                Outcome::Returns => results.collect::<Vec<_>>(),
+                _ => results.by_ref().skip(1).collect(),
+            };
+            assert_eq!(payload.len(), 1, "{op:?} checks a payload of one value");
+            payload[0]
+        };
+
+        for check in op.checks() {
+            match *check {
+                Check::Progress { request } | Check::Exact { request } => {
+                    assert_eq!(operand(request), WireType::Nat, "{op:?}");
+                    assert_eq!(payload(), WireType::Bytes, "{op:?}");
+                }
+                Check::Accepted { buffer } => {
+                    assert_eq!(operand(buffer), WireType::Bytes, "{op:?}");
+                    assert_eq!(payload(), WireType::Nat, "{op:?}");
+                }
+                Check::Parallel { list } => {
+                    assert!(is_list(operand(list)), "{op:?}");
+                    assert!(is_list(payload()), "{op:?}");
+                }
+                Check::NonEmpty => assert!(is_list(payload()), "{op:?}"),
+                Check::Present { field } => assert_eq!(result(field), WireType::Handle, "{op:?}"),
+                Check::Mask { field, .. } => assert_eq!(result(field), WireType::Bytes, "{op:?}"),
+                Check::Below { field, .. } | Check::Code { field, .. } => {
+                    assert_eq!(result(field), WireType::Nat, "{op:?}");
+                }
+                Check::Exit { code, signal } => {
+                    assert_eq!(result(code), WireType::Nat, "{op:?}");
+                    assert_eq!(result(signal), WireType::Nat, "{op:?}");
+                }
+            }
+        }
+
+        for requirement in op.requirements() {
+            match *requirement {
+                Requirement::SameLength { a, b } => {
+                    assert!(is_list(operand(a)) && is_list(operand(b)), "{op:?}");
+                }
+            }
+        }
+    }
+}
+
+/// `would_block` and `tls` are failures, so only a row that can fail is marked with either; a lookup answers only `ok` and `not_found`, and a plain value no status at all.
+#[test]
+fn only_a_row_that_can_fail_is_marked() {
+    for &op in HostOp::ALL {
+        if op.blocks() || op.tls() {
+            assert!(
+                matches!(op.outcome(), Outcome::Fallible | Outcome::Stream),
+                "{op:?} is marked but cannot fail"
+            );
+        }
+    }
+}
+
+/// A file kind's check admits every kind and no other code.
+#[test]
+fn a_file_kind_answers_one_of_its_codes() {
+    let kinds = [
+        FileKind::File,
+        FileKind::Directory,
+        FileKind::Symlink,
+        FileKind::Other,
+    ];
+
+    assert_eq!(FileKind::WIRE_CODES, kinds.map(FileKind::code));
+}
+
+/// Every closed code reads back as the variant it names, and a code past the table names none: an argument outside it is malformed rather than read as a neighbour.
+#[test]
+fn a_closed_code_reads_back_its_variant_and_nothing_past_it() {
+    fn round_trips<T: ClosedCode + Debug>() {
+        for &(variant, code) in T::CODES {
+            assert_eq!(T::from_code(code), Some(variant));
+            assert_eq!(variant.code(), code);
+        }
+
+        let past = T::CODES.iter().map(|(_, code)| code).max().unwrap() + 1;
+        assert_eq!(T::from_code(past), None);
+    }
+
+    round_trips::<Mode>();
+    round_trips::<StdioMode>();
+    round_trips::<ChildStream>();
+    round_trips::<SerialParity>();
+    round_trips::<SerialFlow>();
+    round_trips::<SerialOp>();
+}
+
+/// A poll's interest is the bits a guest may ask for, and nothing a host alone reports.
+#[test]
+fn an_interest_outside_read_and_write_is_malformed() {
+    assert!(Poll::interest(event::READ | event::WRITE).is_some());
+    assert!(Poll::interest(event::ERR).is_none());
+    assert!(Poll::interest(0b1_0000).is_none());
 }

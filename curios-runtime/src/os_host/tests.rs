@@ -1,6 +1,5 @@
 use {
     super::*,
-    curios_abi::{serial_flow, serial_parity},
     curios_utilities::test_support::Temporary,
     rustix::{
         pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
@@ -28,7 +27,7 @@ fn a_standard_stream_takes_set_reuseaddr_like_a_file() {
     let host = OsHost::with_args(vec![]);
 
     for handle in [Handle::Stdin, Handle::Stdout, Handle::Stderr] {
-        assert_eq!(host.socket_set_reuseaddr(handle, 1), Ok(()));
+        assert_eq!(host.socket_set_reuseaddr(handle, true), Ok(()));
     }
 }
 
@@ -44,14 +43,14 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_
     let handle = host.file_open(b"/dev/null".to_vec(), Mode::Read).unwrap();
 
     assert_eq!(
-        host.tty_raw(handle.clone(), 1),
+        host.tty_raw(handle.clone(), true),
         Err(Failure::Other(NOT_A_TERMINAL))
     );
     assert_eq!(
         host.tty_size(handle.clone()),
         Err(Failure::Other(NOT_A_TERMINAL))
     );
-    assert_eq!(host.tty_raw(handle.clone(), 0), Ok(()));
+    assert_eq!(host.tty_raw(handle.clone(), false), Ok(()));
 
     host.handle_close(handle);
 }
@@ -65,13 +64,15 @@ fn a_piped_child_stream_is_filed_non_blocking() {
             vec![b"/bin/cat".to_vec()],
             vec![],
             vec![],
-            curios_abi::stdio_mode::PIPE,
-            curios_abi::stdio_mode::PIPE,
-            curios_abi::stdio_mode::NULL,
+            StdioMode::Pipe,
+            StdioMode::Pipe,
+            StdioMode::Null,
         )
         .unwrap();
-    let stdin = host.proc_stream(child.clone(), 0).unwrap();
-    let stdout = host.proc_stream(child.clone(), 1).unwrap();
+    let stdin = host.proc_stream(child.clone(), ChildStream::Stdin).unwrap();
+    let stdout = host
+        .proc_stream(child.clone(), ChildStream::Stdout)
+        .unwrap();
 
     assert_eq!(
         host.handle_read(stdout.clone(), 8),
@@ -135,7 +136,7 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
 fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
     let any = b"127.0.0.1:0".to_vec();
     let listener = host.socket_open(any.clone()).unwrap();
-    assert_eq!(host.socket_set_reuseaddr(listener.clone(), 1), Ok(()));
+    assert_eq!(host.socket_set_reuseaddr(listener.clone(), true), Ok(()));
     assert_eq!(host.socket_bind(listener.clone(), any), Ok(()));
     assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
 
@@ -334,14 +335,20 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
             vec![b"/bin/echo".to_vec(), b"hi".to_vec()],
             vec![],
             vec![],
-            curios_abi::stdio_mode::INHERIT,
-            curios_abi::stdio_mode::PIPE,
-            curios_abi::stdio_mode::NULL,
+            StdioMode::Inherit,
+            StdioMode::Pipe,
+            StdioMode::Null,
         )
         .unwrap();
 
-    assert!(host.proc_stream(child.clone(), 0).unwrap().is_none());
-    let stdout = host.proc_stream(child.clone(), 1).unwrap();
+    assert!(
+        host.proc_stream(child.clone(), ChildStream::Stdin)
+            .unwrap()
+            .is_none()
+    );
+    let stdout = host
+        .proc_stream(child.clone(), ChildStream::Stdout)
+        .unwrap();
 
     let ready = host.handle_poll(
         vec![child.clone()],
@@ -400,9 +407,9 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
             name.as_bytes().to_vec(),
             115_200,
             data_bits,
-            serial_parity::NONE,
+            SerialParity::None,
             1,
-            serial_flow::NONE,
+            SerialFlow::None,
         )
     };
 
@@ -436,18 +443,18 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     assert_eq!(host.handle_read(port.clone(), 8), Ok(Some(b"ok".to_vec())));
 
     assert_eq!(
-        host.serial_control(port.clone(), serial_op::DISCARD_INPUT, 0),
+        host.serial_control(port.clone(), SerialOp::DiscardInput, false),
         Ok(())
     );
     #[cfg(target_os = "linux")]
     assert_eq!(
-        host.serial_control(port.clone(), serial_op::DTR, 1),
+        host.serial_control(port.clone(), SerialOp::Dtr, true),
         Err(Failure::Other(25))
     );
 
     host.handle_close(port.clone());
     assert_eq!(
-        host.serial_control(port, serial_op::DISCARD_INPUT, 0),
+        host.serial_control(port, SerialOp::DiscardInput, false),
         Err(Failure::NotFound)
     );
 }

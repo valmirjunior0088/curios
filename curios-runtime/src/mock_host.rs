@@ -1,6 +1,6 @@
 use {
     super::{Table, host::*},
-    curios_abi::{event, serial_op, stdio_mode},
+    curios_abi::{ClosedCode, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         sync::{Arc, Mutex},
@@ -20,7 +20,7 @@ const ROOT: &[u8] = b"/";
 /// `EBUSY`, the errno `rmdir(2)` reports on the root — `16` on both release targets, Linux and macOS.
 const EBUSY: u32 = 16;
 
-/// `EINVAL`, the errno a serial open reports for a frame outside the row's ranges and a serial control for an op it does not know — `22` on both release targets.
+/// `EINVAL`, the errno a serial open reports for a frame outside the row's ranges — `22` on both release targets.
 const EINVAL: u32 = 22;
 
 /// One serial open as the scripted host records it: the path and `[baud, data_bits, parity, stop_bits, flow]`.
@@ -606,7 +606,7 @@ impl HostOps for MockHost {
         })))
     }
 
-    fn socket_set_reuseaddr(&self, _io: Handle, _on: u32) -> Result<(), Failure> {
+    fn socket_set_reuseaddr(&self, _io: Handle, _on: bool) -> Result<(), Failure> {
         Ok(())
     }
 
@@ -787,12 +787,12 @@ impl HostOps for MockHost {
         Termination(code)
     }
 
-    fn tty_raw(&self, _io: Handle, on: u32) -> Result<(), Failure> {
+    fn tty_raw(&self, _io: Handle, on: bool) -> Result<(), Failure> {
         if self.tty_sizes.lock().unwrap().is_empty() {
             return Err(Failure::Other(ENOTTY));
         }
 
-        self.raw_modes.lock().unwrap().push(on != 0);
+        self.raw_modes.lock().unwrap().push(on);
 
         Ok(())
     }
@@ -816,9 +816,9 @@ impl HostOps for MockHost {
         path: Vec<u8>,
         baud: u64,
         data_bits: u64,
-        parity: u64,
+        parity: SerialParity,
         stop_bits: u64,
-        flow: u64,
+        flow: SerialFlow,
     ) -> Result<Handle, Failure> {
         // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
         if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
@@ -829,10 +829,10 @@ impl HostOps for MockHost {
             return Err(Failure::NotFound);
         };
 
-        self.serial_opens
-            .lock()
-            .unwrap()
-            .push((path.clone(), [baud, data_bits, parity, stop_bits, flow]));
+        self.serial_opens.lock().unwrap().push((
+            path.clone(),
+            [baud, data_bits, parity.code(), stop_bits, flow.code()],
+        ));
 
         Ok(self.mint(MockResource::Serial(MockSerial {
             bytes: Chunked::new(chunks.clone()),
@@ -840,7 +840,7 @@ impl HostOps for MockHost {
         })))
     }
 
-    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Result<(), Failure> {
+    fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
 
         let port = match table.get_mut(&io) {
@@ -850,13 +850,11 @@ impl HostOps for MockHost {
             None => return Err(Failure::NotFound),
         };
 
-        match op {
-            serial_op::DTR | serial_op::RTS => {}
-            serial_op::DISCARD_INPUT => port.bytes.discard(),
-            _ => return Err(Failure::Other(EINVAL)),
+        if op == SerialOp::DiscardInput {
+            port.bytes.discard();
         }
 
-        self.serial_controls.lock().unwrap().push((op, on != 0));
+        self.serial_controls.lock().unwrap().push((op.code(), on));
 
         Ok(())
     }
@@ -903,9 +901,9 @@ impl HostOps for MockHost {
         argv: Vec<Vec<u8>>,
         _cwd: Vec<u8>,
         _env: Vec<Vec<u8>>,
-        stdin: u64,
-        stdout: u64,
-        stderr: u64,
+        stdin: StdioMode,
+        stdout: StdioMode,
+        stderr: StdioMode,
     ) -> Result<Handle, Failure> {
         // An unscripted program is one the host cannot find, as an unknown path is to `file_open`; the script is keyed by `argv[0]`.
         let Some(script) = argv
@@ -918,11 +916,11 @@ impl HostOps for MockHost {
         let program = &argv[0];
 
         // Each stream is filed only where the guest asked for a pipe; the scripted child has already written everything it ever will.
-        let piped = |mode: u64, bytes: Vec<u8>| match mode == stdio_mode::PIPE {
+        let piped = |mode: StdioMode, bytes: Vec<u8>| match mode == StdioMode::Pipe {
             true => self.mint(MockResource::Piped(Chunked::new(vec![bytes]))),
             false => Handle::none(),
         };
-        let stdin = match stdin == stdio_mode::PIPE {
+        let stdin = match stdin == StdioMode::Pipe {
             true => self.mint(MockResource::Sink),
             false => Handle::none(),
         };
@@ -940,12 +938,9 @@ impl HostOps for MockHost {
         Ok(child)
     }
 
-    fn proc_stream(&self, child: Handle, which: u64) -> Result<Handle, Failure> {
+    fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
-            Some(MockResource::Child(running)) => match running.streams.get(which as usize) {
-                Some(handle) => Ok(handle.clone()),
-                None => Err(Failure::NotFound),
-            },
+            Some(MockResource::Child(running)) => Ok(running.streams[stream_index(which)].clone()),
             _ => Err(Failure::NotFound),
         }
     }
@@ -1042,7 +1037,7 @@ impl MockIo {
         self.serial_opens.lock().unwrap().clone()
     }
 
-    /// Every control the guest applied to an open serial port, in order: the [`serial_op`] tag and the level.
+    /// Every control the guest applied to an open serial port, in order: the [`serial_op`](curios_abi::serial_op) tag and the level.
     pub fn serial_controls(&self) -> Vec<(u64, bool)> {
         self.serial_controls.lock().unwrap().clone()
     }

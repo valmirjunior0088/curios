@@ -3,22 +3,22 @@
 //! The wire contract — the [`Handle`]/[`Failure`]/[`Poll`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Termination, Timestamp,
-    TtySize,
+    ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, SerialFlow,
+    SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
 };
 
 use {
-    curios_abi::{event, serial_flow, serial_parity},
+    curios_abi::event,
     rustix::{event::PollFlags, termios::ControlModes},
     std::io::{Error, ErrorKind},
 };
 
-/// The control-mode bits a serial frame sets, or `None` for a setting `serial/open` refuses: 7 or 8 data bits, a [`serial_parity`] tag, 1 or 2 stop bits, and a [`serial_flow`] tag. Both hosts ask it, so a frame the native host refuses is one the scripted host refuses too.
+/// The control-mode bits a serial frame sets, or `None` for a setting `serial/open` refuses: 7 or 8 data bits and 1 or 2 stop bits, beside the parity and flow control a closed code has already decided. Both hosts ask it, so a frame the native host refuses is one the scripted host refuses too.
 pub(crate) fn serial_frame(
     data_bits: u64,
-    parity: u64,
+    parity: SerialParity,
     stop_bits: u64,
-    flow: u64,
+    flow: SerialFlow,
 ) -> Option<ControlModes> {
     let size = match data_bits {
         7 => ControlModes::CS7,
@@ -27,10 +27,9 @@ pub(crate) fn serial_frame(
     };
 
     let parity = match parity {
-        serial_parity::NONE => ControlModes::empty(),
-        serial_parity::EVEN => ControlModes::PARENB,
-        serial_parity::ODD => ControlModes::PARENB | ControlModes::PARODD,
-        _ => return None,
+        SerialParity::None => ControlModes::empty(),
+        SerialParity::Even => ControlModes::PARENB,
+        SerialParity::Odd => ControlModes::PARENB | ControlModes::PARODD,
     };
 
     let stop = match stop_bits {
@@ -40,12 +39,20 @@ pub(crate) fn serial_frame(
     };
 
     let flow = match flow {
-        serial_flow::NONE => ControlModes::empty(),
-        serial_flow::HARDWARE => ControlModes::CRTSCTS,
-        _ => return None,
+        SerialFlow::None => ControlModes::empty(),
+        SerialFlow::Hardware => ControlModes::CRTSCTS,
     };
 
     Some(size | parity | stop | flow)
+}
+
+/// Where a child's `which` stream sits in the `[stdin, stdout, stderr]` both hosts file a child's streams in.
+pub(crate) fn stream_index(which: ChildStream) -> usize {
+    match which {
+        ChildStream::Stdin => 0,
+        ChildStream::Stdout => 1,
+        ChildStream::Stderr => 2,
+    }
 }
 
 /// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. `dns_resolve` → `NotFound`) map it at the call site.

@@ -1,6 +1,6 @@
 //! The single authored table of builtin host operations, and what `curios-abi` derives from it.
 //!
-//! `for_each_host_op!` is the one place a builtin operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then where the guest surfaces it, `as Handle/read`, then a brace group of what its types cannot say: `yields`, the label a lone payload crosses under (`value` when omitted). The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
+//! `for_each_host_op!` is the one place a builtin operation is written. A row is the operation's [`HostOp`] variant and its Rust signature — `HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure>` — then where the guest surfaces it, `as Handle/read`, then a brace group of what its types cannot say: `yields`, the label a lone payload crosses under (`value` when omitted); `marks`, the failures it may answer beyond the operating system's ([`Mark`]); `requires`, what its operands must hold before the call ([`Requirement`]); and `checks`, what a success answers to relative to its operands ([`Check`]), each naming the operand it reads. The types say the rest. Each operand's type states the wire type it arrives as, the reply's payload the slots a success fills, and the reply's own shape its [`Outcome`] — [`WireOperand`], [`WirePayload`](super::WirePayload) and [`WireReply`] — so the table spells no second description of a type, and a row whose type has no crossing does not compile.
 //!
 //! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-runtime` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
 //!
@@ -10,13 +10,14 @@
 
 use {
     super::{
-        ChildExit, Failure, FileStat, ForeignFunction, ForeignStore, Handle, Mode, Outcome, Poll,
+        Check, ChildExit, ChildStream, Failure, FileStat, ForeignFunction, ForeignStore, Handle,
+        Mark, Mode, Outcome, Poll, Requirement, SerialFlow, SerialOp, SerialParity, StdioMode,
         Termination, Timestamp, TtySize, WireOperand, WireReply, WireSignature,
     },
     std::sync::LazyLock,
 };
 
-/// The one authored table of builtin host operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply as Subject/label { yields: label }`: the variant is the row's [`HostOp`], the method name the wasm import name and the [`HostOps`] method; `Subject/label` is where the guest surfaces it under `/sys`; and the brace group holds what the types cannot say.
+/// The one authored table of builtin host operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply as Subject/label { yields: label, marks: [..], requires: [..], checks: [..] }`, each clause optional: the variant is the row's [`HostOp`], the method name the wasm import name and the [`HostOps`] method; `Subject/label` is where the guest surfaces it under `/sys`; and the brace group holds what the types cannot say.
 ///
 /// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
@@ -25,19 +26,19 @@ macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
             /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
-            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> as Handle/read { yields: bytes }
+            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> as Handle/read { yields: bytes, marks: [Blocks, Tls], checks: [Progress { request: n }] }
 
             /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0. The standard output streams write the whole buffer, waiting on the terminal or pipe that reads them: they are shared with the parent rather than a peer the program chose, and a partial write to a terminal would interleave its output. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
-            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> as Handle/write { yields: written }
+            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> as Handle/write { yields: written, marks: [Blocks, Tls], checks: [Accepted { buffer: b }] }
 
             /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> as file/open { yields: handle }
 
             /// Start an asynchronous lookup of `host`:`port`. `(status, handle)`; on `Ok` the handle becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread.
-            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> as dns/lookup { yields: handle }
+            DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> as dns/lookup { yields: handle, marks: [Blocks] }
 
             /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it. `(status, addresses)`; non-empty on `Ok`, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. `WouldBlock` before readiness.
-            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses }
+            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses, marks: [Blocks], checks: [NonEmpty] }
 
             /// Create an unconnected, non-blocking socket for the address family encoded in `addr`. `(status, handle)` like `file_open`; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
             SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> as socket/open { yields: handle }
@@ -46,31 +47,31 @@ macro_rules! for_each_host_op {
             SocketBind: fn socket_bind(h: Handle, addr: Vec<u8>) -> Result<(), Failure> as socket/bind {}
 
             /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `handle_read`/`handle_write`/`handle_close` serve; `WouldBlock` while it is under way, on which `handle_poll` reports `h` `WRITE`-ready once it has settled and `socket_finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
-            SocketConnect: fn socket_connect(h: Handle, addr: Vec<u8>) -> Result<(), Failure> as socket/connect {}
+            SocketConnect: fn socket_connect(h: Handle, addr: Vec<u8>) -> Result<(), Failure> as socket/connect { marks: [Blocks] }
 
             /// Complete a `socket_connect` that answered `WouldBlock`, once `handle_poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
-            SocketFinishConnect: fn socket_finish_connect(h: Handle) -> Result<(), Failure> as socket/finish_connect {}
+            SocketFinishConnect: fn socket_finish_connect(h: Handle) -> Result<(), Failure> as socket/finish_connect { marks: [Blocks] }
 
             /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`).
             SocketListen: fn socket_listen(h: Handle, backlog: u64) -> Result<(), Failure> as socket/listen {}
 
             /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else `(Ok, handle)`, a non-blocking byte stream like a connected socket.
-            SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> as socket/accept { yields: handle }
+            SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> as socket/accept { yields: handle, marks: [Blocks] }
 
             /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `handle_close`.
-            TlsStart: fn tls_start(h: Handle, sni: Vec<u8>) -> Result<(), Failure> as tls/start {}
+            TlsStart: fn tls_start(h: Handle, sni: Vec<u8>) -> Result<(), Failure> as tls/start { marks: [Tls] }
 
             /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key. `(status, handle)` like `socket_open`: a host-owned config token consumed by `tls_start_server` and released by `handle_close`.
-            TlsServerConfig: fn tls_server_config(cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> as tls/server_config { yields: handle }
+            TlsServerConfig: fn tls_server_config(cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> as tls/server_config { yields: handle, marks: [Tls] }
 
             /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `tls_start`'s is.
-            TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> as tls/start_server {}
+            TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> as tls/start_server { marks: [Tls] }
 
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
-            SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: u32) -> Result<(), Failure> as socket/set_reuseaddr {}
+            SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> as socket/set_reuseaddr {}
 
             /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle. A mask is a byte of flags, so the masks cross as one `Bytes` whose byte `i` is handle `i`'s.
-            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Vec<Poll> as Handle/poll { yields: revents }
+            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Vec<Poll> as Handle/poll { yields: revents, requires: [SameLength { a: handles, b: events }], checks: [Parallel { list: handles }] }
 
             /// Close `h`. Closing an unknown handle is a no-op.
             HandleClose: fn handle_close(h: Handle) -> () as Handle/close {}
@@ -82,7 +83,7 @@ macro_rules! for_each_host_op {
             ClockMono: fn clock_mono() -> Timestamp as clock/mono {}
 
             /// Return `n` random bytes.
-            RandBytes: fn rand_bytes(n: u64) -> Vec<u8> as rand/bytes { yields: bytes }
+            RandBytes: fn rand_bytes(n: u64) -> Vec<u8> as rand/bytes { yields: bytes, checks: [Exact { request: n }] }
 
             /// The process arguments, each an opaque byte string.
             ProcArgs: fn proc_args() -> Vec<Vec<u8>> as proc/args { yields: argv }
@@ -94,16 +95,16 @@ macro_rules! for_each_host_op {
             ProcExit: fn proc_exit(code: u8) -> Termination as proc/exit {}
 
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
-            TtyRaw: fn tty_raw(h: Handle, on: u32) -> Result<(), Failure> as tty/raw {}
+            TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> as tty/raw {}
 
             /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
             TtySize: fn tty_size(h: Handle) -> Result<TtySize, Failure> as tty/size {}
 
             /// Open the serial device at `path`: read-write, no controlling terminal and non-blocking, then raw termios with `CLOCAL` and `CREAD`, `baud` as the speed, and the frame `data_bits` (7 or 8), `parity` (a [`serial_parity`](crate::serial_parity) tag), `stop_bits` (1 or 2) and `flow` (a [`serial_flow`](crate::serial_flow) tag). No exclusive hold is taken, so whether another open of the same device is refused is the device's to say. `(status, handle)`: on `Ok` a non-blocking byte stream `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve as they serve a pipe to a child. A setting outside those ranges answers `EINVAL` through the errno lane without opening; a speed the platform cannot set answers what `tcsetattr` reports. Opening asserts DTR on Linux whatever the program wants, so a board that resets on DTR resets on open — a program that cares discards the boot noise afterwards.
-            SerialOpen: fn serial_open(path: Vec<u8>, baud: u64, data_bits: u64, parity: u64, stop_bits: u64, flow: u64) -> Result<Handle, Failure> as serial/open { yields: handle }
+            SerialOpen: fn serial_open(path: Vec<u8>, baud: u64, data_bits: u64, parity: SerialParity, stop_bits: u64, flow: SerialFlow) -> Result<Handle, Failure> as serial/open { yields: handle }
 
             /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). Break, the four status lines and drain are deliberately absent until a program needs them; drain in particular waits on the wire, which no row does.
-            SerialControl: fn serial_control(h: Handle, op: u64, on: u32) -> Result<(), Failure> as serial/control {}
+            SerialControl: fn serial_control(h: Handle, op: SerialOp, on: bool) -> Result<(), Failure> as serial/control {}
 
             /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
             FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> as file/stat {}
@@ -127,13 +128,13 @@ macro_rules! for_each_host_op {
             ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> as proc/cwd { yields: path }
 
             /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last.
-            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: u64, stdout: u64, stderr: u64) -> Result<Handle, Failure> as proc/spawn { yields: child }
+            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<Handle, Failure> as proc/spawn { yields: child }
 
             /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; an unpiped one is the empty handle a failed `file_open` returns.
-            ProcStream: fn proc_stream(child: Handle, which: u64) -> Result<Handle, Failure> as proc/stream { yields: handle }
+            ProcStream: fn proc_stream(child: Handle, which: ChildStream) -> Result<Handle, Failure> as proc/stream { yields: handle }
 
             /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs; consumes the handle.
-            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait {}
+            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait { marks: [Blocks] }
 
             /// Send `child` `SIGKILL`; `proc_wait` then reports the signal.
             ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> as proc/kill {}
@@ -147,6 +148,9 @@ macro_rules! declare_host_rows {
         $(#[doc = $doc:literal])*
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty as $subject:ident / $label:ident {
             $(yields: $yields:ident $(,)?)?
+            $(marks: [$($mark:ident),* $(,)?] $(,)?)?
+            $(requires: [$($requirement:ident { $($requirement_field:ident: $requirement_operand:ident),* $(,)? }),* $(,)?] $(,)?)?
+            $(checks: [$($check:ident $({ $($check_field:ident: $check_operand:ident),* $(,)? })?),* $(,)?] $(,)?)?
         }
     )*) => {
         /// A builtin host operation, one variant per row of the table, named as the row names it: the variant is the wire name in CamelCase, and `a_variant_is_its_wire_name_in_camel_case` holds the two spellings together.
@@ -166,21 +170,31 @@ macro_rules! declare_host_rows {
         /// Every builtin row, in the table's order — the declaration order `/sys` binds them in — indexed by [`HostOp`]'s discriminant.
         fn roster() -> &'static [Row] {
             static ROWS: LazyLock<Vec<Row>> = LazyLock::new(|| {
-                vec![$(
+                vec![$({
+                    // The label `yields` names, or `value`.
+                    let label = [$(stringify!($yields),)? "value"][0];
+                    let marks: &[Mark] = &[$($(Mark::$mark),*)?];
+                    // The row's own checks, which read its operands by name, then its reply type's.
+                    let mut checks = vec![$($(Check::$check $({ $($check_field: stringify!($check_operand)),* })?),*)?];
+                    checks.extend(<$r as WireReply>::checks(label));
+
                     Row {
                         name: stringify!($name),
                         subject: stringify!($subject),
                         label: stringify!($label),
                         signature: WireSignature {
                             params: vec![$((stringify!($p).to_string(), <$t as WireOperand>::WIRE)),*],
-                            // The label `yields` names, or `value`.
-                            results: <$r as WireReply>::results([$(stringify!($yields),)? "value"][0]),
+                            results: <$r as WireReply>::results(label),
                         },
                         outcome: <$r as WireReply>::OUTCOME,
+                        blocks: marks.contains(&Mark::Blocks),
+                        tls: marks.contains(&Mark::Tls),
+                        requirements: vec![$($(Requirement::$requirement { $($requirement_field: stringify!($requirement_operand)),* }),*)?],
+                        checks,
                         // The row's own `///`, which is where a builtin's meaning is already written down.
                         description: concat!($($doc),*).trim(),
-                    },
-                )*]
+                    }
+                },)*]
             });
 
             &ROWS
@@ -202,6 +216,10 @@ struct Row {
     label: &'static str,
     signature: WireSignature,
     outcome: Outcome,
+    blocks: bool,
+    tls: bool,
+    requirements: Vec<Requirement>,
+    checks: Vec<Check>,
     description: &'static str,
 }
 
@@ -243,6 +261,26 @@ impl HostOp {
     /// Whether the row never returns: its call ends the instance, so it takes the result type it describes as an operand, and nothing resumes after it.
     pub fn diverges(self) -> bool {
         self.outcome() == Outcome::Diverges
+    }
+
+    /// Whether the row may answer `would_block`: it is marked [`Mark::Blocks`].
+    pub fn blocks(self) -> bool {
+        self.row().blocks
+    }
+
+    /// Whether the row may answer `tls`: it is marked [`Mark::Tls`].
+    pub fn tls(self) -> bool {
+        self.row().tls
+    }
+
+    /// What the row's operands must hold before the host is asked.
+    pub fn requirements(self) -> &'static [Requirement] {
+        &self.row().requirements
+    }
+
+    /// What a successful reply answers to: the row's own checks, then its payload type's.
+    pub fn checks(self) -> &'static [Check] {
+        &self.row().checks
     }
 
     /// What the operation does, in the words the table states it in.

@@ -1,6 +1,6 @@
 use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
-    curios_abi::{event, serial_op},
+    curios_abi::event,
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
@@ -488,8 +488,8 @@ impl HostOps for OsHost {
             .map_err(failure_from_error)
     }
 
-    fn socket_set_reuseaddr(&self, io: Handle, on: u32) -> Result<(), Failure> {
-        self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
+    fn socket_set_reuseaddr(&self, io: Handle, on: bool) -> Result<(), Failure> {
+        self.with_socket(&io, |socket| socket.set_reuse_address(on))
     }
 
     fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, timeout_ms: i64) -> Vec<Poll> {
@@ -713,14 +713,14 @@ impl HostOps for OsHost {
         Termination(code)
     }
 
-    fn tty_raw(&self, io: Handle, on: u32) -> Result<(), Failure> {
+    fn tty_raw(&self, io: Handle, on: bool) -> Result<(), Failure> {
         let token = io.bytes();
 
         let outcome = self.with_fd(&io, |fd| {
             let mut records = self.termios.lock().unwrap();
             let recorded = records.iter().position(|(saved, _)| *saved == token);
 
-            match (on != 0, recorded) {
+            match (on, recorded) {
                 // The record is taken once, on the first switch, so a second `tty_raw(h, true)` cannot overwrite the settings the program found with raw ones.
                 (true, recorded) => {
                     let current = tcgetattr(fd)?;
@@ -767,9 +767,9 @@ impl HostOps for OsHost {
         path: Vec<u8>,
         baud: u64,
         data_bits: u64,
-        parity: u64,
+        parity: SerialParity,
         stop_bits: u64,
-        flow: u64,
+        flow: SerialFlow,
     ) -> Result<Handle, Failure> {
         // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
         let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
@@ -804,12 +804,11 @@ impl HostOps for OsHost {
             .map_err(|errno| failure_from_error(std::io::Error::from(errno)))
     }
 
-    fn serial_control(&self, io: Handle, op: u64, on: u32) -> Result<(), Failure> {
+    fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
         let outcome = self.with_fd(&io, |fd| match op {
-            serial_op::DTR => set_modem_lines(fd, TIOCM_DTR, on != 0),
-            serial_op::RTS => set_modem_lines(fd, TIOCM_RTS, on != 0),
-            serial_op::DISCARD_INPUT => tcflush(fd, QueueSelector::IFlush),
-            _ => Err(Errno::INVAL),
+            SerialOp::Dtr => set_modem_lines(fd, TIOCM_DTR, on),
+            SerialOp::Rts => set_modem_lines(fd, TIOCM_RTS, on),
+            SerialOp::DiscardInput => tcflush(fd, QueueSelector::IFlush),
         });
 
         match outcome {
@@ -902,9 +901,9 @@ impl HostOps for OsHost {
         argv: Vec<Vec<u8>>,
         cwd: Vec<u8>,
         env: Vec<Vec<u8>>,
-        stdin: u64,
-        stdout: u64,
-        stderr: u64,
+        stdin: StdioMode,
+        stdout: StdioMode,
+        stderr: StdioMode,
     ) -> Result<Handle, Failure> {
         match os_child::spawn(&argv, &cwd, &env, (stdin, stdout, stderr)) {
             Ok(Spawned {
@@ -932,12 +931,9 @@ impl HostOps for OsHost {
         }
     }
 
-    fn proc_stream(&self, child: Handle, which: u64) -> Result<Handle, Failure> {
+    fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
-            Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
-                Some(handle) => Ok(handle.clone()),
-                None => Err(Failure::NotFound),
-            },
+            Some(OsResource::Child { streams, .. }) => Ok(streams[stream_index(which)].clone()),
             _ => Err(Failure::NotFound),
         }
     }

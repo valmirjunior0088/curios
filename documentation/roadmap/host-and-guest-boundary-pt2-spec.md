@@ -166,7 +166,7 @@ These clauses apply to every row:
 | `proc/wait(child)` | Fallible `{code, signal}`; may block (running) | — | Exactly one active: `signal = 0` and `code <= 255`, or `signal > 0` and `code = 0` | Running preserves; completion consumes once; an end that could not be observed fails with its errno |
 | `proc/kill(child)` | Fallible `{}` | — | — | Signals only a child with no recorded end; an ended child answers `ok` unsignaled |
 
-Each row's clauses move into its `for_each_host_op!` rustdoc in the checkpoint that enforces them, and this table shrinks accordingly.
+Each row's clauses move into the row itself — its types, `marks`, `requires` and `checks` — or its rustdoc, in the checkpoint that enforces them. The outcomes, the *may block* and *TLS* marks, the closed codes and the success checks above are stated by the rows; the table stays as the reference for the behavior checkpoint 7 changes.
 
 The browser keeps answering `permission_denied` for the filesystem, network, terminal, serial and process rows. `dir/list` and `dns/resolve` answer that failure instead of trapping, since both now have a failure lane; `proc/args` has none and keeps refusing the call.
 
@@ -177,8 +177,8 @@ The browser keeps answering `permission_denied` for the filesystem, network, ter
 3. **Builtin identity and signatures.** `HostOp`, `ForeignFunction`'s two cases and `foreign_signature` walked by both checkers, with no behavior change.
 4. **Diverging exit row.** The row, `Halt` in both IRs, totality from the contract, `Termination`, and deletion of `ProcExit` and `EXIT`, with the exit, totality, effect-perimeter and refusal decisions revised.
 5. **`Result` ownership.** The declaration, registry group and explicit re-exports, without changing any row's shape; then the measurement baseline.
-6. **Checked host adapter,** in two reviewed stops with wire and guest shapes unchanged. First, typed rows: the table's rows become typed signatures, `HostOp` an enum, `HostOps` outcome-typed with owned operands and named payload structs, and the runtime's bindings generated from the table, with every row's wire signature identical before and after. Then the checks: the contract's failures and named checks, `bool` and closed-code decoding, outcome encoders that refuse their own host's contract violations, and shape-checked `Lift` and `Lower` for embedder bindings.
-7. **Operation behavior and lifecycle.** The three decisions, the flush row, reads, randomness, spawning, reaping and killing, child streams, stream direction, DNS arguments, TLS and listen transitions, serial codes, plugin results and mock parity.
+6. **Checked host adapter,** in two reviewed stops with wire and guest shapes unchanged. First, typed rows: the table's rows become typed signatures, `HostOp` an enum, `HostOps` outcome-typed with owned operands and named payload structs, and the runtime's bindings generated from the table, with every row's wire signature identical before and after. Then the checks: the contract's failures and named checks, `bool` and closed-code decoding — `proc/stream`'s `which` and the plugin `Bool` result included — outcome encoders that refuse their own host's contract violations, and shape-checked `Lift` and `Lower` for embedder bindings.
+7. **Operation behavior and lifecycle.** The three decisions, the flush row, reads, randomness, spawning, reaping and killing, child streams, stream direction, DNS arguments, TLS and listen transitions and mock parity.
 8. **Guest reply validation.** The emitter's checks, the optimizer audit and a raw-reply test host.
 9. **Browser.** The new `compile` and `run`, checked hooks, token identity, parity with the native contract and the `cargo x js-test` gate step.
 10. **`/sys` outcomes and consumers.** Generated adapters, `Io/Error/of`, `Io/Chunk/of`'s removal, `Async/Write/flush`, bracket flushing, environment keys and every `/std`, program and test consumer.

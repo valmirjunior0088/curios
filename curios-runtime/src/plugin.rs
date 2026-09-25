@@ -244,7 +244,7 @@ fn define_row(
                 }
                 Crossing::Int => arguments.push(Val::I64(i64::lift(&mut caller, slot)?)),
                 Crossing::Bool => {
-                    arguments.push(Val::I32(u32::lift(&mut caller, slot)?.cast_signed()))
+                    arguments.push(Val::I32(i32::from(bool::lift(&mut caller, slot)?)))
                 }
                 Crossing::Byte => arguments.push(Val::I32(i32::from(u8::lift(&mut caller, slot)?))),
                 Crossing::Float => {
@@ -292,10 +292,14 @@ fn define_row(
                 .cast_unsigned()
                 .lower(&mut caller, answers),
             Some(Crossing::Int) => returned[0].unwrap_i64().lower(&mut caller, answers),
-            Some(Crossing::Bool) => returned[0]
-                .unwrap_i32()
-                .cast_unsigned()
-                .lower(&mut caller, answers),
+            // A plugin's `Bool` is a word of its own choosing too, so anything but `0` or `1` is refused rather than read as true.
+            Some(Crossing::Bool) => match returned[0].unwrap_i32() {
+                0 => false.lower(&mut caller, answers),
+                1 => true.lower(&mut caller, answers),
+                word => Err(wasmtime::Error::msg(format!(
+                    "{subject} answered `{export}` with {word}, which is not a Bool"
+                ))),
+            },
             // A plugin answers a word of its own choosing, so one past 255 is refused here rather than truncated into a different byte.
             Some(Crossing::Byte) => {
                 let word = returned[0].unwrap_i32();
