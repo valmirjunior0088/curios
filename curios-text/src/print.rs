@@ -1607,6 +1607,7 @@ fn print_wire_type(type_: WireType) -> Printer {
         WireType::Nat => pure("Nat"),
         WireType::Int => pure("Int"),
         WireType::Bool => pure("Bool"),
+        WireType::Byte => pure("Byte"),
         WireType::Flt => pure("Flt"),
         WireType::Bytes => pure("Bytes"),
         WireType::Bits => pure("Bits"),

@@ -14,6 +14,7 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Nat => Intrinsic::NatType,
         WireType::Int => Intrinsic::IntType,
         WireType::Bool => Intrinsic::BoolType,
+        WireType::Byte => Intrinsic::ByteType,
         WireType::Flt => Intrinsic::FltType,
         WireType::Bytes => Intrinsic::BinType(Grain::X),
         WireType::Bits => Intrinsic::BinType(Grain::B),

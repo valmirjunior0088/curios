@@ -52,7 +52,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i64` for a `Nat` or `Int`, `i32` for a `Bool`, `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of `Nat` or `Int` the `i64` longs array, a list of `Bool` the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`longs_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
+/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalars cross raw in both directions — `i64` for a `Nat` or `Int`, `i32` for a `Bool` or a `Byte`, `f64` for an `Flt` — and the guest boxes a result; `Bytes`/`Bits`/`Handle` are the concrete i8-array, a list of `Nat` or `Int` the `i64` longs array, a list of `Bool` the `i32` words array, any other `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`longs_sub_type`/`words_sub_type`/`elems_sub_type` (the flat payloads every reference crosses the boundary as); keep the two ends in sync.
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bytes_ref = ValType::Ref(RefType::new(
         false,
@@ -73,7 +73,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know a layout curios-emit defines.
     let val_type = |wire_type: &WireType| match wire_type {
         WireType::Nat | WireType::Int => ValType::I64,
-        WireType::Bool => ValType::I32,
+        WireType::Bool | WireType::Byte => ValType::I32,
         WireType::Flt => ValType::F64,
         WireType::Bytes | WireType::Bits | WireType::Handle => bytes_ref.clone(),
         WireType::List(WireLeaf::Nat | WireLeaf::Int) => longs_ref.clone(),

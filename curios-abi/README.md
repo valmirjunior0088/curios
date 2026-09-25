@@ -26,7 +26,7 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 ### The wire vocabulary is a closed subset of guest types, and lists do not nest
 
-**Decision.** `WireType` is `Nat`, `Int`, `Bool`, `Flt`, `Bytes`, `Bits`, `Handle` and `List` of a `WireLeaf` — the same vocabulary minus `List` and `Flt` — so `List(List(_))` is unrepresentable rather than merely unchecked. Nothing below the type distinguishes `Bytes`, `Bits` and `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot and a load/force/embed path, and what differs is the guest type built from them — and, for `Bits`, the length its embed seals.
+**Decision.** `WireType` is `Nat`, `Int`, `Bool`, `Byte`, `Flt`, `Bytes`, `Bits`, `Handle` and `List` of a `WireLeaf` — the same vocabulary minus `List`, `Flt` and `Byte` — so `List(List(_))` is unrepresentable rather than merely unchecked, and `List(Byte)` is the `Bytes` a row already spells. A `Byte` crosses as its `i32` word in both directions: the host refuses an argument outside `0..=255`, and the guest refuses such a result with its `host_reply` refusal rather than boxing a byte no `Byte` can be. Nothing below the type distinguishes `Bytes`, `Bits` and `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot and a load/force/embed path, and what differs is the guest type built from them — and, for `Bits`, the length its embed seals.
 
 **Rationale.** Codegen's host-boundary force and embed steps handle exactly one level of nesting, and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. Making the shape unwritable is cheaper than checking for it in each of three consumers.
 

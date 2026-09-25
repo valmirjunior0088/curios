@@ -20,6 +20,9 @@ pub(crate) fn refusal_message(class: curios_cont::Panic) -> &'static str {
         curios_cont::Panic::Cycle => {
             "a recursive value was read while its own initializer was still running: the group's members form a cycle no forcing order can satisfy"
         }
+        curios_cont::Panic::HostReply => {
+            "the host answered a call with a value outside that call's contract, such as a Byte past 255; the program is not at fault, the host's implementation of the call is"
+        }
         curios_cont::Panic::Invariant => {
             "the program reached an arm the compiler had proved unreachable; this is a compiler bug, please report the program"
         }

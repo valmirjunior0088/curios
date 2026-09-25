@@ -280,10 +280,10 @@ fn raw_carrier(repr: &Repr) -> Option<Repr> {
     }
 }
 
-/// The raw carrier a host call reads this wire type at. Mirrors the `WireType`-to-`LoadAs` mapping the emitter already applies at foreign call sites: a `Bool` crosses as its word, while a `Nat` or `Int` arrives as the reference it is and is narrowed to the wire at the call, refusing a value the wire cannot carry.
+/// The raw carrier a host call reads this wire type at. Mirrors the `WireType`-to-`LoadAs` mapping the emitter already applies at foreign call sites: a `Bool` or a `Byte` crosses as its word, while a `Nat` or `Int` arrives as the reference it is and is narrowed to the wire at the call, refusing a value the wire cannot carry.
 fn wire_carrier(wire: &WireType) -> Option<Repr> {
     match wire {
-        WireType::Bool => Some(Repr::Nat),
+        WireType::Bool | WireType::Byte => Some(Repr::Nat),
         WireType::Flt => Some(Repr::Flt),
         WireType::Nat
         | WireType::Int

@@ -166,7 +166,7 @@ impl Plugin {
 
 /// What one wire type costs a plugin's signature, and how a value of it crosses.
 ///
-/// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here. `Bits` crosses as that same pair over its packed bytes, `len` counting bytes as it does for `Bytes`: the wire has no slot for a bit count, and a plugin needing one reads it in band.
+/// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` or a `Byte` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here. `Bits` crosses as that same pair over its packed bytes, `len` counting bytes as it does for `Bytes`: the wire has no slot for a bit count, and a plugin needing one reads it in band.
 ///
 /// `Handle` and `List` are refused. A handle is a token into the *host's* resource table and means nothing inside a plugin, which holds none; a list is a rope whose element marshalling nothing has asked for. Both are refused where a signature is read rather than mistranslated where it is called.
 fn crossing(wire: WireType, subject: &str, declaration: &str) -> Result<Crossing, String> {
@@ -174,6 +174,7 @@ fn crossing(wire: WireType, subject: &str, declaration: &str) -> Result<Crossing
         WireType::Nat => Ok(Crossing::Nat),
         WireType::Int => Ok(Crossing::Int),
         WireType::Bool => Ok(Crossing::Bool),
+        WireType::Byte => Ok(Crossing::Byte),
         WireType::Flt => Ok(Crossing::Float),
         WireType::Bytes | WireType::Bits => Ok(Crossing::Bytes),
         WireType::Handle | WireType::List(_) => Err(format!(
@@ -188,6 +189,7 @@ enum Crossing {
     Nat,
     Int,
     Bool,
+    Byte,
     Float,
     Bytes,
 }
@@ -244,6 +246,7 @@ fn define_row(
                 Crossing::Bool => {
                     arguments.push(Val::I32(u32::lift(&mut caller, slot)?.cast_signed()))
                 }
+                Crossing::Byte => arguments.push(Val::I32(i32::from(u8::lift(&mut caller, slot)?))),
                 Crossing::Float => {
                     arguments.push(Val::F64(f64::lift(&mut caller, slot)?.to_bits()))
                 }
@@ -293,6 +296,18 @@ fn define_row(
                 .unwrap_i32()
                 .cast_unsigned()
                 .lower(&mut caller, answers),
+            // A plugin answers a word of its own choosing, so one past 255 is refused here rather than truncated into a different byte.
+            Some(Crossing::Byte) => {
+                let word = returned[0].unwrap_i32();
+
+                u8::try_from(word)
+                    .map_err(|_| {
+                        wasmtime::Error::msg(format!(
+                            "{subject} answered `{export}` with {word}, which is not a byte"
+                        ))
+                    })?
+                    .lower(&mut caller, answers)
+            }
             Some(Crossing::Float) => returned[0].unwrap_f64().lower(&mut caller, answers),
             Some(Crossing::Bytes) => {
                 let offset = returned[0].unwrap_i32() as u32;

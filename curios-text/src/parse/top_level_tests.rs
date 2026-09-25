@@ -229,12 +229,12 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
             "foreign f : (Str) -> Nat;",
-            "expected a wire type (Nat, Int, Bool, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
         ),
         // A bare result goes through the same parser, so it names the same vocabulary.
         (
             "foreign f : Str;",
-            "expected a wire type (Nat, Int, Bool, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found 'Str'",
         ),
         (
             "foreign f : (List(List(Nat))) -> Bool;",
@@ -281,6 +281,20 @@ fn top_foreign_rejects_non_wire_type() {
     assert!("foreign frobnicate : Str;".parse::<Module>().is_err());
 }
 
+// A list of bytes is the `Bytes` a row already spells, so `Byte` is a wire type but not a list element.
+#[test]
+fn a_list_of_bytes_is_not_a_wire_type() {
+    let refusal = "foreign f : (List(Byte)) -> Nat;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+
+    assert!(
+        refusal.contains("expected a List element type"),
+        "{refusal}"
+    );
+}
+
 #[test]
 fn foreign_declaration_round_trips() {
     for source in [
@@ -291,6 +305,8 @@ fn foreign_declaration_round_trips() {
         "foreign frobnicate : (Bits, Bytes) -> Bits;",
         "foreign frobnicate : (List(Bits)) -> List(Bits);",
         "foreign close : (Handle) -> {};",
+        "foreign flip : (Byte) -> Byte;",
+        "foreign exited : {ok: Bool, code: Byte};",
         "foreign wall : {secs: Nat, nanos: Nat};",
         "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};",
     ] {

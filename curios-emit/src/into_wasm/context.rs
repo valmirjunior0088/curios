@@ -4,7 +4,8 @@ use {
     super::{
         BigHelper, BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get, set,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table, get,
+        i32_const, set, when,
     },
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_num::Grain,
@@ -802,7 +803,9 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
-            WireType::Nat | WireType::Bool | WireType::Int | WireType::Flt => return vec![],
+            WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int | WireType::Flt => {
+                return vec![];
+            }
             WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
             WireType::Bits => self.table().bits_force_func(),
             WireType::List(inner) => match inner {
@@ -892,7 +895,10 @@ impl<'a, 'b> Context<'a, 'b> {
                     .collect::<Vec<_>>();
 
                 if results.iter().any(|wire_type| {
-                    matches!(wire_type, WireType::Nat | WireType::Bool | WireType::Int)
+                    matches!(
+                        wire_type,
+                        WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int
+                    )
                 }) {
                     let waiting = results
                         .iter()
@@ -905,6 +911,14 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(waiting.iter().rev().map(set));
 
                     for (index, (wire_type, local)) in results.iter().zip(&waiting).enumerate() {
+                        // A `Byte` crosses as a word the host chose, so one past 255 is refused here rather than boxed into an i31 no `Byte` can be.
+                        if matches!(wire_type, WireType::Byte) {
+                            output.extend([get(local), i32_const(255), curios_wasm::Instr::I32GtU]);
+                            output.push(when(
+                                self.table().refuse_instrs(curios_cont::Panic::HostReply),
+                            ));
+                        }
+
                         output.push(get(local));
                         match (reference, index + 1 == results.len()) {
                             (Some(reference), true) => {
@@ -1029,11 +1043,11 @@ impl LoadAs {
     }
 }
 
-/// How a host-import operand of the given wire type is loaded at the call site: a `Bool` as its word, a `Nat` or `Int` narrowed to the wire's `i32` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: a `Bool` or a `Byte` as its word, a `Nat` or `Int` narrowed to the wire's `i32` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {
-            WireType::Bool => LoadAs::Nat,
+            WireType::Bool | WireType::Byte => LoadAs::Nat,
             WireType::Nat => LoadAs::WireNat,
             WireType::Int => LoadAs::WireInt,
             WireType::Flt => LoadAs::Flt,

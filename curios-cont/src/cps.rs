@@ -691,7 +691,7 @@ pub enum Node {
     Unreachable,
 }
 
-/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
+/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode, a host's reply — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
     /// A `Nat` argument to a host function the wire's `i32` cannot carry. The one place a `Nat` is narrowed by refusing: everywhere inside the program it is unbounded.
@@ -704,18 +704,21 @@ pub enum Panic {
     FltDecode,
     /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing.
     Cycle,
+    /// A host answered a call with a value outside that call's contract — a `Byte` past 255 among them. Decided by the emitter where it lowers the call, so the host that answered is at fault and never the program.
+    HostReply,
     /// An arm the theory proved impossible was taken: a compiler bug, never the program's.
     Invariant,
 }
 
 impl Panic {
     /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
-    pub const ALL: [Panic; 6] = [
+    pub const ALL: [Panic; 7] = [
         Panic::NatWire,
         Panic::IntWire,
         Panic::OutOfBounds,
         Panic::FltDecode,
         Panic::Cycle,
+        Panic::HostReply,
         Panic::Invariant,
     ];
 }
@@ -728,6 +731,7 @@ impl fmt::Display for Panic {
             Panic::OutOfBounds => "bounds",
             Panic::FltDecode => "flt",
             Panic::Cycle => "cycle",
+            Panic::HostReply => "host_reply",
             Panic::Invariant => "invariant",
         })
     }

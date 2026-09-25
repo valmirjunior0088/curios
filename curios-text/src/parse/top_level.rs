@@ -108,7 +108,7 @@ fn refuse_qualified_wire_name<'a>() -> Parser<'a, ()> {
     commit(not_ahead("/").map_err("a wire type is written bare: `Nat` rather than `/std/Nat`, since the wire grammar is its own closed vocabulary and resolves no names"))
 }
 
-// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
+// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     refuse_qualified_wire_name()
         .and_keep(mark().and(parse_identifier()))
@@ -116,6 +116,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
             "Nat" => pure(WireType::Nat),
             "Int" => pure(WireType::Int),
             "Bool" => pure(WireType::Bool),
+            "Byte" => pure(WireType::Byte),
             "Flt" => pure(WireType::Flt),
             "Bytes" => pure(WireType::Bytes),
             "Bits" => pure(WireType::Bits),
@@ -126,7 +127,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
                 .map(WireType::List),
             // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
             other => commit(fail_from(&start, format!(
-                "expected a wire type (Nat, Int, Bool, Flt, Bytes, Bits, Handle, or List(...)), found '{other}'"
+                "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, or List(...)), found '{other}'"
             ))),
         })
 }

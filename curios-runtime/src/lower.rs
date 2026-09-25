@@ -59,6 +59,15 @@ impl Lower for u64 {
     }
 }
 
+/// A `Byte` result, as its word. The type holds it below 256, which is the range the guest refuses a reply outside of.
+impl Lower for u8 {
+    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        results[0] = Val::I32(i32::from(self));
+
+        Ok(())
+    }
+}
+
 /// A `Bool` result, as its word `0` or `1`.
 impl Lower for u32 {
     fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {

@@ -19,6 +19,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Nat => nat(),
         WireType::Int => int(),
         WireType::Bool => bool_(),
+        WireType::Byte => byte(),
         WireType::Flt => flt(),
         WireType::Bytes => bin(Grain::X),
         WireType::Bits => bin(Grain::B),

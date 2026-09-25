@@ -277,6 +277,36 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     assert!(io.output().is_empty());
 }
 
+/// A `Byte` crosses as its word in both directions, at both ends of its range: the embedder's function sees the byte the guest sent and the guest reads back the one it answered, with nothing narrowed or widened on the way.
+#[test]
+fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
+    let source = r#"
+        foreign flip : (Byte) -> Byte;
+        let top = flip(0)!;
+        let bottom = flip(255)!;
+        let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/flip", |byte: u8| 255 - byte);
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 255);
+}
+
 /// The whole `Flt` boundary in one pass: the guest reads the `f64` out of its box for the operand, and the host takes and returns a plain number.
 ///
 /// **Nothing boxes the result here.** Its only use is a comparison, which wants the raw carrier, so the representation analysis holds the returned parameter in an `f64` register and no `$flt` is ever allocated. A boxing step at the call site would have built one for a value nothing reads as a reference.

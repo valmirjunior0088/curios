@@ -8,9 +8,9 @@ use curios_num::{Integer, Natural};
 
 use {
     crate::into_wasm,
-    curios_abi::host_ops,
+    curios_abi::{ForeignFunction, host_ops},
     curios_num::{Binary, Floating, Grain},
-    std::collections::BTreeMap,
+    std::{collections::BTreeMap, sync::Arc},
 };
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
@@ -321,12 +321,18 @@ pub(super) fn channel_roundtrip() -> curios_cont::Module {
 
 // --- Foreign ABI ----------------------------------------------------------
 
-/// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
+/// A call to the builtin row `name`, as [`foreign_call_to`] builds one.
 pub(super) fn foreign_call(name: &str) -> curios_cont::Module {
-    let function = host_ops()
-        .get(name)
-        .unwrap_or_else(|| panic!("host_ops defines {name}"))
-        .clone();
+    foreign_call_to(
+        host_ops()
+            .get(name)
+            .unwrap_or_else(|| panic!("host_ops defines {name}"))
+            .clone(),
+    )
+}
+
+/// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
+pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Module {
     let arity = function.signature.params.len();
     let results = function.signature.results.len();
 

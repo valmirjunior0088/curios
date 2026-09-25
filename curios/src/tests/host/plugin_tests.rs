@@ -101,6 +101,24 @@ fn plugin() -> Vec<u8> {
         vec![local(0), Instr::I64Const { value: 2 }, Instr::I64Mul],
     );
 
+    // A byte crossing: `255 - b`, so both ends of the range come back as the other.
+    export(
+        &mut module,
+        "flip",
+        vec![i32_type()],
+        vec![i32_type()],
+        vec![Instr::I32Const { value: 255 }, local(0), Instr::I32Sub],
+    );
+
+    // A byte answer the guest cannot hold: `b + 1`, which is 256 for 255.
+    export(
+        &mut module,
+        "bump",
+        vec![i32_type()],
+        vec![i32_type()],
+        vec![local(0), Instr::I32Const { value: 1 }, Instr::I32Add],
+    );
+
     // A byte string crossing: the `(ptr, len)` pair handed straight back, which is what proves the write and the read back agree on where the bytes are.
     export(
         &mut module,
@@ -160,6 +178,43 @@ fn a_scalar_crosses_to_a_plugin_and_back() {
     .expect("execution succeeded");
 
     assert_eq!(code, 42);
+}
+
+/// A `Byte` reaching a plugin as its word and coming back as one, at both ends of its range.
+#[test]
+fn a_byte_crosses_to_a_plugin_and_back() {
+    let code = run_against(
+        r#"
+        foreign flip : (Byte) -> Byte;
+        let top = flip(0)!;
+        let bottom = flip(255)!;
+        let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+        /std/Io/pure(())
+        "#,
+        &[("flip", "/flip")],
+    )
+    .expect("execution succeeded");
+
+    assert_eq!(code, 255);
+}
+
+/// A plugin answering a `Byte` with a word past 255 is refused rather than truncated into a different byte.
+#[test]
+fn a_plugin_byte_past_255_is_refused() {
+    let refusal = run_against(
+        r#"
+        foreign bump : (Byte) -> Byte;
+        let _ = /std/proc/exit(@{}, bump(255)!)!;
+        /std/Io/pure(())
+        "#,
+        &[("bump", "/bump")],
+    )
+    .expect_err("256 is not a byte");
+
+    assert!(
+        refusal.contains("with 256, which is not a byte"),
+        "{refusal}"
+    );
 }
 
 /// A byte string reaching a plugin's linear memory and coming back out of it — the crossing the whole design exists for, since this is where a GC array and a linear memory have to meet.

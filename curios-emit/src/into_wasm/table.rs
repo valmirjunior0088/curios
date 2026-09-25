@@ -600,7 +600,7 @@ impl<'a> Table<'a> {
     pub(crate) fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Int => curios_wasm::ValType::Num(curios_wasm::NumType::I64),
-            WireType::Bool => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            WireType::Bool | WireType::Byte => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             WireType::Bytes | WireType::Bits | WireType::Handle => {
                 concrete_val(self.bytes_type(), false)
@@ -924,7 +924,7 @@ impl<'a> Table<'a> {
         match wire_type {
             WireType::Nat => vec![call(&self.big_func(BigHelper::OfU64))],
             WireType::Int => vec![call(&self.big_func(BigHelper::OfI64))],
-            WireType::Bool => vec![curios_wasm::Instr::RefI31],
+            WireType::Bool | WireType::Byte => vec![curios_wasm::Instr::RefI31],
             _ => vec![],
         }
     }
