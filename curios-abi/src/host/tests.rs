@@ -1,7 +1,7 @@
 use {
     super::{
-        ForeignFunction, Namespace, ResultShape, Status, WireReference, WireResults, WireSignature,
-        WireType, host_ops,
+        DeclaredForeign, ForeignFunction, HostOp, Namespace, ResultShape, Status, WireReference,
+        WireResults, WireSignature, WireType, host_ops,
     },
     crate::status,
     std::collections::BTreeSet,
@@ -33,7 +33,7 @@ fn errno_lane_is_disjoint_from_named_codes() {
 fn names_are_the_wire_abi() {
     let names = host_ops()
         .iter()
-        .map(|function| function.name.clone())
+        .map(|function| function.name().to_string())
         .collect::<Vec<_>>();
 
     assert_eq!(
@@ -86,7 +86,7 @@ fn placements_are_unique() {
     let store = host_ops();
     let placements: BTreeSet<_> = store
         .iter()
-        .map(|function| (&function.subject, &function.label))
+        .map(|function| (function.subject(), function.label()))
         .collect();
 
     assert_eq!(placements.len(), store.iter().count());
@@ -95,7 +95,11 @@ fn placements_are_unique() {
 /// Every builtin states the `/sys` module it surfaces in: the prelude places rows by that column rather than by a list beside the table, so a row without one is a table it cannot read.
 #[test]
 fn ops_rows_name_a_subject() {
-    assert!(host_ops().iter().all(|function| function.subject.is_some()));
+    assert!(
+        host_ops()
+            .iter()
+            .all(|function| function.subject().is_some())
+    );
 }
 
 /// Result labels are the record fields the guest projects (`.status`, `.secs`, …) — renaming one is a standard-library break, so the multi-result shapes are pinned.
@@ -106,7 +110,7 @@ fn result_records_keep_their_labels() {
         store
             .get(name)
             .unwrap_or_else(|| panic!("host_ops lacks {name}"))
-            .signature
+            .signature()
             .results
             .iter()
             .map(|(label, _)| label.to_string())
@@ -141,14 +145,14 @@ fn result_records_keep_their_labels() {
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {
-        let signature = &function.signature;
+        let signature = function.signature();
 
         let params: BTreeSet<_> = signature.params.iter().map(|(name, _)| name).collect();
         assert_eq!(
             params.len(),
             signature.params.len(),
             "{} repeats a parameter name",
-            function.name
+            function.name()
         );
     }
 }
@@ -164,18 +168,18 @@ fn results_cross_scalars_first_and_the_reference_last() {
     let store = host_ops();
     let read = store.get("handle_read").expect("host_ops defines read");
     assert_eq!(
-        read.signature.results.iter().collect::<Vec<_>>(),
+        read.signature().results.iter().collect::<Vec<_>>(),
         [("status", WireType::Nat), ("bytes", WireType::Bytes)]
     );
     assert_eq!(
-        read.signature.results.reference(),
+        read.signature().results.reference(),
         Some(("bytes", WireReference::Bytes))
     );
     assert!(
         store
             .get("clock_wall")
             .expect("host_ops defines clock_wall")
-            .signature
+            .signature()
             .results
             .reference()
             .is_none()
@@ -190,7 +194,7 @@ fn the_guest_shape_is_read_off_the_result_count() {
         store
             .get(name)
             .expect("a host_ops row")
-            .signature
+            .signature()
             .results
             .shape()
     };
@@ -209,17 +213,9 @@ fn the_guest_shape_is_read_off_the_result_count() {
 fn register_rejects_a_duplicate_name() {
     let mut store = host_ops();
 
-    store.register(ForeignFunction {
-        namespace: Namespace::Sys,
-        name: "handle_read".to_string(),
-        subject: Some("Handle".to_string()),
-        label: "read_again".to_string(),
-        description: String::new(),
-        signature: WireSignature {
-            params: vec![],
-            results: WireResults::none(),
-        },
-    });
+    store.register(ForeignFunction::Builtin(
+        HostOp::named("handle_read").expect("the roster names handle_read"),
+    ));
 }
 
 /// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed substrate `emit_sys_imports` reads instead of re-deriving membership by rebuilding this same store.
@@ -228,33 +224,49 @@ fn ops_rows_are_stamped_with_the_sys_namespace() {
     assert!(
         host_ops()
             .iter()
-            .all(|function| function.namespace == Namespace::Sys)
+            .all(|function| function.namespace() == Namespace::Sys)
     );
 }
 
-/// Identity is the wasm import pair: `label` and `signature` don't participate (a cached row matches a freshly minted one), but the namespace does — one import name under `sys` and under `ffi` names two different imports.
+/// A builtin is its roster position and a declared row its import name: neither a declared row's label nor its signature participates, and a declared row never equals the builtin whose wire name it happens to spell, since the two import under different namespaces.
 #[test]
-fn equality_is_the_import_pair() {
-    let base = |namespace, label: &str| ForeignFunction {
-        namespace,
-        name: "frobnicate".to_string(),
-        subject: None,
-        label: label.to_string(),
-        description: String::new(),
-        signature: WireSignature {
-            params: vec![],
-            results: WireResults::none(),
-        },
+fn a_builtin_is_its_roster_position_and_a_declared_row_its_name() {
+    let declared = |name: &str, label: &str| {
+        ForeignFunction::Declared(DeclaredForeign {
+            name: name.to_string(),
+            label: label.to_string(),
+            signature: WireSignature {
+                params: vec![],
+                results: WireResults::none(),
+            },
+        })
     };
+    let read = HostOp::named("handle_read").expect("the roster names handle_read");
 
     assert_eq!(
-        base(Namespace::Ffi, "frobnicate"),
-        base(Namespace::Ffi, "frobnicate_again")
+        declared("/frobnicate", "frobnicate"),
+        declared("/frobnicate", "frobnicate_again")
+    );
+    assert_eq!(
+        ForeignFunction::Builtin(read),
+        ForeignFunction::Builtin(read)
     );
     assert_ne!(
-        base(Namespace::Sys, "frobnicate"),
-        base(Namespace::Ffi, "frobnicate")
+        ForeignFunction::Builtin(read),
+        declared("handle_read", "read")
     );
+}
+
+/// Every position the roster issues names the row it was issued for, so a builtin read back through its identity is the row the table states.
+#[test]
+fn a_builtin_reads_back_the_row_it_names() {
+    for op in HostOp::all() {
+        assert_eq!(HostOp::named(op.name()), Some(op));
+        assert_eq!(
+            op.name(),
+            format!("{}_{}", op.subject().to_lowercase(), op.label())
+        );
+    }
 }
 
 /// A row's wire name is its placement spelled flat — the subject lowercased, an underscore, the label — so no two rows sharing a label contend for one import name, and a new row cannot choose a name beside where it is placed.
@@ -262,15 +274,14 @@ fn equality_is_the_import_pair() {
 fn a_wire_name_is_its_placement_spelled_flat() {
     for function in host_ops().iter() {
         let subject = function
-            .subject
-            .as_deref()
+            .subject()
             .expect("every builtin row names its subject");
 
         assert_eq!(
-            function.name,
-            format!("{}_{}", subject.to_lowercase(), function.label),
+            function.name(),
+            format!("{}_{}", subject.to_lowercase(), function.label()),
             "the row placed at {subject}/{}",
-            function.label,
+            function.label(),
         );
     }
 }

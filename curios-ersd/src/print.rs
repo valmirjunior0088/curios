@@ -314,7 +314,8 @@ impl Printer<'_, '_, '_, '_> {
             }
             jobs.push(Job::Line(format!(
                 "foreign {id} {}/{}",
-                row.namespace, row.name
+                row.namespace(),
+                row.name()
             )));
         }
 
@@ -549,8 +550,8 @@ impl Printer<'_, '_, '_, '_> {
                         let row = self.module.foreign(*foreign).expect("live foreign");
                         simple = Some(format!(
                             "{}/{}({})",
-                            row.namespace,
-                            row.name,
+                            row.namespace(),
+                            row.name(),
                             self.atoms(operands)
                         ));
                     }

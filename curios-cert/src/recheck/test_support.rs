@@ -8,7 +8,7 @@
 
 use {
     crate::{Globals, Kernel, Verdict},
-    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductDecl,
         InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope,
@@ -900,19 +900,21 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     }
 }
 
-/// `let held : claimed = <a forged host row returning one `Nat`>`, with `False` declared alongside.
-pub(super) fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
-    let row = Arc::new(ForeignFunction {
-        namespace: Namespace::Ffi,
+/// A declared row no store issued, returning one `Nat` — the only kind of row a term can forge, since a builtin is an identity whose row is the roster's.
+pub(super) fn forged_row() -> ForeignFunction {
+    ForeignFunction::Declared(DeclaredForeign {
         name: "/forged".to_string(),
-        subject: None,
         label: "forged".to_string(),
-        description: String::new(),
         signature: WireSignature {
             params: Vec::new(),
             results: WireResults::single("value".to_string(), WireType::Nat),
         },
-    });
+    })
+}
+
+/// `let held : claimed = <a call to row with no operands>`, with `False` declared alongside.
+pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: &Global) -> Module {
+    let row = Arc::new(row);
 
     let definition = Definition {
         name: Global::Authored(Qualifier::from(["held"])),

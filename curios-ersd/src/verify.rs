@@ -669,14 +669,14 @@ impl<'m> Verifier<'m> {
                         format!("statement {id} references dead {foreign}"),
                     )
                 })?;
-                let arity = row.signature.params.len();
+                let arity = row.signature().params.len();
                 if operands.len() != arity {
                     return Err(fault(
                         StructuralRule::ForeignArity,
                         format!(
                             "statement {id} calls {}/{} with {} operands; its wire arity is {arity}",
-                            row.namespace,
-                            row.name,
+                            row.namespace(),
+                            row.name(),
                             operands.len()
                         ),
                     ));

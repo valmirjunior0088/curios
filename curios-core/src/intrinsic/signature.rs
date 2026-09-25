@@ -4,6 +4,8 @@
 //!
 //! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
+//! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row — the roster's for a builtin, the declaration's own otherwise — so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
+//!
 //! **The third copy is checked rather than removed, and that is enough.** `/sys` still states every one of these types a second time, as the declarations a user actually calls — and it cannot drift, because elaborating a `/sys` body checks its operands against this table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced.
 //!
 //! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.

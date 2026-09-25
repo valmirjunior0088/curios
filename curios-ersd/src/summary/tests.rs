@@ -1,6 +1,10 @@
 //! What a recursive function's summary says about divergence, and what decides it.
 
-use crate::*;
+use {
+    crate::*,
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    std::sync::Arc,
+};
 
 /// `fn loop(n) = loop(n)` — a self-call, so its component is recursive whatever it does. With `effectful`, a host call sits in the body beside it.
 fn a_self_recursive_function(total: bool) -> Module {
@@ -13,17 +17,14 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
     let param = builder.value(Some("n".into()));
     builder.open_block();
     if effectful {
-        let row = std::sync::Arc::new(curios_abi::ForeignFunction {
-            namespace: curios_abi::Namespace::Sys,
-            name: "beep".into(),
-            subject: Some("Handle".into()),
+        let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+            name: "/beep".into(),
             label: "beep".into(),
-            description: String::new(),
-            signature: curios_abi::WireSignature {
+            signature: WireSignature {
                 params: vec![],
-                results: curios_abi::WireResults::single("r".into(), curios_abi::WireType::Nat),
+                results: WireResults::single("r".into(), WireType::Nat),
             },
-        });
+        }));
         let foreign = builder.foreign(row);
         builder.let_value(
             None,

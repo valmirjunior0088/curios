@@ -5,30 +5,17 @@
 use {
     super::*,
     crate::{LetSignature, Pattern},
-    curios_abi::{ForeignFunction, ForeignStore, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{ForeignFunction, ForeignStore, HostOp},
     curios_utilities::Plicity,
 };
 
-/// One store row naming `subject` as the `/sys` module it belongs to.
-fn row(subject: &str, label: &str) -> ForeignFunction {
-    ForeignFunction {
-        namespace: Namespace::Sys,
-        name: format!("{subject}_{label}"),
-        subject: Some(subject.to_string()),
-        label: label.to_string(),
-        signature: WireSignature {
-            params: Vec::new(),
-            results: WireResults::single("value".to_string(), WireType::Nat),
-        },
-        description: String::new(),
-    }
-}
-
-fn store(rows: &[(&str, &str)]) -> ForeignStore {
+/// A store of the roster's rows named by `names`, in that order — a subject is a column of the roster, so the placements these tests ask about are the table's own.
+fn store(names: &[&str]) -> ForeignStore {
     let mut store = ForeignStore::new();
 
-    for (subject, label) in rows {
-        store.register(row(subject, label));
+    for name in names {
+        let op = HostOp::named(name).unwrap_or_else(|| panic!("the roster names {name}"));
+        store.register(ForeignFunction::Builtin(op));
     }
 
     store
@@ -91,18 +78,18 @@ fn a_gloss_lands_on_the_declaration_it_is_written_above() {
 
 #[test]
 fn a_host_row_opens_the_module_its_subject_names_when_nothing_declared_it() {
-    let modules = absorb_host_rows(Vec::new(), &store(&[("file", "open"), ("file", "close")]));
+    let modules = absorb_host_rows(Vec::new(), &store(&["file_open", "file_stat"]));
 
     assert_eq!(modules.len(), 1);
     assert_eq!(modules[0].label, "file");
-    assert_eq!(labels(&modules[0]), ["open", "close"]);
+    assert_eq!(labels(&modules[0]), ["open", "stat"]);
 }
 
 // `Handle` is the carrier in both inputs and `proc` the module of operations in both; one rule places each, and neither is lifted out and appended by hand.
 #[test]
 fn a_host_row_joins_the_module_that_declared_its_subject() {
     let declared = vec![SysModule::ops("proc", vec![nat_succ()])];
-    let modules = absorb_host_rows(declared, &store(&[("proc", "args"), ("file", "open")]));
+    let modules = absorb_host_rows(declared, &store(&["proc_args", "file_open"]));
 
     assert_eq!(modules.len(), 2, "a joined subject opens no second module");
     assert_eq!(
@@ -117,7 +104,7 @@ fn a_host_row_joins_the_module_that_declared_its_subject() {
 #[test]
 fn a_declared_module_survives_a_store_that_names_it_in_no_row() {
     let declared = vec![SysModule::ops("proc", vec![nat_succ()])];
-    let modules = absorb_host_rows(declared, &store(&[("file", "open")]));
+    let modules = absorb_host_rows(declared, &store(&["file_open"]));
 
     assert_eq!(labels(&modules[0]), ["succ"]);
 }
@@ -127,7 +114,7 @@ fn a_declared_module_survives_a_store_that_names_it_in_no_row() {
 fn a_subject_nothing_declared_keeps_the_order_its_first_row_appears_in() {
     let modules = absorb_host_rows(
         Vec::new(),
-        &store(&[("socket", "bind"), ("file", "open"), ("socket", "listen")]),
+        &store(&["socket_bind", "file_open", "socket_listen"]),
     );
 
     let order = modules

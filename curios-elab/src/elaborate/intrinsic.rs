@@ -78,37 +78,47 @@ fn synth_intrinsic(
         };
 
         let operand = operands[done.len()].clone();
-        done.push(match demand {
-            // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way. A written tuple or list literal whose demand has no structure yet — `List/map`'s list at `List(?T)` before anything pins `?T` — settles to its own product here rather than parking: an intrinsic has no turnaround an outer expectation can send element structure through, its later operands (the lambda that projects the element) need that structure, and this loop is the one place they would otherwise never get it.
-            Operand::At(type_) => {
-                match settle_against(context, &operand, type_, SettleTier::Force)? {
-                    Some(settled) => settled,
-                    None => {
-                        elaborate(context, &operand, Mode::Check(type_.clone()))
-                            .map_err(|error| {
-                                exhausted_bound(
-                                    context,
-                                    error,
-                                    type_,
-                                    format!("the bound of '{}'", Term::intrinsic(current.clone())),
-                                )
-                            })?
-                            .0
-                    }
-                }
-            }
-            Operand::IsType => crate::check_is_sort(context, &operand)?.0,
-            Operand::Function { domains, codomain } => {
-                let params = domains
-                    .iter()
-                    .map(|domain| (context.fresh(Some("x")), domain.clone()))
-                    .collect::<Vec<_>>();
-                let expected = Term::func_type(params, codomain.clone());
-
-                elaborate(context, &operand, Mode::Check(expected))?.0
-            }
-        });
+        done.push(elaborate_demand(context, &operand, demand, || {
+            Term::intrinsic(current.clone())
+        })?);
     }
+}
+
+/// Elaborate one operand against what its operation demands of it, and hand back the rebuilt operand. Shared by the intrinsics and by foreign calls, whose demands `curios_core::foreign_signature` states in the same vocabulary, so a type operand or an operand at a wire type is elaborated one way whichever operation holds it. `operation` renders the node for a bound that fails to terminate.
+pub(super) fn elaborate_demand(
+    context: &mut Context,
+    operand: &Term,
+    demand: &Operand,
+    operation: impl FnOnce() -> Term,
+) -> Result<Term, Error> {
+    Ok(match demand {
+        // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way. A written tuple or list literal whose demand has no structure yet — `List/map`'s list at `List(?T)` before anything pins `?T` — settles to its own product here rather than parking: an intrinsic has no turnaround an outer expectation can send element structure through, its later operands (the lambda that projects the element) need that structure, and this is the one place they would otherwise never get it.
+        Operand::At(type_) => match settle_against(context, operand, type_, SettleTier::Force)? {
+            Some(settled) => settled,
+            None => {
+                elaborate(context, operand, Mode::Check(type_.clone()))
+                    .map_err(|error| {
+                        exhausted_bound(
+                            context,
+                            error,
+                            type_,
+                            format!("the bound of '{}'", operation()),
+                        )
+                    })?
+                    .0
+            }
+        },
+        Operand::IsType => crate::check_is_sort(context, operand)?.0,
+        Operand::Function { domains, codomain } => {
+            let params = domains
+                .iter()
+                .map(|domain| (context.fresh(Some("x")), domain.clone()))
+                .collect::<Vec<_>>();
+            let expected = Term::func_type(params, codomain.clone());
+
+            elaborate(context, operand, Mode::Check(expected))?.0
+        }
+    })
 }
 
 pub(crate) fn elaborate_intrinsic(

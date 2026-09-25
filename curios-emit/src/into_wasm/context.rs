@@ -865,13 +865,13 @@ impl<'a, 'b> Context<'a, 'b> {
                 operands,
                 resume,
             } => {
-                let signature = &function.signature;
+                let signature = &function.signature();
 
                 debug_assert_eq!(
                     operands.len(),
                     signature.params.len(),
                     "{} operand count does not match its signature",
-                    function.name
+                    function.name()
                 );
 
                 for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {

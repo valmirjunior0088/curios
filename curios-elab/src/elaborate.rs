@@ -36,10 +36,10 @@ use {
     },
     curios_core::{
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
-        InstanceHead, Intrinsic, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, One, Proj,
-        Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term,
-        Transient, Tuple, TupleType, Variant, WitnessOrigin, instantiate_universe_levels_scoped,
-        wire_results_term, wire_term,
+        InstanceHead, Intrinsic, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, One,
+        Produced, Proj, Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm,
+        Telescope, Term, Transient, Tuple, TupleType, Variant, WitnessOrigin, foreign_signature,
+        instantiate_universe_levels_scoped,
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity, recurse},
@@ -130,28 +130,27 @@ fn elaborate_subterm(
             Term::type_at(level.succ().map_err(Error::from)?),
         ),
         Subterm::Prop => (term.clone(), Term::type_ground()),
-        // A store-described host call: each operand checks against its wire type, and the result shape (unit, bare value, named record) is read off the signature. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
+        // A host call, elaborated through the same walk an intrinsic is: each operand against what `foreign_signature` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — read off the same row. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Subterm::Foreign(function, args) => {
-            let signature = &function.signature;
+            let signature = foreign_signature(function, |label| context.fresh(Some(label)));
 
             assert_eq!(
                 args.len(),
-                signature.params.len(),
+                signature.operands.len(),
                 "{} operand count does not match its signature",
-                function.name
+                function.name()
             );
 
             let mut elaborated = Vec::with_capacity(args.len());
-            for (arg, (_, wire_type)) in args.iter().zip(&signature.params) {
-                elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
+            for (arg, demand) in args.iter().zip(&signature.operands) {
+                elaborated.push(elaborate_demand(context, arg, demand, || term.clone())?);
             }
 
-            let result = wire_results_term(&signature.results, |label| context.fresh(Some(label)));
+            let Produced::Fixed(type_) = signature.produced else {
+                unreachable!("a foreign call produces a fixed `Io` type");
+            };
 
-            (
-                Term::foreign(Arc::clone(function), elaborated),
-                Term::intrinsic(Intrinsic::io_type(result)),
-            )
+            (Term::foreign(Arc::clone(function), elaborated), type_)
         }
         Subterm::Instance(instance) => {
             let type_ = match &instance.head {

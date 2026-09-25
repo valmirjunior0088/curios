@@ -27,7 +27,21 @@ pub(super) fn infer_intrinsic(
         "`signature` and `operands` disagree about {intrinsic:?}",
     );
 
-    for (operand, demand) in operands.iter().zip(&signature.operands) {
+    check_operands(kernel, operands, &signature.operands)?;
+
+    match signature.produced {
+        Produced::Fixed(type_) => check_is_type(kernel, &type_),
+        Produced::Sort => Ok(sort_of_intrinsic(kernel, intrinsic)?.term()),
+    }
+}
+
+/// Check each operand against what its operation demands of it, zipped in order. Shared by the intrinsics and by foreign calls, whose demands [`curios_core::foreign_signature`] states in the same vocabulary, so a type operand or an operand at a wire type is checked one way whichever operation holds it.
+pub(super) fn check_operands<'a>(
+    kernel: &mut Kernel,
+    operands: impl IntoIterator<Item = &'a Term>,
+    demands: &[Operand],
+) -> Result<(), KernelError> {
+    for (operand, demand) in operands.into_iter().zip(demands) {
         match demand {
             Operand::At(type_) => {
                 check(kernel, operand, type_)?;
@@ -45,10 +59,7 @@ pub(super) fn infer_intrinsic(
         }
     }
 
-    match signature.produced {
-        Produced::Fixed(type_) => check_is_type(kernel, &type_),
-        Produced::Sort => Ok(sort_of_intrinsic(kernel, intrinsic)?.term()),
-    }
+    Ok(())
 }
 
 /// Check that `term` is a type, and hand it back. An intrinsic that carries its element type carries a *type*, and taking that on trust is how a container of nonsense would be admitted.

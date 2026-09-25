@@ -1,19 +1,25 @@
 //! The single authored list of builtin host operations, and the two projections `curios-abi` derives from it.
 //!
-//! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the `host_ops` wire store and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
+//! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the roster every [`HostOp`] names a row of, from which the `host_ops` store is built, and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
 //!
 //! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `Polls`, `ListBytes`, `ListHandle`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
 //!
 //! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket_open`, `clock`).
 
-use super::{
-    ForeignFunction, ForeignStore, Handle, Mode, Namespace, Poll, Status, WireLeaf, WireReference,
-    WireResults, WireScalar, WireShape, WireSignature, WireType,
+use {
+    super::{
+        ForeignFunction, ForeignStore, Handle, Mode, Poll, Status, WireLeaf, WireReference,
+        WireResults, WireScalar, WireShape, WireSignature, WireType,
+    },
+    std::{
+        fmt::{self, Debug, Formatter},
+        sync::LazyLock,
+    },
 };
 
 /// The one authored list of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table so every projection comes off this single source. Each row is `method as Subject/label [param: Slot, …] [result: Slot, …];` — the method name is both the wasm import name and the [`HostOps`] method, `Subject/label` is where the guest surfaces it under `/sys`, and each `Slot` is one of the closed vocabulary the `*_of!` helpers map to concrete types.
 ///
-/// This macro is private to `curios-abi`: the two projections it drives — `host_ops` and [`HostOps`] — are the only interfaces the rest of the system uses. The native adapter's codec bindings are hand-written against that pair (they marshal wasmtime values, which cannot live in this leaf), and cross-checked against it — a `define` name must be a real store row and each call must match the trait.
+/// This macro is private to `curios-abi`: the two projections it drives — the roster behind [`HostOp`] and [`HostOps`] — are the only interfaces the rest of the system uses. The native adapter's codec bindings are hand-written against that pair (they marshal wasmtime values, which cannot live in this leaf), and cross-checked against it — a `define` name must be a real store row and each call must match the trait.
 macro_rules! host_ops {
     ($callback:ident) => {
         $callback! {
@@ -280,32 +286,116 @@ macro_rules! declare_host_trait {
     };
 }
 
-/// Project the op list to the wire store the compiler and runtime derive from.
-macro_rules! declare_host_store {
+/// One row as the table states it. Private: a caller names a row by its [`HostOp`] and reads it through that, so the table has no second spelling outside this module.
+struct Row {
+    name: &'static str,
+    subject: &'static str,
+    label: &'static str,
+    signature: WireSignature,
+    description: &'static str,
+}
+
+/// Project the op list to the roster every [`HostOp`] is a position in.
+macro_rules! declare_host_roster {
     ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
-        /// The builtin store: every host operation the standard library consumes, in prelude (= declaration) order. The method name is the wasm import name; the subject and label are the `/sys` module and binding the guest surfaces it as; parameter names match those declarations; result labels are the record fields the guest projects. The runtime seeds its implementations from the same rows, so the two ends cannot drift.
-        pub fn host_ops() -> ForeignStore {
-            let mut store = ForeignStore::new();
-
-            $(
-                store.register(ForeignFunction {
-                    namespace: Namespace::Sys,
-                    name: stringify!($method).to_string(),
-                    subject: Some(stringify!($subject).to_string()),
-                    label: stringify!($label).to_string(),
-                    signature: WireSignature {
-                        params: vec![$((stringify!($p).to_string(), wire_of!($ps))),*],
-                        results: results_of!($($r : $rs),*),
+        /// Every builtin row, in the table's order — the declaration order `/sys` binds them in and the runtime seeds its implementations by.
+        fn roster() -> &'static [Row] {
+            static ROWS: LazyLock<Vec<Row>> = LazyLock::new(|| {
+                let rows = vec![$(
+                    Row {
+                        name: stringify!($method),
+                        subject: stringify!($subject),
+                        label: stringify!($label),
+                        signature: WireSignature {
+                            params: vec![$((stringify!($p).to_string(), wire_of!($ps))),*],
+                            results: results_of!($($r : $rs),*),
+                        },
+                        // The row's own `///`, which is where a builtin's meaning is already written down.
+                        description: concat!($($doc),*).trim(),
                     },
-                    // The row's own `///`, which is where a builtin's meaning is already written down.
-                    description: concat!($($doc),*).trim().to_string(),
-                });
-            )*
+                )*];
 
-            store
+                assert!(
+                    rows.len() <= usize::from(u8::MAX) + 1,
+                    "a `HostOp` names a row by one byte"
+                );
+
+                rows
+            });
+
+            &ROWS
         }
     };
 }
 
+/// A builtin host operation, named by its position in the one authored roster — which is the whole of its identity.
+///
+/// **A term carries this and nothing else about the row.** Its signature, placement and description are read back from the table wherever they are needed, so no copy exists that could disagree with the table: equality, interning, linking and cache admission compare identities, and a conflicting description of a builtin cannot be written down. A user's `foreign` declaration has no roster to point into and carries its own signature instead, as [`ForeignFunction::Declared`].
+///
+/// The position is private and every value comes from [`all`](Self::all) or [`named`](Self::named), so an unrecognised position cannot be minted. An archived one is only ever read by the compiler that wrote it, whose roster it indexes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct HostOp(u8);
+
+impl HostOp {
+    /// Every builtin, in the table's order.
+    pub fn all() -> impl Iterator<Item = HostOp> {
+        (0..roster().len())
+            .map(|index| HostOp(u8::try_from(index).expect("the roster holds at most 256 rows")))
+    }
+
+    /// The builtin whose wire name is `name`.
+    pub fn named(name: &str) -> Option<HostOp> {
+        Self::all().find(|op| op.name() == name)
+    }
+
+    fn row(self) -> &'static Row {
+        &roster()[usize::from(self.0)]
+    }
+
+    /// The wasm import name and [`HostOps`] method — the row's placement spelled flat.
+    pub fn name(self) -> &'static str {
+        self.row().name
+    }
+
+    /// The `/sys` module the row surfaces in.
+    pub fn subject(self) -> &'static str {
+        self.row().subject
+    }
+
+    /// The binding the row surfaces as within its subject.
+    pub fn label(self) -> &'static str {
+        self.row().label
+    }
+
+    /// The row's operands and results.
+    pub fn signature(self) -> &'static WireSignature {
+        &self.row().signature
+    }
+
+    /// What the operation does, in the words the roster states it in.
+    pub fn description(self) -> &'static str {
+        self.row().description
+    }
+}
+
+// A builtin reads as the row it names, which is what a failing assertion or a printed term wants to show.
+impl Debug for HostOp {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.name())
+    }
+}
+
+/// The builtin store: every host operation the standard library consumes, in prelude (= declaration) order. The method name is the wasm import name; the subject and label are the `/sys` module and binding the guest surfaces it as; parameter names match those declarations; result labels are the record fields the guest projects. The runtime seeds its implementations from the same rows, so the two ends cannot drift.
+pub fn host_ops() -> ForeignStore {
+    let mut store = ForeignStore::new();
+
+    for op in HostOp::all() {
+        store.register(ForeignFunction::Builtin(op));
+    }
+
+    store
+}
+
 host_ops!(declare_host_trait);
-host_ops!(declare_host_store);
+host_ops!(declare_host_roster);

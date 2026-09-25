@@ -7,7 +7,7 @@
 use {
     super::{Decl, helpers::*},
     crate::{Doc, LetSignature, Subterm, Term, TopForeign},
-    curios_abi::{ForeignFunction, ForeignStore, Namespace, ResultShape, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, ForeignStore, ResultShape, WireType},
     curios_num::Grain,
     curios_utilities::Plicity,
     std::sync::Arc,
@@ -35,14 +35,14 @@ fn wire_type(type_: &WireType) -> Term {
 /// A row with no parameters becomes a *constant* rather than a nullary function, which is not a case here but a consequence of handing [`Decl`] an empty telescope — see `Decl::signature`.
 pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     // What the row says of itself, which for a builtin is the roster's own `///` and for a user's `foreign` is nothing — their prose sits on the declaration they wrote.
-    let doc = match function.description.is_empty() {
+    let doc = match function.description().is_empty() {
         true => None,
         false => Some(Doc {
-            lines: vec![function.description.clone()],
+            lines: vec![function.description().to_string()],
             span: None,
         }),
     };
-    let signature = &function.signature;
+    let signature = function.signature();
 
     let result = match signature.results.shape() {
         ResultShape::Unit => unit(),
@@ -68,7 +68,7 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     Decl {
         doc,
         vis_pub,
-        label: function.label.clone(),
+        label: function.label().to_string(),
         params: signature
             .params
             .iter()
@@ -85,15 +85,12 @@ pub(crate) fn foreign_signature(
     foreigns: &mut ForeignStore,
     name: String,
 ) -> LetSignature {
-    let function = ForeignFunction {
-        namespace: Namespace::Ffi,
+    // A user's `foreign` carries its own `---` on the declaration they wrote, which is what a page reads; the row has nothing to add.
+    let function = ForeignFunction::Declared(DeclaredForeign {
         name,
-        subject: None,
         label: declaration.label.to_string(),
         signature: declaration.signature.clone(),
-        // A user's `foreign` carries its own `---` on the declaration they wrote, which is what a page reads; the row has nothing to add.
-        description: String::new(),
-    };
+    });
 
     foreigns.register(function.clone());
 

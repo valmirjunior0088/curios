@@ -203,7 +203,7 @@ fn harness_implements_every_host_op() {
 
     for name in host_ops()
         .iter()
-        .map(|function| function.name.as_str())
+        .map(|function| function.name())
         .chain([EXIT, PANIC])
     {
         assert!(

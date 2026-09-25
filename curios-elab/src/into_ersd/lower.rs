@@ -10,8 +10,8 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item, Module, StructDecl,
-        Zonked, project_erased_universes, wire_term,
+        ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item, Module, Operand,
+        StructDecl, Zonked, foreign_operands, project_erased_universes,
     },
     curios_utilities::{Span, grown},
     std::{
@@ -375,19 +375,17 @@ impl Lowering {
             Subterm::Intrinsic(intrinsic) => {
                 intrinsic::erase_intrinsic(self, context, intrinsic, hint)
             }
-            // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
+            // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row.
             Subterm::Foreign(function, arguments) => {
                 let mut atoms = Vec::with_capacity(arguments.len());
-                for (argument, (_, wire_type)) in arguments.iter().zip(&function.signature.params) {
-                    atoms.push(emitted!(self.walk(
-                        context,
-                        argument,
-                        &wire_term(wire_type),
-                        None
-                    )?));
+                for (argument, demand) in arguments.iter().zip(foreign_operands(function)) {
+                    let Operand::At(type_) = demand else {
+                        unreachable!("a returning host call demands only wire-typed operands");
+                    };
+                    atoms.push(emitted!(self.walk(context, argument, &type_, None)?));
                 }
                 let foreign = self.builder.foreign(Arc::clone(function));
-                let described = format!("io/{}", function.name);
+                let described = format!("io/{}", function.name());
                 self.thunk(hint.or(Some(described.as_str())), move |lowering| {
                     Ok(lowering.bind(
                         None,

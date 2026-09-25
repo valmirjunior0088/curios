@@ -272,7 +272,7 @@ impl<'a> MachineFunctionBridge<'a> {
             } => EmissionTail::Host(EmissionHostTarget::Foreign {
                 function: function.clone(),
                 operands: self.operands(args, values),
-                resume: self.resume_target(*resume, function.signature.results.len(), blocks),
+                resume: self.resume_target(*resume, function.signature().results.len(), blocks),
             }),
             MachineTerminator::ForeignReturn { function, args } => {
                 EmissionTail::Host(EmissionHostTarget::Foreign {

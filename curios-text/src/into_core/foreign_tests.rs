@@ -19,14 +19,14 @@ fn declaration_populates_the_store() {
 
     let function = foreigns.get("/frobnicate").expect("frobnicate registered");
     assert_eq!(
-        function.signature.params,
+        function.signature().params,
         vec![
             ("a0".to_string(), WireType::Nat),
             ("a1".to_string(), WireType::Bytes),
         ]
     );
     assert_eq!(
-        function.signature.results,
+        function.signature().results,
         WireResults::single("_".to_string(), WireType::Nat)
     );
 }
@@ -41,7 +41,7 @@ fn declaration_zero_arg_populates_the_store() {
     .unwrap();
 
     let function = foreigns.get("/clock").expect("clock registered");
-    assert!(function.signature.params.is_empty());
+    assert!(function.signature().params.is_empty());
 }
 
 #[test]

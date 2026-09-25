@@ -81,7 +81,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
         WireType::List(_) => list_ref.clone(),
     };
 
-    let signature = &function.signature;
+    let signature = &function.signature();
 
     FuncType::new(
         engine,
@@ -436,8 +436,8 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     let missing = impls
         .foreigns
         .iter()
-        .filter(|function| !impls.trampolines.contains_key(&function.name))
-        .map(|function| function.name.as_str())
+        .filter(|function| !impls.trampolines.contains_key(function.name()))
+        .map(|function| function.name())
         .collect::<Vec<_>>();
     assert!(
         missing.is_empty(),

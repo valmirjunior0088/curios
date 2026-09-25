@@ -4,7 +4,7 @@
 
 use {
     super::test_support::*,
-    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     std::sync::Arc,
 };
 
@@ -30,17 +30,14 @@ fn result_arity_shapes_the_resume() {
 /// A `Byte` crosses as a word the host chose, so the guest refuses one past 255 before boxing it — as the host's fault, not the program's.
 #[test]
 fn a_byte_result_past_255_is_refused_as_a_host_reply() {
-    let function = Arc::new(ForeignFunction {
-        namespace: Namespace::Ffi,
+    let function = Arc::new(ForeignFunction::Declared(DeclaredForeign {
         name: "/flip".to_string(),
-        subject: None,
         label: "flip".to_string(),
         signature: WireSignature {
             params: vec![("b".to_string(), WireType::Byte)],
             results: WireResults::single("flipped".to_string(), WireType::Byte),
         },
-        description: String::new(),
-    });
+    }));
 
     let wat = wat(&foreign_call_to(function));
     assert_contains(&wat, "(param i32) (result i32)");

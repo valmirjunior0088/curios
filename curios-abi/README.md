@@ -6,7 +6,7 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 ### The builtin operations are authored once and projected
 
-**Decision.** `host_ops!` in `host/ops.rs` is the one place a builtin host operation is written — its wire name, its `/sys` placement, its operands and results as slot kinds — and it is an X-macro: invoked with a callback, it applies that callback to the whole table. Two projections come off it, the `host_ops()` wire store and the typed `HostOps` trait. The native adapter's codec bindings are hand-written against that pair and cross-checked three ways: each `define` name must be a real store row (asserted), every method call must match the trait (compiler-checked), and no row may go unbound (asserted when the bindings are built).
+**Decision.** `host_ops!` in `host/ops.rs` is the one place a builtin host operation is written — its wire name, its `/sys` placement, its operands and results as slot kinds — and it is an X-macro: invoked with a callback, it applies that callback to the whole table. Two projections come off it, the roster every `HostOp` names a row of — from which the `host_ops()` store is built — and the typed `HostOps` trait. The native adapter's codec bindings are hand-written against that pair and cross-checked three ways: each `define` name must be a real store row (asserted), every method call must match the trait (compiler-checked), and no row may go unbound (asserted when the bindings are built).
 
 **Rationale.** A store and a trait written separately are two spellings of one contract, and the wasm import a row names is the identity both ends link on — a mismatch strands an import silently until a program reaches it. One authored list with derived projections cannot drift between them, and the hand-written third leg cannot drift from either without an assertion or the compiler saying so.
 
@@ -46,11 +46,13 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** A test over `host_ops()` beside the table. It pins the builtin rows and nothing else, and a user `foreign` declaration's single result was already well-formed by construction, so the test would have guarded exactly the rows a type guards better.
 
-### A row's identity is its import pair, and the namespace is an enum
+### A builtin is an identity, a declared row its import name, and the namespace is an enum
 
-**Decision.** A `ForeignFunction` compares and hashes by `(namespace, name)` alone, and `Namespace` is a two-variant enum rather than a `&'static str`.
+**Decision.** A `ForeignFunction` is `Builtin(HostOp)` or `Declared(DeclaredForeign)`. `HostOp` is a row's position in the roster and nothing more: its wire name, placement, signature and description are read back from the table wherever they are needed, so a term calling a builtin carries no description of it. A declared row — a user's own `foreign` declaration — has no table to point into, so it carries its own signature and compares and hashes by its import name. The import pair is `(namespace, name)` either way, and `Namespace` is a two-variant enum the case decides, `sys` for a builtin and `ffi` for a declared row.
 
-**Rationale.** A store never holds two functions with one name, so the pair determines the whole row; comparing by it keeps term-level equality and hashing O(1), and lets a cached prelude row match a freshly minted one with the same content. The enum makes the namespaces that exist exactly the namespaces that can be written, and it archives as its own discriminant — the byte a hand-rolled code table used to assign, beside a panic asserting a validity the string type could not give it.
+**Rationale.** A builtin's row copied onto every term that calls it was a second description, and every seam that met two copies — term equality, interning in the erased stage, the linker, a cached unit — would have needed a check that they agreed, each one a check someone had to remember. An identity leaves nothing to disagree with the table, so a conflicting description of a builtin cannot be written down at all, and comparison stays O(1). The enum makes the namespaces that exist exactly the namespaces that can be written, and it archives as its own discriminant.
+
+**Rejected.** Carrying the row on the term and checking agreement at each seam, for the reason above. An enum with one variant per row: consumers would `match` on operations where they should read an operation's contract, and a macro cannot spell the variant names without a second column restating the first. Comparing rows by their whole content, which made equality walk signatures and let a builtin's copy drift from the table.
 
 ### A row's wire name is its placement spelled flat
 

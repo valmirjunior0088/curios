@@ -12,7 +12,7 @@
 
 use {
     super::{Lift, Lower, engine::ForeignBindings, shared_engine},
-    curios_abi::{ForeignStore, ResultShape, WireType},
+    curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::{Arc, Mutex},
@@ -201,11 +201,11 @@ fn define_row(
     bindings: &mut ForeignBindings,
     plugin: &Arc<Mutex<Plugin>>,
     export: &str,
-    row: &Arc<curios_abi::ForeignFunction>,
+    row: &Arc<ForeignFunction>,
     subject: &str,
 ) -> Result<(), String> {
-    let declaration = row.name.clone();
-    let signature = row.signature.clone();
+    let declaration = row.name().to_string();
+    let signature = row.signature().clone();
 
     let params = signature
         .params
@@ -332,7 +332,7 @@ pub fn plugin_bindings(
 ) -> Result<ForeignBindings, String> {
     let rows = foreigns
         .iter()
-        .map(|function| (function.name.clone(), Arc::clone(function)))
+        .map(|function| (function.name().to_string(), Arc::clone(function)))
         .collect::<BTreeMap<_, _>>();
 
     // Which row each claim names, and who claimed it — the second half is what lets a duplicate name both claimants.

@@ -1236,9 +1236,9 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
         // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
         Subterm::Foreign(function, args) => {
-            let name = match &function.subject {
-                Some(subject) => format!("{subject}/{}", function.label),
-                None => function.label.clone(),
+            let name = match function.subject() {
+                Some(subject) => format!("{subject}/{}", function.label()),
+                None => function.label().to_string(),
             };
             print_intrinsic_call(name, vec![], args)
         }

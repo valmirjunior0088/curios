@@ -2,7 +2,8 @@ use curios_num::Natural;
 
 use {
     crate::*,
-    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    std::sync::Arc,
 };
 
 /// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
@@ -19,17 +20,14 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     );
     let two = builder.constant(Constant::Nat(Natural::from(2u32)));
     let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
-    let row = std::sync::Arc::new(ForeignFunction {
-        namespace: Namespace::Sys,
-        name: "beep".into(),
-        subject: Some("Handle".into()),
+    let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+        name: "/beep".into(),
         label: "beep".into(),
-        description: String::new(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::single("r".into(), WireType::Nat),
         },
-    });
+    }));
     let foreign = builder.foreign(row);
     let _effectful_unused = builder.item_value(
         Some("effectful_unused".into()),

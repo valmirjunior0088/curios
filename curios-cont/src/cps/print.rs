@@ -393,8 +393,8 @@ impl Printer<'_, '_, '_, '_> {
             } => {
                 let call = format!(
                     "{}/{}({})",
-                    function.namespace,
-                    function.name,
+                    function.namespace(),
+                    function.name(),
                     self.operands(args)
                 );
                 jobs.push(Job::Line(self.transfer(call, *return_to, ret, suffix)));

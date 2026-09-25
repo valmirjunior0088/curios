@@ -2,7 +2,8 @@ use curios_num::Natural;
 
 use {
     crate::*,
-    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    std::sync::Arc,
 };
 
 /// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 }; entry: count(k) with k a runtime-ish parameterless alias (kept opaque by referencing the function itself so evaluation cannot close it).
@@ -56,17 +57,14 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     builder.item_functions(vec![count]);
 
     builder.open_block();
-    let row = std::sync::Arc::new(ForeignFunction {
-        namespace: Namespace::Sys,
-        name: "poll".into(),
-        subject: Some("Handle".into()),
+    let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
+        name: "/poll".into(),
         label: "poll".into(),
-        description: String::new(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::single("r".into(), WireType::Nat),
         },
-    });
+    }));
     let foreign = builder.foreign(row);
     let opaque = builder.let_value(
         Some("opaque".into()),

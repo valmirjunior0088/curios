@@ -298,14 +298,13 @@ pub(super) fn absorb_host_rows(
 
     for function in foreigns.iter() {
         let subject = function
-            .subject
-            .clone()
+            .subject()
             .expect("a builtin host operation names its /sys subject");
 
         let index = match modules.iter().position(|module| module.label == subject) {
             Some(index) => index,
             None => {
-                modules.push(SysModule::ops(&subject, Vec::new()));
+                modules.push(SysModule::ops(subject, Vec::new()));
                 modules.len() - 1
             }
         };

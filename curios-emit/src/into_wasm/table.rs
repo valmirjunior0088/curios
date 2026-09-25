@@ -694,8 +694,11 @@ impl<'a> Table<'a> {
     ///
     /// A row's identity is its `(namespace, name)` pair (see [`ForeignFunction`]), and its name is chosen outside the emitter, so the minted name embeds both components under the reserved `host/` row prefix — a foreign name can never collide with a runtime helper, another minted row, or a same-named row from another namespace. The embedding is injective because namespaces are compiler-chosen and never contain `/`.
     pub(crate) fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
-        let func_name =
-            curios_wasm::FuncName::from(format!("host/{}/{}", function.namespace, function.name));
+        let func_name = curios_wasm::FuncName::from(format!(
+            "host/{}/{}",
+            function.namespace(),
+            function.name()
+        ));
 
         self.host_funcs
             .borrow_mut()

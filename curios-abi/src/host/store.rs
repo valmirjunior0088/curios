@@ -1,6 +1,6 @@
 //! The foreign-function store — the generic description of a host call, from which each consumer derives its own view of the boundary.
 //!
-//! A [`ForeignFunction`] is one host call, and it is self-describing: its `namespace`/`name` pair is the wasm import (`sys` and a fixed name for a builtin, `ffi` and the declaration's fully qualified name for a user's own `foreign` declaration — the wire-level ABI contract between the emitter and the runtime linker), and its [`WireSignature`] names the operands and results and gives each a [`WireType`]. Every host call is effectful, so reducing one at the type level is always an error — the effect cannot happen at compile time. The IR nodes carry the function as an `Arc`, so every stage reads what it needs straight off the node instead of keeping an independently hand-written spelling in lockstep:
+//! A [`ForeignFunction`] is one host call: a builtin, which is its [`HostOp`](super::HostOp) identity and reads every fact about itself back from the roster, or a user's own `foreign` declaration, which carries its own. Either way its `namespace`/`name` pair is the wasm import (`sys` and the roster's wire name for a builtin, `ffi` and the declaration's fully qualified name for a declared row — the wire-level ABI contract between the emitter and the runtime linker), and its [`WireSignature`] names the operands and results and gives each a [`WireType`]. Every host call is effectful, so reducing one at the type level is always an error — the effect cannot happen at compile time. The IR nodes carry the function as an `Arc`, so every stage reads what it needs through the node instead of keeping an independently hand-written spelling in lockstep:
 //!
 //! - the `/sys` prelude declaration, or a user's own `foreign` declaration (surface parameter types and the named result record the guest projects),
 //! - the core elaborator's operand checks and result type,
@@ -9,10 +9,13 @@
 //!
 //! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) seeds the fixed builtin (`sys`) tier, consumable only by the standard library, created per compilation by the pipeline driver; a second store, accumulated from a program's own `foreign` declarations (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two are never merged, but the wasm namespace is the row's own `namespace` field, stamped at declaration time — the store split only governs who may consume a tier. `exit` is in neither store; only its import name lives here, as [`EXIT`].
 
-use std::{
-    fmt::{self, Display, Formatter},
-    hash::{Hash, Hasher},
-    sync::Arc,
+use {
+    super::HostOp,
+    std::{
+        fmt::{self, Display, Formatter},
+        hash::{Hash, Hasher},
+        sync::Arc,
+    },
 };
 
 /// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked; `README.md` states why one level is all the boundary handles.
@@ -257,32 +260,87 @@ impl Display for Namespace {
     }
 }
 
-/// One foreign (host-provided) function. `namespace`/`name` is the wasm import pair — the wire ABI shared by the wasm emitter and the runtime linker; never change one without changing what the other end expects (the unit tests snapshot the builtin set). `namespace` is `sys` for a builtin and `ffi` for a user's `foreign` declaration, whose `name` is its fully qualified name (leading `/`). `label` is the binding name the function surfaces under in the guest, and `subject` the module that binding sits in: `Some` for a builtin, whose placement the [`host_ops!`](super::host_ops) table states, and `None` for a user's `foreign` declaration, which the guest already places by writing it where it wants it. The two are independent of the wire pair — a row moves in the module tree without the import moving.
-#[derive(Debug, Clone)]
+/// One foreign (host-provided) function: a builtin the roster names, or a user's own `foreign` declaration.
+///
+/// **A builtin is its identity and nothing else.** [`HostOp`] names a row of the one authored table, and every fact about the row — its wire name, `/sys` placement, signature and description — is read back from the table, so no term carries a description of a builtin that could disagree with it. A declared row has no table to point into and carries its signature itself. The accessors below answer both alike: the wasm import pair is `(namespace, name)` — `sys` and the roster's wire name for a builtin, `ffi` and the declaration's fully qualified name (leading `/`) for a declared row — the wire ABI shared by the wasm emitter and the runtime linker. `label` is the binding the function surfaces under in the guest and `subject` the module that binding sits in: `Some` for a builtin, whose placement the table states, and `None` for a declared row, which the guest already places by writing it where it wants it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub struct ForeignFunction {
-    pub namespace: Namespace,
-    pub name: String,
-    pub subject: Option<String>,
-    pub label: String,
-    pub signature: WireSignature,
-    /// What the operation does, in the words the roster states it in — the guest's own documentation of the row, so a page showing a builtin says the same thing the table says. Empty for a user's `foreign` declaration, whose prose sits on the declaration the author wrote.
-    pub description: String,
+pub enum ForeignFunction {
+    Builtin(HostOp),
+    Declared(DeclaredForeign),
 }
 
-// Identity is the wasm import pair: a [`ForeignStore`] never holds two functions with one name (`register` enforces it), so `(namespace, name)` determines the whole row. This keeps term-level equality and hashing O(1) instead of walking the signature — and makes rows from *different* stores with the same content compare equal, so a cached prelude term matches a freshly minted one.
-impl PartialEq for ForeignFunction {
+/// A user's own `foreign` declaration, as its row: the fully qualified name it imports under in the `ffi` namespace, the label it binds, and the signature it declared.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct DeclaredForeign {
+    pub name: String,
+    pub label: String,
+    pub signature: WireSignature,
+}
+
+// A declared row's identity is its import name: a [`ForeignStore`] never holds two functions with one name (`register` enforces it), and qualified names are unique per compilation, so the name determines the whole row. Equality and hashing stay O(1) rather than walking the signature.
+impl PartialEq for DeclaredForeign {
     fn eq(&self, other: &Self) -> bool {
-        self.namespace == other.namespace && self.name == other.name
+        self.name == other.name
     }
 }
 
-impl Eq for ForeignFunction {}
+impl Eq for DeclaredForeign {}
 
-impl Hash for ForeignFunction {
+impl Hash for DeclaredForeign {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.namespace.hash(state);
         self.name.hash(state);
+    }
+}
+
+impl ForeignFunction {
+    /// The wasm import namespace: `sys` for a builtin, `ffi` for a declared row.
+    pub fn namespace(&self) -> Namespace {
+        match self {
+            ForeignFunction::Builtin(_) => Namespace::Sys,
+            ForeignFunction::Declared(_) => Namespace::Ffi,
+        }
+    }
+
+    /// The wasm import name: the roster's wire name, or the declaration's fully qualified name.
+    pub fn name(&self) -> &str {
+        match self {
+            ForeignFunction::Builtin(op) => op.name(),
+            ForeignFunction::Declared(declared) => &declared.name,
+        }
+    }
+
+    /// The `/sys` module a builtin surfaces in; a declared row is placed where it was written.
+    pub fn subject(&self) -> Option<&str> {
+        match self {
+            ForeignFunction::Builtin(op) => Some(op.subject()),
+            ForeignFunction::Declared(_) => None,
+        }
+    }
+
+    /// The binding the function surfaces as in the guest.
+    pub fn label(&self) -> &str {
+        match self {
+            ForeignFunction::Builtin(op) => op.label(),
+            ForeignFunction::Declared(declared) => &declared.label,
+        }
+    }
+
+    /// The operands and results: the roster's for a builtin, the declaration's own otherwise.
+    pub fn signature(&self) -> &WireSignature {
+        match self {
+            ForeignFunction::Builtin(op) => op.signature(),
+            ForeignFunction::Declared(declared) => &declared.signature,
+        }
+    }
+
+    /// What the operation does, in the words the roster states it in — the guest's own documentation of the row, so a page showing a builtin says the same thing the table says. Empty for a declared row, whose prose sits on the declaration the author wrote.
+    pub fn description(&self) -> &str {
+        match self {
+            ForeignFunction::Builtin(op) => op.description(),
+            ForeignFunction::Declared(_) => "",
+        }
     }
 }
 
@@ -302,9 +360,9 @@ impl ForeignStore {
     /// Record a function. The import name is the identity every stage links on, so registering a duplicate is a construction bug and panics.
     pub fn register(&mut self, function: ForeignFunction) {
         assert!(
-            self.get(&function.name).is_none(),
+            self.get(function.name()).is_none(),
             "foreign function '{}' is already registered",
-            function.name
+            function.name()
         );
 
         self.functions.push(Arc::new(function));
@@ -312,7 +370,9 @@ impl ForeignStore {
 
     /// The row registered under `name` — the wasm import string, the identity every stage links on. Linear scan; stores hold a few dozen rows at most.
     pub fn get(&self, name: &str) -> Option<&Arc<ForeignFunction>> {
-        self.functions.iter().find(|function| function.name == name)
+        self.functions
+            .iter()
+            .find(|function| function.name() == name)
     }
 
     /// The rows in registration order — the declaration order the prelude binds them in and the runtime seeds its implementations by.
@@ -326,9 +386,9 @@ impl ForeignStore {
     pub fn absorb(&mut self, other: &ForeignStore) {
         for function in other.iter() {
             assert!(
-                self.get(&function.name).is_none(),
+                self.get(function.name()).is_none(),
                 "foreign function '{}' is declared by two units; their mount prefixes were not disjoint",
-                function.name
+                function.name()
             );
 
             self.functions.push(Arc::clone(function));

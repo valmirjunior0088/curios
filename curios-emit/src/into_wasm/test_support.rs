@@ -333,8 +333,8 @@ pub(super) fn foreign_call(name: &str) -> curios_cont::Module {
 
 /// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
 pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cont::Module {
-    let arity = function.signature.params.len();
-    let results = function.signature.results.len();
+    let arity = function.signature().params.len();
+    let results = function.signature().results.len();
 
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();

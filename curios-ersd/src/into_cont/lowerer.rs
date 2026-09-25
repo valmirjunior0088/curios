@@ -1853,7 +1853,7 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: curios_cont::ContinuationId,
     ) -> curios_cont::NodeId {
-        let arity = function.signature.results.len();
+        let arity = function.signature().results.len();
         if arity == 1 {
             return self.split(result, 1, rest, terminator, target, |return_to| {
                 curios_cont::Node::Foreign {

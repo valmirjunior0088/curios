@@ -3,7 +3,7 @@ pub use signature::*;
 
 use {
     super::{Bound, Free, Level, Nat, Subterm, Term, Var, Visit},
-    curios_abi::{ResultShape, WireResults, WireType},
+    curios_abi::{ForeignFunction, ResultShape, WireResults, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
     std::collections::BTreeSet,
 };
@@ -36,6 +36,29 @@ pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> F
                 .map(|(label, wire_type)| (fresh(label), wire_term(&wire_type)))
                 .collect::<Vec<_>>(),
         ),
+    }
+}
+
+/// What a foreign call demands of each operand, in order: its parameter's wire type. Erasure walks these, and [`foreign_signature`] states them for the checkers.
+pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
+    function
+        .signature()
+        .params
+        .iter()
+        .map(|(_, wire_type)| Operand::At(wire_term(wire_type)))
+        .collect()
+}
+
+/// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the kernel and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is the `Io` of the row's result shape, [`wire_results_term`]'s reading, its record labels bound by binders `fresh` mints.
+///
+/// **The row is the whole statement.** For a builtin it is the roster's, reached through the identity the term carries, and for a declared row its own; nothing the term says beside the row reaches the type.
+pub fn foreign_signature(function: &ForeignFunction, fresh: impl FnMut(&str) -> Free) -> Signature {
+    Signature {
+        operands: foreign_operands(function),
+        produced: Produced::Fixed(Term::intrinsic(Intrinsic::io_type(wire_results_term(
+            &function.signature().results,
+            fresh,
+        )))),
     }
 }
 

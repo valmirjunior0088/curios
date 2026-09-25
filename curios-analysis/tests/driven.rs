@@ -7,7 +7,7 @@
 //! What stays in `curios-analysis` is everything that needs no checker at all — the polarity lattice's own laws, the size-change matrix algebra, universe satisfiability. Those are unit tests of pure functions and belong beside them.
 
 use {
-    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
+    curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
         Coverage, Declarations, Invert, PositivityRefusal, fixture::SYNTAX, group_totality,
         invert_indices, positivity_vectors,
@@ -685,17 +685,14 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             Term::intrinsic(Intrinsic::ListType(markers.visited()))
         }),
         Specimen::of(&mut markers, |markers| {
-            let row = Arc::new(ForeignFunction {
-                namespace: Namespace::Ffi,
+            let row = Arc::new(ForeignFunction::Declared(DeclaredForeign {
                 name: "/planted".to_string(),
-                subject: None,
                 label: "planted".to_string(),
-                description: String::new(),
                 signature: WireSignature {
                     params: Vec::new(),
                     results: WireResults::single("value".to_string(), WireType::Nat),
                 },
-            });
+            }));
             Term::foreign(row, vec![markers.visited()])
         }),
         Specimen::of(&mut markers, |markers| {

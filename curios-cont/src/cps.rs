@@ -1167,7 +1167,7 @@ impl Module {
                         return_to,
                         ..
                     } if *return_to == sentinel => {
-                        operation = operation.or(Some(function.signature.results.len()));
+                        operation = operation.or(Some(function.signature().results.len()));
                     }
                     Node::Cell { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
@@ -1907,14 +1907,14 @@ impl Module {
                 args,
                 return_to,
             } => {
-                if args.len() != function.signature.params.len() {
+                if args.len() != function.signature().params.len() {
                     return Err(VerifyError(format!(
                         "{id} foreign call expects {} operands, got {}",
-                        function.signature.params.len(),
+                        function.signature().params.len(),
                         args.len()
                     )));
                 }
-                let results = function.signature.results.len();
+                let results = function.signature().results.len();
                 let params = self.continuation_arity(
                     current_function,
                     return_cont,

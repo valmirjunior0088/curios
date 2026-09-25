@@ -16,7 +16,7 @@ mod eliminate;
 use eliminate::check_induct_arms;
 
 mod intrinsic;
-use intrinsic::infer_intrinsic;
+use intrinsic::{check_operands, infer_intrinsic};
 
 #[cfg(test)]
 mod declaration_tests;
@@ -38,9 +38,9 @@ use {
     },
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
-        Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Proj, Rec, Reducer, Scope, Step, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_results_term,
-        wire_term,
+        Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Produced, Proj, Rec, Reducer, Scope,
+        Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
+        foreign_signature,
     },
     curios_num::{Binary, Grain},
     curios_utilities::recurse,
@@ -71,26 +71,25 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
         Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
-        // A host call described by its ABI row: each operand checks against its wire type, and the result shape — unit, a bare value, or a named record — is read off the same signature. The rule is here rather than among the intrinsics because the row, not this crate, is what states the signature.
+        // A host call described by its ABI row, typed through the same walk an intrinsic is: each operand checks against what `foreign_signature` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — is read off the same row. The row, not this crate, states the signature, and for a builtin the row is the roster's, reached through the identity the term carries.
         Subterm::Foreign(function, args) => {
-            let signature = &function.signature;
+            let signature = foreign_signature(function, |label| kernel.fresh(Some(label)));
 
-            if args.len() != signature.params.len() {
+            if args.len() != signature.operands.len() {
                 return Err(KernelError::Arity {
                     counted: Counted::Arguments,
-                    expected: signature.params.len(),
+                    expected: signature.operands.len(),
                     actual: args.len(),
                 });
             }
 
-            for ((_, wire), argument) in signature.params.iter().zip(args) {
-                check(kernel, argument, &wire_term(wire))?;
-            }
+            check_operands(kernel, args, &signature.operands)?;
 
-            Ok(Term::intrinsic(Intrinsic::io_type(wire_results_term(
-                &signature.results,
-                |label| kernel.fresh(Some(label)),
-            ))))
+            let Produced::Fixed(type_) = signature.produced else {
+                unreachable!("a foreign call produces a fixed `Io` type");
+            };
+
+            Ok(type_)
         }
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.

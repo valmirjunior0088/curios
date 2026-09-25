@@ -1039,23 +1039,23 @@ impl MachineModule {
                 resume,
                 ..
             } => {
-                if args.len() != foreign.signature.params.len() {
+                if args.len() != foreign.signature().params.len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} foreign call argument count does not match its ABI"
                     )));
                 }
-                verify_block_resume(function, *resume, foreign.signature.results.len())?;
+                verify_block_resume(function, *resume, foreign.signature().results.len())?;
             }
             MachineTerminator::ForeignReturn {
                 function: foreign,
                 args,
             } => {
-                if args.len() != foreign.signature.params.len() {
+                if args.len() != foreign.signature().params.len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} foreign tail call argument count does not match its ABI"
                     )));
                 }
-                tail_returns(owner, function, foreign.signature.results.len())?;
+                tail_returns(owner, function, foreign.signature().results.len())?;
             }
             MachineTerminator::Cell { op, args, resume } => {
                 if args.len() != op.operand_arity() {
