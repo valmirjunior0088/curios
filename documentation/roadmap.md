@@ -147,12 +147,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] [Guest channel storage](../curios-emit/README.md#cells-and-channels-occupy-the-guest-heap) with a positive-capacity obligation, atomic outcomes and consumed-slot release
   - [x] Scheduler state threaded through its loop; opaque readiness waits and shared park claims
   - [x] `Tui/Session` state threaded through reading, size tracking and drawing; [comparison measurements](../curios/src/tests/coordination.rs) recorded with their workloads
-- [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — canonical operation contracts and checked adapters; write progress, flushing and poll-wide failure remain design decisions
+- [ ] [Host and guest boundary, part 2: host operations and outcomes](roadmap/host-and-guest-boundary-pt2-spec.md) — one contract per host operation, a builtin identity no term can contradict, and checked adapters on both sides
   - [ ] `Byte` on the wire and exit as a diverging row
   - [ ] `Result` declared in `/sys`, preserving explicit `/std` re-exports and reusing the existing `/sys/Option`
   - [ ] Checked host outcomes, guest reply validation, buffer ownership and resource transitions
+  - [ ] Single-attempt writes, an explicit flush, unbuffered standard output and classified poll failures
   - [ ] Ordinary `/sys` outcome wrappers over wire-shaped Core calls; domain vocabulary retained in `/std`
-  - [ ] Native, mock, plugin and browser conformance, with independent protocol fixtures
+  - [ ] Native, mock, plugin and browser conformance, with independent protocol fixtures and a Node-run browser suite
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
   - [x] The bound reaches Core and the kernel re-checks it, for every one of the thirteen
   - [x] A bound is read off the node that carries it, and the oracle closed on a criterion
