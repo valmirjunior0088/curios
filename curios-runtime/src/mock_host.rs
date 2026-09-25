@@ -392,6 +392,8 @@ pub struct MockHost {
     connect_pending: bool,
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
+    /// How many flushes are still to answer `WouldBlock` before one drains, as a TLS stream's do while its records wait for the socket.
+    pending_flushes: Mutex<u64>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
@@ -422,6 +424,9 @@ pub struct MockHost {
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
 
+/// `EBADF`, the errno a stream used in a direction it is not open for reports — `9` on both release targets.
+const EBADF: u32 = 9;
+
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
 const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
 
@@ -432,6 +437,39 @@ impl MockHost {
     /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters, then `build` for the `(host, io)` pair.
     pub fn builder() -> MockHostBuilder {
         MockHostBuilder::default()
+    }
+
+    /// Whether `handle` names a stream that moves bytes in `direction`, as the native host answers it: a stream open only the other way — a standard stream, a file opened for the other, a child's pipe — is `EBADF`, and anything that is not a stream at all is `NotFound`.
+    fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
+        let wrong_way = Err(Failure::Other(EBADF));
+
+        match (handle, direction) {
+            (Handle::Stdin, Direction::Read)
+            | (Handle::Stdout | Handle::Stderr, Direction::Write) => Ok(()),
+            (Handle::Stdin | Handle::Stdout | Handle::Stderr, _) => wrong_way,
+            (Handle::Other(_), _) => match (self.table.lock().unwrap().get(handle), direction) {
+                (Some(MockResource::File(open)), Direction::Read) if open.mode != Mode::Read => {
+                    wrong_way
+                }
+                (Some(MockResource::File(open)), Direction::Write) if open.mode == Mode::Read => {
+                    wrong_way
+                }
+                (Some(MockResource::Sink), Direction::Read)
+                | (Some(MockResource::Piped(_)), Direction::Write) => wrong_way,
+                (
+                    Some(
+                        MockResource::File(_)
+                        | MockResource::Inbound(_)
+                        | MockResource::Outbound(_)
+                        | MockResource::Serial(_)
+                        | MockResource::Piped(_)
+                        | MockResource::Sink,
+                    ),
+                    _,
+                ) => Ok(()),
+                _ => Err(Failure::NotFound),
+            },
+        }
     }
 
     /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
@@ -614,11 +652,16 @@ impl HostOps for MockHost {
         Ok(())
     }
 
-    fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, _: i64) -> Vec<Poll> {
+    fn handle_poll(
+        &self,
+        handles: Vec<Handle>,
+        events: Vec<Poll>,
+        _: i64,
+    ) -> Result<Vec<Poll>, Refusal> {
         // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports `ERR`. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
-        handles
+        let ready = handles
             .iter()
             .enumerate()
             .map(|(slot, handle)| {
@@ -665,7 +708,31 @@ impl HostOps for MockHost {
                     },
                 }
             })
-            .collect()
+            .collect();
+
+        Ok(ready)
+    }
+
+    fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
+        if matches!(io, Handle::Stdin | Handle::Stdout | Handle::Stderr) {
+            return Ok(());
+        }
+
+        if self.table.lock().unwrap().get(&io).is_none() {
+            return Err(Failure::NotFound);
+        }
+
+        // The scripted host holds nothing of what it accepted, so a flush drains at once — unless the script says a flush waits, as a TLS stream's does while its records wait for the socket.
+        let mut pending = self.pending_flushes.lock().unwrap();
+
+        match *pending {
+            0 => Ok(()),
+            _ => {
+                *pending -= 1;
+
+                Err(Failure::WouldBlock)
+            }
+        }
     }
 
     fn handle_close(&self, io: Handle) {
@@ -673,25 +740,23 @@ impl HostOps for MockHost {
     }
 
     fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
-        match &io {
-            // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, the end once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
-            Handle::Stdin => return self.input.lock().unwrap().read(count),
-            Handle::Other(_) => {}
-            // stdout/stderr are not readable.
-            _ => return Ok(None),
+        // The direction and the kind first, as the native host checks them: a request for nothing reads nothing and never answers the end of a stream it did not look at.
+        self.stream(&io, Direction::Read)?;
+
+        if count == 0 {
+            return Ok(Some(Vec::new()));
+        }
+
+        // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, the end once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
+        if matches!(io, Handle::Stdin) {
+            return self.input.lock().unwrap().read(count);
         }
 
         match self.table.lock().unwrap().get_mut(&io) {
             // File-backed handle: serve from the in-memory filesystem.
-            Some(MockResource::File(open)) => {
-                if open.mode != Mode::Read {
-                    return Err(Failure::NotFound);
-                }
-
-                self.files.with(&open.path, |contents| {
-                    serve_from(contents, &mut open.position, count)
-                })
-            }
+            Some(MockResource::File(open)) => self.files.with(&open.path, |contents| {
+                serve_from(contents, &mut open.position, count)
+            }),
             // Inbound (accepted) connection: serve the scripted request.
             Some(MockResource::Inbound(conn)) => conn.bytes.read(count),
             // A serial port: serve the device's scripted chunks.
@@ -706,31 +771,29 @@ impl HostOps for MockHost {
     }
 
     fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
+        // The direction and the kind first, as the native host checks them; an empty write writes nothing.
+        self.stream(&io, Direction::Write)?;
+
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+
         // The in-memory sink always takes the whole buffer in one go, so a successful write reports the full length and never `WouldBlock`.
         let full = bytes.len() as u64;
 
-        match &io {
-            Handle::Stdout | Handle::Stderr => {
-                self.output.lock().unwrap().extend_from_slice(&bytes);
+        if matches!(io, Handle::Stdout | Handle::Stderr) {
+            self.output.lock().unwrap().extend_from_slice(&bytes);
 
-                if matches!(io, Handle::Stderr) {
-                    self.errors.lock().unwrap().extend_from_slice(&bytes);
-                }
-
-                return Ok(full);
+            if matches!(io, Handle::Stderr) {
+                self.errors.lock().unwrap().extend_from_slice(&bytes);
             }
-            Handle::Other(_) => {}
-            // stdin is not writable; the guest's `/sys/Handle` never issues this.
-            Handle::Stdin => panic!("write to stdin"),
+
+            return Ok(full);
         }
 
         match self.table.lock().unwrap().get(&io) {
             // File-backed handle: append to the in-memory filesystem.
             Some(MockResource::File(open)) => {
-                if open.mode == Mode::Read {
-                    return Err(Failure::NotFound);
-                }
-
                 self.files.append(&open.path, &bytes);
 
                 Ok(full)
@@ -768,7 +831,7 @@ impl HostOps for MockHost {
         reading(self.clock_mono_seq.lock().unwrap().pop_front())
     }
 
-    fn rand_bytes(&self, count: u64) -> Vec<u8> {
+    fn rand_bytes(&self, count: u64) -> Result<Vec<u8>, Refusal> {
         let mut state = self.rng.lock().unwrap();
         let mut output = Vec::with_capacity(count as usize);
 
@@ -782,7 +845,7 @@ impl HostOps for MockHost {
             output.push((x >> 24) as u8);
         }
 
-        output
+        Ok(output)
     }
 
     fn proc_args(&self) -> Vec<Vec<u8>> {
@@ -1083,6 +1146,7 @@ pub struct MockHostBuilder {
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     inbound: VecDeque<Vec<Vec<u8>>>,
     connect_pending: bool,
+    pending_flushes: u64,
     clock_wall_seq: VecDeque<(u64, u64)>,
     clock_mono_seq: VecDeque<(u64, u64)>,
     args: Vec<Vec<u8>>,
@@ -1257,6 +1321,13 @@ impl MockHostBuilder {
         self
     }
 
+    /// Make the first `count` flushes of a handle the host knows answer `WouldBlock`, as a TLS stream's do while its records wait for the socket, so a caller that retries a flush is exercised.
+    pub fn pending_flushes(mut self, count: u64) -> Self {
+        self.pending_flushes = count;
+
+        self
+    }
+
     /// Script the inbound requests served by `socket_accept`, one per accepted connection (FIFO), each served whole and ready at once. An exhausted queue makes `socket_accept` fail, which ends a `serve` loop (a real blocking `socket_accept` would park there).
     pub fn inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(self, requests: I) -> Self {
         self.inbound_chunks(requests.into_iter().map(|request| vec![request]))
@@ -1341,6 +1412,7 @@ impl MockHostBuilder {
             endpoints: self.endpoints,
             inbound: Mutex::new(self.inbound),
             connect_pending: self.connect_pending,
+            pending_flushes: Mutex::new(self.pending_flushes),
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),

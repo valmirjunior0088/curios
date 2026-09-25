@@ -11,8 +11,8 @@
 use {
     super::{
         Check, ChildExit, ChildStream, Failure, FileStat, ForeignFunction, ForeignStore, Handle,
-        Mark, Mode, Outcome, Poll, Requirement, SerialFlow, SerialOp, SerialParity, StdioMode,
-        Termination, Timestamp, TtySize, WireOperand, WireReply, WireSignature,
+        Mark, Mode, Outcome, Poll, Refusal, Requirement, SerialFlow, SerialOp, SerialParity,
+        StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply, WireSignature,
     },
     std::sync::LazyLock,
 };
@@ -25,11 +25,14 @@ use {
 macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
-            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
+            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with between one and `n` bytes, or with none and no I/O at all when `n` is `0`; `Eof` with none once the stream has ended; or a failure. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it. The native host reads at most 64 KiB in one call, whatever `n` asks. Reading `stdout` or `stderr` fails with `EBADF`, as reading any descriptor opened only to write does.
             HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> as Handle/read { yields: bytes, marks: [Blocks, Tls], checks: [Progress { request: n }] }
 
-            /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0. The standard output streams write the whole buffer, waiting on the terminal or pipe that reads them: they are shared with the parent rather than a peer the program chose, and a partial write to a terminal would interleave its output. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
+            /// Write `b` to `h` in one attempt, returning `(status, written)` — the bytes it accepted, between one and all of them, or `0` for an empty `b`, which checks the handle and writes nothing. The contract is every handle's, the standard streams included: a handle may take only a prefix, and the caller resends the tail. A handle that can accept nothing now answers `WouldBlock`; an interruption before any progress is retried rather than reported; and a descriptor that accepts nothing and reports no error fails with the errno-less `Other(0)`. The host holds nothing of what a write accepted except a TLS stream's records, which `handle_flush` drains. Writing `stdin` fails with `EBADF`.
             HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> as Handle/write { yields: written, marks: [Blocks, Tls], checks: [Accepted { buffer: b }] }
+
+            /// Drain what the host still holds for `h`: a TLS stream's pending records, answering `WouldBlock` until `rustls` holds nothing — `handle_poll` reports the handle writable meanwhile — and `Ok` at once for any other kind, whose accepted writes the host holds nothing of. It promises the host's own buffers are empty, not that a peer has received the bytes or a disk has stored them. `NotFound` for an unknown handle.
+            HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> as Handle/flush { marks: [Blocks, Tls] }
 
             /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> as file/open { yields: handle }
@@ -70,8 +73,8 @@ macro_rules! for_each_host_op {
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
             SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> as socket/set_reuseaddr {}
 
-            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle; a handle that is unknown — closed, say — or has no descriptor reports `ERR`, so its waiter wakes into the call that says why. A mask is a byte of flags, so the masks cross as one `Bytes` whose byte `i` is handle `i`'s.
-            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Vec<Poll> as Handle/poll { yields: revents, requires: [SameLength { a: handles, b: events }], checks: [Parallel { list: handles }] }
+            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle, each within the interest it asked for plus `ERR` and `HUP`; a handle that is unknown — closed, say — has no descriptor, or names a descriptor the system calls invalid reports `ERR`, so its waiter wakes into the call that says why. Each distinct descriptor is polled once, whatever number of handles name it, and an interruption is retried against a deadline taken at the call. A poll the system refuses outright refuses the call, naming the error.
+            HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Result<Vec<Poll>, Refusal> as Handle/poll { yields: revents, requires: [SameLength { a: handles, b: events }], checks: [Parallel { list: handles }] }
 
             /// Close `h`. Closing an unknown handle is a no-op.
             HandleClose: fn handle_close(h: Handle) -> () as Handle/close {}
@@ -82,8 +85,8 @@ macro_rules! for_each_host_op {
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
             ClockMono: fn clock_mono() -> Timestamp as clock/mono {}
 
-            /// Return `n` random bytes.
-            RandBytes: fn rand_bytes(n: u64) -> Vec<u8> as rand/bytes { yields: bytes, checks: [Exact { request: n }] }
+            /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
+            RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> as rand/bytes { yields: bytes, checks: [Exact { request: n }] }
 
             /// The process arguments, each an opaque byte string.
             ProcArgs: fn proc_args() -> Vec<Vec<u8>> as proc/args { yields: argv }

@@ -42,6 +42,7 @@ fn names_are_the_wire_abi() {
         [
             "handle_read",
             "handle_write",
+            "handle_flush",
             "file_open",
             "dns_lookup",
             "dns_resolve",

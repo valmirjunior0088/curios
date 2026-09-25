@@ -355,6 +355,8 @@ impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
             Encoded::Reply(values) => values,
             // A termination is the guest-exit trap, which unwinds the call and which `instantiate` catches for its code: the one way a host ends the instance, so no implementation of a diverging row can return into the guest.
             Encoded::Terminate(code) => return Err(wasmtime::Error::from(ExitTrap(code))),
+            // A host that could not answer a row with no failure lane refuses the call, naming why.
+            Encoded::Refused(sentence) => return Err(refused(sentence)),
         };
 
         self.op

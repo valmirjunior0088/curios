@@ -6,9 +6,9 @@
 
 use {
     super::{
-        Check, ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, Mode, Poll, SerialFlow,
-        SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf, WireResults,
-        WireShape, WireType,
+        Check, ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, Mode, Poll, Refusal,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
+        WireResults, WireShape, WireType,
     },
     crate::status,
 };
@@ -131,11 +131,12 @@ pub enum WireValue {
     BytesList(Vec<Vec<u8>>),
 }
 
-/// A reply as it crosses: its values in slot order, or the termination a diverging reply is.
+/// A reply as it crosses: its values in slot order, the termination a diverging reply is, or the refusal of a call its host could not answer.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Encoded {
     Reply(Vec<WireValue>),
     Terminate(u8),
+    Refused(String),
 }
 
 /// A second, in the nanoseconds a clock reading or a modification time counts below it.
@@ -488,6 +489,26 @@ impl<T: WirePayload> WireReply for Option<T> {
         match self {
             Some(value) => with_payload(status::OK, Some(value)),
             None => with_payload::<T>(Failure::NotFound.code(), None),
+        }
+    }
+}
+
+/// A value, or a refusal: a row with no failure lane whose host could not answer is refused rather than answered with something the host does not have. The refusal never crosses, so the row returns exactly as its payload does.
+impl<T: WirePayload> WireReply for Result<T, Refusal> {
+    const OUTCOME: Outcome = Outcome::Returns;
+
+    fn results(label: &'static str) -> WireResults {
+        results(T::slots(label))
+    }
+
+    fn checks(label: &'static str) -> Vec<Check> {
+        T::checks(label)
+    }
+
+    fn encode(self) -> Encoded {
+        match self {
+            Ok(value) => WireReply::encode(value),
+            Err(Refusal(sentence)) => Encoded::Refused(sentence),
         }
     }
 }

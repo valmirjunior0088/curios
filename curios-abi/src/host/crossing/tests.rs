@@ -1,8 +1,8 @@
-//! How a reply encodes: the status first, a payload's values or the padding in their place, and a termination in place of any value.
+//! How a reply encodes: the status first, a payload's values or the padding in their place, and a termination or a refusal in place of any value.
 
 use {
     super::{
-        super::{ChildExit, Failure, Handle, Termination, TtySize, WireType},
+        super::{ChildExit, Failure, Handle, Refusal, Termination, TtySize, WireType},
         Encoded, WireReply, WireValue, results,
     },
     crate::status,
@@ -72,6 +72,19 @@ fn a_child_exit_fills_the_field_that_applies() {
             WireValue::Nat(0),
             WireValue::Nat(9)
         ])
+    );
+}
+
+/// A row with no failure lane answers its value, or refuses the call in its place rather than answer something its host does not have.
+#[test]
+fn a_refusal_stands_in_place_of_any_value() {
+    assert_eq!(
+        Ok::<_, Refusal>(vec![7u8]).encode(),
+        Encoded::Reply(vec![WireValue::Bytes(vec![7])])
+    );
+    assert_eq!(
+        Err::<Vec<u8>, _>(Refusal("no entropy".to_string())).encode(),
+        Encoded::Refused("no entropy".to_string())
     );
 }
 

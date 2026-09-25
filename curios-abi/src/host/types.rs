@@ -182,6 +182,10 @@ impl Failure {
     }
 }
 
+/// Why a host cannot answer a row that has no failure lane — memory it cannot find, entropy it cannot draw, a poll the system refuses. The call is refused, naming this, rather than answered with a value the host does not have; a row whose failures a guest handles has [`Failure`] instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal(pub String);
+
 /// A clock reading, as `clock_wall` and `clock_mono` answer it: whole seconds, and the nanoseconds within the second.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Timestamp {

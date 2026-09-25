@@ -3,7 +3,7 @@
 use {
     super::test_support::Lying,
     crate::tests::run_text,
-    curios_abi::{Failure, Handle, HostOp, Poll, Timestamp},
+    curios_abi::{Failure, Handle, HostOp, Poll, Refusal, Timestamp},
     curios_runtime::MockHost,
 };
 
@@ -125,7 +125,7 @@ fn a_poll_that_answers_for_other_handles_is_refused() {
         ",
         host,
         HostOp::HandlePoll,
-        Vec::<Poll>::new(),
+        Ok::<_, Refusal>(Vec::<Poll>::new()),
     );
 
     assert!(
@@ -144,7 +144,7 @@ fn randomness_short_of_its_request_is_refused() {
         ",
         host,
         HostOp::RandBytes,
-        vec![0u8; 3],
+        Ok::<_, Refusal>(vec![0u8; 3]),
     );
 
     assert!(

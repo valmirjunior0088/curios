@@ -12,25 +12,28 @@ use {
         },
     },
     rustls::{
-        ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
-        crypto::ring, pki_types::ServerName,
+        ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
+        ServerConnection, StreamOwned, crypto::ring, pki_types::ServerName,
     },
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
         ffi::{OsStr, c_int},
         fs::{self, File, OpenOptions},
-        io::{ErrorKind, Read, Write, stderr, stdin, stdout},
+        io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
         net::SocketAddr,
         os::{
-            fd::{AsFd, BorrowedFd, OwnedFd},
+            fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::ffi::{OsStrExt, OsStringExt},
         },
         sync::{Arc, LazyLock, Mutex, OnceLock},
-        time::{Instant, SystemTime, UNIX_EPOCH},
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
     webpki_roots::TLS_SERVER_ROOTS,
 };
+
+/// The most one `handle_read` reads, whatever it is asked. A request is a count the guest names and the buffer a read fills is allocated before anything arrives, so an uncapped one would let a request for more memory than the host has abort the process; a larger request is answered with the prefix one read takes, which the row allows. 64 KiB is a pipe's buffer, and four of the largest TLS record.
+const READ_MAX: u64 = 64 * 1024;
 
 /// The shared client TLS configuration: a bundled `webpki-roots` trust-anchor set with certificate verification on, built once and `Arc`-cloned by every `tls_start`. An explicit `ring` crypto provider is wired in so the config never depends on a process-global default provider being installed.
 static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
@@ -124,6 +127,25 @@ impl OsHost {
         }
     }
 
+    /// Whether `handle` names a stream that moves bytes in `direction` — the answer to a request of nothing, given without I/O. The standard streams are open one way each, and using one the other way is `EBADF`, as it is for a descriptor opened one way; anything that is not a stream at all is `NotFound`.
+    fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
+        match (handle, direction) {
+            (Handle::Stdin, Direction::Read)
+            | (Handle::Stdout | Handle::Stderr, Direction::Write) => Ok(()),
+            (Handle::Stdin | Handle::Stdout | Handle::Stderr, _) => Err(bad_descriptor()),
+            (Handle::Other(_), _) => match self.table.lock().unwrap().get(handle) {
+                Some(
+                    OsResource::File(_)
+                    | OsResource::Connected(_)
+                    | OsResource::ClientTls(_)
+                    | OsResource::ServerTls(_)
+                    | OsResource::Descriptor(_),
+                ) => Ok(()),
+                _ => Err(Failure::NotFound),
+            },
+        }
+    }
+
     /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
     fn mint(&self, resource: OsResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
@@ -156,7 +178,7 @@ impl OsHost {
     /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`failure_from_error`], never a quiet success — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
     fn with_socket<F>(&self, handle: &Handle, apply: F) -> Result<(), Failure>
     where
-        F: FnOnce(&Socket) -> std::io::Result<()>,
+        F: FnOnce(&Socket) -> io::Result<()>,
     {
         let table = self.table.lock().unwrap();
 
@@ -492,20 +514,29 @@ impl HostOps for OsHost {
         self.with_socket(&io, |socket| socket.set_reuse_address(on))
     }
 
-    fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, timeout_ms: i64) -> Vec<Poll> {
+    fn handle_poll(
+        &self,
+        handles: Vec<Handle>,
+        events: Vec<Poll>,
+        timeout_ms: i64,
+    ) -> Result<Vec<Poll>, Refusal> {
+        // The deadline is taken at the call, so a retried interruption does not restart the wait. A negative timeout waits forever, and so does one past what an `Instant` can hold.
+        let deadline = u64::try_from(timeout_ms)
+            .ok()
+            .and_then(|millis| Instant::now().checked_add(Duration::from_millis(millis)));
+
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
         let (in_handle, out_handle, err_handle) = (stdin(), stdout(), stderr());
 
-        // Build a `PollFd` only for resolvable handles, remembering which input slot each maps to so revents land back in parallel. A handle that is unknown — closed, say — or names a resource with no descriptor is never polled and reports `ERR`, which wakes whoever waits on it into the call that reports why, rather than leaving it parked on readiness that cannot come.
-        let mut polls = Vec::with_capacity(handles.len());
+        // One entry per distinct descriptor, asking for the union of every slot's interest in it, so a descriptor several handles name is polled once and never counts against the system's limit twice. Each slot remembers its entry, its own interest, and the guest's where `rustls`'s replaced it. A handle that is unknown — closed, say — or names a resource with no descriptor is never polled and reports `ERR`, which wakes whoever waits on it into the call that reports why, rather than leaving it parked on readiness that cannot come.
+        let mut watched: Vec<(BorrowedFd<'_>, Poll)> = Vec::new();
         let mut slots = Vec::with_capacity(handles.len());
         let mut results = vec![Poll::empty(); handles.len()];
 
-        for (slot, handle) in handles.iter().enumerate() {
-            let requested = events.get(slot).copied().unwrap_or_else(Poll::empty);
-            let watched = match handle {
+        for (slot, (handle, &requested)) in handles.iter().zip(&events).enumerate() {
+            let resolved = match handle {
                 Handle::Stdin => Some((in_handle.as_fd(), requested)),
                 Handle::Stdout => Some((out_handle.as_fd(), requested)),
                 Handle::Stderr => Some((err_handle.as_fd(), requested)),
@@ -519,9 +550,9 @@ impl HostOps for OsHost {
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some((done.as_fd(), requested)),
                     OsResource::Descriptor(fd) => Some((fd.as_fd(), requested)),
-                    // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `proc_wait` answers.
+                    // The reaper's pipe read end: `READ`-ready once the child's end is recorded, which is when `proc_wait` answers.
                     OsResource::Child { running, .. } => Some((running.done.as_fd(), requested)),
-                    // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor and reports as unrecognized.
+                    // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor.
                     OsResource::ClientTls(stream) => {
                         Some((stream.sock.as_fd(), tls_interest(&stream.conn, requested)))
                     }
@@ -532,40 +563,73 @@ impl HostOps for OsHost {
                 }),
             };
 
-            let Some((fd, interest)) = watched else {
+            let Some((fd, interest)) = resolved else {
                 results[slot] = Poll::from_bits(event::ERR);
 
                 continue;
             };
 
-            polls.push(PollFd::from_borrowed_fd(fd, poll_to_flags(interest)));
+            let entry = match watched
+                .iter()
+                .position(|(known, _)| known.as_raw_fd() == fd.as_raw_fd())
+            {
+                Some(entry) => {
+                    watched[entry].1 = Poll::from_bits(watched[entry].1.bits() | interest.bits());
+
+                    entry
+                }
+                None => {
+                    watched.push((fd, interest));
+
+                    watched.len() - 1
+                }
+            };
 
             // Where the watched interest is not the guest's own, readiness is reported in the guest's terms: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it too — reported as the substituted bits alone, the guest would look for its own, see nothing, and re-poll a socket that answers at once, forever.
             let translated = (interest != requested).then_some(requested);
-            slots.push((slot, translated));
+            slots.push((slot, entry, interest, translated));
         }
 
-        // `Int` timeout, poll(2)-style: negative waits forever (no `Timespec`), otherwise a millisecond deadline (`0` returns immediately).
-        let timeout = (timeout_ms >= 0).then(|| Timespec {
-            tv_sec: timeout_ms / 1000,
-            tv_nsec: ((timeout_ms % 1000) * 1_000_000) as _,
-        });
+        let mut polls = watched
+            .iter()
+            .map(|(fd, interest)| PollFd::from_borrowed_fd(*fd, poll_to_flags(*interest)))
+            .collect::<Vec<_>>();
 
-        // A failed poll (e.g. `EINTR`) reports no readiness; the scheduler re-polls. On success, scatter each revents back to its input slot.
-        if poll(&mut polls, timeout.as_ref()).is_ok() {
-            for (index, &(slot, translated)) in slots.iter().enumerate() {
-                let ready = poll_from_flags(polls[index].revents());
+        // An interruption is not readiness, so the poll resumes for what is left of the wait; any other failure is the system refusing the poll itself, which no readiness report can say, so the call is refused naming it.
+        loop {
+            let timeout = deadline.map(|deadline| {
+                let left = deadline.saturating_duration_since(Instant::now());
 
-                results[slot] = match translated {
-                    Some(requested) if ready.bits() != 0 => {
-                        Poll::from_bits(ready.bits() | requested.bits())
-                    }
-                    _ => ready,
-                };
+                Timespec {
+                    tv_sec: left.as_secs() as _,
+                    tv_nsec: left.subsec_nanos() as _,
+                }
+            });
+
+            match poll(&mut polls, timeout.as_ref()) {
+                Ok(_) => break,
+                Err(Errno::INTR) => {}
+                Err(errno) => {
+                    return Err(Refusal(format!(
+                        "the system refused the poll: {}",
+                        Error::from(errno)
+                    )));
+                }
             }
         }
 
-        results
+        // Each slot reads its own interest out of what its descriptor reported, with the result-only `ERR` and `HUP` beside it.
+        for (slot, entry, interest, translated) in slots {
+            let ready = poll_from_flags(polls[entry].revents()).bits()
+                & (interest.bits() | event::ERR | event::HUP);
+
+            results[slot] = match translated {
+                Some(requested) if ready != 0 => Poll::from_bits(ready | requested.bits()),
+                _ => Poll::from_bits(ready),
+            };
+        }
+
+        Ok(results)
     }
 
     fn handle_close(&self, io: Handle) {
@@ -573,7 +637,12 @@ impl HostOps for OsHost {
     }
 
     fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
-        let mut buffer = vec![0; count as usize];
+        // A request for nothing reads nothing: it only asks whether the handle could be read, and never answers the end of a stream it did not look at.
+        if count == 0 {
+            return self.stream(&io, Direction::Read).map(|()| Some(Vec::new()));
+        }
+
+        let mut buffer = vec![0; count.min(READ_MAX) as usize];
 
         let result = match &io {
             // Standard input is the process's, shared with the terminal or the pipe that feeds it, so its descriptor's flags are never touched; the read is gated by a zero-timeout poll instead, answering `WouldBlock` when nothing is there, which is how a shared descriptor keeps the rule that no row waits on a peer. On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `handle_poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
@@ -584,8 +653,10 @@ impl HostOps for OsHost {
                     return Err(Failure::WouldBlock);
                 }
 
-                rustix::io::read(&input, &mut buffer[..]).map_err(std::io::Error::from)
+                rustix::io::read(&input, &mut buffer[..]).map_err(Error::from)
             }
+            // The output streams are open to write only, as a descriptor opened to write is.
+            Handle::Stdout | Handle::Stderr => return Err(bad_descriptor()),
             Handle::Other(_) => {
                 let mut table = self.table.lock().unwrap();
                 let stream: &mut dyn Read = match table.get_mut(&io) {
@@ -605,7 +676,7 @@ impl HostOps for OsHost {
                     Some(OsResource::Descriptor(fd)) => {
                         let result = rustix::io::read(&*fd, &mut buffer[..]);
 
-                        return read_outcome(result.map_err(std::io::Error::from), buffer);
+                        return read_outcome(result.map_err(Error::from), buffer);
                     }
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
                     _ => return Err(Failure::NotFound),
@@ -613,68 +684,57 @@ impl HostOps for OsHost {
 
                 stream.read(&mut buffer)
             }
-            // stdout/stderr are not readable.
-            _ => return Ok(None),
         };
 
         read_outcome(result, buffer)
     }
 
     fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
-        // The blocking std streams write the whole buffer or fail; report the full length on success so callers see the write completed.
+        // An empty write writes nothing: it only asks whether the handle could be written.
+        if bytes.is_empty() {
+            return self.stream(&io, Direction::Write).map(|()| 0);
+        }
+
         match io {
+            // The standard output streams are written through their raw descriptors, one attempt per call as every other handle is: `std`'s own buffer would hold what the guest wrote where neither the other stream's writes nor a flush can reach it, and the guest's output would arrive out of the order it was written in.
             Handle::Stdout => {
-                return stdout()
-                    .write_all(&bytes)
-                    .map(|()| bytes.len() as u64)
-                    .map_err(failure_from_error);
+                return write_once(|| rustix::io::write(stdout(), &bytes).map_err(Error::from));
             }
             Handle::Stderr => {
-                return stderr()
-                    .write_all(&bytes)
-                    .map(|()| bytes.len() as u64)
-                    .map_err(failure_from_error);
+                return write_once(|| rustix::io::write(stderr(), &bytes).map_err(Error::from));
             }
-            // POSIX semantics: stdin is plain fd 0, so the write succeeds when the process was handed a read-write descriptor (a terminal) and reports `EBADF` when it was opened read-only.
-            Handle::Stdin => {
-                return rustix::io::write(stdin(), &bytes)
-                    .map(|written| written as u64)
-                    .map_err(|errno| failure_from_error(std::io::Error::from(errno)));
-            }
+            // Standard input is open to read only, as a descriptor opened to read is.
+            Handle::Stdin => return Err(bad_descriptor()),
             Handle::Other(_) => {}
         }
 
         let mut table = self.table.lock().unwrap();
 
-        let stream = match table.get_mut(&io) {
-            Some(OsResource::File(file)) => file as &mut dyn Write,
-            Some(OsResource::Connected(socket)) => socket,
-            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `handle_close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
-            Some(OsResource::ClientTls(tls)) => {
-                return tls
-                    .write(&bytes)
-                    .map(|written| written as u64)
-                    .map_err(tls_failure);
-            }
-            Some(OsResource::ServerTls(tls)) => {
-                return tls
-                    .write(&bytes)
-                    .map(|written| written as u64)
-                    .map_err(tls_failure);
-            }
+        match table.get_mut(&io) {
+            Some(OsResource::File(file)) => write_once(|| file.write(&bytes)),
+            Some(OsResource::Connected(socket)) => write_once(|| socket.write(&bytes)),
+            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports nothing accepted and the caller resends. Once established it takes plaintext into `rustls`'s records, as much as its buffer holds, and pushes them to the socket as far as the socket allows; what the socket did not take waits for the next read, write or `handle_flush` of the handle, and a `handle_close` drops it.
+            Some(OsResource::ClientTls(tls)) => tls_write(|| tls.write(&bytes)),
+            Some(OsResource::ServerTls(tls)) => tls_write(|| tls.write(&bytes)),
             Some(OsResource::Descriptor(fd)) => {
-                return rustix::io::write(&*fd, &bytes)
-                    .map(|written| written as u64)
-                    .map_err(|errno| failure_from_error(std::io::Error::from(errno)));
+                write_once(|| rustix::io::write(&*fd, &bytes).map_err(Error::from))
             }
-            _ => return Err(Failure::NotFound),
-        };
+            _ => Err(Failure::NotFound),
+        }
+    }
 
-        // A single non-blocking `write`: the kernel takes a prefix and reports its length. We return that count rather than looping (`write_all`), because a loop that hits `WouldBlock` mid-buffer would lose the count of what already went out and the caller would resend it.
-        stream
-            .write(&bytes)
-            .map(|written| written as u64)
-            .map_err(failure_from_error)
+    fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
+        if matches!(io, Handle::Stdin | Handle::Stdout | Handle::Stderr) {
+            return Ok(());
+        }
+
+        // Only a TLS stream holds anything of what a write accepted: its records, which `rustls` pushes to the socket as far as the socket takes them. Every other kind wrote straight through.
+        match self.table.lock().unwrap().get_mut(&io) {
+            Some(OsResource::ClientTls(tls)) => flush_tls(&mut tls.conn, &mut tls.sock),
+            Some(OsResource::ServerTls(tls)) => flush_tls(&mut tls.conn, &mut tls.sock),
+            Some(_) => Ok(()),
+            None => Err(Failure::NotFound),
+        }
     }
 
     fn clock_wall(&self) -> Timestamp {
@@ -697,11 +757,18 @@ impl HostOps for OsHost {
         }
     }
 
-    fn rand_bytes(&self, count: u64) -> Vec<u8> {
-        let mut buffer = vec![0u8; count as usize];
-        getrandom::fill(&mut buffer).expect("OS randomness unavailable");
+    fn rand_bytes(&self, count: u64) -> Result<Vec<u8>, Refusal> {
+        // Reserved rather than allocated, so a request for more memory than the host has refuses the call rather than aborting the process.
+        let unreserved = || Refusal(format!("{count} random bytes do not fit in memory"));
+        let length = usize::try_from(count).map_err(|_| unreserved())?;
+        let mut buffer = Vec::new();
 
-        buffer
+        buffer.try_reserve_exact(length).map_err(|_| unreserved())?;
+        buffer.resize(length, 0);
+        getrandom::fill(&mut buffer)
+            .map_err(|error| Refusal(format!("the system gave no randomness: {error}")))?;
+
+        Ok(buffer)
     }
 
     fn proc_args(&self) -> Vec<Vec<u8>> {
@@ -751,7 +818,7 @@ impl HostOps for OsHost {
         match outcome {
             None => Err(Failure::NotFound),
             Some(Ok(())) => Ok(()),
-            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
         }
     }
 
@@ -762,7 +829,7 @@ impl HostOps for OsHost {
                 cols: size.ws_col.into(),
                 rows: size.ws_row.into(),
             }),
-            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
         }
     }
 
@@ -777,7 +844,7 @@ impl HostOps for OsHost {
     ) -> Result<Handle, Failure> {
         // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
         let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
-            return Err(failure_from_error(std::io::Error::from(Errno::INVAL)));
+            return Err(failure_from_error(Error::from(Errno::INVAL)));
         };
 
         // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
@@ -805,7 +872,7 @@ impl HostOps for OsHost {
 
         opened
             .map(|fd| self.mint(OsResource::Descriptor(fd)))
-            .map_err(|errno| failure_from_error(std::io::Error::from(errno)))
+            .map_err(|errno| failure_from_error(Error::from(errno)))
     }
 
     fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
@@ -818,7 +885,7 @@ impl HostOps for OsHost {
         match outcome {
             None => Err(Failure::NotFound),
             Some(Ok(())) => Ok(()),
-            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
         }
     }
 
@@ -1003,12 +1070,12 @@ fn set_modem_lines(fd: BorrowedFd<'_>, mask: c_int, on: bool) -> rustix::io::Res
 }
 
 /// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.
-fn is_errno(error: &std::io::Error, errno: Errno) -> bool {
+fn is_errno(error: &Error, errno: Errno) -> bool {
     error.raw_os_error() == Some(errno.raw_os_error())
 }
 
 /// The failure a TLS stream's read or write reports: `rustls`'s own errors — a failed verification, a protocol violation, a plaintext peer — arrive wrapped in an `InvalidData` error and collapse to `TlsError`, and everything else is the socket's, mapped as every other stream maps it.
-fn tls_failure(error: std::io::Error) -> Failure {
+fn tls_failure(error: Error) -> Failure {
     if error
         .get_ref()
         .is_some_and(|inner| inner.is::<rustls::Error>())
@@ -1021,7 +1088,7 @@ fn tls_failure(error: std::io::Error) -> Failure {
 
 /// A TLS read's outcome as the row's reply: a peer that closed without `close_notify` reads as the end of the stream, since a length-framed protocol notices a truncation itself, and the rest as [`tls_failure`] maps it.
 fn tls_read_outcome(
-    result: std::io::Result<usize>,
+    result: io::Result<usize>,
     buffer: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, Failure> {
     match result {
@@ -1029,6 +1096,49 @@ fn tls_read_outcome(
         Err(error) => Err(tls_failure(error)),
         Ok(_) => read_outcome(result, buffer),
     }
+}
+
+/// `EBADF`: a stream used in a direction it is not open for.
+fn bad_descriptor() -> Failure {
+    failure_from_error(Error::from(Errno::BADF))
+}
+
+/// One write attempt's reply, retried while an interruption stops it before any progress. A descriptor that takes nothing of a nonempty buffer and reports nothing has no failure to name, so it is the errno-less `Other(0)` — never a success its caller would resend forever.
+fn write_once(mut write: impl FnMut() -> io::Result<usize>) -> Result<u64, Failure> {
+    loop {
+        match write() {
+            Ok(0) => return Err(Failure::Other(0)),
+            Ok(accepted) => return Ok(accepted as u64),
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => return Err(failure_from_error(error)),
+        }
+    }
+}
+
+/// A TLS write's reply, retried while an interruption stops it before any progress. `rustls` accepts nothing of a nonempty buffer when its own is full, which is `WouldBlock`: nothing can be accepted now, and the socket's writability is what frees room.
+fn tls_write(mut write: impl FnMut() -> io::Result<usize>) -> Result<u64, Failure> {
+    loop {
+        match write() {
+            Ok(0) => return Err(Failure::WouldBlock),
+            Ok(accepted) => return Ok(accepted as u64),
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => return Err(tls_failure(error)),
+        }
+    }
+}
+
+/// Push a TLS stream's pending records to its socket until `rustls` holds none: `WouldBlock` when the socket takes no more, which `handle_poll` reports writable once it can, and a failure as [`tls_failure`] maps it.
+fn flush_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Result<(), Failure> {
+    while conn.wants_write() {
+        match conn.write_tls(sock) {
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == ErrorKind::WouldBlock => return Err(Failure::WouldBlock),
+            Err(error) => return Err(tls_failure(error)),
+        }
+    }
+
+    Ok(())
 }
 
 /// The interest to watch a TLS stream's socket for. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked on `WRITE` to send its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, plus `WRITE` whenever `rustls` still holds records to push.
@@ -1044,7 +1154,7 @@ fn tls_interest(conn: &rustls::CommonState, requested: Poll) -> Poll {
 
 /// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its failure. Shared by every descriptor `handle_read` serves, the raw ones included.
 fn read_outcome(
-    result: std::io::Result<usize>,
+    result: io::Result<usize>,
     mut buffer: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, Failure> {
     match result {

@@ -67,7 +67,9 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
     );
 
     // A poll arms the next chunk and reports the handle readable, and only then does the read serve it.
-    let ready = host.handle_poll(vec![handle.clone()], vec![Poll::from_bits(event::READ)], -1);
+    let ready = host
+        .handle_poll(vec![handle.clone()], vec![Poll::from_bits(event::READ)], -1)
+        .unwrap();
     assert_eq!(ready[0].bits() & event::READ, event::READ);
     assert_eq!(
         host.handle_read(handle.clone(), 8),
@@ -76,7 +78,9 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
 
     // Past the last chunk the stream is at its end, which a poll still reports as readable.
     assert_eq!(host.handle_read(handle.clone(), 8), Ok(None));
-    let ready = host.handle_poll(vec![handle], vec![Poll::from_bits(event::READ)], -1);
+    let ready = host
+        .handle_poll(vec![handle], vec![Poll::from_bits(event::READ)], -1)
+        .unwrap();
     assert_eq!(ready[0].bits() & event::READ, event::READ);
 }
 
@@ -97,11 +101,13 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
         host.socket_finish_connect(handle.clone()),
         Err(Failure::WouldBlock)
     );
-    let ready = host.handle_poll(
-        vec![handle.clone()],
-        vec![Poll::from_bits(event::WRITE)],
-        -1,
-    );
+    let ready = host
+        .handle_poll(
+            vec![handle.clone()],
+            vec![Poll::from_bits(event::WRITE)],
+            -1,
+        )
+        .unwrap();
     assert_eq!(ready[0].bits() & event::WRITE, event::WRITE);
     assert_eq!(host.socket_finish_connect(handle.clone()), Ok(()));
     assert_eq!(host.handle_read(handle, 8), Ok(Some(b"pong".to_vec())));
@@ -112,7 +118,8 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
         host.socket_connect(stray.clone(), b"nowhere:1".to_vec()),
         Err(Failure::WouldBlock)
     );
-    host.handle_poll(vec![stray.clone()], vec![Poll::from_bits(event::WRITE)], -1);
+    host.handle_poll(vec![stray.clone()], vec![Poll::from_bits(event::WRITE)], -1)
+        .unwrap();
     assert_eq!(
         host.socket_finish_connect(stray.clone()),
         Err(Failure::ConnectionRefused)
@@ -131,7 +138,9 @@ fn a_chunked_endpoint_ends_readable() {
 
     // A stream at its end reads as its end, and a poll still reports it readable, as an OS reports a closed peer.
     assert_eq!(host.handle_read(handle.clone(), 8), Ok(None));
-    let ready = host.handle_poll(vec![handle], vec![Poll::from_bits(event::READ)], -1);
+    let ready = host
+        .handle_poll(vec![handle], vec![Poll::from_bits(event::READ)], -1)
+        .unwrap();
     assert_eq!(ready[0].bits() & event::READ, event::READ);
 }
 
@@ -232,7 +241,9 @@ fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
     assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::WouldBlock));
 
     // A poll arms the next chunk and reports standard input readable, and only then does the read serve it: the park-poll-resume path a keystroke arriving later takes.
-    let ready = host.handle_poll(vec![Handle::Stdin], vec![Poll::from_bits(event::READ)], -1);
+    let ready = host
+        .handle_poll(vec![Handle::Stdin], vec![Poll::from_bits(event::READ)], -1)
+        .unwrap();
     assert_eq!(ready[0].bits() & event::READ, event::READ);
     assert_eq!(host.handle_read(Handle::Stdin, 8), Ok(Some(b"q".to_vec())));
 
@@ -295,7 +306,8 @@ fn a_serial_discard_drops_only_what_arrived() {
         Ok(())
     );
     assert_eq!(host.handle_read(port.clone(), 16), Err(Failure::WouldBlock));
-    host.handle_poll(vec![port.clone()], vec![Poll::from_bits(event::READ)], 0);
+    host.handle_poll(vec![port.clone()], vec![Poll::from_bits(event::READ)], 0)
+        .unwrap();
     assert_eq!(host.handle_read(port, 16), Ok(Some(b"ready".to_vec())));
 }
 
@@ -322,11 +334,15 @@ fn a_running_child_ends_by_its_kill_and_an_ended_one_is_not_signaled() {
 
     let sleepy = spawned(&host, b"sleepy");
     assert_eq!(host.proc_wait(sleepy.clone()), Err(Failure::WouldBlock));
-    let ready = host.handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0);
+    let ready = host
+        .handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0)
+        .unwrap();
     assert_eq!(ready[0].bits(), 0);
 
     assert_eq!(host.proc_kill(sleepy.clone()), Ok(()));
-    let ready = host.handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0);
+    let ready = host
+        .handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0)
+        .unwrap();
     assert_eq!(ready[0].bits() & event::READ, event::READ);
     assert_eq!(
         host.proc_wait(sleepy.clone()),
@@ -362,4 +378,65 @@ fn an_unpiped_stream_is_not_found() {
         Err(Failure::NotFound)
     );
     assert!(host.proc_stream(child, ChildStream::Stdout).is_ok());
+}
+
+/// A stream used in the direction it is not open for is `EBADF`, as the native host answers: a standard stream, a file opened the other way, a child's pipe read from its writing end. Anything that is not a stream is `NotFound`.
+#[test]
+fn a_stream_is_open_the_ways_its_host_opened_it() {
+    const EBADF: Result<(), Failure> = Err(Failure::Other(9));
+
+    let (host, _io) = MockHost::builder().files([("r", "text")]).build();
+    let reading = host.file_open(b"r".to_vec(), Mode::Read).unwrap();
+    let writing = host.file_open(b"w".to_vec(), Mode::Write).unwrap();
+
+    assert_eq!(host.handle_read(Handle::Stdout, 8).map(|_| ()), EBADF);
+    assert_eq!(
+        host.handle_write(Handle::Stdin, b"x".to_vec()).map(|_| ()),
+        EBADF
+    );
+    assert_eq!(
+        host.handle_write(reading.clone(), b"x".to_vec())
+            .map(|_| ()),
+        EBADF
+    );
+    assert_eq!(host.handle_read(writing.clone(), 8).map(|_| ()), EBADF);
+    assert_eq!(host.handle_read(reading, 2), Ok(Some(b"te".to_vec())));
+    assert_eq!(host.handle_write(writing, b"x".to_vec()), Ok(1));
+}
+
+/// A request for nothing checks the handle and moves nothing: a zero read of a spent stream is empty bytes rather than its end, and an empty write is `0`.
+#[test]
+fn a_request_for_nothing_moves_nothing() {
+    let (host, _io) = MockHost::builder().build();
+
+    assert_eq!(host.handle_read(Handle::Stdin, 0), Ok(Some(vec![])));
+    assert_eq!(host.handle_read(Handle::Stdin, 8), Ok(None));
+    assert_eq!(host.handle_write(Handle::Stdout, vec![]), Ok(0));
+    assert_eq!(
+        host.handle_read(Handle::Other(vec![0xff]), 0),
+        Err(Failure::NotFound)
+    );
+}
+
+/// A scripted flush waits as a TLS stream's does while its records wait for the socket, then drains; the standard streams hold nothing, and an unknown handle is `NotFound`.
+#[test]
+fn a_scripted_flush_waits_then_drains() {
+    let (host, _io) = MockHost::builder()
+        .net([("example.com:80", "")])
+        .pending_flushes(2)
+        .build();
+    let socket = host.socket_open(b"example.com:80".to_vec()).unwrap();
+    assert_eq!(
+        host.socket_connect(socket.clone(), b"example.com:80".to_vec()),
+        Ok(())
+    );
+
+    assert_eq!(host.handle_flush(Handle::Stdout), Ok(()));
+    assert_eq!(host.handle_flush(socket.clone()), Err(Failure::WouldBlock));
+    assert_eq!(host.handle_flush(socket.clone()), Err(Failure::WouldBlock));
+    assert_eq!(host.handle_flush(socket), Ok(()));
+    assert_eq!(
+        host.handle_flush(Handle::Other(vec![0xff])),
+        Err(Failure::NotFound)
+    );
 }

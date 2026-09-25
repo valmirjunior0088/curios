@@ -2,8 +2,9 @@
 
 use {
     curios_abi::{
-        ChildExit, ChildStream, Failure, FileStat, Handle, HostOp, HostOps, Mode, Poll, SerialFlow,
-        SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, for_each_host_op,
+        ChildExit, ChildStream, Failure, FileStat, Handle, HostOp, HostOps, Mode, Poll, Refusal,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+        for_each_host_op,
     },
     curios_runtime::MockHost,
     std::{any::Any, sync::Mutex},

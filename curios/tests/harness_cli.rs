@@ -5,7 +5,7 @@ use {
     std::{
         ffi::OsStr,
         fs,
-        io::Write,
+        io::{Read, Write, pipe},
         os::unix::ffi::OsStrExt,
         path::Path,
         process::{Command, Output, Stdio},
@@ -292,6 +292,40 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(0));
+}
+
+/// A program's two output streams reach one pipe in the order it wrote them: standard output is written through its descriptor, one attempt per call, so nothing the program wrote there waits in a buffer while standard error overtakes it. The compiler's own report precedes the program's output on standard error, so what the program wrote is the tail.
+#[test]
+fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
+    let root = temporary("stream-order");
+    fs::create_dir_all(&root).unwrap();
+    let (mut merged, writer) = pipe().unwrap();
+    // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
+    let mut child = {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
+        command
+            .current_dir(&root)
+            .args(["run", "-"])
+            .stdin(Stdio::piped())
+            .stdout(writer.try_clone().unwrap())
+            .stderr(writer);
+        command.spawn().expect("run the compiler")
+    };
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            b"let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\")\n",
+        )
+        .unwrap();
+
+    let mut output = Vec::new();
+    merged.read_to_end(&mut output).unwrap();
+    assert!(child.wait().unwrap().success());
+
+    let output = String::from_utf8(output).unwrap();
+    assert!(output.ends_with("abc\n"), "{output}");
 }
 
 #[test]

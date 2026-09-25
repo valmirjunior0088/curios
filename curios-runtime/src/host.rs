@@ -3,8 +3,8 @@
 //! The wire contract — the [`Handle`]/[`Failure`]/[`Poll`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, SerialFlow,
-    SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
+    ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Refusal,
+    SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
 };
 
 use {
@@ -44,6 +44,13 @@ pub(crate) fn serial_frame(
     };
 
     Some(size | parity | stop | flow)
+}
+
+/// Which way a stream row moves bytes: what a request of nothing is checked against without moving any, and what a stream open only the other way refuses with `EBADF`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Direction {
+    Read,
+    Write,
 }
 
 /// Where a child's `which` stream sits in the `[stdin, stdout, stderr]` both hosts file a child's streams in.
@@ -88,7 +95,7 @@ pub(crate) fn poll_to_flags(events: Poll) -> PollFlags {
     flags
 }
 
-/// Map the platform `revents` back to a [`Poll`] readiness mask, including the result-only `ERR`/`HUP` the kernel reports whether or not they were asked for.
+/// Map the platform `revents` back to a [`Poll`] readiness mask, including the result-only `ERR`/`HUP` the kernel reports whether or not they were asked for. A descriptor the kernel calls invalid (`POLLNVAL`) reports `ERR`: its waiter wakes into the call that says why rather than waiting on a descriptor that cannot become ready.
 pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
     let mut bits = 0;
 
@@ -100,7 +107,7 @@ pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
         bits |= event::WRITE;
     }
 
-    if flags.contains(PollFlags::ERR) {
+    if flags.intersects(PollFlags::ERR | PollFlags::NVAL) {
         bits |= event::ERR;
     }
 

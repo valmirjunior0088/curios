@@ -152,6 +152,17 @@ export async function run(config) {
       return encodeBytes(ready);
     },
     handle_close: () => {},
+    // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.
+    handle_flush: (handle) => {
+      switch (tokenOf(handle)) {
+        case config.stdio.STDIN:
+        case config.stdio.STDOUT:
+        case config.stdio.STDERR:
+          return config.status.OK;
+        default:
+          return config.status.NOT_FOUND;
+      }
+    },
     clock_wall: () => {
       const millis = Date.now();
 
