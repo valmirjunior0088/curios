@@ -5,6 +5,7 @@ use {
         pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
         termios::LocalModes,
     },
+    std::{num::NonZeroU32, thread, time::Duration},
 };
 
 /// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. Boxing the two TLS variants took that from 1176 bytes to 16, measured 2026-08-23 by the `size_of` calls below — a `rustls` connection carries its record buffers inline, and unboxed it set the size of every other kind.
@@ -97,7 +98,7 @@ fn a_piped_child_stream_is_filed_non_blocking() {
         if outcome != Err(Failure::WouldBlock) {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(10));
         outcome = host.handle_read(stdout.clone(), 8);
     }
     assert_eq!(outcome, Ok(None));
@@ -126,8 +127,18 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
     reader.read_exact(&mut byte).expect("the byte is there");
     assert!(!readable_now(reader.as_fd()));
 
+    // A child another test spawns while this pipe's close-on-exec flag is being set — macOS has no `pipe2`, so `std` sets it after the pipe exists — holds the write end until it exits or is killed, so the end of the stream may arrive late rather than at once.
     drop(writer);
-    assert!(readable_now(reader.as_fd()));
+    let closed = (0..100).any(|_| {
+        let readable = readable_now(reader.as_fd());
+
+        if !readable {
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        readable
+    });
+    assert!(closed);
 }
 
 /// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_resolve` would mint for it.
@@ -326,7 +337,7 @@ fn a_refused_connect_reports_and_drops_the_socket() {
     assert_eq!(host.handle_read(client, 8), Err(Failure::NotFound));
 }
 
-/// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The unpiped stdin comes back as the empty handle.
+/// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The unpiped stdin has no handle, which is `not_found`.
 #[test]
 fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     let host = OsHost::with_args(vec![]);
@@ -341,10 +352,9 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
         )
         .unwrap();
 
-    assert!(
-        host.proc_stream(child.clone(), ChildStream::Stdin)
-            .unwrap()
-            .is_none()
+    assert_eq!(
+        host.proc_stream(child.clone(), ChildStream::Stdin),
+        Err(Failure::NotFound)
     );
     let stdout = host
         .proc_stream(child.clone(), ChildStream::Stdout)
@@ -457,4 +467,79 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
         host.serial_control(port, SerialOp::DiscardInput, false),
         Err(Failure::NotFound)
     );
+}
+
+/// Spawn `argv` with every stream on the null device.
+fn quiet(host: &OsHost, argv: &[&[u8]]) -> Result<Handle, Failure> {
+    host.proc_spawn(
+        argv.iter().map(|arg| arg.to_vec()).collect(),
+        vec![],
+        vec![],
+        StdioMode::Null,
+        StdioMode::Null,
+        StdioMode::Null,
+    )
+}
+
+/// Wait up to five seconds for `child`'s handle to report that its end is recorded.
+fn ended(host: &OsHost, child: &Handle) {
+    let ready = host.handle_poll(
+        vec![child.clone()],
+        vec![Poll::from_bits(event::READ)],
+        5_000,
+    );
+
+    assert_ne!(ready[0].bits() & event::READ, 0, "the child ended");
+}
+
+/// Once the reaper has recorded an exit it has also reaped the pid, which the OS may hand to another process, so a kill answers `ok` without signaling anything — and the exit still reads back. A kill that signaled the freed pid answered `ESRCH` here, or ended whatever process had inherited it.
+#[test]
+fn killing_a_child_that_has_ended_signals_nothing() {
+    let host = OsHost::with_args(vec![]);
+    let child = quiet(&host, &[b"/bin/sh", b"-c", b"exit 0"]).unwrap();
+
+    ended(&host, &child);
+    assert_eq!(host.proc_kill(child.clone()), Ok(()));
+    assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
+}
+
+#[test]
+fn killing_a_running_child_ends_it_by_its_signal() {
+    let host = OsHost::with_args(vec![]);
+    let child = quiet(&host, &[b"/bin/sleep", b"60"]).unwrap();
+
+    assert_eq!(host.proc_wait(child.clone()), Err(Failure::WouldBlock));
+    assert_eq!(host.proc_kill(child.clone()), Ok(()));
+    ended(&host, &child);
+    assert_eq!(
+        host.proc_wait(child),
+        Ok(ChildExit::Signal(NonZeroU32::new(9).unwrap()))
+    );
+}
+
+/// An empty `argv` names no program, a NUL fits in no C string, and an environment entry needs a name before its `=`: each is `EINVAL`, as `execve` and `setenv` answer, and none starts anything.
+#[test]
+fn spawning_refuses_what_no_program_can_be() {
+    const EINVAL: u32 = 22;
+
+    let host = OsHost::with_args(vec![]);
+    let spawn = |argv: Vec<Vec<u8>>, env: Vec<Vec<u8>>| {
+        host.proc_spawn(
+            argv,
+            vec![],
+            env,
+            StdioMode::Null,
+            StdioMode::Null,
+            StdioMode::Null,
+        )
+    };
+    let refused = Err(Failure::Other(EINVAL));
+
+    assert_eq!(spawn(vec![], vec![]), refused);
+    assert_eq!(spawn(vec![b"/bin/e\0cho".to_vec()], vec![]), refused);
+    assert_eq!(
+        spawn(vec![b"/bin/echo".to_vec()], vec![b"=x".to_vec()]),
+        refused
+    );
+    assert_eq!(spawn(vec![b"/bin/echo".to_vec()], vec![vec![]]), refused);
 }

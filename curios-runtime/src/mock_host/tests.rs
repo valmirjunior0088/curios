@@ -3,6 +3,7 @@
 use {
     super::{super::host::*, EBUSY, ENOTTY, MockHost},
     curios_abi::event,
+    std::num::NonZeroU32,
 };
 
 #[test]
@@ -296,4 +297,69 @@ fn a_serial_discard_drops_only_what_arrived() {
     assert_eq!(host.handle_read(port.clone(), 16), Err(Failure::WouldBlock));
     host.handle_poll(vec![port.clone()], vec![Poll::from_bits(event::READ)], 0);
     assert_eq!(host.handle_read(port, 16), Ok(Some(b"ready".to_vec())));
+}
+
+/// Spawn `program` with its standard output piped and the rest inherited.
+fn spawned(host: &MockHost, program: &[u8]) -> Handle {
+    host.proc_spawn(
+        vec![program.to_vec()],
+        vec![],
+        vec![],
+        StdioMode::Inherit,
+        StdioMode::Pipe,
+        StdioMode::Inherit,
+    )
+    .unwrap()
+}
+
+/// A running child is not ready and cannot be waited for until a kill ends it by `SIGKILL`, which is recorded; a child that has ended is not signaled again, and nothing is recorded — the mirror of a native host that never signals a pid it has reaped.
+#[test]
+fn a_running_child_ends_by_its_kill_and_an_ended_one_is_not_signaled() {
+    let (host, io) = MockHost::builder()
+        .running_children(["sleepy"])
+        .children([("done", "", "", ChildExit::Code(0))])
+        .build();
+
+    let sleepy = spawned(&host, b"sleepy");
+    assert_eq!(host.proc_wait(sleepy.clone()), Err(Failure::WouldBlock));
+    let ready = host.handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0);
+    assert_eq!(ready[0].bits(), 0);
+
+    assert_eq!(host.proc_kill(sleepy.clone()), Ok(()));
+    let ready = host.handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0);
+    assert_eq!(ready[0].bits() & event::READ, event::READ);
+    assert_eq!(
+        host.proc_wait(sleepy.clone()),
+        Ok(ChildExit::Signal(NonZeroU32::new(9).unwrap()))
+    );
+    assert_eq!(host.proc_wait(sleepy), Err(Failure::NotFound));
+
+    let done = spawned(&host, b"done");
+    assert_eq!(host.proc_kill(done.clone()), Ok(()));
+    assert_eq!(host.proc_wait(done), Ok(ChildExit::Code(0)));
+    assert_eq!(io.kills(), [b"sleepy".to_vec()]);
+}
+
+/// Waiting consumes only a child: a handle of any other kind answers `not_found` and stays filed.
+#[test]
+fn waiting_on_what_is_not_a_child_leaves_it_filed() {
+    let (host, _io) = MockHost::builder().build();
+    let file = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
+
+    assert_eq!(host.proc_wait(file.clone()), Err(Failure::NotFound));
+    assert_eq!(host.handle_write(file, b"x".to_vec()), Ok(1));
+}
+
+#[test]
+fn an_unpiped_stream_is_not_found() {
+    let (host, _io) = MockHost::builder()
+        .children([("greet", "hello", "", ChildExit::Code(0))])
+        .build();
+    let child = spawned(&host, b"greet");
+
+    assert_eq!(
+        host.proc_stream(child.clone(), ChildStream::Stdin),
+        Err(Failure::NotFound)
+    );
+    assert!(host.proc_stream(child, ChildStream::Stdout).is_ok());
 }

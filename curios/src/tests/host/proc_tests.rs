@@ -247,7 +247,7 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     assert_eq!(io.output(), b"signaled(9) not_found");
 }
 
-// A child spawned inside `Child/with` is killed when the task around it is cancelled: the mock records the program name when `kill` reaches it.
+// A child spawned inside `Child/with` is killed when the task around it is cancelled: the child runs until something ends it, and the mock records the program name when the kill does.
 #[test]
 fn a_cancelled_task_kills_the_child_it_spawned() {
     let source = child_program(
@@ -263,12 +263,30 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
         "#,
     );
 
-    let (system, io) = MockHost::builder()
-        .children([("sleepy", "", "", ChildExit::Code(0))])
-        .build();
+    let (system, io) = MockHost::builder().running_children(["sleepy"]).build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"cancelled");
     assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
+}
+
+// A bracket whose body returns without waiting still ends with its child released: a child that has already ended is not signaled, and its handle is closed, so a wait after the bracket finds nothing to wait for.
+#[test]
+fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
+    let source = child_program(
+        r#"
+            let child = Command/spawn(Command/new("done", []))!;
+            let _ = Child/with(child, Try/pure(()))!;
+            let late = Try/run(Child/wait(child))!;
+            Try/pure(match late | success(e) => Show/show(e) | failure(e) => Show/show(e) end)
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("done", "", "", ChildExit::Code(0))])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"not_found");
+    assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
 // A child's pipes are streams: `spawn` with piped output hands back a `Command/Pipe` that `Async/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.

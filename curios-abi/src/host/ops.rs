@@ -70,7 +70,7 @@ macro_rules! for_each_host_op {
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
             SocketSetReuseaddr: fn socket_set_reuseaddr(h: Handle, on: bool) -> Result<(), Failure> as socket/set_reuseaddr {}
 
-            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle. A mask is a byte of flags, so the masks cross as one `Bytes` whose byte `i` is handle `i`'s.
+            /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle; a handle that is unknown — closed, say — or has no descriptor reports `ERR`, so its waiter wakes into the call that says why. A mask is a byte of flags, so the masks cross as one `Bytes` whose byte `i` is handle `i`'s.
             HandlePoll: fn handle_poll(handles: Vec<Handle>, events: Vec<Poll>, timeout: i64) -> Vec<Poll> as Handle/poll { yields: revents, requires: [SameLength { a: handles, b: events }], checks: [Parallel { list: handles }] }
 
             /// Close `h`. Closing an unknown handle is a no-op.
@@ -127,16 +127,16 @@ macro_rules! for_each_host_op {
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
             ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> as proc/cwd { yields: path }
 
-            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last.
+            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
             ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<Handle, Failure> as proc/spawn { yields: child }
 
-            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; an unpiped one is the empty handle a failed `file_open` returns.
+            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; a stream that was not piped has none, and is `NotFound`. Closing the child leaves its streams filed.
             ProcStream: fn proc_stream(child: Handle, which: ChildStream) -> Result<Handle, Failure> as proc/stream { yields: handle }
 
-            /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs; consumes the handle.
+            /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
             ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait { marks: [Blocks] }
 
-            /// Send `child` `SIGKILL`; `proc_wait` then reports the signal.
+            /// Send `child` `SIGKILL` if it still runs; `proc_wait` then reports the signal. A child whose end is already recorded is not signaled and answers `Ok`, since the host may have reaped its pid and the system handed it on.
             ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> as proc/kill {}
         }
     };

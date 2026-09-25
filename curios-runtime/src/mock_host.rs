@@ -3,6 +3,7 @@ use {
     curios_abi::{ClosedCode, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
+        num::NonZeroU32,
         sync::{Arc, Mutex},
     },
 };
@@ -325,19 +326,19 @@ struct MockServer {
     capture: usize,
 }
 
-/// A scripted child: what it writes on each stream and how it ends, keyed by program name in the builder.
+/// A scripted child: what it writes on each stream and how it ends — or `None`, a child that runs until it is killed — keyed by program name in the builder.
 #[derive(Clone)]
 struct MockChildScript {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
-    exit: ChildExit,
+    exit: Option<ChildExit>,
 }
 
-/// A live scripted child: exited the moment it was spawned, its handle ready and its exit waiting for `proc_wait`, its piped streams filed and handed out through `proc_stream`.
+/// A live scripted child, its piped streams filed and handed out through `proc_stream` — `None` for a stream that was not piped. A child scripted with an exit has ended the moment it was spawned, its handle ready and its exit waiting for `proc_wait`; one scripted without runs until `proc_kill` ends it by `SIGKILL`, and until then its handle is not ready and `proc_wait` answers `would_block`.
 struct MockChild {
     program: Vec<u8>,
-    exit: ChildExit,
-    streams: [Handle; 3],
+    exit: Option<ChildExit>,
+    streams: [Option<Handle>; 3],
 }
 
 /// A live scripted serial port minted by `serial_open`: `handle_read` serves the device's scripted chunks, and `handle_write` appends to the capture filed under `path`.
@@ -409,7 +410,7 @@ pub struct MockHost {
     cwd: Vec<u8>,
     /// Scripted children by program name: what `proc_spawn` finds.
     children: HashMap<Vec<u8>, MockChildScript>,
-    /// The program names of every child `proc_kill` was asked to end, in order. Shared with [`MockIo::kills`], so a test can see that a cancelled task killed what it spawned.
+    /// The program names of every child `proc_kill` ended, in order — a child that had already ended is not signaled, so it is not recorded. Shared with [`MockIo::kills`], so a test can see that a cancelled task killed what it spawned.
     kills: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted serial devices by path: the chunks a port serves while it is open. Opening an unscripted path is `NotFound`.
     serial_devices: HashMap<Vec<u8>, Vec<Vec<u8>>>,
@@ -420,6 +421,9 @@ pub struct MockHost {
     /// What the program wrote to each serial port, by path. Shared with [`MockIo::serial_written`].
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
+
+/// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
+const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
 
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
 const ENOTTY: u32 = 25;
@@ -611,7 +615,7 @@ impl HostOps for MockHost {
     }
 
     fn handle_poll(&self, handles: Vec<Handle>, events: Vec<Poll>, _: i64) -> Vec<Poll> {
-        // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports nothing. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
+        // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports `ERR`. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
         handles
@@ -650,8 +654,14 @@ impl HostOps for MockHost {
 
                             Poll::from_bits(event::WRITE)
                         }
+                        // A child is readable once it has ended, which is when `proc_wait` answers.
+                        Some(MockResource::Child(child)) => match child.exit {
+                            Some(_) => Poll::from_bits(event::READ),
+                            None => Poll::empty(),
+                        },
                         Some(_) => requested,
-                        None => Poll::empty(),
+                        // An unknown handle — closed, say — reports `ERR`, as the native host does, so a waiter wakes into the call that reports why.
+                        None => Poll::from_bits(event::ERR),
                     },
                 }
             })
@@ -916,14 +926,11 @@ impl HostOps for MockHost {
         let program = &argv[0];
 
         // Each stream is filed only where the guest asked for a pipe; the scripted child has already written everything it ever will.
-        let piped = |mode: StdioMode, bytes: Vec<u8>| match mode == StdioMode::Pipe {
-            true => self.mint(MockResource::Piped(Chunked::new(vec![bytes]))),
-            false => Handle::none(),
+        let piped = |mode: StdioMode, bytes: Vec<u8>| {
+            (mode == StdioMode::Pipe)
+                .then(|| self.mint(MockResource::Piped(Chunked::new(vec![bytes]))))
         };
-        let stdin = match stdin == StdioMode::Pipe {
-            true => self.mint(MockResource::Sink),
-            false => Handle::none(),
-        };
+        let stdin = (stdin == StdioMode::Pipe).then(|| self.mint(MockResource::Sink));
         let streams = [
             stdin,
             piped(stdout, script.stdout),
@@ -940,22 +947,36 @@ impl HostOps for MockHost {
 
     fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
-            Some(MockResource::Child(running)) => Ok(running.streams[stream_index(which)].clone()),
+            // A stream that was not piped has no handle, which is `not_found` as an unknown handle is.
+            Some(MockResource::Child(running)) => running.streams[stream_index(which)]
+                .clone()
+                .ok_or(Failure::NotFound),
             _ => Err(Failure::NotFound),
         }
     }
 
     fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {
-        match self.table.lock().unwrap().remove(&child) {
-            Some(MockResource::Child(ended)) => Ok(ended.exit),
-            _ => Err(Failure::NotFound),
-        }
+        let mut table = self.table.lock().unwrap();
+
+        // Only an ended child is consumed: a running one answers `would_block`, and anything that is not a child stays filed.
+        let exit = match table.get(&child) {
+            Some(MockResource::Child(scripted)) => scripted.exit.ok_or(Failure::WouldBlock)?,
+            _ => return Err(Failure::NotFound),
+        };
+
+        table.remove(&child);
+
+        Ok(exit)
     }
 
     fn proc_kill(&self, child: Handle) -> Result<(), Failure> {
-        match self.table.lock().unwrap().get(&child) {
-            Some(MockResource::Child(running)) => {
-                self.kills.lock().unwrap().push(running.program.clone());
+        match self.table.lock().unwrap().get_mut(&child) {
+            // A running child ends by the signal, which is recorded; an ended one is not signaled at all, as the native host never signals a pid it has reaped.
+            Some(MockResource::Child(scripted)) => {
+                if scripted.exit.is_none() {
+                    self.kills.lock().unwrap().push(scripted.program.clone());
+                    scripted.exit = Some(ChildExit::Signal(SIGKILL));
+                }
 
                 Ok(())
             }
@@ -1089,10 +1110,29 @@ impl MockHostBuilder {
                     MockChildScript {
                         stdout: stdout.as_ref().to_vec(),
                         stderr: stderr.as_ref().to_vec(),
-                        exit,
+                        exit: Some(exit),
                     },
                 )
             }));
+
+        self
+    }
+
+    /// Script children `proc_spawn` can start that write nothing and run until `proc_kill` ends them.
+    pub fn running_children<P: AsRef<[u8]>, I: IntoIterator<Item = P>>(
+        mut self,
+        programs: I,
+    ) -> Self {
+        self.children.extend(programs.into_iter().map(|program| {
+            (
+                program.as_ref().to_vec(),
+                MockChildScript {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    exit: None,
+                },
+            )
+        }));
 
         self
     }

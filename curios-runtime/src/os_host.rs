@@ -3,7 +3,7 @@ use {
     curios_abi::event,
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
-        fs::{OFlags, fcntl_getfl, fcntl_setfl},
+        fs::OFlags,
         io::Errno,
         ioctl::{Opcode, Setter, ioctl},
         termios::{
@@ -59,10 +59,10 @@ enum OsResource {
     },
     /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or a serial port, filed by `serial_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first — `proc_spawn` through `fcntl`, `serial_open` at the open itself — so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
-    /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `proc_wait` drains it, `proc_kill` addresses its pid, and `proc_stream` hands out the handles of its piped standard streams — filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does.
+    /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the end, `proc_wait` answers it, `proc_kill` addresses its pid while it runs, and `proc_stream` hands out the handles of its piped standard streams — `None` for a stream that was not piped, filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does. Closing the child leaves its streams filed, and the reaper still reaps the process.
     Child {
         running: Running,
-        streams: Box<[Handle; 3]>,
+        streams: Box<[Option<Handle>; 3]>,
     },
     Connected(Socket),
     Unconnected(Socket),
@@ -498,7 +498,7 @@ impl HostOps for OsHost {
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
         let (in_handle, out_handle, err_handle) = (stdin(), stdout(), stderr());
 
-        // Build a `PollFd` only for resolvable handles, remembering which input slot each maps to so revents land back in parallel; an unknown handle keeps its `empty()` slot and is never polled.
+        // Build a `PollFd` only for resolvable handles, remembering which input slot each maps to so revents land back in parallel. A handle that is unknown — closed, say — or names a resource with no descriptor is never polled and reports `ERR`, which wakes whoever waits on it into the call that reports why, rather than leaving it parked on readiness that cannot come.
         let mut polls = Vec::with_capacity(handles.len());
         let mut slots = Vec::with_capacity(handles.len());
         let mut results = vec![Poll::empty(); handles.len()];
@@ -532,13 +532,17 @@ impl HostOps for OsHost {
                 }),
             };
 
-            if let Some((fd, interest)) = watched {
-                polls.push(PollFd::from_borrowed_fd(fd, poll_to_flags(interest)));
+            let Some((fd, interest)) = watched else {
+                results[slot] = Poll::from_bits(event::ERR);
 
-                // Where the watched interest is not the guest's own, readiness is reported in the guest's terms: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it too — reported as the substituted bits alone, the guest would look for its own, see nothing, and re-poll a socket that answers at once, forever.
-                let translated = (interest != requested).then_some(requested);
-                slots.push((slot, translated));
-            }
+                continue;
+            };
+
+            polls.push(PollFd::from_borrowed_fd(fd, poll_to_flags(interest)));
+
+            // Where the watched interest is not the guest's own, readiness is reported in the guest's terms: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it too — reported as the substituted bits alone, the guest would look for its own, see nothing, and re-poll a socket that answers at once, forever.
+            let translated = (interest != requested).then_some(requested);
+            slots.push((slot, translated));
         }
 
         // `Int` timeout, poll(2)-style: negative waits forever (no `Timespec`), otherwise a millisecond deadline (`0` returns immediately).
@@ -905,53 +909,47 @@ impl HostOps for OsHost {
         stdout: StdioMode,
         stderr: StdioMode,
     ) -> Result<Handle, Failure> {
-        match os_child::spawn(&argv, &cwd, &env, (stdin, stdout, stderr)) {
-            Ok(Spawned {
-                child,
-                stdin,
-                stdout,
-                stderr,
-            }) => {
-                // An unpiped stream is the empty handle a failed `file_open` returns; a piped one is filed as a `Descriptor` with `O_NONBLOCK` applied, since a fiber drains it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents. A flag that cannot be set leaves that stream as the empty handle with the child running; `proc_wait` and `proc_kill` still reach it.
-                let file = |fd: Option<OwnedFd>| match fd {
-                    Some(fd) => match nonblocking(&fd) {
-                        Ok(()) => self.mint(OsResource::Descriptor(fd)),
-                        Err(_) => Handle::none(),
-                    },
-                    None => Handle::none(),
-                };
-                let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
+        let Spawned {
+            child,
+            stdin,
+            stdout,
+            stderr,
+        } = os_child::spawn(&argv, &cwd, &env, (stdin, stdout, stderr))?;
 
-                Ok(self.mint(OsResource::Child {
-                    running: child,
-                    streams,
-                }))
-            }
-            Err(error) => Err(failure_from_error(error)),
-        }
+        // Each piped stream's parent end, non-blocking already, filed as a `Descriptor` the stream rows serve as they serve any pipe.
+        let file = |fd: Option<OwnedFd>| fd.map(|fd| self.mint(OsResource::Descriptor(fd)));
+        let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
+
+        Ok(self.mint(OsResource::Child {
+            running: child,
+            streams,
+        }))
     }
 
     fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
         match self.table.lock().unwrap().get(&child) {
-            Some(OsResource::Child { streams, .. }) => Ok(streams[stream_index(which)].clone()),
+            // A stream that was not piped has no handle, which is `not_found` as an unknown handle is.
+            Some(OsResource::Child { streams, .. }) => streams[stream_index(which)]
+                .clone()
+                .ok_or(Failure::NotFound),
             _ => Err(Failure::NotFound),
         }
     }
 
     fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {
-        // Reached once `handle_poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does.
+        // Reached once `handle_poll` reports the child's handle ready, so the end is recorded; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does. Once answered — an exit, or the failure that kept the reaper from observing one — the handle is consumed.
         let mut table = self.table.lock().unwrap();
 
-        let exit = match table.get(&child) {
-            Some(OsResource::Child { running, .. }) => running.exit.get(),
+        let end = match table.get(&child) {
+            Some(OsResource::Child { running, .. }) => running.end(),
             _ => return Err(Failure::NotFound),
         };
 
-        match exit {
-            Some(exit) => {
+        match end {
+            Some(end) => {
                 table.remove(&child);
 
-                Ok(exit)
+                end
             }
             None => Err(Failure::WouldBlock),
         }
@@ -979,13 +977,6 @@ fn readable_now(fd: BorrowedFd<'_>) -> bool {
             .intersects(PollFlags::IN | PollFlags::HUP | PollFlags::ERR),
         Err(_) => true,
     }
-}
-
-/// Apply `O_NONBLOCK` to `fd` through `fcntl`, the one flag a pipe end takes.
-fn nonblocking(fd: &OwnedFd) -> std::io::Result<()> {
-    let flags = fcntl_getfl(fd)?;
-
-    fcntl_setfl(fd, flags | OFlags::NONBLOCK).map_err(std::io::Error::from)
 }
 
 // The modem-line ioctls rustix does not wrap, as each platform numbers them: Linux's generic tty numbers, which both release architectures use, and the BSD family's `_IOW('t', 108, int)` and `_IOW('t', 107, int)`, which macOS keeps. The line bits agree across all of them.

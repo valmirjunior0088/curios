@@ -78,8 +78,14 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
             end)
     end;
 
---- `body` with the child killed whichever way the task ends, so a child never outlives the bracket it was started in.
+-- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
+let release(c: Child) -> Io({}) =
+    let _ = /sys/proc/kill(c.handle)!;
+    let _ = Handle/close(c.handle)!;
+    close_pipes(c);
+
+--- `body` with the child killed and its handle released whichever way the task ends, so a child never outlives the bracket it was started in, and nothing it was filed under does either.
 pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    let outcome = Async/using(kill(c), Try/run(body))!;
+    let outcome = Async/using(release(c), Try/run(body))!;
     let a = outcome!;
     Try/pure(a);
