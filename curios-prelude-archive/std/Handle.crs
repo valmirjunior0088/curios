@@ -45,17 +45,21 @@ pub let poll(
     let masks = /sys/Handle/poll(handles, to_masks(interests), timeout)!;
     Io/pure(of_masks(masks));
 
+--- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
+let answered(b: Bytes) -> Io/Chunk =
+    match b | x[] => Io/Chunk/eof() | x[_, .._] => Io/Chunk/chunk(b) end;
+
 --- Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
-let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
+let read_waiting(h: Handle, n: Nat, @positive: Nat/Lt(0, n)) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     match r
-    | success(some(b)) => Io/pure(Io/Chunk/chunk(b))
+    | success(some(b)) => Io/pure(answered(b))
     | success(none()) => Io/pure(Io/Chunk/eof())
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
             let _ = poll([h], [Interest/readable], -1)!;
-            read_waiting(h, n)
+            read_waiting(h, n, @positive)
         | _ => Io/pure(Io/Chunk/error(Io/Error/of(s)))
         end
     end;
@@ -99,16 +103,16 @@ let park_on(h: Handle, interest: Interest) -> Async({}) =
     Async/park([Async/Wait/ready(h, interest)]);
 
 --- Up to `n` bytes, parking the fiber while the host would block.
-let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
+let read_parking(h: Handle, n: Nat, @positive: Nat/Lt(0, n)) -> Async(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     match r
-    | success(some(b)) => Async/pure(Io/Chunk/chunk(b))
+    | success(some(b)) => Async/pure(answered(b))
     | success(none()) => Async/pure(Io/Chunk/eof())
     | failure(s) =>
         choose
         | s == /sys/status/would_block =>
             let _ = park_on(h, Interest/readable)!;
-            read_parking(h, n)
+            read_parking(h, n, @positive)
         | _ => Async/pure(Io/Chunk/error(Io/Error/of(s)))
         end
     end;
@@ -150,11 +154,11 @@ let flush_parking(h: Handle) -> Async(Result(Io/Error, {})) =
     end;
 
 satisfy Async/Read(Io, Handle) {
-    read(h, n) = read_waiting(h, n),
+    read(h, n, @positive) = read_waiting(h, n, @positive),
 }
 
 satisfy Async/Read(Async, Handle) {
-    read(h, n) = read_parking(h, n),
+    read(h, n, @positive) = read_parking(h, n, @positive),
 }
 
 satisfy Async/Write(Io, Handle) {

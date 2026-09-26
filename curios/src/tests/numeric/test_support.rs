@@ -26,7 +26,7 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         r#"
         use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io}};
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;

@@ -46,7 +46,7 @@ fn task_bind_reads_and_echoes() {
         let prog : Async({}) =
             let r = Async/Read/read(Io/stdin, 1024)!;
             match r : (_) => Async({})
-            | chunk(bytes) => Io/write(Io/stdout, bytes)
+            | chunk(bytes, @_) => Io/write(Io/stdout, bytes)
             | eof() => Async/pure(())
             | error(_) => Async/pure(())
             end;
@@ -149,7 +149,7 @@ fn constructing_a_leaf_task_performs_no_effect() {
         let discarded : Async(Io/Chunk) = Async/Read/read(Io/stdin, 100);
         let r = Io/read(Io/stdin, 100)!;
         match r : (_) => /std/Io({})
-        | chunk(bytes) => Io/write(Io/stdout, bytes)
+        | chunk(bytes, @_) => Io/write(Io/stdout, bytes)
         | eof() => Io/write(Io/stdout, Str/to_bytes("<eof>"))
         | error(_) => Io/write(Io/stdout, Str/to_bytes("<err>"))
         end

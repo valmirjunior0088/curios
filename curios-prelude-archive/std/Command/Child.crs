@@ -31,7 +31,7 @@ end
 pub use Exit/{let Exit};
 
 satisfy Async/Read(Async, Pipe) {
-    read(p, n) = Async/Read/read(p.0, n),
+    read(p, n, @positive) = Async/Read/read(@Async, @Handle, p.0, n, @positive),
 }
 
 satisfy Async/Write(Async, Pipe) {

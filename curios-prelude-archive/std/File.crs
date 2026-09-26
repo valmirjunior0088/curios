@@ -32,20 +32,20 @@ pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
 pub let close(f: File) -> Io({}) =
     Handle/close(f.0);
 
---- Up to `n` bytes.
-pub let read(f: File, n: Nat) -> Io(Io/Chunk) =
-    Async/Read/read(f.0, n);
+--- Up to `n` bytes, and at least one until the file ends.
+pub let read(f: File, n: Nat, @positive: Nat/Lt(0, n)) -> Io(Io/Chunk) =
+    Async/Read/read(@Io, @Handle, f.0, n, @positive);
 
 --- The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
     Try/attempt(Async/Write/write(f.0, b));
 
 satisfy Async/Read(Io, File) {
-    read(f, n) = read(f, n),
+    read(f, n, @positive) = read(f, n, @positive),
 }
 
 satisfy Async/Read(Async, File) {
-    read(f, n) = Async/lift(read(f, n)),
+    read(f, n, @positive) = Async/lift(read(f, n, @positive)),
 }
 
 satisfy Async/Write(Io, File) {
@@ -91,7 +91,7 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
     let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
         let c = read(f, 4096)!;
         match c
-        | chunk(b) => go(x[..acc, ..b])
+        | chunk(b, @_) => go(x[..acc, ..b])
         | eof() => Try/pure(acc)
         | error(e) => Try/raise(e)
         end;

@@ -86,7 +86,7 @@ fn read_one_chunk(open: &str) -> String {
         let fiber: Async({{}}) =
             let r = Try/run(Socket/with({open}, (s) =>
                 let c = Socket/read(s, 64)!;
-                Try/pure(match c | chunk(b) => b | _ => x[] end)))!;
+                Try/pure(match c | chunk(b, @_) => b | _ => x[] end)))!;
             match r
             | success(bytes) => Io/write(Io/stdout, bytes)
             | failure(e) => /std/print(Show/show(e))
@@ -129,7 +129,7 @@ fn echo_server(listener: &str, prefix: &str) -> String {
         let handler(c: Socket) -> Async({{}}) =
             let r = Socket/read(c, 64)!;
             match r
-            | chunk(bytes) =>
+            | chunk(bytes, @_) =>
                 let _ = Socket/write(c, x[..Str/to_bytes("{prefix}"), ..bytes])!;
                 Async/pure(())
             | _ => Async/pure(())
@@ -180,7 +180,7 @@ fn listen_and_accept_serve_one_connection_by_hand() {
             let r = Socket/read(c, 64)!;
             let reply =
                 match r
-                | chunk(bytes) => Socket/write(c, x[..Str/to_bytes("one: "), ..bytes])
+                | chunk(bytes, @_) => Socket/write(c, x[..Str/to_bytes("one: "), ..bytes])
                 | _ => Async/pure(Result/success(()))
                 end;
             let _ = Try/attempt(reply)!;
@@ -374,6 +374,46 @@ fn a_foreign_flt_may_stand_before_another_result() {
         code, 7,
         "the float matched and the status beside it came back"
     );
+}
+
+/// A reference that is not the last result, and more than one of them: the guest waits the results out in locals and embeds each where it stands, so a byte string before a count and a list of byte strings after it each read back as the embedder answered them.
+#[test]
+fn a_foreign_record_may_answer_references_in_any_slot() {
+    let source = r#"
+        use /std/{Bytes, List, Nat, Str};
+        foreign split : (Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
+        let r = split(x[1, 2, 3])!;
+        /std/print(Str/flatten([
+            Nat/to_str(Bytes/to_nat(r.head)), " ",
+            Nat/to_str(r.count), " ",
+            Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b)))),
+        ]))
+        "#;
+
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .expect("failed to parse source");
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/split", |bytes: Vec<u8>| {
+        (
+            bytes[..1].to_vec(),
+            7u64,
+            vec![bytes[1..2].to_vec(), bytes[2..].to_vec()],
+        )
+    });
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(io.output(), b"1 7 2,3");
 }
 
 /// A `List(Bits)` in both directions, which is the one `Bits` path a plugin cannot reach — `crossing` refuses every list — so the deep force and embed the grain needed are exercised here or nowhere.

@@ -141,16 +141,16 @@ pub let go(body: Fiber) -> Async({}) =
     let c = Cell/new()!;
     fork_with(body, Token { c });
 
---- Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
+--- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
 pub let drain(
     @M: (Type) -> Type,
     use Monad(M),
-    read: (Nat) -> M(Io/Chunk),
+    read: (n: Nat, @positive: Nat/Lt(0, n)) -> M(Io/Chunk),
 ) -> M(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r
-        | chunk(bytes) => go(x[..acc, ..bytes])
+        | chunk(bytes, @_) => go(x[..acc, ..bytes])
         | eof() => Monad/pure(Result/success(acc))
         | error(e) => Monad/pure(Result/failure(e))
         end;
@@ -158,9 +158,11 @@ pub let drain(
 
 --- What a stream is read through, in the monad the region is written in: `Async` parks the fiber until bytes arrive, `Io` waits on this program's own behalf.
 ---
+--- A read asks for a positive count and answers a chunk of between one byte and that count, the end of the stream, or a failure. The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/Lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
+---
 --- A carrier whose progress a peer decides declares only the `Async` witness, so reading it in an `Io` region is refused where it is written.
 pub concept Read(M: (Type) -> Type, S: Type): pub Type {
-    read(S, Nat) -> M(Io/Chunk),
+    read(s: S, n: Nat, @positive: Nat/Lt(0, n)) -> M(Io/Chunk),
 }
 
 --- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
@@ -178,9 +180,9 @@ pub let read_all(
     use Read(M, S),
     s: S,
 ) -> M(Result(Io/Error, Bytes)) =
-    drain((n) => Read/read(s, n));
+    drain((n, @positive) => Read/read(@M, @S, s, n, @positive));
 
---- The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
+--- The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first. It reads a byte at a time, so it consumes nothing past the delimiter.
 pub let read_until(
     @M: (Type) -> Type,
     @S: Type,
@@ -192,8 +194,8 @@ pub let read_until(
     let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let c = Read/read(s, 1)!;
         match c
-        | chunk(b) =>
-            match Option/unwrap_or(Bytes/try_get(b, 0), delimiter) == delimiter
+        | chunk(b, @some) =>
+            match Bytes/get(b, 0, @some) == delimiter
             | true => Monad/pure(Result/success(acc))
             | false => go(x[..acc, ..b])
             end
@@ -202,7 +204,7 @@ pub let read_until(
         end;
     go(x[]);
 
---- One line without its line ending — a newline, or a carriage return and a newline — or `none` when the stream ends with nothing read; what is read before the end is the last line, and a failure drops what was read.
+--- One line without its line ending — a newline, or a carriage return and a newline — or `none` when the stream ends with nothing read; what is read before the end is the last line, and a failure drops what was read. It reads a byte at a time, so it consumes nothing past the line's end.
 pub let read_line(
     @M: (Type) -> Type,
     @S: Type,
@@ -218,8 +220,8 @@ pub let read_line(
     let go(acc: Bytes, cr: Bool) -> M(Result(Io/Error, Option(Bytes))) =
         let c = Read/read(s, 1)!;
         match c
-        | chunk(b) =>
-            let byte = Option/unwrap_or(Bytes/try_get(b, 0), newline);
+        | chunk(b, @some) =>
+            let byte = Bytes/get(b, 0, @some);
             choose
             | byte == newline => Monad/pure(Result/success(Option/some(acc)))
             | byte == carriage => go(held(acc, cr), true)
@@ -250,7 +252,7 @@ pub let copy(
     let go() -> M(Result(Io/Error, {})) =
         let c = Read/read(from, 4096)!;
         match c
-        | chunk(b) =>
+        | chunk(b, @_) =>
             let w = Write/write(to, b)!;
             match w | success(_) => go() | failure(e) => Monad/pure(Result/failure(e)) end
         | eof() => Monad/pure(Result/success(()))
@@ -364,45 +366,50 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
         end
     end;
 
+--- The parked waiters a poll finds ready, and the rest. The poll answers one report per handle in the handles' order — the row's `Parallel` check holds every host to it — so each waiter is walked beside its own report; one that no report reaches has nothing reported, and stays parked.
 let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
     let handles = List/map(blocked, (p: Parked) => p.handle);
     let events = List/map(blocked, (p: Parked) => p.interest);
-    let results = Handle/poll(handles, events, timeout)!;
+    let reports = Handle/poll(handles, events, timeout)!;
     let walk(
         rest: List(Parked),
-        i: Nat,
+        reports: List(Readiness),
         woken: List(Job),
         still: List(Parked),
     ) -> Io({List(Job), List(Parked)}) =
         match rest
         | [] => Io/pure((woken, still))
         | [p, ..tail] =>
+            let step: {Bool, List(Readiness)} =
+                match reports
+                | [r, ..more] => (Readiness/answers(r, p.interest), more)
+                | [] => (false, [])
+                end;
+            let (ready, later) = step;
             let held = peek(p.slot)!;
             match held
-            | none() => walk(tail, i + 1, woken, still)
+            | none() => walk(tail, later, woken, still)
             | some(j) =>
                 let dead = is_cancelled(j.token)!;
                 match dead
                 | true =>
                     let _ = claim(p.slot)!;
                     let _ = run_guards(j.guards)!;
-                    walk(tail, i + 1, woken, still)
+                    walk(tail, later, woken, still)
                 | false =>
-                    match Readiness/answers(
-                        Option/unwrap_or(List/try_get(results, i), Readiness/nothing),
-                        p.interest)
+                    match ready
                     | true =>
                         let taken = claim(p.slot)!;
                         match taken
-                        | none() => walk(tail, i + 1, woken, still)
-                        | some(k) => walk(tail, i + 1, [k, ..woken], still)
+                        | none() => walk(tail, later, woken, still)
+                        | some(k) => walk(tail, later, [k, ..woken], still)
                         end
-                    | false => walk(tail, i + 1, woken, [p, ..still])
+                    | false => walk(tail, later, woken, [p, ..still])
                     end
                 end
             end
         end;
-    walk(blocked, 0, [], []);
+    walk(blocked, reports, [], []);
 
 let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
     let earliest(rest: List(Sleeper), best: Option(Duration)) -> Option(Duration) =

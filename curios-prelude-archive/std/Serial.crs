@@ -72,15 +72,15 @@ pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
 --- Up to `n` bytes, parking until some arrive.
-pub let read(s: Serial, n: Nat) -> Async(Io/Chunk) =
-    Async/Read/read(s.0, n);
+pub let read(s: Serial, n: Nat, @positive: Nat/Lt(0, n)) -> Async(Io/Chunk) =
+    Async/Read/read(@Async, @Handle, s.0, n, @positive);
 
 --- The whole of `b`, parking while the device cannot take more.
 pub let write(s: Serial, b: Bytes) -> Async(Result(Io/Error, {})) =
     Async/Write/write(s.0, b);
 
 satisfy Async/Read(Async, Serial) {
-    read(s, n) = read(s, n),
+    read(s, n, @positive) = read(s, n, @positive),
 }
 
 satisfy Async/Write(Async, Serial) {

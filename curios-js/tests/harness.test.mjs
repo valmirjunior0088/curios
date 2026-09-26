@@ -56,6 +56,13 @@ let r = pair(1, x[])!;
 print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]))
 `;
 
+const SPLIT = `
+use /std/{Bytes, List, Nat, Str, print};
+foreign split: (Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
+let r = split(x[1, 2, 3])!;
+print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]))
+`;
+
 const TAKE = `
 foreign take: (Nat, Int, Bool, Byte, Flt, Bytes, Bits, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
 take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1, 3], [true, false], [x[7], x[]], [/std/Handle/stdout])
@@ -94,14 +101,13 @@ const DIRECTION = `
 use /std/{Async, Handle, Io, Show, Str, print};
 foreign token: Handle;
 let said(c: Io/Chunk) -> Str =
-    match c | chunk(_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
+    match c | chunk(_, @_) => "chunk" | eof() => "eof" | error(e) => Show/show(e) end;
 let w = Async/Write/write(Handle/stdin, x[1])!;
 let out = Async/Read/read(Handle/stdout, 4)!;
-let nothing = Async/Read/read(Handle/stdin, 0)!;
 let rest = Async/Read/read(Handle/stdin, 4)!;
 let h = token!;
 let unknown = Async/Read/read(h, 4)!;
-print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(nothing), said(rest), said(unknown)]))
+print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]))
 `;
 
 const POLL = `
@@ -218,6 +224,20 @@ test("a row with several results is answered by an object keyed by exactly their
   );
 });
 
+test("a row's references may stand in any slot, and several may, each read back where it stands", async () => {
+  const { stdout } = await execute(SPLIT, {
+    foreign: {
+      "/split": (bytes) => ({
+        head: bytes.slice(0, 1),
+        count: 7n,
+        rest: [bytes.slice(1, 2), bytes.slice(2)],
+      }),
+    },
+  });
+
+  assert.equal(stdout, "1 7 2,3");
+});
+
 test("a hook is handed each operand as the JavaScript value its type names", async () => {
   let handed;
 
@@ -314,7 +334,7 @@ test("a stream used against its direction fails with EBADF, and a handle this ho
     foreign: { "/token": () => new Uint8Array() },
   });
 
-  assert.equal(stdout, "other(9) other(9) chunk eof not_found");
+  assert.equal(stdout, "other(9) other(9) eof not_found");
 });
 
 test("a poll reports ERR for a handle it does not know, and refuses interests that do not pair with the handles", async () => {

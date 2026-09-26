@@ -56,7 +56,7 @@ fn nat_bitwise_ops_execute() {
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io};
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;
@@ -86,7 +86,7 @@ fn int_bitwise_ops_execute() {
         r#"
         use /std/{Byte, Bytes, Nat, Int, Str, Option, Io};
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;

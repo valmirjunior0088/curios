@@ -3,15 +3,15 @@ use /std/tcp/{resolve, let Socket};
 use /std/Handle/{Interest};
 
 --- Up to `n` bytes, parking until some arrive.
-pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =
-    Async/Read/read(c.0, n);
+pub let read(c: Socket, n: Nat, @positive: Nat/Lt(0, n)) -> Async(Io/Chunk) =
+    Async/Read/read(@Async, @Handle, c.0, n, @positive);
 
 --- The whole of `b`, parking while the peer cannot take more.
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
     Async/Write/write(c.0, b);
 
 satisfy Async/Read(Async, Socket) {
-    read(c, n) = read(c, n),
+    read(c, n, @positive) = read(c, n, @positive),
 }
 
 satisfy Async/Write(Async, Socket) {

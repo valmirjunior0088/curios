@@ -1,9 +1,11 @@
-use /std/{Bytes, Io};
+use /std/{Bytes, Nat, Io};
 
 --- One read's answer: bytes, the end of the stream, or a failure.
+---
+--- A chunk holds at least one byte, and says so: a read asks for a positive count, and a stream with nothing more to give has ended, which is `eof`. So a reader takes a chunk's first byte by its proof rather than by a default, and a loop over chunks advances with every one.
 pub induct Chunk: pub Type
---- Bytes were read.
-| chunk(Bytes)
+--- Bytes were read: at least one.
+| chunk(bytes: Bytes, @some: Nat/Lt(0, Bytes/len(bytes)))
 --- The stream is finished.
 | eof()
 --- The read failed.

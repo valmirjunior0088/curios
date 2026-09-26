@@ -81,7 +81,7 @@ pub let read(@E: Type, s: Session) -> Async({Session, Option(List(Event(E)))}) =
     match got
     | eof() => Async/pure((s, Option/none()))
     | error(_) => Async/pure((s, Option/none()))
-    | chunk(bytes) =>
+    | chunk(bytes, @_) =>
         let d = input/decode(x[..s.rest, ..bytes]);
         match Bytes/len(d.rest) == 0: (_) => Async({Session, Option(List(Event(E)))})
         | true => Async/pure((Session { ..s, rest = x[] }, Option/some(d.events)))
@@ -92,7 +92,7 @@ pub let read(@E: Type, s: Session) -> Async({Session, Option(List(Event(E)))}) =
                     Option/some([..d.events, ..input/flush(d.rest)])));
             let more = Async/timeout(Duration/of_millis(30), Async/Read/read(Io/stdin, 1024))!;
             match more
-            | some(chunk(next)) =>
+            | some(chunk(next, @_)) =>
                 let settled = input/decode(x[..d.rest, ..next]);
                 Async/pure((
                     Session { ..s, rest = settled.rest },

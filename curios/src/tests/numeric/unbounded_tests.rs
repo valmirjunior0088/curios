@@ -344,7 +344,7 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io};
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;

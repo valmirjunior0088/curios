@@ -70,7 +70,7 @@ fn read_pulls_bytes_inside_the_bracket() {
         use /std/{File, Path, Str, Bytes, Try, Io};
         let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
             let c = File/read(f, 1024)!;
-            Try/pure(match c | chunk(b) => b | eof() => x[] | error(_) => x[] end)))!;
+            Try/pure(match c | chunk(b, @_) => b | eof() => x[] | error(_) => x[] end)))!;
         match bytes
         | success(b) => Io/write(Io/stdout, b)
         | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
@@ -93,7 +93,7 @@ fn with_async_reads_through_the_stream_witness_inside_a_fiber() {
             File/with_async(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
                 let _ = Async/yield_now!;
                 let c = Lift/lift(Async/Read/read(@Async, f, 1024))!;
-                Try/pure(match c | chunk(b) => b | _ => x[] end));
+                Try/pure(match c | chunk(b, @_) => b | _ => x[] end));
         let fiber: Async({}) =
             let r = Try/run(program)!;
             match r

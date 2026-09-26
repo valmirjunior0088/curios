@@ -616,7 +616,7 @@ fn program() -> String {
                 end
             end;
         let line = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;
