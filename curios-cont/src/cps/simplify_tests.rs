@@ -1,4 +1,4 @@
-//! Dead code, jump forwarding, atom rewriting, and the intrinsic identities the simplifier folds.
+//! Dead code, jump and call forwarding, atom rewriting, and the intrinsic identities the simplifier folds.
 
 use curios_num::{Integer, Natural, Rounding};
 
@@ -6,11 +6,11 @@ use {
     super::test_support::unary_intrinsic_module,
     crate::cps::simplify::{
         eliminate_dead_bindings, eliminate_dead_parameters, fold_intrinsic_identities,
-        forward_aggregate_projections, forward_continuations, rewrite_atoms,
+        forward_aggregate_projections, forward_calls, forward_continuations, rewrite_atoms,
     },
     crate::{
-        Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueExpr,
-        ValueId,
+        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
+        Module, Node, NodeId, ValueExpr, ValueId,
     },
     curios_num::Floating,
     std::collections::BTreeMap,
@@ -513,4 +513,106 @@ fn identity_folds_leave_traps_and_flt_untouched() {
             "{op:?} binding must survive"
         );
     }
+}
+
+/// A join whose body calls the function its jump hands it, with the jump's other argument as the call's, and the one jump into it — handing over the known function `arm`, or, when `known` is false, a closure the entry holds in its parameter. Answers the jump, `arm` and the entry's return continuation.
+fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+
+    let arm = module.reserve_function();
+    let arm_return = module.reserve_continuation();
+    let arm_param = module.add_value(Some("arm argument".into()));
+    let arm_body = module.add_node(Node::ApplyCont(Edge {
+        target: arm_return,
+        args: vec![Atom::Value(arm_param)],
+    }));
+    module.define_function(
+        arm,
+        Function {
+            debug_name: Some("arm".into()),
+            params: vec![arm_param],
+            return_cont: arm_return,
+            body: arm_body,
+            droppable: false,
+        },
+    );
+
+    let join = module.reserve_continuation();
+    let join_callee = module.add_value(Some("join callee".into()));
+    let join_argument = module.add_value(Some("join argument".into()));
+    let join_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(join_callee),
+        args: vec![Atom::Value(join_argument)],
+        return_to: entry_return,
+    });
+    module.define_continuation(
+        join,
+        Continuation {
+            debug_name: Some("join".into()),
+            params: vec![join_callee, join_argument],
+            body: join_body,
+        },
+    );
+
+    let (entry_params, handed) = match known {
+        true => (vec![], Atom::Fun(arm)),
+        false => {
+            let closure = module.add_value(Some("closure".into()));
+
+            (vec![closure], Atom::Value(closure))
+        }
+    };
+    let jump = module.add_node(Node::ApplyCont(Edge {
+        target: join,
+        args: vec![handed, Atom::Literal(Literal::Nat(Natural::from(7u32)))],
+    }));
+    let conts = module.add_node(Node::LetCont {
+        continuations: vec![join],
+        body: jump,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![arm],
+        body: conts,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: entry_params,
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+
+    (module, jump, arm, entry_return)
+}
+
+/// The shape a convoy leaves once its evidence is erased: each arm jumps its function to a join that only calls it. The call is made at the jump instead, with the jump's other argument standing for the join's parameter and the join's return continuation kept, so the function has a known caller that inlining can consume.
+#[test]
+fn a_known_function_jumped_to_a_join_that_calls_it_is_called_at_the_jump() {
+    let (mut module, jump, arm, entry_return) = calling_join(true);
+
+    assert!(forward_calls(&mut module));
+    assert!(matches!(
+        module.node(jump),
+        Some(Node::ApplyFun { callee: Callee::Known(callee), args, return_to })
+            if *callee == arm
+                && *return_to == entry_return
+                && args == &[Atom::Literal(Literal::Nat(Natural::from(7u32)))]
+    ));
+    module.verify().unwrap();
+}
+
+/// A callee still held in a value gains nothing from moving: the call would stay indirect, and the node would only be copied into every jump.
+#[test]
+fn a_closure_value_jumped_to_a_join_that_calls_it_stays_a_jump() {
+    let (mut module, jump, _, _) = calling_join(false);
+
+    assert!(!forward_calls(&mut module));
+    assert!(matches!(module.node(jump), Some(Node::ApplyCont(_))));
+    module.verify().unwrap();
 }

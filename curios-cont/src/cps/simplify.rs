@@ -145,6 +145,78 @@ pub(super) fn thread_edge(
         *changed = true;
     }
 }
+/// A jump that hands a known function to a continuation whose whole body calls it, made that call at the jump.
+///
+/// This is the shape a convoy leaves. `match s: (x) => (e: E(x)) -> R | … end(evidence)` elaborates each arm to a function of the evidence it carries and applies the match's value to the evidence after it, so once erasure has dropped the evidence each arm binds a nullary function and jumps it to a join that does nothing but call it. Left alone, every arm allocates that function's environment and the join calls it indirectly. Called where it is known instead, each arm's function has one direct call and no escaping use, and inlining consumes it, so a convoy costs nothing at run time.
+///
+/// Sound because the continuation's body is one node and everything it reads is in scope at each jump into it: its parameters are the jump's arguments, and anything else was in scope where it was defined, which every jump into it lies within, since a continuation is local to its function. The call keeps the body's arguments, with the jump's substituted for the parameters, and the body's return continuation, so its arity and protocol are unchanged. Only a jump handing over a known function is forwarded: a callee that is still a value gains nothing from moving and would only copy the node.
+pub(super) fn forward_calls(module: &mut Module) -> bool {
+    let calling = module
+        .continuations
+        .iter_live()
+        .filter_map(|(id, continuation)| {
+            let Node::ApplyFun {
+                callee: Callee::Closure(callee),
+                args,
+                return_to,
+            } = module.node(continuation.body)?
+            else {
+                return None;
+            };
+            let position = continuation
+                .params
+                .iter()
+                .position(|param| param == callee)?;
+
+            Some((
+                id,
+                (
+                    continuation.params.clone(),
+                    position,
+                    args.clone(),
+                    *return_to,
+                ),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    if calling.is_empty() {
+        return false;
+    }
+
+    let mut changed = false;
+    for (_, node) in module.nodes.iter_live_mut() {
+        let Node::ApplyCont(edge) = node else {
+            continue;
+        };
+        let Some((params, position, args, return_to)) = calling.get(&edge.target) else {
+            continue;
+        };
+        if params.len() != edge.args.len() {
+            continue;
+        }
+        let Atom::Fun(function) = edge.args[*position] else {
+            continue;
+        };
+        let substituted = args
+            .iter()
+            .map(|arg| match arg {
+                Atom::Value(value) => params
+                    .iter()
+                    .position(|param| param == value)
+                    .map_or_else(|| arg.clone(), |index| edge.args[index].clone()),
+                _ => arg.clone(),
+            })
+            .collect();
+
+        *node = Node::ApplyFun {
+            callee: Callee::Known(function),
+            args: substituted,
+            return_to: *return_to,
+        };
+        changed = true;
+    }
+    changed
+}
 pub(super) fn retarget(
     target: &mut ContinuationId,
     resolve: &impl Fn(ContinuationId) -> ContinuationId,

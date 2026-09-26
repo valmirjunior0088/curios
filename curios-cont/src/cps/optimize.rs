@@ -13,8 +13,8 @@ use super::{
     reachable::prune_unreachable,
     simplify::{
         eliminate_dead_bindings, eliminate_dead_parameters, flatten_indexed_lists,
-        fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
-        fuse_append_chains, rewrite_atoms, simplify_nodes,
+        fold_intrinsic_identities, forward_aggregate_projections, forward_calls,
+        forward_continuations, fuse_append_chains, rewrite_atoms, simplify_nodes,
     },
     specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     uncurry::uncurry_returns,
@@ -80,6 +80,7 @@ pub fn optimize(module: &mut Module) {
         let substitutions = curios_profile::profile!("cont::known_values" => known_values(module));
         let changed = pass!("cont::rewrite_atoms", rewrite_atoms(module, &substitutions))
             | pass!("cont::forward_continuations", forward_continuations(module))
+            | pass!("cont::forward_calls", forward_calls(module))
             | pass!(
                 "cont::forward_aggregate_projections",
                 forward_aggregate_projections(module)

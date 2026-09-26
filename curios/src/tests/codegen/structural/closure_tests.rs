@@ -1,4 +1,4 @@
-//! The closure ABI: table indices, interned capture-free closures, and the escaping uses that coexist with direct ones.
+//! The closure ABI: table indices, interned capture-free closures, the escaping uses that coexist with direct ones, and the convoys that need none.
 
 //! Structural acceptance fixtures. Each test compiles a small `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural property of the emitted code — a clean natural loop for a hot kernel, direct recursion, the closure ABI only where a call is genuinely unknown — and that the raw module validates and executes without Binaryen repairing control flow.
 //!
@@ -157,4 +157,37 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
             function.name,
         );
     }
+}
+
+/// A convoy — a match applied to the evidence its arms take, spelled `end(evidence)` — erases to arms that each bind a function of nothing and jump it to a join that only calls it. Called where it is known, each arm's function has one direct caller and inlines, so a loop running a convoy per step allocates no environment and calls nothing indirectly.
+#[test]
+fn a_convoy_in_a_hot_loop_allocates_no_closure() {
+    const CONVOY: &str = r#"
+        use /std/{Nat, Bool, Eq, List, proc};
+        let step(x: Nat) -> Nat =
+            match x % 2 == 0: (even) => (e: Eq(x % 2 == 0, even)) -> Nat
+            | true => (_) => x / 2
+            | false => (_) => 3 * x + 1
+            end(Eq/refl());
+        let loop(k: Nat, x: Nat) -> Nat =
+            match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;
+        let taint = List/len(proc/args!);
+        /std/print(Nat/to_str(loop(taint, 7)))
+        "#;
+
+    let wat = wat(CONVOY);
+    let kernel = loop_containing(&wat, "65537");
+
+    assert!(
+        !kernel.contains("struct.new $envr/"),
+        "no arm's environment is allocated in the loop"
+    );
+    assert!(
+        !kernel.contains("struct.new $clsr/"),
+        "no closure is allocated in the loop"
+    );
+    assert!(
+        !kernel.contains("call_indirect"),
+        "no arm is called indirectly in the loop"
+    );
 }
