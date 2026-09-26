@@ -21,7 +21,7 @@
 //! **Below two slots the decision is not taken.** A one-slot protocol hands back a single value, which is what a return edge carries before any of this — so nothing on the edge records that the class was already decided, and the next round would decide it again. The width bound is what makes [`split_returns`] idempotent, and idempotence here is a termination property rather than a tidiness one.
 
 use {
-    super::analysis::{analyze_calls, function_nodes},
+    super::analysis::{analyze_calls, continuation_entries, function_nodes},
     super::*,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -51,7 +51,7 @@ pub(super) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
     let mut pinned = BTreeSet::<FunctionId>::new();
     let mut demanded = BTreeMap::<FunctionId, Demand>::new();
     let mut resumes = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
-    let entries = entries(module);
+    let entries = continuation_entries(module);
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
@@ -273,38 +273,6 @@ fn split_fields(
                 .unwrap_or_else(|| module.pad(*row, index))
         })
         .collect()
-}
-
-/// What transfers into each continuation: the known function whose call resumes there, or `None` for an entry that is anything else.
-fn entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
-    let mut output = BTreeMap::<ContinuationId, Vec<Option<FunctionId>>>::new();
-    for (_, node) in module.nodes.iter_live() {
-        match node {
-            Node::ApplyFun {
-                callee, return_to, ..
-            } => {
-                let from = match callee {
-                    Callee::Known(callee) => Some(*callee),
-                    Callee::Closure(_) => None,
-                };
-                output.entry(*return_to).or_default().push(from);
-            }
-            Node::Foreign { return_to, .. }
-            | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
-            | Node::Intrinsic { return_to, .. } => {
-                output.entry(*return_to).or_default().push(None);
-            }
-            Node::ApplyCont(edge) => output.entry(edge.target).or_default().push(None),
-            Node::Switch { cases, default, .. } => {
-                for edge in cases.values().chain(default.as_ref()) {
-                    output.entry(edge.target).or_default().push(None);
-                }
-            }
-            _ => {}
-        }
-    }
-    output
 }
 
 /// The edges of `node` that transfer to `sentinel`, to be rewritten in place.

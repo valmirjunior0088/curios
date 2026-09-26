@@ -235,6 +235,42 @@ pub(super) fn analyze_calls(module: &Module) -> CallAnalysis {
     }
     analysis
 }
+/// What transfers into each continuation: the known function whose call resumes there, or `None` for an entry that is anything else — a call through a closure, an operation delivering its result, a jump.
+///
+/// Read by every pass that changes what a continuation's parameter holds, because the change is right only where it is right for every entry. `split_returns` widens a resume to several results only when each entry is a call it rewrites, and `uncurry_returns` has a resume expect an applied answer rather than a closure on the same condition. The second once judged a resume by the one call it was rewriting, and the joins a `match` lowers to — one parser called, another jumped in as a closure — were rewritten for the call and fed the jumped closure to code reading an answer.
+pub(super) fn continuation_entries(
+    module: &Module,
+) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
+    let mut output = BTreeMap::<ContinuationId, Vec<Option<FunctionId>>>::new();
+    for (_, node) in module.nodes.iter_live() {
+        match node {
+            Node::ApplyFun {
+                callee, return_to, ..
+            } => {
+                let from = match callee {
+                    Callee::Known(callee) => Some(*callee),
+                    Callee::Closure(_) => None,
+                };
+                output.entry(*return_to).or_default().push(from);
+            }
+            Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
+                output.entry(*return_to).or_default().push(None);
+            }
+            Node::ApplyCont(edge) => output.entry(edge.target).or_default().push(None),
+            Node::Switch { cases, default, .. } => {
+                for edge in cases.values().chain(default.as_ref()) {
+                    output.entry(edge.target).or_default().push(None);
+                }
+            }
+            _ => {}
+        }
+    }
+    output
+}
+
 /// Every node in `function`'s own body, stopping at each nested function's boundary — see [`free_values`] for which callers that suits and which it does not.
 pub(super) fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
     nodes_from(module, module.function(function).unwrap().body)

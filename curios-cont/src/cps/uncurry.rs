@@ -6,7 +6,9 @@
 mod tests;
 
 use {
-    super::analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from},
+    super::analysis::{
+        CallAnalysis, analyze_calls, continuation_entries, function_nodes, nodes_from,
+    },
     super::*,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,6 +18,7 @@ use {
 /// The three answers are three different things, and [`uncurry_returns`] needs them apart: `Some(width)` is a function whose every non-tail caller applies what it returns, at that one width; `None` is one with a caller that does something else, which no class-mate's width may overrule; and absence is a function reached only by a class-mate's tail call — *unobserved*, with no caller of its own to disagree, taking its width from the class. Both halves of a verdict are [`admit_site`]'s, per site, and [`rewritable`]'s, per function; nothing here judges a site a second way.
 pub(super) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>> {
     let calls = analyze_calls(module);
+    let entries = continuation_entries(module);
     let mut verdicts = BTreeMap::<FunctionId, Option<usize>>::new();
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
@@ -33,7 +36,7 @@ pub(super) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>
             if *return_to == sentinel {
                 continue;
             }
-            let observed = admit_site(module, *return_to).map(|site| site.passed.len());
+            let observed = admit_site(module, &entries, *return_to).map(|site| site.passed.len());
             let verdict = verdicts.entry(*callee).or_insert(observed);
             *verdict = match (*verdict, observed) {
                 (Some(seen), Some(width)) if seen == width => Some(width),
@@ -83,14 +86,20 @@ fn returns_functions(module: &Module, function: FunctionId) -> bool {
 struct Site {
     passed: Vec<Atom>,
     resume: Resume,
+    /// The known functions whose calls enter the continuation a [`Resume::Jump`] rewrites — this site's callee among them — and none for a [`Resume::Retarget`], which leaves that continuation alone. Whether each is rewritten with the site is a fact about the class, which [`plan_class`] holds them to.
+    callers: BTreeSet<FunctionId>,
 }
 
 /// Judge one call site by the continuation it resumes at: the application the callee would absorb, or `None` where the site cannot be rewritten.
 ///
 /// **Every condition on a site is here, and nowhere else.** Admission ([`uncurryable`]) and planning ([`plan_class`]) each walked the resume with a list of their own, and each list had a clause the other lacked — the plan counted application sites and never asked whether the closure was also kept, so a member the admission had refused was planned on its class-mate's width and rewritten, and the tuple that had held the closure held the applied answer. One judgment consumed twice cannot disagree with itself.
 ///
-/// The conditions: the resume receives the one value the tuple protocol delivers; that value's only use is a single application, which [`sole_application`] establishes over the whole region, nested functions included; the application's arguments exist where the call is rather than being bound inside the resume, or moving the application above the call would move a computation with it; and the application is reached from the resume's head through `LetCont`s alone, which is what [`Resume`] needs. A width of zero is refused because it is a different transform wearing this one's clothes: with no argument to absorb, the closure is a *thunk* and the rewrite would only decide when it runs — which for an `Io` description is the one thing its meaning rests on.
-fn admit_site(module: &Module, return_to: ContinuationId) -> Option<Site> {
+/// The conditions: the resume receives the one value the tuple protocol delivers; that value's only use is a single application, which [`sole_application`] establishes over the whole region, nested functions included; the application's arguments exist where the call is rather than being bound inside the resume, or moving the application above the call would move a computation with it; the application is reached from the resume's head through `LetCont`s alone, which is what [`Resume`] needs; and where the resume is kept and rewritten, every entry into it is a call, whose callers the site records. The one condition that is not the site's own — that each of those callers is rewritten with it — is the class's, and [`plan_class`] checks it against what this records rather than judging the resume again. A width of zero is refused because it is a different transform wearing this one's clothes: with no argument to absorb, the closure is a *thunk* and the rewrite would only decide when it runs — which for an `Io` description is the one thing its meaning rests on.
+fn admit_site(
+    module: &Module,
+    entries: &BTreeMap<ContinuationId, Vec<Option<FunctionId>>>,
+    return_to: ContinuationId,
+) -> Option<Site> {
     let resume = module.continuation(return_to)?;
     let [result] = resume.params.as_slice() else {
         return None;
@@ -116,16 +125,27 @@ fn admit_site(module: &Module, return_to: ContinuationId) -> Option<Site> {
         unreachable!("an application site is an application")
     };
     // Both forms are correct rewrites of this site, and the cheap one is available wherever losing it would cost: a call whose stack depth matters is in tail position, so the application that follows it is too, and a continuation holding nothing but that application is what [`Resume::Retarget`] asks for.
-    let resume = if resume.body == site {
-        Resume::Retarget(after)
+    let (resume, callers) = if resume.body == site {
+        (Resume::Retarget(after), BTreeSet::new())
     } else {
-        Resume::Jump {
+        // Keeping the resume rewrites it for everything that enters it, so everything that enters it has to be a call this transform can reach: a jump carrying some other closure, a call through one, an operation's result would each arrive at the rewritten body still unapplied.
+        let callers = entries
+            .get(&return_to)?
+            .iter()
+            .copied()
+            .collect::<Option<BTreeSet<_>>>()?;
+        let resume = Resume::Jump {
             site,
             result: *result,
             after,
-        }
+        };
+        (resume, callers)
     };
-    Some(Site { passed, resume })
+    Some(Site {
+        passed,
+        resume,
+        callers,
+    })
 }
 
 /// The one application of `value` beneath `body`, with its arguments, when that application is the value's only use — or `None` when any use does anything else: a second application, an ordinary operand, which would dangle once the callee returns the answer instead of the closure, or any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
@@ -228,7 +248,7 @@ enum Resume {
     Retarget(ContinuationId),
     /// Keep that continuation, and turn the application inside it into a jump carrying what the callee now returns directly.
     ///
-    /// Always well-formed, because nothing moves. It costs one live frame per call, which matters only in a loop — and in a loop the application is itself in tail position, so its target is the caller's own sentinel and [`Resume::Retarget`] takes the site instead.
+    /// Nothing moves, but the continuation is every entry's rather than this call's, so from then on it reads an answer wherever it is entered from: it is well-formed exactly when every entry is a call to a member of the class being rewritten, which [`admit_site`] and [`plan_class`] establish between them. It costs one live frame per call, which matters only in a loop — and in a loop the application is itself in tail position, so its target is the caller's own sentinel and [`Resume::Retarget`] takes the site instead.
     Jump {
         site: NodeId,
         result: ValueId,
@@ -245,6 +265,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
         return false;
     }
     let calls = analyze_calls(module);
+    let entries = continuation_entries(module);
     // A class that cannot be planned is declined, not fatal: aborting here would leave every later class untried, and one unrewritable site would silently disable the whole pass.
     let Some((members, width, plan)) = tail_classes(module).into_iter().find_map(|members| {
         // Tail-forwarding makes one return stream of the whole class, so a width observed anywhere in it is the width of all of it, and a member with no caller of its own has nothing to disagree with — while a member whose caller refused is refused whatever its class-mates observed. What every member must satisfy is [`rewritable`], which its width says nothing about.
@@ -255,7 +276,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
             .iter()
             .all(|member| rewritable(module, &calls, *member))
             .then_some(())?;
-        let plan = plan_class(module, &members)?;
+        let plan = plan_class(module, &entries, &members)?;
         Some((members, width, plan))
     }) else {
         return false;
@@ -322,7 +343,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
         }
     }
 
-    for (node_id, Site { passed, resume }) in plan {
+    for (node_id, Site { passed, resume, .. }) in plan {
         let Some(Node::ApplyFun {
             callee,
             args,
@@ -365,7 +386,11 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
 /// Every call site the rewrite must change, each with what [`admit_site`] admitted at it, or `None` if any of them refuses.
 ///
 /// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun — and it is decided by the same judgment that observed the widths, so nothing a site refused can be planned on its class-mates' account.
-fn plan_class(module: &Module, members: &[FunctionId]) -> Option<Vec<(NodeId, Site)>> {
+fn plan_class(
+    module: &Module,
+    entries: &BTreeMap<ContinuationId, Vec<Option<FunctionId>>>,
+    members: &[FunctionId],
+) -> Option<Vec<(NodeId, Site)>> {
     let mut plan = Vec::new();
     for node_id in module.nodes.live_ids().collect::<Vec<_>>() {
         let Some(Node::ApplyFun {
@@ -383,7 +408,12 @@ fn plan_class(module: &Module, members: &[FunctionId]) -> Option<Vec<(NodeId, Si
         if module.continuation(*return_to).is_none() {
             continue;
         }
-        plan.push((node_id, admit_site(module, *return_to)?));
+        let site = admit_site(module, entries, *return_to)?;
+        // A kept resume is rewritten for every call entering it, so a call to anything outside the class would still hand it a closure.
+        if !site.callers.iter().all(|caller| members.contains(caller)) {
+            return None;
+        }
+        plan.push((node_id, site));
     }
     Some(plan)
 }

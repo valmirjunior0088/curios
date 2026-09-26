@@ -526,3 +526,195 @@ fn a_forwarded_application_declines_uncurrying() {
         "an application behind a forwarding jump is not one the transform can move",
     );
 }
+
+/// What else enters the continuation a caller of `producer` resumes at, beside that call.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Beside {
+    /// Nothing: the call is the only entry.
+    Nothing,
+    /// A second call to `producer`, which the rewrite reaches as it reaches the first.
+    Producer,
+    /// A call to `second`, a function of another class that also returns a closure.
+    Second,
+    /// A jump carrying a closure of its own, which no rewrite reaches.
+    Jump,
+}
+
+/// A unary function, `name`, whose body halts.
+fn unary(module: &mut Module, name: &str) -> FunctionId {
+    let param = module.add_value(Some(format!("{name}/param")));
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let body = module.add_node(halt_zero());
+    module.define_function(
+        function,
+        Function {
+            debug_name: Some(name.into()),
+            params: vec![param],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    function
+}
+
+/// A unary function, `name`, that returns `returned` as a closure.
+fn returning(module: &mut Module, name: &str, returned: FunctionId) -> FunctionId {
+    let param = module.add_value(Some(format!("{name}/param")));
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let body = module.add_node(Node::ApplyCont(Edge {
+        target: return_cont,
+        args: vec![Atom::Fun(returned)],
+    }));
+    module.define_function(
+        function,
+        Function {
+            debug_name: Some(name.into()),
+            params: vec![param],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    function
+}
+
+/// A caller of `producer` whose resume applies the closure below a `LetCont`, so the rewrite keeps the resume and rewrites it — the shape a `match` choosing a parser lowers to — with `beside` entering it too, on the other arm of a switch.
+fn shared_resume(beside: Beside) -> (Module, FunctionId) {
+    let mut module = Module::default();
+    let inner = unary(&mut module, "inner");
+    let other = unary(&mut module, "other");
+    let producer = returning(&mut module, "producer", inner);
+    let second = returning(&mut module, "second", other);
+
+    let argument = module.add_value(Some("caller/argument".into()));
+    let caller = module.reserve_function();
+    let caller_ret = module.reserve_continuation();
+
+    let received = module.add_value(Some("resume/closure".into()));
+    let resume = module.reserve_continuation();
+    let spare = module.reserve_continuation();
+    let spare_body = module.add_node(halt_zero());
+    module.define_continuation(
+        spare,
+        Continuation {
+            debug_name: Some("spare".into()),
+            params: vec![],
+            body: spare_body,
+        },
+    );
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(received),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+        return_to: caller_ret,
+    });
+    let resume_body = module.add_node(Node::LetCont {
+        continuations: vec![spare],
+        body: apply,
+    });
+    module.define_continuation(
+        resume,
+        Continuation {
+            debug_name: Some("resume".into()),
+            params: vec![received],
+            body: resume_body,
+        },
+    );
+
+    let call_into_resume = |module: &mut Module, callee: FunctionId, name: &str| {
+        let continuation = module.reserve_continuation();
+        let body = module.add_node(Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args: vec![Atom::Value(argument)],
+            return_to: resume,
+        });
+        module.define_continuation(
+            continuation,
+            Continuation {
+                debug_name: Some(name.into()),
+                params: vec![],
+                body,
+            },
+        );
+        continuation
+    };
+    let first = call_into_resume(&mut module, producer, "first");
+    let mut continuations = vec![resume, first];
+    let other_edge = match beside {
+        Beside::Nothing => None,
+        Beside::Producer | Beside::Second => {
+            let callee = match beside {
+                Beside::Producer => producer,
+                _ => second,
+            };
+            let continuation = call_into_resume(&mut module, callee, "beside");
+            continuations.push(continuation);
+            Some(Edge {
+                target: continuation,
+                args: vec![],
+            })
+        }
+        Beside::Jump => Some(Edge {
+            target: resume,
+            args: vec![Atom::Fun(other)],
+        }),
+    };
+    let first_edge = Edge {
+        target: first,
+        args: vec![],
+    };
+    let dispatch = module.add_node(match other_edge {
+        None => Node::ApplyCont(first_edge),
+        Some(edge) => Node::Switch {
+            scrutinee: Atom::Value(argument),
+            cases: [(0, edge)].into(),
+            default: Some(first_edge),
+        },
+    });
+    let conts = module.add_node(Node::LetCont {
+        continuations,
+        body: dispatch,
+    });
+    // Every function the caller names is introduced here, or a `Known` call to one names a function out of scope.
+    let body = module.add_node(Node::LetFun {
+        functions: vec![inner, other, producer, second],
+        body: conts,
+    });
+    module.define_function(
+        caller,
+        Function {
+            debug_name: Some("caller".into()),
+            params: vec![argument],
+            return_cont: caller_ret,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(caller);
+
+    module.verify().expect("the fixture is valid CPS");
+    (module, producer)
+}
+
+/// A kept resume is rewritten for everything that enters it, so a jump carrying a closure of its own into the same continuation — a `match` handing one parser in by a call and another by a jump — declines the site: the rewritten resume would read the jumped closure as an answer. With the call as its only entry, the same site is admitted.
+#[test]
+fn a_resume_a_closure_is_jumped_into_declines_uncurrying() {
+    let (module, producer) = shared_resume(Beside::Jump);
+    assert_eq!(uncurryable(&module).get(&producer), Some(&None));
+
+    let (module, producer) = shared_resume(Beside::Nothing);
+    assert_eq!(uncurryable(&module).get(&producer), Some(&Some(1)));
+}
+
+/// A kept resume shared with a call to another class declines both classes, since rewriting either would leave the other's call handing it a closure; shared between two calls to one function, it is rewritten once for both.
+#[test]
+fn a_resume_shared_with_another_class_declines_uncurrying() {
+    let (mut module, _) = shared_resume(Beside::Second);
+    assert!(!uncurry_returns(&mut module));
+
+    let (mut module, _) = shared_resume(Beside::Producer);
+    assert!(uncurry_returns(&mut module));
+    module.verify().expect("the rewrite leaves valid CPS");
+}
