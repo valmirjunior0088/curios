@@ -601,6 +601,45 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
+        name: "List, through a concatenation",
+        binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, List/len([..xs, ..ys])), left: Nat/Lt(i, List/len(xs)), right: Nat/Lt(i, List/len(ys)), spans: Nat/Le(s + l, List/len([..xs, ..ys])), inside: Nat/Le(s + l, List/len(xs))",
+        held: &[
+            // A position inside an operand of a concatenation is that operand's position, and so is a window inside one. Decided where two are compared, as a position through a window is: the concatenation's bound reaches past the operand, so rewriting the read would owe a bound no term in hand proves, while the operand's own read is typed by the bound that places the position inside it.
+            "Eq(List/get(@Nat, [..xs, ..ys], i, @joined), List/get(@Nat, xs, i, @left))",
+            "Eq(List/slice(@Nat, [..xs, ..ys], s, l, @spans), List/slice(@Nat, xs, s, l, @inside))",
+        ],
+        refused: &[
+            // Control, and no law: the other operand at the same offset, which begins at `len(xs)` rather than at `0`.
+            "Eq(List/get(@Nat, [..xs, ..ys], i, @joined), List/get(@Nat, ys, i, @right))",
+        ],
+    },
+    Carrier {
+        name: "Bytes, through a concatenation",
+        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, Bytes/len(x[..bs, ..cs])), left: Nat/Lt(i, Bytes/len(bs)), right: Nat/Lt(i, Bytes/len(cs)), spans: Nat/Le(s + l, Bytes/len(x[..bs, ..cs])), inside: Nat/Le(s + l, Bytes/len(bs))",
+        held: &[
+            // The `List` rows, at the byte grain.
+            "Eq(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
+            "Eq(Bytes/slice(x[..bs, ..cs], s, l, @spans), Bytes/slice(bs, s, l, @inside))",
+        ],
+        refused: &[
+            // The `List` control, at the byte grain.
+            "Eq(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(cs, i, @right))",
+        ],
+    },
+    Carrier {
+        name: "Bits, through a concatenation",
+        binders: "ts: Bits, us: Bits, i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, Bits/len(b[..ts, ..us])), left: Nat/Lt(i, Bits/len(ts)), right: Nat/Lt(i, Bits/len(us)), spans: Nat/Le(s + l, Bits/len(b[..ts, ..us])), inside: Nat/Le(s + l, Bits/len(ts))",
+        held: &[
+            // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
+            "Eq(Bits/get(b[..ts, ..us], i, @joined), Bits/get(ts, i, @left))",
+            "Eq(Bits/slice(b[..ts, ..us], s, l, @spans), Bits/slice(ts, s, l, @inside))",
+        ],
+        refused: &[
+            // The `List` control, at the bit grain.
+            "Eq(Bits/get(b[..ts, ..us], i, @joined), Bits/get(us, i, @right))",
+        ],
+    },
+    Carrier {
         name: "Bits against Bytes",
         binders: "bs: Bytes, ts: Bits, a: Bool/Holds(Nat/eql(Nat/rem(Bits/len(ts), 8), 0))",
         held: &[

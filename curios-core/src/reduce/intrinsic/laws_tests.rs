@@ -679,11 +679,13 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// A position through a window, held over values: `get(slice(w, s, l), i)` is decided the same element as `get(w, s + i)`, at both packed grains' carrier and at `List`, and the near miss one position short must not be. An `Equal` must hold at every anchor, inside the windows' own preconditions; the tally says both verdicts were reached.
+// A position through a window, held over values: `get(slice(w, s, l), i)` is decided the same element as `get(w, s + i)`, at both packed grains' carrier and at `List`, and the near miss one position short must not be. So is a position inside an operand of a concatenation: `get(v ++ w, 2)` is `get(v, 2)` and `get(v ++ w, len(v) + 1)` is `get(w, 1)`, while the other operand at the same offset, and a position one short, are not. An `Equal` must hold at every anchor, inside the reads' own preconditions — `v` is never shorter than three, so every read of it here is in range; the tally says both verdicts were reached.
 #[test]
 fn every_position_verdict_holds_at_every_closed_instantiation() {
     let anchor_free = Free::local(0, Some("w"));
     let w = Term::free_var(&anchor_free);
+    let operand_free = Free::local(1, Some("v"));
+    let v = Term::free_var(&operand_free);
     let elem = symbol(1000, "T");
 
     let bin_window = Term::intrinsic(Intrinsic::bin_slice(
@@ -713,10 +715,62 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
         in_range: qed(),
     };
 
+    let bin_get_at = |bin: Term, index: Term| Intrinsic::BinGet {
+        grain: Grain::X,
+        bin,
+        index,
+        in_range: qed(),
+    };
+    let bin_joined = Term::intrinsic(Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![v.clone(), w.clone()],
+    });
+    let list_joined = Term::intrinsic(Intrinsic::ListConcat {
+        element: elem.clone(),
+        operands: vec![v.clone(), w.clone()],
+    });
+    // `len(v) + 1` as reduction spells it, a floor over the length, which is the spelling conversion hands the peel.
+    let past_v = Term::intrinsic(Intrinsic::Nat(Nat::Succ(
+        1u32.into(),
+        Term::intrinsic(Intrinsic::BinLen(Grain::X, v.clone())),
+    )));
+
     let bin_anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
     let list_anchors: [&[u32]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+    let bin_operands: [&[u8]; 2] = [&[1, 2, 3], &[4, 5, 6, 7]];
+    let list_operands: [&[u32]; 2] = [&[1, 2, 3], &[4, 5, 6, 7]];
 
     let cases = [
+        (
+            "get(v ++ w, 2) ~ get(v, 2)",
+            bin_get(bin_joined.clone(), 2),
+            bin_get(v.clone(), 2),
+            true,
+        ),
+        (
+            "get(v ++ w, len(v) + 1) ~ get(w, 1)",
+            bin_get_at(bin_joined.clone(), past_v),
+            bin_get(w.clone(), 1),
+            true,
+        ),
+        (
+            "get(v ++ w, 2) ~ get(w, 2)",
+            bin_get(bin_joined, 2),
+            bin_get(w.clone(), 2),
+            true,
+        ),
+        (
+            "get(vs ++ ws, 2) ~ get(vs, 2)",
+            list_get(list_joined.clone(), 2),
+            list_get(v.clone(), 2),
+            false,
+        ),
+        (
+            "get(vs ++ ws, 1) ~ get(vs, 2)",
+            list_get(list_joined, 1),
+            list_get(v.clone(), 2),
+            false,
+        ),
         (
             "get(slice(w, 1, 3), 2) ~ get(w, 3)",
             bin_get(bin_window.clone(), 2),
@@ -755,11 +809,18 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
 
         for index in 0..2 {
             let close = |side: &Intrinsic| {
-                let anchor = match packed {
-                    true => run_bytes(bin_anchors[index]),
-                    false => nat_list(list_anchors[index]),
+                let (anchor, operand) = match packed {
+                    true => (
+                        run_bytes(bin_anchors[index]),
+                        run_bytes(bin_operands[index]),
+                    ),
+                    false => (
+                        nat_list(list_anchors[index]),
+                        nat_list(list_operands[index]),
+                    ),
                 };
-                fold(at(Term::intrinsic(side.clone()), &anchor_free, anchor))
+                let side = at(Term::intrinsic(side.clone()), &operand_free, operand);
+                fold(at(side, &anchor_free, anchor))
             };
 
             if matches!(peel, Peel::Equal) {
@@ -774,7 +835,7 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, stuck),
-        (2, 2),
+        (5, 4),
         "the grid stopped reaching both position verdicts",
     );
 }
