@@ -81,10 +81,7 @@ pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let r = /sys/tls/start_server(h, cfg)!;
-    match r
-    | success(_) => serve_conn(h, handler)
-    | failure(_) => Async/lift(Handle/close(h))
-    end;
+    match r | success(_) => serve_conn(h, handler) | failure(_) => Async/lift(Handle/close(h)) end;
 
 --- `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
 pub let serve_tls(
