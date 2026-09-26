@@ -61,7 +61,7 @@ impl From<WireLeaf> for WireType {
     }
 }
 
-/// A wire type that crosses as a raw wasm value rather than a reference — which is what decides that it may stand in any result slot, where a reference must stand last.
+/// A wire type that crosses as a raw wasm value rather than a reference.
 ///
 /// **Every scalar re-enters raw, and the guest boxes it.** `Nat` and `Int` cross as `i64`, `Bool` and `Byte` as `i32` and `Flt` as `f64`, in both directions. Every box is a layout `curios-emit` defines — an `Flt`'s struct, and a `Nat` or `Int` past the i31 a boxed magnitude — so a host that allocated one would be a second crate needing to know it, and a host that minted only the i31 would have to refuse a result past it. The guest doing the reinterpretation is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded on the guest side and never crosses as one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -148,70 +148,47 @@ impl From<WireReference> for WireType {
     }
 }
 
-/// The named results of one foreign function, in the order they cross: any number of scalars, then at most one reference, last.
+/// The named results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
 ///
-/// **The shape is the type's, so a row cannot spell a reference anywhere else.** Codegen embeds only the final result back into a rope — an earlier reference would sit under later stack values and need juggling through locals — and the runtime lowers references on the same assumption; `README.md` states the decision. The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: `/sys` projects `.status` and `.bytes` in reading a row's outcome, and the standard library `.secs`, `.nanos`, ….
+/// The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: `/sys` projects `.status` and `.bytes` in reading a row's outcome, and the standard library `.secs`, `.nanos`, …. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot. `README.md` states the decision and the rule it replaced.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
-    scalars: Vec<(String, WireScalar)>,
-    reference: Option<(String, WireReference)>,
+    results: Vec<(String, WireType)>,
 }
 
 impl WireResults {
     /// No results: the unit value.
     pub fn none() -> Self {
         Self {
-            scalars: Vec::new(),
-            reference: None,
+            results: Vec::new(),
         }
     }
 
     /// One result of any wire type — a user `foreign` declaration's shape, well-formed whatever the type.
     pub fn single(label: String, wire_type: WireType) -> Self {
-        Self::ending(Vec::new(), label, wire_type.shape())
+        Self::of(vec![(label, wire_type)])
     }
 
-    /// `scalars` followed by `last`, which is the one slot a reference may take.
-    pub fn ending(mut scalars: Vec<(String, WireScalar)>, label: String, last: WireShape) -> Self {
-        let reference = match last {
-            WireShape::Scalar(scalar) => {
-                scalars.push((label, scalar));
-
-                None
-            }
-            WireShape::Reference(reference) => Some((label, reference)),
-        };
-
-        Self { scalars, reference }
+    /// `results`, labelled, in the order they cross.
+    pub fn of(results: Vec<(String, WireType)>) -> Self {
+        Self { results }
     }
 
     /// How many results cross — the count the guest-facing shape is read off.
     pub fn len(&self) -> usize {
-        self.scalars.len() + usize::from(self.reference.is_some())
+        self.results.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.results.is_empty()
     }
 
-    /// Every result by label and wire type, in the order they cross: the scalars, then the reference when there is one.
+    /// Every result by label and wire type, in the order they cross.
     pub fn iter(&self) -> impl Iterator<Item = (&str, WireType)> + '_ {
-        self.scalars
+        self.results
             .iter()
-            .map(|(label, scalar)| (label.as_str(), WireType::from(*scalar)))
-            .chain(
-                self.reference
-                    .iter()
-                    .map(|(label, reference)| (label.as_str(), WireType::from(*reference))),
-            )
-    }
-
-    /// The reference result, when there is one — always the last to cross, which is what lets codegen embed it with nothing above it on the stack.
-    pub fn reference(&self) -> Option<(&str, WireReference)> {
-        self.reference
-            .as_ref()
-            .map(|(label, reference)| (label.as_str(), *reference))
+            .map(|(label, wire_type)| (label.as_str(), *wire_type))
     }
 
     /// The shape the guest sees these results in, read off their count — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.

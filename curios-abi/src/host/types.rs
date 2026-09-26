@@ -1,6 +1,6 @@
 //! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`] and [`ChildExit`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Poll`] a byte of flags, a [`Mode`] its `0`/`1`/`2` tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{
@@ -35,7 +35,7 @@ impl Handle {
         token.to_bytes_le()
     }
 
-    /// No handle: the empty token, which no host mints. It is the padding a failed handle row answers beside its status — `proc/stream`'s for a stream that was not piped among them — which `/sys` never reads, since it reads a payload only under a success; and `handle_close` on it is the no-op closing any unknown handle is.
+    /// No handle: the empty token, which no host mints. It is the padding a failed handle row answers beside its status, and what `proc/spawn` answers for a stream the call did not pipe; `/sys` reads neither, since it reads a payload only under a success and a spawned stream by the mode the call asked for. `handle_close` on it is the no-op closing any unknown handle is.
     pub fn none() -> Self {
         Handle::Other(Vec::new())
     }
@@ -301,20 +301,13 @@ impl ClosedCode for StdioMode {
     ];
 }
 
-/// Which of a child's standard streams `proc/stream` hands out, its tags the [`stdio`] tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChildStream {
-    Stdin,
-    Stdout,
-    Stderr,
-}
-
-impl ClosedCode for ChildStream {
-    const CODES: &'static [(Self, u64)] = &[
-        (ChildStream::Stdin, stdio::STDIN as u64),
-        (ChildStream::Stdout, stdio::STDOUT as u64),
-        (ChildStream::Stderr, stdio::STDERR as u64),
-    ];
+/// What `proc/spawn` answers: the child's handle, and the parent's end of each standard stream the call piped — `None` for one it did not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChildHandles {
+    pub child: Handle,
+    pub stdin: Option<Handle>,
+    pub stdout: Option<Handle>,
+    pub stderr: Option<Handle>,
 }
 
 /// The parity `serial/open` frames a character with, its tags [`serial_parity`]'s.

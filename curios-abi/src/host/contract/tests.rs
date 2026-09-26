@@ -2,7 +2,7 @@
 
 use {
     super::super::{Handle, HostOp, WireValue},
-    crate::status,
+    crate::{status, stdio_mode},
 };
 
 fn nat(value: u64) -> WireValue {
@@ -136,14 +136,15 @@ fn randomness_answers_exactly_the_bytes_asked_for() {
     );
 }
 
+/// A resolution answers what the resolver found, and a name that resolves to no address is an answer rather than a broken reply: what it means to a connection is `/std`'s to say.
 #[test]
-fn a_resolved_lookup_holds_an_address() {
+fn a_resolution_answers_what_the_resolver_found_none_included() {
     let resolve = |addresses: Vec<Vec<u8>>| {
         HostOp::DnsResolve.check_reply(&[nat(status::OK), WireValue::BytesList(addresses)], &[None])
     };
 
     assert!(resolve(vec![b"127.0.0.1:80".to_vec()]).is_ok());
-    assert!(resolve(vec![]).is_err());
+    assert!(resolve(vec![]).is_ok());
 }
 
 #[test]
@@ -181,4 +182,33 @@ fn a_child_ends_by_a_code_or_by_a_signal() {
     assert!(wait(0, 9).is_ok());
     assert!(wait(256, 0).is_err());
     assert!(wait(3, 9).is_err());
+}
+
+/// A spawned child's stream is a handle exactly when the call piped it: the empty token for a piped stream, or a handle for one the call did not pipe, answers a call that was never made.
+#[test]
+fn a_spawn_answers_a_stream_exactly_when_it_was_piped() {
+    let spawn = |stdout, handle| {
+        HostOp::ProcSpawn.check_reply(
+            &[
+                nat(status::OK),
+                WireValue::Handle(Handle::Other(vec![7])),
+                WireValue::Handle(Handle::none()),
+                WireValue::Handle(handle),
+                WireValue::Handle(Handle::none()),
+            ],
+            &[
+                Some(1),
+                Some(0),
+                Some(0),
+                Some(stdio_mode::INHERIT),
+                Some(stdout),
+                Some(stdio_mode::NULL),
+            ],
+        )
+    };
+
+    assert!(spawn(stdio_mode::PIPE, Handle::Other(vec![8])).is_ok());
+    assert!(spawn(stdio_mode::INHERIT, Handle::none()).is_ok());
+    assert!(spawn(stdio_mode::PIPE, Handle::none()).is_err());
+    assert!(spawn(stdio_mode::NULL, Handle::Other(vec![8])).is_err());
 }

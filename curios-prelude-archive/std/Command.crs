@@ -55,14 +55,6 @@ let stdio_of(s: Stdio) -> Nat =
 let env_entry(entry: {Str, Str}) -> Bytes =
     x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
 
-let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Handle)) =
-    match mode
-    | piped() =>
-        let s = Io/Error/of_result(/sys/proc/stream(child, which)!)!;
-        Try/pure(Option/some(s))
-    | _ => Try/pure(Option/none())
-    end;
-
 --- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
 let names_a_variable(key: Str) -> Bool =
     match Str/is_empty(key) | true => false | false => Bool/not(Str/contains(key, '=')) end;
@@ -74,10 +66,10 @@ let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     | false => Result/failure(Io/Error/other(/sys/errno/inval))
     end;
 
---- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
+--- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     let _ = env_checked(cmd.env)!;
-    let child =
+    let spawned =
         Io/Error/of_result(
             /sys/proc/spawn(
                 [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
@@ -86,15 +78,12 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
                 stdio_of(cmd.stdin),
                 stdio_of(cmd.stdout),
                 stdio_of(cmd.stderr))!)!;
-    let stdin = pipe(child, 0, cmd.stdin)!;
-    let stdout = pipe(child, 1, cmd.stdout)!;
-    let stderr = pipe(child, 2, cmd.stderr)!;
     Try/pure(
         Child {
-            handle = child,
-            stdin = Option/map(stdin, (h) => Pipe { h }),
-            stdout = Option/map(stdout, (h) => Pipe { h }),
-            stderr = Option/map(stderr, (h) => Pipe { h }),
+            handle = spawned.child,
+            stdin = Option/map(spawned.stdin, (h) => Pipe { h }),
+            stdout = Option/map(spawned.stdout, (h) => Pipe { h }),
+            stderr = Option/map(spawned.stderr, (h) => Pipe { h }),
         });
 
 let drain(p: Option(Pipe)) -> Async(Result(Io/Error, Bytes)) =

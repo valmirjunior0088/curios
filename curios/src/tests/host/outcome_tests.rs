@@ -295,23 +295,38 @@ fn a_network_row_s_failure_is_the_error_it_names() {
     );
 }
 
+/// A name that resolves to no address names nothing a socket can reach: the resolution is an answer, and `/std` reads it as `not_found`, as it reads a name that resolves to nothing at all.
+#[test]
+fn a_name_resolving_to_no_address_is_not_found() {
+    assert_eq!(
+        exit_code(
+            In::Async,
+            r#"let _ = tcp/Socket/connect("h", 80)!; Try/pure(())"#,
+            vec![
+                (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
+                (HostOp::DnsResolve, ok(vec![RawValue::BytesList(vec![])])),
+            ],
+        ),
+        2
+    );
+}
+
+/// A spawn with no stream piped: the child's handle, and the empty token for each stream.
+fn spawned() -> (HostOp, Vec<RawValue>) {
+    (
+        HostOp::ProcSpawn,
+        ok(vec![bytes(&[7]), bytes(b""), bytes(b""), bytes(b"")]),
+    )
+}
+
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
-    let spawned = || (HostOp::ProcSpawn, ok(vec![bytes(&[7])]));
-
     each_fails(
         In::Io,
-        vec![
-            (
-                r#"let _ = Command/spawn(Command/new("x", []))!; Try/pure(())"#,
-                vec![(HostOp::ProcSpawn, denied(vec![bytes(b"")]))],
-            ),
-            (
-                r#"let _ = Command/spawn(Command { ..Command/new("x", []), stdout = Stdio/piped() })!;
-                   Try/pure(())"#,
-                vec![spawned(), (HostOp::ProcStream, denied(vec![bytes(b"")]))],
-            ),
-        ],
+        vec![(
+            r#"let _ = Command/spawn(Command/new("x", []))!; Try/pure(())"#,
+            vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
+        )],
     );
     each_fails(
         In::Async,
@@ -327,8 +342,6 @@ fn a_process_row_s_failure_is_the_error_it_names() {
 /// `/std` absorbs two failures by design: a listener's `SO_REUSEADDR` is a courtesy the bind does not depend on, and a kill that fails leaves a child the bracket reaps regardless.
 #[test]
 fn the_failures_std_absorbs_by_design_are_absorbed() {
-    let spawned = (HostOp::ProcSpawn, ok(vec![bytes(&[7])]));
-
     assert_eq!(
         exit_code(
             In::Async,
@@ -353,26 +366,9 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
             r#"let c = Command/spawn(Command/new("x", []))!;
                let _ = Child/kill(c)!;
                Try/pure(())"#,
-            vec![spawned, (HostOp::ProcKill, denied(vec![]))],
+            vec![spawned(), (HostOp::ProcKill, denied(vec![]))],
         ),
         0
-    );
-}
-
-/// A stream that was not piped is one the host has no end of, which reaches the program as `not_found`.
-#[test]
-fn an_unpiped_stream_is_not_found() {
-    assert_eq!(
-        exit_code(
-            In::Io,
-            r#"let _ = Command/spawn(Command { ..Command/new("x", []), stdout = Stdio/piped() })!;
-               Try/pure(())"#,
-            vec![
-                (HostOp::ProcSpawn, ok(vec![bytes(&[7])])),
-                (HostOp::ProcStream, vec![nat(status::NOT_FOUND), bytes(b"")]),
-            ],
-        ),
-        2
     );
 }
 

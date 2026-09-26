@@ -331,11 +331,10 @@ struct MockChildScript {
     exit: Option<ChildExit>,
 }
 
-/// A live scripted child, its piped streams filed and handed out through `proc_stream` — `None` for a stream that was not piped. A child scripted with an exit has ended the moment it was spawned, its handle ready and its exit waiting for `proc_wait`; one scripted without runs until `proc_kill` ends it by `SIGKILL`, and until then its handle is not ready and `proc_wait` answers `would_block`.
+/// A live scripted child, its piped streams filed beside it and handed back with it. A child scripted with an exit has ended the moment it was spawned, its handle ready and its exit waiting for `proc_wait`; one scripted without runs until `proc_kill` ends it by `SIGKILL`, and until then its handle is not ready and `proc_wait` answers `would_block`.
 struct MockChild {
     program: Vec<u8>,
     exit: Option<ChildExit>,
-    streams: [Option<Handle>; 3],
 }
 
 /// A live scripted serial port minted by `serial_open`: `handle_read` serves the device's scripted chunks, and `handle_write` appends to the capture filed under `path`.
@@ -973,7 +972,7 @@ impl HostOps for MockHost {
         stdin: StdioMode,
         stdout: StdioMode,
         stderr: StdioMode,
-    ) -> Result<Handle, Failure> {
+    ) -> Result<ChildHandles, Failure> {
         // An unscripted program is one the host cannot find, as an unknown path is to `file_open`; the script is keyed by `argv[0]`.
         let Some(script) = argv
             .first()
@@ -989,29 +988,16 @@ impl HostOps for MockHost {
             (mode == StdioMode::Pipe)
                 .then(|| self.mint(MockResource::Piped(Chunked::new(vec![bytes]))))
         };
-        let stdin = (stdin == StdioMode::Pipe).then(|| self.mint(MockResource::Sink));
-        let streams = [
-            stdin,
-            piped(stdout, script.stdout),
-            piped(stderr, script.stderr),
-        ];
-        let child = self.mint(MockResource::Child(MockChild {
-            program: program.to_vec(),
-            exit: script.exit,
-            streams,
-        }));
 
-        Ok(child)
-    }
-
-    fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
-        match self.table.lock().unwrap().get(&child) {
-            // A stream that was not piped has no handle, which is `not_found` as an unknown handle is.
-            Some(MockResource::Child(running)) => running.streams[stream_index(which)]
-                .clone()
-                .ok_or(Failure::NotFound),
-            _ => Err(Failure::NotFound),
-        }
+        Ok(ChildHandles {
+            stdin: (stdin == StdioMode::Pipe).then(|| self.mint(MockResource::Sink)),
+            stdout: piped(stdout, script.stdout),
+            stderr: piped(stderr, script.stderr),
+            child: self.mint(MockResource::Child(MockChild {
+                program: program.to_vec(),
+                exit: script.exit,
+            })),
+        })
     }
 
     fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {

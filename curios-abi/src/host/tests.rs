@@ -1,8 +1,8 @@
 use {
     super::{
-        Check, ChildStream, ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction,
-        HostOp, Mode, Namespace, Outcome, Poll, Requirement, ResultShape, SerialFlow, SerialOp,
-        SerialParity, StdioMode, WireReference, WireResults, WireSignature, WireType, host_ops,
+        Check, ClosedCode, DeclaredForeign, Failure, FileKind, ForeignFunction, HostOp, Mode,
+        Namespace, Outcome, Poll, Requirement, ResultShape, SerialFlow, SerialOp, SerialParity,
+        StdioMode, WireLeaf, WireResults, WireSignature, WireType, host_ops,
     },
     crate::{event, status},
     std::{collections::BTreeSet, fmt::Debug},
@@ -76,7 +76,6 @@ fn names_are_the_wire_abi() {
             "dir_remove",
             "proc_cwd",
             "proc_spawn",
-            "proc_stream",
             "proc_wait",
             "proc_kill",
         ]
@@ -139,12 +138,14 @@ fn result_records_keep_their_labels() {
     );
     assert_eq!(labels("dir_list"), ["status", "names"]);
     assert_eq!(labels("proc_cwd"), ["status", "path"]);
-    assert_eq!(labels("proc_spawn"), ["status", "child"]);
-    assert_eq!(labels("proc_stream"), ["status", "handle"]);
+    assert_eq!(
+        labels("proc_spawn"),
+        ["status", "child", "stdin", "stdout", "stderr"]
+    );
     assert_eq!(labels("proc_wait"), ["status", "code", "signal"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest, nor that a reference result comes last — [`WireLeaf`](super::WireLeaf) and [`WireResults`] make both unrepresentable.
+/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes it unrepresentable.
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {
@@ -160,12 +161,11 @@ fn signatures_are_well_formed() {
     }
 }
 
-/// A single result is well-formed whatever its type, and results cross scalars first and the reference last — the order a user `foreign` declaration's one result and the table's rows both read back in.
+/// Results cross in the order they are written, whatever their shapes: a single result of any type, a row's status before its payload, and references in any slot — two of them, or one before a scalar — each read back where it stands.
 #[test]
-fn results_cross_scalars_first_and_the_reference_last() {
+fn results_cross_in_the_order_they_are_written() {
     let single = WireResults::single("_".to_string(), WireType::Bytes);
     assert_eq!(single.len(), 1);
-    assert_eq!(single.reference(), Some(("_", WireReference::Bytes)));
     assert_eq!(single.iter().collect::<Vec<_>>(), [("_", WireType::Bytes)]);
 
     let store = host_ops();
@@ -174,18 +174,20 @@ fn results_cross_scalars_first_and_the_reference_last() {
         read.signature().results.iter().collect::<Vec<_>>(),
         [("status", WireType::Nat), ("bytes", WireType::Bytes)]
     );
+
+    let written = [
+        ("head".to_string(), WireType::Bytes),
+        ("count".to_string(), WireType::Nat),
+        ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
+    ];
+    let mixed = WireResults::of(written.to_vec());
     assert_eq!(
-        read.signature().results.reference(),
-        Some(("bytes", WireReference::Bytes))
-    );
-    assert!(
-        store
-            .get("clock_wall")
-            .expect("host_ops defines clock_wall")
-            .signature()
-            .results
-            .reference()
-            .is_none()
+        mixed.iter().collect::<Vec<_>>(),
+        [
+            ("head", WireType::Bytes),
+            ("count", WireType::Nat),
+            ("rest", WireType::List(WireLeaf::Bytes)),
+        ]
     );
 }
 
@@ -379,7 +381,10 @@ fn every_check_reads_what_its_row_has() {
                     assert!(is_list(operand(list)), "{op:?}");
                     assert!(is_list(payload()), "{op:?}");
                 }
-                Check::NonEmpty => assert!(is_list(payload()), "{op:?}"),
+                Check::Piped { field, mode } => {
+                    assert_eq!(operand(mode), WireType::Nat, "{op:?}");
+                    assert_eq!(result(field), WireType::Handle, "{op:?}");
+                }
                 Check::Present { field } => assert_eq!(result(field), WireType::Handle, "{op:?}"),
                 Check::Mask { field, .. } => assert_eq!(result(field), WireType::Bytes, "{op:?}"),
                 Check::Below { field, .. } | Check::Code { field, .. } => {
@@ -443,7 +448,6 @@ fn a_closed_code_reads_back_its_variant_and_nothing_past_it() {
 
     round_trips::<Mode>();
     round_trips::<StdioMode>();
-    round_trips::<ChildStream>();
     round_trips::<SerialParity>();
     round_trips::<SerialFlow>();
     round_trips::<SerialOp>();

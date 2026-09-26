@@ -918,16 +918,16 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 output.extend(call);
 
-                // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`). Boxing works on the top of the stack only, so a row with one waits its results out in locals of their own and brings them back in order, and so does a row whose reply is checked, since a check reads its values before any is boxed; a row with neither needs only its reference embedded, which is the last to cross — `WireResults` can hold it nowhere else — and so is already on top.
-                let reference = signature
-                    .results
-                    .reference()
-                    .map(|(_, reference)| reference);
+                // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`), and a reference crosses as a flat payload and is embedded back into a rope. Both work on the top of the stack only, so a row with a result to box, a reference below the top, or a reply to check — a check reads its values before any is boxed — waits its results out in locals of their own and brings them back in order, boxing or embedding each where it stands. A row with none of those at most embeds its last result, which is already on top.
                 let results = signature
                     .results
                     .iter()
                     .map(|(_, wire_type)| wire_type)
                     .collect::<Vec<_>>();
+                let reference = |wire_type: &WireType| match wire_type.shape() {
+                    WireShape::Reference(reference) => Some(reference),
+                    WireShape::Scalar(_) => None,
+                };
 
                 if Self::reply_checked(function)
                     || results.iter().any(|wire_type| {
@@ -936,6 +936,11 @@ impl<'a, 'b> Context<'a, 'b> {
                             WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int
                         )
                     })
+                    || results
+                        .iter()
+                        .rev()
+                        .skip(1)
+                        .any(|wire_type| reference(wire_type).is_some())
                 {
                     let waiting = results
                         .iter()
@@ -951,17 +956,17 @@ impl<'a, 'b> Context<'a, 'b> {
                     // Held to the row before the program reads any of it: a value its wire type cannot be, a status the row never answers, or a success that breaks the row's checks refuses as `host_reply` (`reply.rs`).
                     output.extend(self.reply_check_instrs(function, &waiting, &operands));
 
-                    for (index, (wire_type, local)) in waiting.iter().enumerate() {
+                    for (wire_type, local) in &waiting {
                         output.push(get(local));
-                        match (reference, index + 1 == results.len()) {
-                            (Some(reference), true) => {
+                        match reference(wire_type) {
+                            Some(reference) => {
                                 output.push(curios_wasm::Instr::RefAsNonNull);
                                 output.extend(self.wire_embed_instrs(reference));
                             }
-                            _ => output.extend(self.table().box_word_instrs(wire_type)),
+                            None => output.extend(self.table().box_word_instrs(wire_type)),
                         }
                     }
-                } else if let Some(reference) = reference {
+                } else if let Some(reference) = results.last().and_then(reference) {
                     output.extend(self.wire_embed_instrs(reference));
                 }
 

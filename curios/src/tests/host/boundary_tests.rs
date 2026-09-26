@@ -223,6 +223,56 @@ fn a_child_that_ended_both_ways_is_refused() {
     ));
 }
 
+/// A spawn whose standard output is wired by `stdout`, printing the pipes the child came back with.
+fn spawning(stdout: &str) -> String {
+    format!(
+        r#"
+        use /std/{{Str, Option, Try, Io, Command}};
+        use /std/Command/{{Child, Stdio}};
+        let held(p: Option(Command/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
+        let spawned: Try(Io, Io/Error, Child) =
+            Command/spawn(Command {{ ..Command/new("x", []), stdout = Stdio/{stdout}() }});
+        let r = Try/run(spawned)!;
+        match r
+        | success(c) => /std/print(Str/join(" ", [held(Child/stdin(c)), held(Child/stdout(c)), held(Child/stderr(c))]))
+        | failure(_) => /std/print("failed")
+        end
+        "#
+    )
+}
+
+/// A spawn answers the parent's end of a stream exactly when the call piped it, and the program holds a pipe for exactly those: a handle for a stream the call did not pipe, or the empty token for one it did, is refused.
+#[test]
+fn a_spawn_answers_a_stream_exactly_when_it_was_piped() {
+    let spawn = |stdout: &[u8]| {
+        vec![
+            RawValue::Nat(status::OK),
+            RawValue::Bytes(vec![7]),
+            RawValue::Bytes(vec![]),
+            RawValue::Bytes(stdout.to_vec()),
+            RawValue::Bytes(vec![]),
+        ]
+    };
+    let (host, io) = MockHost::builder().build();
+
+    answering(&spawning("piped"), host, HostOp::ProcSpawn, spawn(&[8]))
+        .expect("the reply keeps its row");
+    assert_eq!(io.output(), b"none pipe none");
+
+    refused(answering(
+        &spawning("inherit"),
+        mock(),
+        HostOp::ProcSpawn,
+        spawn(&[8]),
+    ));
+    refused(answering(
+        &spawning("piped"),
+        mock(),
+        HostOp::ProcSpawn,
+        spawn(&[]),
+    ));
+}
+
 /// Nothing resumes after `exit`, so a host whose `exit` returns has broken its contract and cannot resume the program.
 #[test]
 fn a_host_that_returns_from_exit_is_refused() {

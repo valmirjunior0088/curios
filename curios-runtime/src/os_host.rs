@@ -62,10 +62,9 @@ enum OsResource {
     },
     /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or a serial port, filed by `serial_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first — `proc_spawn` through `fcntl`, `serial_open` at the open itself — so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
-    /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the end, `proc_wait` answers it, `proc_kill` addresses its pid while it runs, and `proc_stream` hands out the handles of its piped standard streams — `None` for a stream that was not piped, filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does. Closing the child leaves its streams filed, and the reaper still reaps the process.
+    /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the end, `proc_wait` answers it, and `proc_kill` addresses its pid while it runs. Its piped streams are `Descriptor`s of their own, handed back beside it, so closing the child leaves them filed, and the reaper still reaps the process.
     Child {
         running: Running,
-        streams: Box<[Option<Handle>; 3]>,
     },
     Connected(Socket),
     Unconnected(Socket),
@@ -988,7 +987,7 @@ impl HostOps for OsHost {
         stdin: StdioMode,
         stdout: StdioMode,
         stderr: StdioMode,
-    ) -> Result<Handle, Failure> {
+    ) -> Result<ChildHandles, Failure> {
         let Spawned {
             child,
             stdin,
@@ -998,22 +997,13 @@ impl HostOps for OsHost {
 
         // Each piped stream's parent end, non-blocking already, filed as a `Descriptor` the stream rows serve as they serve any pipe.
         let file = |fd: Option<OwnedFd>| fd.map(|fd| self.mint(OsResource::Descriptor(fd)));
-        let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
 
-        Ok(self.mint(OsResource::Child {
-            running: child,
-            streams,
-        }))
-    }
-
-    fn proc_stream(&self, child: Handle, which: ChildStream) -> Result<Handle, Failure> {
-        match self.table.lock().unwrap().get(&child) {
-            // A stream that was not piped has no handle, which is `not_found` as an unknown handle is.
-            Some(OsResource::Child { streams, .. }) => streams[stream_index(which)]
-                .clone()
-                .ok_or(Failure::NotFound),
-            _ => Err(Failure::NotFound),
-        }
+        Ok(ChildHandles {
+            stdin: file(stdin),
+            stdout: file(stdout),
+            stderr: file(stderr),
+            child: self.mint(OsResource::Child { running: child }),
+        })
     }
 
     fn proc_wait(&self, child: Handle) -> Result<ChildExit, Failure> {

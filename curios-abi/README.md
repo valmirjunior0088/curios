@@ -48,13 +48,15 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rejected.** Spelling only `Bytes` and leaving the grain to prose. It puts the agreement in a comment on one side and a call-site conversion on the other, which is the drift `curios-abi` exists to prevent — and it costs an allocation to say in code what the type could have said for nothing.
 
-### A reference result is the last, and the type holds it
+### A row's results cross in the order written, a reference in any slot
 
-**Decision.** `WireResults` is a list of scalar results and at most one reference result, which crosses last; `WireSignature` carries that rather than a plain list. The table's roster holds the same rule: a row whose payload puts a reference anywhere but last is refused when the roster is built, so every test that reads the table fails on it.
+**Decision.** `WireResults` is the ordered list of a row's labelled results, each a scalar or a reference in whatever slot the row gives it, and as many references as the row has. The guest waits a row's results out in locals and boxes or embeds each where it stands; the runtime lowers each result into its own slot; the surface keeps a `foreign` declaration's fields in the order written.
 
-**Rationale.** Codegen embeds only the final result back into a rope, because an earlier reference would sit under later stack values and need juggling through locals, and the runtime lowers references on the same assumption. That rested on a debug assertion at the one call site, which a new row would meet only when a program first called it — in a release build, as a module that fails wasm validation, naming the emitter. The rule belongs to the table, and a type that cannot hold the wrong shape is the cheapest place to keep it.
+**Rationale.** A reply is a tuple, and a tuple's order and labels are its identity, so the only question the wire may ask of a row is what it answers, never where it may put it. A row that has to answer two references — a child and its streams, a connection and its peer — otherwise becomes a protocol of calls, each fallible after the first has already acted: `proc_spawn` answered only the child and its streams came back one `proc_stream` call at a time, so starting a program could fail with the program already running.
 
-**Rejected.** A test over `host_ops()` beside the table. It pins the builtin rows and nothing else, and a user `foreign` declaration's single result was already well-formed by construction, so the test would have guarded exactly the rows a type guards better.
+**The rule this replaced, and why it held.** Until 2026-09-22 the emitter embedded a reference result straight off the wasm stack after the call, so only the last result could be reached without locals, and `WireResults` held at most one reference, last, with the roster, the surface and a debug assertion before it holding the same rule. Scalar results then began crossing raw and being boxed in the guest, which spills every result of a row with a scalar to locals, and the reply checks spilled every checked row's; from then on no emitted call needed the reference on top, and the runtime had lowered positionally all along. The rule outlived its reason because the change that removed the reason did not revisit the decision.
+
+**Rejected.** Keeping the rule for rows that need no locals, where the last result is already on top. It saves nothing a row pays for — such a row has at most one result to embed, and the emitter embeds it in place — while splitting one statement of a row's shape into two. A test over `host_ops()` beside the table, for the reason a type was chosen before: it would pin the builtin rows and nothing else.
 
 ### A builtin is an identity, a declared row its import name, and the namespace is an enum
 

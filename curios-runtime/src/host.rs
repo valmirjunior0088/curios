@@ -3,7 +3,7 @@
 //! The wire contract — the [`Handle`]/[`Failure`]/[`Poll`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], a [`Poll`] mask to and from the platform `poll` flags (whose raw values differ per platform), and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Refusal,
+    ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Mode, Poll, Refusal,
     SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
 };
 
@@ -64,15 +64,6 @@ pub(crate) fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> 
 /// Whether `name` can name an environment variable at all: an empty name cannot, nor one holding the `=` that ends a name in `NAME=VALUE` or the NUL that ends a C string. Both hosts ask it, so such a name is absent from either.
 pub(crate) fn names_a_variable(name: &[u8]) -> bool {
     !name.is_empty() && !name.contains(&b'=') && !name.contains(&0)
-}
-
-/// Where a child's `which` stream sits in the `[stdin, stdout, stderr]` both hosts file a child's streams in.
-pub(crate) fn stream_index(which: ChildStream) -> usize {
-    match which {
-        ChildStream::Stdin => 0,
-        ChildStream::Stdout => 1,
-        ChildStream::Stderr => 2,
-    }
 }
 
 /// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. `dns_resolve` → `NotFound`) map it at the call site.

@@ -313,3 +313,23 @@ fn a_piped_output_is_read_through_the_stream_witness() {
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"hello\n|exited(0)");
 }
+
+// A child holds a pipe for exactly the streams its command piped, whichever of the three they are: an inherited stream and a null one have none.
+#[test]
+fn a_child_holds_a_pipe_for_exactly_the_streams_it_piped() {
+    let source = child_program(
+        r#"
+            let held(p: Option(Command/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
+            let pipes(c: Child) -> Str = Str/join(" ", [held(Child/stdin(c)), held(Child/stdout(c)), held(Child/stderr(c))]);
+            let c = Command/spawn(Command { ..Command/new("greet", []), stdin = Command/Stdio/piped(), stdout = Command/Stdio/null() })!;
+            let d = Command/spawn(Command { ..Command/new("greet", []), stdin = Command/Stdio/null(), stdout = Command/Stdio/piped(), stderr = Command/Stdio/piped() })!;
+            Try/pure(Str/join(" | ", [pipes(c), pipes(d)]))
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("greet", "hello\n", "", ChildExit::Code(0))])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"pipe none none | none pipe pipe");
+}

@@ -11,20 +11,16 @@ use {
     },
 };
 
-/// A finished lookup the worker hands back through the slot: the resolved address blobs, or `NotFound` when the name resolved to nothing. Built only via [`Resolved::found`] / [`Resolved::not_found`], which keep the invariant that a success carries a non-empty blob list. Distinct from the host's ABI reply, which also answers `WouldBlock` (still in flight) — a state a completed `Resolved` never holds.
+/// A finished lookup the worker hands back through the slot: every address blob the resolver found, none included, or `NotFound` when the lookup failed. Distinct from the host's ABI reply, which also answers `WouldBlock` (still in flight) — a state a completed `Resolved` never holds.
 pub(crate) struct Resolved(Result<Vec<Vec<u8>>, Failure>);
 
 impl Resolved {
-    /// The outcome of a successful `getaddrinfo`: the resolved blobs, or `NotFound` when the name resolved to an empty set.
+    /// The outcome of a successful `getaddrinfo`: the resolved blobs, as many as it found. A name that resolves to no address is reported as the empty list it is, and `/std` decides what it means.
     fn found(addresses: Vec<Vec<u8>>) -> Self {
-        if addresses.is_empty() {
-            Self::not_found()
-        } else {
-            Self(Ok(addresses))
-        }
+        Self(Ok(addresses))
     }
 
-    /// The name resolved to nothing — an empty result or a failed lookup.
+    /// The lookup failed.
     fn not_found() -> Self {
         Self(Err(Failure::NotFound))
     }

@@ -1,15 +1,17 @@
-use /std/{Str, Nat, Bytes, Result, Option, List, Try, Async, Io, Handle};
+use /std/{Str, Nat, Bytes, Result, Try, Async, Io, Handle};
 use /std/Handle/{Interest};
 
 let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     let _ = Async/park([Async/Wait/ready(h, Interest/readable)])!;
     let r = /sys/dns/resolve(h)!;
     Async/pure(
-        Result/map_success(
-            Io/Error/of_result(r),
-            (addresses) => Option/unwrap_or(List/try_get(addresses, 0), x[])));
+        match Io/Error/of_result(r)
+        | success([a, .._]) => Result/success(a)
+        | success([]) => Result/failure(Io/Error/not_found())
+        | failure(e) => Result/failure(e)
+        end);
 
---- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber.
+--- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
 pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
     let h = Io/Error/of_result(/sys/dns/lookup(Str/to_bytes(host), port)!)!;
     let a = Async/using(Handle/close(h), resolved_address(h))!;

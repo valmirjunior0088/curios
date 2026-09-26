@@ -312,7 +312,7 @@ fn a_serial_discard_drops_only_what_arrived() {
 }
 
 /// Spawn `program` with its standard output piped and the rest inherited.
-fn spawned(host: &MockHost, program: &[u8]) -> Handle {
+fn spawned(host: &MockHost, program: &[u8]) -> ChildHandles {
     host.proc_spawn(
         vec![program.to_vec()],
         vec![],
@@ -332,7 +332,7 @@ fn a_running_child_ends_by_its_kill_and_an_ended_one_is_not_signaled() {
         .children([("done", "", "", ChildExit::Code(0))])
         .build();
 
-    let sleepy = spawned(&host, b"sleepy");
+    let sleepy = spawned(&host, b"sleepy").child;
     assert_eq!(host.proc_wait(sleepy.clone()), Err(Failure::WouldBlock));
     let ready = host
         .handle_poll(vec![sleepy.clone()], vec![Poll::from_bits(event::READ)], 0)
@@ -350,7 +350,7 @@ fn a_running_child_ends_by_its_kill_and_an_ended_one_is_not_signaled() {
     );
     assert_eq!(host.proc_wait(sleepy), Err(Failure::NotFound));
 
-    let done = spawned(&host, b"done");
+    let done = spawned(&host, b"done").child;
     assert_eq!(host.proc_kill(done.clone()), Ok(()));
     assert_eq!(host.proc_wait(done), Ok(ChildExit::Code(0)));
     assert_eq!(io.kills(), [b"sleepy".to_vec()]);
@@ -366,18 +366,19 @@ fn waiting_on_what_is_not_a_child_leaves_it_filed() {
     assert_eq!(host.handle_write(file, b"x".to_vec()), Ok(1));
 }
 
+/// A spawn answers the parent's end of each stream it piped and nothing for the rest, and a piped output reads back what the script wrote.
 #[test]
-fn an_unpiped_stream_is_not_found() {
+fn a_spawn_answers_exactly_the_streams_it_piped() {
     let (host, _io) = MockHost::builder()
         .children([("greet", "hello", "", ChildExit::Code(0))])
         .build();
-    let child = spawned(&host, b"greet");
+    let spawned = spawned(&host, b"greet");
 
+    assert_eq!((&spawned.stdin, &spawned.stderr), (&None, &None));
     assert_eq!(
-        host.proc_stream(child.clone(), ChildStream::Stdin),
-        Err(Failure::NotFound)
+        host.handle_read(spawned.stdout.expect("stdout was piped"), 8),
+        Ok(Some(b"hello".to_vec()))
     );
-    assert!(host.proc_stream(child, ChildStream::Stdout).is_ok());
 }
 
 /// A stream used in the direction it is not open for is `EBADF`, as the native host answers: a standard stream, a file opened the other way, a child's pipe read from its writing end. Anything that is not a stream is `NotFound`.

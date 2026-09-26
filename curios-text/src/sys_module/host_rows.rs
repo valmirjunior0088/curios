@@ -8,7 +8,8 @@ use {
     super::{Decl, helpers::*},
     crate::{Doc, Intrinsic, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{
-        DeclaredForeign, ForeignFunction, ForeignStore, Outcome, ResultShape, WireType, status,
+        Check, DeclaredForeign, ForeignFunction, ForeignStore, Outcome, ResultShape, WireType,
+        status, stdio_mode,
     },
     curios_num::Grain,
     curios_utilities::Plicity,
@@ -30,7 +31,7 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
-/// The guest's reading of a builtin row's outcome: the type a `/sys` declaration answers and the body that answers it, from the row's raw result type and its raw call. The call is bound with `/sys/Io/bind` and answered with `/sys/Io/pure`, called as any caller calls them rather than built inline from their intrinsics — an inline bind leaves a description the erased optimizer cannot fold, and every dead top-level value holding one, `/std/Tui/Session/enter` among them, then survives pruning into every program. The status is read before anything else, so a payload is projected only under the status that makes it one — `Result(Nat, T)` for a fallible row, `ok` a success and every other status the failure it names; `Result(Nat, Option(T))` for a stream, `eof` its end; and `Option(T)` for a lookup, `not_found` its absence. `T` is the payload the status stands beside: `{}` for none, the one value, or the record of several. A row whose outcome needs no reading — one that returns, and every declared row — answers its raw call.
+/// The guest's reading of a builtin row's outcome: the type a `/sys` declaration answers and the body that answers it, from the row's raw result type and its raw call. The call is bound with `/sys/Io/bind` and answered with `/sys/Io/pure`, called as any caller calls them rather than built inline from their intrinsics — an inline bind leaves a description the erased optimizer cannot fold, and every dead top-level value holding one, `/std/Tui/Session/enter` among them, then survives pruning into every program. The status is read before anything else, so a payload is projected only under the status that makes it one — `Result(Nat, T)` for a fallible row, `ok` a success and every other status the failure it names; `Result(Nat, Option(T))` for a stream, `eof` its end; and `Option(T)` for a lookup, `not_found` its absence. `T` is the payload the status stands beside: `{}` for none, the one value, or the record of several. A field a `Piped` check governs is an `Option` decided by the mode operand the check names — present exactly when the call asked for a pipe, which the check holds the host to — so its token is never what decides it. A row whose outcome needs no reading — one that returns, and every declared row — answers its raw call.
 fn adapted(function: &ForeignFunction, raw: Term, call: Term) -> (Term, Term) {
     let outcome = match function {
         ForeignFunction::Builtin(op) => op.outcome(),
@@ -58,25 +59,6 @@ fn adapted(function: &ForeignFunction, raw: Term, call: Term) -> (Term, Term) {
         true => name(reply),
         false => project(name(reply), "status"),
     };
-    let (payload_type, payload) = match payload {
-        [] => (unit(), tuple(Vec::new())),
-        [(label, wire)] => (wire_type(wire), project(name(reply), label)),
-        fields => (
-            record(
-                fields
-                    .iter()
-                    .map(|(label, wire)| (*label, wire_type(wire)))
-                    .collect(),
-            ),
-            tuple(
-                fields
-                    .iter()
-                    .map(|(label, _)| (*label, project(name(reply), label)))
-                    .collect(),
-            ),
-        ),
-    };
-
     let is = |status: u64| intrinsic(Intrinsic::NatEql(code.clone(), nat_lit(status)));
     let result_of = |success| applied(sys_op(&["sys", "Result"]), vec![nat(), success]);
     let option_of = |value| applied(sys_op(&["sys", "Option"]), vec![value]);
@@ -84,6 +66,46 @@ fn adapted(function: &ForeignFunction, raw: Term, call: Term) -> (Term, Term) {
     let failure = applied(sys_op(&["sys", "Result", "failure"]), vec![code.clone()]);
     let some = |value| applied(sys_op(&["sys", "Option", "some"]), vec![value]);
     let none = applied(sys_op(&["sys", "Option", "none"]), Vec::new());
+
+    let checks = match function {
+        ForeignFunction::Builtin(op) => op.checks(),
+        ForeignFunction::Declared(_) => &[],
+    };
+    let field = |label: &str, wire: &WireType| {
+        let value = project(name(reply), label);
+        let piped = checks.iter().find_map(|check| match *check {
+            Check::Piped { field, mode } if field == label => Some(mode),
+            _ => None,
+        });
+
+        match piped {
+            Some(mode) => (
+                option_of(wire_type(wire)),
+                branch(
+                    intrinsic(Intrinsic::NatEql(name(mode), nat_lit(stdio_mode::PIPE))),
+                    some(value),
+                    none.clone(),
+                ),
+            ),
+            None => (wire_type(wire), value),
+        }
+    };
+    let (payload_type, payload) = match payload {
+        [] => (unit(), tuple(Vec::new())),
+        [(label, wire)] => field(label, wire),
+        fields => {
+            let (types, values) = fields
+                .iter()
+                .map(|(label, wire)| {
+                    let (type_, value) = field(label, wire);
+
+                    ((*label, type_), (*label, value))
+                })
+                .unzip();
+
+            (record(types), tuple(values))
+        }
+    };
 
     let (answer, value) = match outcome {
         Outcome::Fallible => (

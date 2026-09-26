@@ -6,9 +6,9 @@
 
 use {
     super::{
-        Check, ChildExit, ChildStream, Failure, FileKind, FileStat, Handle, Mode, Poll, Refusal,
-        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf,
-        WireResults, WireShape, WireType,
+        Check, ChildExit, ChildHandles, ClosedCode, Failure, FileKind, FileStat, Handle, Mode,
+        Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
+        TtySize, WireLeaf, WireResults, WireType,
     },
     crate::status,
 };
@@ -35,7 +35,7 @@ pub enum Outcome {
 pub trait WireOperand {
     const WIRE: WireType;
 
-    /// What a row's checks read of the operand — a count's value, a buffer's or a list's length — or `None` for an operand no check reads.
+    /// What a row's checks read of the operand — a count's value, a buffer's or a list's length, a mode's code — or `None` for an operand no check reads.
     fn measure(&self) -> Option<u64> {
         None
     }
@@ -104,10 +104,10 @@ impl WireOperand for Mode {
 
 impl WireOperand for StdioMode {
     const WIRE: WireType = WireType::Nat;
-}
 
-impl WireOperand for ChildStream {
-    const WIRE: WireType = WireType::Nat;
+    fn measure(&self) -> Option<u64> {
+        Some(self.code())
+    }
 }
 
 impl WireOperand for SerialParity {
@@ -360,6 +360,31 @@ impl WirePayload for ChildExit {
     }
 }
 
+/// A stream the call did not pipe crosses as [`Handle::none`], the padding a failure fills every slot with: which streams a success holds is the call's to say, and the row's own checks hold the host to it.
+impl WirePayload for ChildHandles {
+    fn slots(_: &'static str) -> Vec<(String, WireType)> {
+        ["child", "stdin", "stdout", "stderr"]
+            .map(|label| (label.to_string(), WireType::Handle))
+            .into()
+    }
+
+    fn encode(self, values: &mut Vec<WireValue>) {
+        values.push(WireValue::Handle(self.child));
+        values.extend(
+            [self.stdin, self.stdout, self.stderr]
+                .map(|stream| WireValue::Handle(stream.unwrap_or_else(Handle::none))),
+        );
+    }
+
+    fn pad(values: &mut Vec<WireValue>) {
+        values.extend([(); 4].map(|()| WireValue::Handle(Handle::none())));
+    }
+
+    fn checks(_: &'static str) -> Vec<Check> {
+        vec![Check::Present { field: "child" }]
+    }
+}
+
 /// A builtin's whole reply: the outcome it crosses as, its result slots, the checks its success answers to, and its encoding.
 pub trait WireReply: Sized {
     const OUTCOME: Outcome;
@@ -375,31 +400,12 @@ pub trait WireReply: Sized {
 
 /// The slots a reply crosses with that carries a status: the status first, then the payload's.
 fn with_status<T: WirePayload>(label: &'static str) -> WireResults {
-    results(
+    WireResults::of(
         [("status".to_string(), WireType::Nat)]
             .into_iter()
             .chain(T::slots(label))
             .collect(),
     )
-}
-
-/// `slots` as [`WireResults`], which holds a reference result only last. A row whose payload puts one anywhere else is a table that cannot be read, so the roster refuses it when it is built.
-fn results(mut slots: Vec<(String, WireType)>) -> WireResults {
-    let Some((label, last)) = slots.pop() else {
-        return WireResults::none();
-    };
-
-    let scalars = slots
-        .into_iter()
-        .map(|(label, wire_type)| match wire_type.shape() {
-            WireShape::Scalar(scalar) => (label, scalar),
-            WireShape::Reference(_) => {
-                panic!("`{label}` is a reference result, and only the last result may be one")
-            }
-        })
-        .collect();
-
-    WireResults::ending(scalars, label, last.shape())
 }
 
 /// A status, then either the payload or its padding.
@@ -418,7 +424,7 @@ impl<T: WirePayload> WireReply for T {
     const OUTCOME: Outcome = Outcome::Returns;
 
     fn results(label: &'static str) -> WireResults {
-        results(T::slots(label))
+        WireResults::of(T::slots(label))
     }
 
     fn checks(label: &'static str) -> Vec<Check> {
@@ -498,7 +504,7 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
     const OUTCOME: Outcome = Outcome::Returns;
 
     fn results(label: &'static str) -> WireResults {
-        results(T::slots(label))
+        WireResults::of(T::slots(label))
     }
 
     fn checks(label: &'static str) -> Vec<Check> {

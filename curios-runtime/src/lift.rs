@@ -1,5 +1,5 @@
 use {
-    super::{ChildStream, Handle, Mode, Poll, SerialFlow, SerialOp, SerialParity, StdioMode},
+    super::{Handle, Mode, Poll, SerialFlow, SerialOp, SerialParity, StdioMode},
     curios_abi::{ClosedCode, WireLeaf, WireType},
     wasmtime::{Caller, Val},
 };
@@ -60,16 +60,6 @@ impl Lift for StdioMode {
 
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "a stdio mode")
-    }
-}
-
-impl Lift for ChildStream {
-    fn shape() -> Vec<WireType> {
-        vec![WireType::Nat]
-    }
-
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        lift_code(params, "a standard stream")
     }
 }
 

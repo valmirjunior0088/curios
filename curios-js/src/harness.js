@@ -249,9 +249,14 @@ export async function run(config) {
     dir_create: denied,
     dir_remove: denied,
     proc_cwd: deniedHandle,
-    // WASI has no process creation and neither does the playground.
-    proc_spawn: deniedHandle,
-    proc_stream: deniedHandle,
+    // WASI has no process creation and neither does the playground. A spawn answers the child and its three streams, so its denial pads four tokens.
+    proc_spawn: () => [
+      status.PERMISSION_DENIED,
+      emptyBytes(),
+      emptyBytes(),
+      emptyBytes(),
+      emptyBytes(),
+    ],
     proc_wait: () => [status.PERMISSION_DENIED, 0n, 0n],
     proc_kill: denied,
     // The row diverges, so this never returns: the signal unwinds the guest, and a code outside a byte is a module this compiler did not emit.

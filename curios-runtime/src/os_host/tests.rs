@@ -61,7 +61,12 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_
 #[test]
 fn a_piped_child_stream_is_filed_non_blocking() {
     let host = OsHost::with_args(vec![]);
-    let child = host
+    let ChildHandles {
+        child,
+        stdin: Some(stdin),
+        stdout: Some(stdout),
+        stderr: None,
+    } = host
         .proc_spawn(
             vec![b"/bin/cat".to_vec()],
             vec![],
@@ -70,11 +75,10 @@ fn a_piped_child_stream_is_filed_non_blocking() {
             StdioMode::Pipe,
             StdioMode::Null,
         )
-        .unwrap();
-    let stdin = host.proc_stream(child.clone(), ChildStream::Stdin).unwrap();
-    let stdout = host
-        .proc_stream(child.clone(), ChildStream::Stdout)
-        .unwrap();
+        .unwrap()
+    else {
+        panic!("the piped streams, and only they, are answered");
+    };
 
     assert_eq!(
         host.handle_read(stdout.clone(), 8),
@@ -356,11 +360,16 @@ fn a_refused_connect_reports_and_drops_the_socket() {
     assert_eq!(host.handle_read(client, 8), Err(Failure::NotFound));
 }
 
-/// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The unpiped stdin has no handle, which is `not_found`.
+/// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The inherited stdin and the null stderr have no handle.
 #[test]
 fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     let host = OsHost::with_args(vec![]);
-    let child = host
+    let ChildHandles {
+        child,
+        stdin: None,
+        stdout: Some(stdout),
+        stderr: None,
+    } = host
         .proc_spawn(
             vec![b"/bin/echo".to_vec(), b"hi".to_vec()],
             vec![],
@@ -369,15 +378,10 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
             StdioMode::Pipe,
             StdioMode::Null,
         )
-        .unwrap();
-
-    assert_eq!(
-        host.proc_stream(child.clone(), ChildStream::Stdin),
-        Err(Failure::NotFound)
-    );
-    let stdout = host
-        .proc_stream(child.clone(), ChildStream::Stdout)
-        .unwrap();
+        .unwrap()
+    else {
+        panic!("the piped stream, and only it, is answered");
+    };
 
     let ready = host
         .handle_poll(
@@ -492,7 +496,7 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     );
 }
 
-/// Spawn `argv` with every stream on the null device.
+/// Spawn `argv` with every stream on the null device, and the child's handle.
 fn quiet(host: &OsHost, argv: &[&[u8]]) -> Result<Handle, Failure> {
     host.proc_spawn(
         argv.iter().map(|arg| arg.to_vec()).collect(),
@@ -502,6 +506,7 @@ fn quiet(host: &OsHost, argv: &[&[u8]]) -> Result<Handle, Failure> {
         StdioMode::Null,
         StdioMode::Null,
     )
+    .map(|spawned| spawned.child)
 }
 
 /// Wait up to five seconds for `child`'s handle to report that its end is recorded.

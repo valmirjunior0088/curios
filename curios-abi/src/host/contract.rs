@@ -1,12 +1,12 @@
 //! What a builtin row promises beyond its types, and the one evaluator that holds a native call to it.
 //!
-//! A row's contract has four parts. Its outcome is its reply type's ([`Outcome`]). Its failures are the operating system's named statuses and the errno lane on every fallible row, with `would_block` only on a row marked [`Mark::Blocks`] and `tls` only on one marked [`Mark::Tls`]; a stream alone ends, and a lookup answers `ok` or `not_found` and nothing else. Its requirements relate its operands before the call ([`Requirement`]). Its checks relate a successful reply to its operands or to itself ([`Check`]): the row's own, which read its lone payload, and its payload type's, which read the payload's fields by label.
+//! A row's contract has four parts. Its outcome is its reply type's ([`Outcome`]). Its failures are the operating system's named statuses and the errno lane on every fallible row, with `would_block` only on a row marked [`Mark::Blocks`] and `tls` only on one marked [`Mark::Tls`]; a stream alone ends, and a lookup answers `ok` or `not_found` and nothing else. Its requirements relate its operands before the call ([`Requirement`]). Its checks relate a successful reply to its operands or to itself ([`Check`]): the row's own, which read its lone payload or the field they name against an operand, and its payload type's, which read the payload's fields by label.
 //!
 //! [`HostOp::admit`] holds a call's operands to the requirements, and [`HostOp::check_reply`] its encoded reply to the rest, each answering the sentence a refusal reports. A check is data rather than a predicate, so whatever reads the table reads the same contract.
 
 use {
     super::{HostOp, Outcome, WireValue},
-    crate::status,
+    crate::{status, stdio_mode},
 };
 
 #[cfg(test)]
@@ -28,7 +28,7 @@ pub enum Requirement {
     SameLength { a: &'static str, b: &'static str },
 }
 
-/// What a successful reply answers to. The first five read the row's lone payload and are the row's own; the rest name the fields they read and come from the payload's type.
+/// What a successful reply answers to. The first five are the row's own, each relating a field to an operand: four read its lone payload, and `Piped` the field it names. The rest name the fields they read and come from the payload's type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Check {
     /// A read's bytes: between one and `request` when `request` is positive, and none when it is zero.
@@ -39,8 +39,11 @@ pub enum Check {
     Exact { request: &'static str },
     /// One element for each element of `list`.
     Parallel { list: &'static str },
-    /// At least one element.
-    NonEmpty,
+    /// A stream's handle, present exactly when the operand `mode` asked for a pipe ([`stdio_mode::PIPE`]) and the empty token otherwise.
+    Piped {
+        field: &'static str,
+        mode: &'static str,
+    },
     /// A handle that is not the empty token.
     Present { field: &'static str },
     /// Every byte of `field` within `allowed`.
@@ -169,11 +172,18 @@ impl HostOp {
                         ));
                     }
                 }
-                Check::NonEmpty => {
-                    if length(payload()) == 0 {
-                        return Err(
-                            "succeeded with nothing where a success holds something".to_string()
-                        );
+                Check::Piped { field: name, mode } => {
+                    let piped = self.operand(operands, mode) == stdio_mode::PIPE;
+
+                    if let WireValue::Handle(handle) = field(name)
+                        && handle.is_none() == piped
+                    {
+                        return Err(match piped {
+                            true => {
+                                format!("answered the empty token as `{name}`, which was piped")
+                            }
+                            false => format!("answered a handle as `{name}`, which was not piped"),
+                        });
                     }
                 }
                 Check::Present { field: name } => {

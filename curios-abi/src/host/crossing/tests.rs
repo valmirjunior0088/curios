@@ -2,8 +2,8 @@
 
 use {
     super::{
-        super::{ChildExit, Failure, Handle, Refusal, Termination, TtySize, WireType},
-        Encoded, WireReply, WireValue, results,
+        super::{ChildExit, ChildHandles, Failure, Handle, Refusal, Termination, TtySize},
+        Encoded, WireReply, WireValue,
     },
     crate::status,
     std::num::NonZeroU32,
@@ -75,6 +75,39 @@ fn a_child_exit_fills_the_field_that_applies() {
     );
 }
 
+/// A stream the call did not pipe crosses as the empty token, which is also what every slot of a failed spawn crosses as.
+#[test]
+fn a_spawn_answers_the_empty_token_for_a_stream_it_did_not_pipe() {
+    let none = || WireValue::Handle(Handle::none());
+
+    assert_eq!(
+        Ok::<_, Failure>(ChildHandles {
+            child: Handle::Other(vec![7]),
+            stdin: None,
+            stdout: Some(Handle::Other(vec![8])),
+            stderr: None,
+        })
+        .encode(),
+        Encoded::Reply(vec![
+            WireValue::Nat(status::OK),
+            WireValue::Handle(Handle::Other(vec![7])),
+            none(),
+            WireValue::Handle(Handle::Other(vec![8])),
+            none()
+        ])
+    );
+    assert_eq!(
+        Err::<ChildHandles, _>(Failure::NotFound).encode(),
+        Encoded::Reply(vec![
+            WireValue::Nat(status::NOT_FOUND),
+            none(),
+            none(),
+            none(),
+            none()
+        ])
+    );
+}
+
 /// A row with no failure lane answers its value, or refuses the call in its place rather than answer something its host does not have.
 #[test]
 fn a_refusal_stands_in_place_of_any_value() {
@@ -91,14 +124,4 @@ fn a_refusal_stands_in_place_of_any_value() {
 #[test]
 fn a_termination_ends_the_instance_in_place_of_any_value() {
     assert_eq!(Termination(7).encode(), Encoded::Terminate(7));
-}
-
-/// Codegen embeds only the final result back into a rope, so a payload that put a reference anywhere else would be a row no stage could lower; the roster refuses it when it is built.
-#[test]
-#[should_panic(expected = "only the last result may be one")]
-fn a_reference_result_crosses_only_last() {
-    results(vec![
-        ("bytes".to_string(), WireType::Bytes),
-        ("count".to_string(), WireType::Nat),
-    ]);
 }

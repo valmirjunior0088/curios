@@ -3,9 +3,7 @@
 use {
     super::test_support::comments_of,
     crate::*,
-    curios_abi::{
-        WireLeaf, WireReference, WireResults, WireScalar, WireShape, WireSignature, WireType,
-    },
+    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_utilities::Plicity,
 };
 
@@ -175,11 +173,10 @@ fn top_foreign_takes_a_tuple_of_results() {
                     ("a0".to_string(), WireType::Handle),
                     ("a1".to_string(), WireType::Nat)
                 ],
-                results: WireResults::ending(
-                    vec![("status".to_string(), WireScalar::Nat)],
-                    "bytes".to_string(),
-                    WireShape::Reference(WireReference::Bytes)
-                ),
+                results: WireResults::of(vec![
+                    ("status".to_string(), WireType::Nat),
+                    ("bytes".to_string(), WireType::Bytes),
+                ]),
             },
         })]
     );
@@ -199,17 +196,27 @@ fn top_foreign_refuses_a_single_result_in_braces() {
     );
 }
 
-/// A reference crosses last, and the surface is told rather than reordered: `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are two tuple types, so moving the field would hand the program one it did not declare.
+/// A reference may take any slot, and several may: the results cross in the order written, since `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are two tuple types and the one declared is the one the program gets.
 #[test]
-fn top_foreign_refuses_a_reference_result_before_the_last() {
-    let refusal = "foreign f : (Nat) -> {bytes: Bytes, status: Nat};"
-        .parse::<Module>()
-        .unwrap_err()
-        .format();
-
-    assert!(
-        refusal.contains("written last"),
-        "the refusal states the ordering rule: {refusal}"
+fn top_foreign_keeps_references_in_the_slots_written() {
+    assert_eq!(
+        "foreign f : (Nat) -> {bytes: Bytes, status: Nat, rest: List(Bytes)};"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "f".into(),
+            signature: WireSignature {
+                params: vec![("a0".to_string(), WireType::Nat)],
+                results: WireResults::of(vec![
+                    ("bytes".to_string(), WireType::Bytes),
+                    ("status".to_string(), WireType::Nat),
+                    ("rest".to_string(), WireType::List(WireLeaf::Bytes)),
+                ]),
+            },
+        })]
     );
 }
 

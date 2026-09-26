@@ -140,33 +140,16 @@ fn parse_wire_field<'a>() -> Parser<'a, (String, WireType)> {
         .map(|(label, type_)| (label.to_string(), type_))
 }
 
-// The results a braced field list denotes, or why it denotes none. Two refusals, and both are the same fact: a tuple type's labels are part of its identity, so this may neither drop the label a single field carries nor move a field to satisfy the wire's ordering.
+// The results a braced field list denotes, in the order written, or why it denotes none: a tuple type's labels are part of its identity, so this may not drop the label a single field carries.
 fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireResults, String> {
-    let Some((last_label, last_type)) = fields.last().cloned() else {
-        return Ok(WireResults::none());
-    };
-
     // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
-    if fields.len() == 1 {
+    if let [(label, _)] = fields.as_slice() {
         return Err(format!(
-            "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{last_label}: …}}`"
+            "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{label}: …}}`"
         ));
     }
 
-    let mut scalars = Vec::new();
-    for (label, type_) in &fields[..fields.len() - 1] {
-        match type_.shape() {
-            WireShape::Scalar(scalar) => scalars.push((label.clone(), scalar)),
-            // Reordering would satisfy the wire and hand back a different tuple type than the one declared, since `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are not one type. So the rule is stated to the writer instead.
-            WireShape::Reference(_) => {
-                return Err(format!(
-                    "`{label}` is a reference result (Bytes, Handle or List), which crosses last and so is written last: move it to the end rather than expecting it to be moved, since a tuple type's field order is part of what it is"
-                ));
-            }
-        }
-    }
-
-    Ok(WireResults::ending(scalars, last_label, last_type.shape()))
+    Ok(WireResults::of(fields))
 }
 
 // A result: a bare wire type, or a braced field list naming the tuple type the row yields. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.

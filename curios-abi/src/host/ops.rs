@@ -12,7 +12,7 @@
 
 use {
     super::{
-        Check, ChildExit, ChildStream, Failure, FileStat, ForeignFunction, ForeignStore, Handle,
+        Check, ChildExit, ChildHandles, Failure, FileStat, ForeignFunction, ForeignStore, Handle,
         Mark, Mode, Outcome, Poll, Refusal, Requirement, SerialFlow, SerialOp, SerialParity,
         StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply, WireSignature,
     },
@@ -42,8 +42,8 @@ macro_rules! for_each_host_op {
             /// Start an asynchronous lookup of `host`:`port`, succeeding with a handle that becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
             DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> as dns/lookup { yields: handle, marks: [Blocks] }
 
-            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: a success holds at least one, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. `WouldBlock` before readiness.
-            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses, marks: [Blocks], checks: [NonEmpty] }
+            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: every address the resolver found, none included, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. A lookup that failed is `NotFound`. `WouldBlock` before readiness.
+            DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses, marks: [Blocks] }
 
             /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
             SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> as socket/open { yields: handle }
@@ -132,11 +132,8 @@ macro_rules! for_each_host_op {
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
             ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> as proc/cwd { yields: path }
 
-            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
-            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<Handle, Failure> as proc/spawn { yields: child }
-
-            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). A piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; a stream that was not piped has none, and is `NotFound`. Closing the child leaves its streams filed.
-            ProcStream: fn proc_stream(child: Handle, which: ChildStream) -> Result<Handle, Failure> as proc/stream { yields: handle }
+            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, beside the parent's end of each stream the call piped: a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve, and the empty token for a stream that was not piped. Closing the child leaves its streams filed. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
+            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> as proc/spawn { checks: [Piped { field: stdin, mode: stdin }, Piped { field: stdout, mode: stdout }, Piped { field: stderr, mode: stderr }] }
 
             /// How `child` ended, once its handle is readable: a success with `code` and `signal`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
             ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait { marks: [Blocks] }

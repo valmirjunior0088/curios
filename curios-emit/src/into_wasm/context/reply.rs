@@ -5,7 +5,7 @@
 use {
     super::Context,
     crate::into_wasm::{call, either, get, i32_const, i64_const, when},
-    curios_abi::{Check, ForeignFunction, HostOp, Outcome, WireLeaf, WireType, status},
+    curios_abi::{Check, ForeignFunction, HostOp, Outcome, WireLeaf, WireType, status, stdio_mode},
 };
 
 /// A value waiting in a local, with the wire type it crossed as.
@@ -24,6 +24,7 @@ impl<'a> Context<'a, '_> {
                 Check::Progress { request } | Check::Exact { request } => Some(request),
                 Check::Accepted { buffer } => Some(buffer),
                 Check::Parallel { list } => Some(list),
+                Check::Piped { mode, .. } => Some(mode),
                 _ => None,
             })
             .collect()
@@ -216,11 +217,18 @@ impl<'a> Context<'a, '_> {
                     .chain([curios_wasm::Instr::I64Ne])
                     .collect(),
             ),
-            Check::NonEmpty => violated(
-                measure(payload())
-                    .into_iter()
-                    .chain([curios_wasm::Instr::I64Eqz])
-                    .collect(),
+            // A handle exactly when the mode asked for a pipe: violated where the stream's absence agrees with its being piped.
+            Check::Piped { field: name, mode } => violated(
+                [
+                    measure(operand(mode)),
+                    vec![
+                        i64_const(stdio_mode::PIPE as i64),
+                        curios_wasm::Instr::I64Eq,
+                    ],
+                    measure(field(name)),
+                    vec![curios_wasm::Instr::I64Eqz, curios_wasm::Instr::I32Eq],
+                ]
+                .concat(),
             ),
             Check::Present { field: name } => violated(
                 measure(field(name))
