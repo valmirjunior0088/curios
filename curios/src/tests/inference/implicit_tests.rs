@@ -224,3 +224,51 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
         "the report should say nothing determined the value, got: {report}"
     );
 }
+
+// An implicit solved from a projection whose value runs a walk that carries its input's validity, which each arm's guard discharges — the shape `Str/fold` takes once it threads a string's validity. The guard is `h + 1 < 10`, and the occurrence it must meet sits in `step`'s unfolding behind the `let` that names `h + 1`, so it reaches the arm respelled. Elaborating the walk decides that by comparing canonical spellings. Re-validating the solution looked the written spelling up and nothing more, since the canonical comparison sat on the branch suppression never takes, so a correct solution was rejected and `use_it` refused — while the same program with `step` spelling `h + 1 < 10` directly was accepted.
+#[test]
+fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, List, Vec};
+
+        induct S: Type
+        | ok()
+        | bad()
+        end
+
+        let step(h: Nat, s: S) -> S =
+            let n = h + 1;
+            match s | bad() => S/bad() | ok() => choose | Bool/not(n < 10) => S/bad() | _ => S/ok() end end;
+        let run_from(s: S, l: List(Nat)) -> S = match l | [] => s | [h, ..t] => run_from(step(h, s), t) end;
+        let fine(s: S) -> Bool = match s | ok() => true | bad() => false end;
+        let from_bad(@l: List(Nat), v: Bool/Holds(fine(run_from(S/bad(), l)))) -> Bool/False =
+            match l | [] => match v end | [_, ..t] => from_bad(@t, v) end;
+
+        let total(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> Nat =
+            let go(s: S, l: List(Nat), acc: Nat, v: Bool/Holds(fine(run_from(s, l)))) -> Nat =
+                match l
+                | [] => acc
+                | [h, ..t] =>
+                    match s
+                    | bad() => match from_bad(@t, v) end
+                    | ok() =>
+                        match h + 1 < 10
+                        | false => match from_bad(@t, v) end
+                        | true => go(S/ok(), t, acc + h, v)
+                        end
+                    end
+                end;
+            go(S/ok(), l, 0, v);
+
+        let counted(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> {w: Nat, v: Vec(Nat, w)} =
+            let n = total(l, v);
+            (w = n, v = Vec/replicate(n, 0));
+        let width(@w: Nat, _v: Vec(Nat, w)) -> Nat = w;
+        let use_it(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> Nat = width(counted(l, v).v);
+
+        /std/print(Nat/to_str(use_it([1, 2, 3], Bool/True/qed())))
+        "#),
+        b"6"
+    );
+}
