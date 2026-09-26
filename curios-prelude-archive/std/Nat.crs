@@ -1,7 +1,7 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord};
+use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is below `b`.
@@ -108,6 +108,21 @@ pub let is_even(n: Nat) -> Bool =
 --- Whether `lo <= c <= hi`.
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
+
+--- A decided equality is an equation: `a == b` gives `Eq(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
+pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq(a, b) =
+    match a
+    | 0 =>
+        match b
+        | 0 => Eq/refl()
+        | _ + 1 => match h end
+        end
+    | ap + 1 =>
+        match b
+        | 0 => match h end
+        | bp + 1 => Eq/cong((x) => x + 1, eq_of_eql(ap, bp, h))
+        end
+    end;
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =

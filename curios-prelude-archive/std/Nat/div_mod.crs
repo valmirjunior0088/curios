@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Eq};
-use /std/Nat/{Lt};
+use /std/Nat/{Lt, Le};
 
 --- `n` divided by `d`: the quotient and remainder, with Euclid's identity and the remainder's bound beside them.
 pub struct DivMod(n: Nat, d: Nat): pub Type {
@@ -23,3 +23,53 @@ pub let div_mod(n: Nat, d: Nat, @ok: Lt(0, d)) -> DivMod(n, d) =
         joined = Eq/refl(),
         bounded = Bool/True/qed(),
     };
+
+--- `m * d <= n` gives `m <= n / d`: the quotient is the largest multiplier that fits.
+---
+--- A quotient below `m` would put `n` under `(n / d + 1) * d`, which Euclid's identity, the reducer's own, already bounds below `n` once scaled — so that arm is empty.
+pub let le_div_of_mul_le(
+    m: Nat,
+    n: Nat,
+    d: Nat,
+    @ok: Lt(0, d),
+    p: Le(m * d, n),
+) -> Le(m, Nat/div(n, d, @ok)) =
+    match Nat/div(n, d, @ok) < m
+    | false => Lt/le_of_not_lt(Nat/div(n, d, @ok), m, Bool/True/qed())
+    | true =>
+        match Lt/lt_of_lt_le(
+            n,
+            (Nat/div(n, d, @ok) + 1) * d,
+            n,
+            Lt/add_mul_lt(
+                Nat/div(n, d, @ok),
+                Nat/rem(n, d, @ok),
+                Nat/div(n, d, @ok) + 1,
+                d,
+                Bool/True/qed(),
+                Bool/True/qed()),
+            Le/trans(Le/mul_mono_r(d, Lt/le_succ_of_lt(Nat/div(n, d, @ok), m, Bool/True/qed())), p))
+        end
+    end;
+
+--- `n < m * d` gives `n / d < m`: a quotient of at least `m` would scale past `n`, since the quotient's multiple of `d` is at most `n` by Euclid's identity.
+pub let div_lt_of_lt_mul(
+    m: Nat,
+    n: Nat,
+    d: Nat,
+    @ok: Lt(0, d),
+    p: Lt(n, m * d),
+) -> Lt(Nat/div(n, d, @ok), m) =
+    match Nat/div(n, d, @ok) < m
+    | true => Bool/True/qed()
+    | false =>
+        match Lt/lt_of_lt_le(
+            n,
+            m * d,
+            n,
+            p,
+            Le/trans(
+                Le/mul_mono_r(d, Lt/le_of_not_lt(Nat/div(n, d, @ok), m, Bool/True/qed())),
+                Le/add_r(Nat/div(n, d, @ok) * d, Nat/rem(n, d, @ok))))
+        end
+    end;
