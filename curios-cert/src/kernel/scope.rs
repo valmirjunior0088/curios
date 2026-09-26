@@ -13,10 +13,12 @@ pub(super) struct Mark {
     refinements: usize,
 }
 
-/// One arm's case equation, under the two spellings a probe may present its subject in.
+/// One arm's case equation, under the three spellings a probe may present its subject in.
 struct Refinement {
     /// The scrutinee **as written** — the spelling the equation is recorded under, and the one a probe is asked about first.
     key: Term,
+    /// The spelling the written one's dispatch resolves to — `(?w).1(a, hi)` as `NatLe(a, hi)` — recorded beside it on entry and asked at the same point, or `None` where the written spelling needs no resolving. See [`resolved_spelling`](super::whnf::resolved_spelling).
+    resolved: Option<Term>,
     /// The value this case assumes the scrutinee is.
     value: Term,
     /// The weak-head normal form of `key`, computed at most once and only when a probe has already missed the written spelling. See [`Scope::unasked_refinement`].
@@ -58,27 +60,28 @@ impl Scope {
     ///
     /// **Keyed on the scrutinee as written.** This used to be keyed on the scrutinee's weak-head normal form, which the caller obtained by reducing it once per arm — and a scrutinee mentioning a local can be memoized by nothing, so a web of combinator definitions each naming the one before it twice unfolded exponentially to produce a key that a literal arm body then never probed. The written spelling costs nothing to record; the reduced one is computed only when a probe misses, at most once per equation, by [`Scope::unasked_refinement`] and its caller.
     ///
-    /// A local-free scrutinee is skipped rather than recorded, and that gate now sits on the written spelling. Local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — a local-free term's entry outlives the arm, and reduction of a local-free term never encounters a local-bearing stuck form, so no such reduct can depend on an equation that was later retracted; a local-bearing term's entry may, and is cleared with the equation. The reduced spelling a settlement computes is *not* covered by this gate, and does not need to be: the probe that consults it is asked only about local-bearing terms, so a local-free reduct can be recorded and can never fire.
+    /// A local-free scrutinee is skipped rather than recorded, and that gate now sits on the written spelling. Local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — a local-free term's entry outlives the arm, and reduction of a local-free term never encounters a local-bearing stuck form, so no such reduct can depend on an equation that was later retracted; a local-bearing term's entry may, and is cleared with the equation. The reduced spelling a settlement computes is *not* covered by this gate, and does not need to be: the probe that consults it is asked only about local-bearing terms, so a local-free reduct can be recorded and can never fire. The resolved spelling *is* gated, separately, because it is asked at the probe before decomposition, which every term reaches: opening a dispatch substitutes its arguments into the method's body, and a method that ignores its local argument resolves to a local-free comparison that would then answer local-free terms inside the arm and hand the memos an entry resting on the equation.
     ///
     /// An equation is a claim about *one* term, so the only sound key is one that identifies terms already definitionally equal, and structural equality is the under-approximation of that which costs nothing to justify. Both spellings satisfy it — the written one *is* the scrutinee, and the reduced one is what the kernel's own reduction says it computes to.
     ///
     /// This used to key through `project_erased_universes`, on the premise that a universe argument cannot affect computation. The premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it was written for the Core-to-Ersd hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identified `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
-    pub(super) fn refine(&mut self, scrutinee: Term, value: Term) {
+    pub(super) fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) {
         if scrutinee.has_local_free() {
             self.refinements.push(Refinement {
                 key: scrutinee,
+                resolved: resolved.filter(Term::has_local_free),
                 value,
                 reduct: Reduct::Unasked,
             });
         }
     }
 
-    /// The case value the term `term` is refined to under the *written* spelling, innermost arm first.
+    /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.
     ///
-    /// Probed by the same key [`Scope::refine`] stores under, which is the scrutinee itself.
+    /// Probed by the keys [`Scope::refine`] stores under: the scrutinee itself, and the spelling its dispatch resolves to, which is what a probe presents once reduction has opened the same dispatch — so an intrinsic comparison meets a guard written through a concept before anything folds it.
     pub(super) fn refinement_of(&self, term: &Term) -> Option<Term> {
         self.in_force_innermost_first()
-            .find(|entry| entry.key == *term)
+            .find(|entry| entry.key == *term || entry.resolved.as_ref() == Some(term))
             .map(|entry| entry.value.clone())
     }
 

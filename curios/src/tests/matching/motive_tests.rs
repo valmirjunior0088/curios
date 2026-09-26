@@ -146,3 +146,119 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
 
     assert_eq!(run(source), b"ok");
 }
+
+// === The ambient result over an expression ===================================
+//
+// An omitted motive over an expression scrutinee takes the ambient form as a variable's does: the goal as written, its syntactic occurrences of the expression replaced by the case, and the arm's refinement reducing every occurrence the goal reaches only by unfolding. A family solved by occurrence abstraction saw the goal reduced at its root instead, where an occurrence spelled through a `let` escaped the abstraction while the application the refinement is keyed on had been unfolded away — so `classify`'s shape, a defined guard behind a `let` after an earlier guard, was refused although the written constant motive checked it.
+#[test]
+fn an_elided_motive_over_an_expression_reaches_a_guard_behind_a_let() {
+    let source = r#"
+        use /std/{Nat, Bool, Byte};
+        let ladder(c : Byte) -> Bool =
+            let m = Byte/to_nat(c);
+            match m < 1 | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
+        let climbs(c : Byte) -> Bool/Holds(ladder(c)) =
+            match Byte/to_nat(c) < 1
+            | true => Bool/True/qed()
+            | false => match Nat/in_range(Byte/to_nat(c), 3, 5) | true => Bool/True/qed() | false => Bool/True/qed() end
+            end;
+        let aliased(n : Nat) -> Bool =
+            let m = n;
+            match Nat/in_range(m, 0, 1) | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
+        let climbs_aliased(n : Nat) -> Bool/Holds(aliased(n)) =
+            match Nat/in_range(n, 0, 1)
+            | true => Bool/True/qed()
+            | false => match Nat/in_range(n, 3, 5) | true => Bool/True/qed() | false => Bool/True/qed() end
+            end;
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// An occurrence the goal reaches only by unfolding a definition is reduced by the arm's refinement, since no spelling shows it to replace.
+#[test]
+fn an_elided_motive_over_an_expression_reaches_an_occurrence_behind_a_definition() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
+        let bounded(n : Nat, h : Nat/Lt(n, 10)) -> Bool/Holds(below(n)) =
+            match n < 5
+            | true => Bool/True/qed()
+            | false => h
+            end;
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A goal that writes the expression is specialized per arm: each arm is checked with the case in the comparison's place.
+#[test]
+fn an_elided_motive_over_an_expression_specializes_a_goal_that_writes_it() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        let pick(n : Nat) -> match n < 5 : (_) => Type | true => Nat | false => Bool end =
+            match n < 5
+            | true => 3
+            | false => true
+            end;
+        /std/print(Nat/to_str(pick(2)))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}
+
+// The ambient goal is still the goal: an arm whose goal does not hold at its case is refused.
+#[test]
+fn an_elided_motive_over_an_expression_refuses_an_arm_whose_goal_fails() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
+        let unbounded(n : Nat) -> Bool/Holds(below(n)) =
+            match n < 5
+            | true => Bool/True/qed()
+            | false => Bool/True/qed()
+            end;
+        /std/print("ok")
+        "#;
+
+    let error = error(source);
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+}
+
+// === Case splits over a free monoid ==========================================
+//
+// A fold's induction hypothesis is typed at the result at the tail, which only a family states, so a fold whose arm reads its hypothesis closes one over its scrutinee. A case split reads none, and takes the ambient result as a `Bool` match does: a goal holding a proof about the scrutinee — which a family closed over the scrutinee, and not over the proof, cannot state — needs no convoy.
+#[test]
+fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
+    let source = r#"
+        use /std/{Nat, Bytes, List, Eq};
+        let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
+            -> Eq(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
+            match a | x[] => Eq/refl() | x[_, .._] => Eq/refl() end;
+        let at_list(@T : Type, xs : List(T), i : Nat, q : Nat/Lt(i, List/len(xs)))
+            -> Eq(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
+            match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;
+        let byte_of(n : Nat, q : Nat/Lt(n, 256)) -> Eq(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
+            match n | 0 => Eq/refl() | p + 1 => Eq/refl() end;
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A fold whose arm reads its hypothesis still closes a family over its scrutinee, so the same goal is refused there: the proof is stated at a type the family's binder does not match.
+#[test]
+fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
+    let source = r#"
+        use /std/{Nat, Bytes, Eq};
+        let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
+            -> Eq(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
+            match a | x[] => Eq/refl() | x[_, .._]; ih => ih end;
+        /std/print("ok")
+        "#;
+
+    let error = error(source);
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+}

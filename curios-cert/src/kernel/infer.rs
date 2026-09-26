@@ -510,7 +510,7 @@ fn check_cases(
 
         kernel.scoped(|kernel| {
             let mut solutions = Vec::new();
-            eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions);
+            eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -572,32 +572,49 @@ fn check_cases(
             check(kernel, default, &expected)
         }
 
-        Cases::FreeMonoid { carrier } => match result {
-            MatchResult::Family(motive) => {
-                check_free_monoid(kernel, motive, scrutinee, scrutinee_type, carrier, &at)
-            }
-            MatchResult::Ambient(goal) => Err(KernelError::AmbientFold(goal.clone())),
-        },
+        Cases::FreeMonoid { carrier } => {
+            check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &at)
+        }
     }
 }
 
-/// The free-monoid arm rule: the identity arm inhabits the motive at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and an induction hypothesis at that tail — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
+/// Whether a fold's cons arm reads its induction hypothesis, the last binder its scope closes over.
+fn reads_hypothesis(carrier: &Carrier) -> bool {
+    match carrier {
+        Carrier::Nat { cons_case, .. } => cons_case.uses(1),
+        Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case.uses(2),
+    }
+}
+
+/// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
+///
+/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`KernelError::AmbientFold`]); and a family that reaches the scrutinee other than through its binder would type it at the arm's own goal ([`KernelError::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
 ///
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
     kernel: &mut Kernel,
-    motive: &Scope<Many>,
+    result: &MatchResult,
     scrutinee: &Term,
     scrutinee_type: &Term,
     carrier: &Carrier,
     at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
-    // The hypothesis below is typed at the motive opened at the tail, and the arm is then checked with the scrutinee specialized to the cons value. A motive that reaches the scrutinee other than through its binder has that occurrence specialized as well, so the hypothesis would be assumed at the arm's own goal — `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` proving `Eq(n, 0)` for every `n`. Refused syntactically, which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
-    if motive.body().mentions_term(scrutinee) {
-        return Err(KernelError::FoldMotiveCapturesScrutinee(scrutinee.clone()));
-    }
+    let motive = match (reads_hypothesis(carrier), result) {
+        (false, _) => None,
+        (true, MatchResult::Ambient(goal)) => return Err(KernelError::AmbientFold(goal.clone())),
+        // The capture is refused syntactically — `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` would prove `Eq(n, 0)` for every `n` — which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
+        (true, MatchResult::Family(motive)) => {
+            if motive.body().mentions_term(scrutinee) {
+                return Err(KernelError::FoldMotiveCapturesScrutinee(scrutinee.clone()));
+            }
+            Some(motive)
+        }
+    };
 
-    // One cons arm: open the binders, assume them at the carrier's types with the induction hypothesis at the tail, and check the body at the motive of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
+    // The hypothesis at a tail, for an arm that reads one.
+    let hypothesis = |tail: &Term| motive.map(|motive| motive.open(&[tail]));
+
+    // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
     let cons = |kernel: &mut Kernel,
                 binders: Vec<(&Free, Term)>,
                 cons_value: Term,
@@ -608,10 +625,10 @@ fn check_free_monoid(
                 kernel.assume(binder, type_);
             }
 
-            let expected = motive.open(&[&cons_value]);
+            let expected = result.at(scrutinee, &[], &[], &cons_value);
 
             let mut solutions = Vec::new();
-            eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions);
+            eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -646,15 +663,10 @@ fn check_free_monoid(
             ));
             let body = cons_case.open(&[&pred_occurrence, &Term::free_var(&ih)]);
 
-            cons(
-                kernel,
-                vec![
-                    (&pred, Term::intrinsic(Intrinsic::NatType)),
-                    (&ih, motive.open(&[&pred_occurrence])),
-                ],
-                succ_value,
-                &body,
-            )
+            let mut binders = vec![(&pred, Term::intrinsic(Intrinsic::NatType))];
+            binders.extend(hypothesis(&pred_occurrence).map(|type_| (&ih, type_)));
+
+            cons(kernel, binders, succ_value, &body)
         }
 
         Carrier::List {
@@ -701,16 +713,13 @@ fn check_free_monoid(
                 &Term::free_var(&ih),
             ]);
 
-            cons(
-                kernel,
-                vec![
-                    (&head, elem.clone()),
-                    (&tail, Term::intrinsic(Intrinsic::ListType(elem.clone()))),
-                    (&ih, motive.open(&[&tail_occurrence])),
-                ],
-                cons_value,
-                &body,
-            )
+            let mut binders = vec![
+                (&head, elem.clone()),
+                (&tail, Term::intrinsic(Intrinsic::ListType(elem.clone()))),
+            ];
+            binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
+
+            cons(kernel, binders, cons_value, &body)
         }
 
         Carrier::Bin {
@@ -749,16 +758,13 @@ fn check_free_monoid(
                 &Term::free_var(&ih),
             ]);
 
-            cons(
-                kernel,
-                vec![
-                    (&head, atom_type),
-                    (&tail, Term::intrinsic(Intrinsic::BinType(*grain))),
-                    (&ih, motive.open(&[&tail_occurrence])),
-                ],
-                cons_value,
-                &body,
-            )
+            let mut binders = vec![
+                (&head, atom_type),
+                (&tail, Term::intrinsic(Intrinsic::BinType(*grain))),
+            ];
+            binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
+
+            cons(kernel, binders, cons_value, &body)
         }
     }
 }

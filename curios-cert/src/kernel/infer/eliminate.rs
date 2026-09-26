@@ -30,8 +30,8 @@ use {
     crate::{Counted, InductAt, Kernel, KernelError, Sort, carries_information},
     curios_analysis::{Invert, invert_indices, invert_indices_outer, pinned_by_targets},
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, MatchResult, Subterm, Telescope, Term, Variant,
-        Visit,
+        Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
+        Term, Variant, Visit,
     },
 };
 
@@ -120,7 +120,7 @@ fn check_arm(
             })
             .into();
 
-            assume_case_value(kernel, scrutinee, &value, &mut solutions);
+            assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
 
             let refs = payload.iter().collect::<Vec<_>>();
             let body = substitute(&arm.open(&refs), &solutions);
@@ -155,7 +155,7 @@ pub(super) fn assume_case_value(
     scrutinee: &Term,
     value: &Term,
     solutions: &mut Vec<(Free, Term)>,
-) {
+) -> Result<(), ReduceError> {
     let value = substitute(value, solutions);
 
     if let Subterm::Var(var) = &**scrutinee
@@ -163,10 +163,10 @@ pub(super) fn assume_case_value(
         && kernel.local_type(var.unwrap()).is_some()
     {
         solutions.push((var.unwrap().clone(), value));
-        return;
+        return Ok(());
     }
 
-    kernel.refine(scrutinee.clone(), value);
+    kernel.refine(scrutinee.clone(), value)
 }
 
 /// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution. Empty when the equations force nothing — including when they *clash*, which makes the arm unreachable and therefore checked as written.

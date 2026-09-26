@@ -71,7 +71,9 @@ pub(super) fn across_an_arm(kernel: &mut Kernel) -> [Term; 4] {
     let closed = chain(8);
 
     let (inside_open, inside_closed) = kernel.scoped(|kernel| {
-        kernel.refine(Term::free_var(&n), nat(0));
+        kernel
+            .refine(Term::free_var(&n), nat(0))
+            .expect("the equation records");
 
         (
             kernel.reduce_forced(open.clone()).expect("reduces"),

@@ -3,9 +3,9 @@ use {
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
     curios_analysis::{Invert, invert_indices, pinned_by_targets},
     curios_core::{
-        Advance, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
-        case_substitution,
+        Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
+        IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Scope, Subterm, Telescope,
+        Term, Three, Two, case_substitution,
     },
     curios_num::{Binary, Grain, Natural},
     std::collections::BTreeSet,
@@ -38,7 +38,7 @@ fn seed_motive(
     Ok(())
 }
 
-/// Resolve the (arity-one) motive of an intrinsic eliminator. An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
+/// Resolve the (arity-one) motive of an intrinsic eliminator that keeps a family: a fold whose arm reads its hypothesis, or any intrinsic elimination whose motive is written or inferred — an elided one checked against an expected type is otherwise ambient (`resolve_intrinsic_result`). An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
 ///
 /// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job exactly as before.
 fn resolve_intrinsic_motive(
@@ -61,7 +61,7 @@ fn resolve_intrinsic_motive(
     check_motive(context, &shape, motive)
 }
 
-/// Refuse a fold whose motive reaches its scrutinee other than through the binder it declares.
+/// Refuse a fold whose arm reads its hypothesis, under a motive that reaches its scrutinee other than through the binder it declares.
 ///
 /// The induction hypothesis is assumed at the motive opened at the tail *inside* the cons arm, where `refine_head` has the scrutinee reducing to the cons value. A captured occurrence reduces with it, so the hypothesis would be typed at the arm's own goal: `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` then proves `Eq(n, 0)` for every `n`. The kernel refuses the same shape by the same test (`check_free_monoid`); this is the elaborator's copy, so the refusal is reported where the motive was written. A local defined in the frame — a `let` alias of the scrutinee, or a binder an enclosing arm refined — is read through its definition, since the reducer will read it the same way.
 fn refuse_captured_scrutinee(
@@ -118,6 +118,57 @@ fn refuse_captured_scrutinee(
     }
 }
 
+/// The result of a fold, by the rule every reader of one states — erasure's split-or-fold reading and the kernel's arm rule too: the induction hypothesis is assumed exactly when the arm reads it, and only a family types it, at the motive opened at the tail. An arm that may read it (`may_read_hypothesis`) keeps the family, which is refused if it captures the scrutinee and seeded against the expected type. An arm that cannot is a case split, resolved as a `Bool` elimination is: ambient where the motive is elided and checked, since nothing needs the type a hypothesis would have had.
+///
+/// The rebuilt motive is what everything below opens: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
+fn resolve_fold_result(
+    context: &mut Context,
+    head_type: &Term,
+    head: &Term,
+    motive: &Scope<Many>,
+    (term, mode): (&Term, &Mode),
+    reads_hypothesis: bool,
+) -> Result<MatchResult, Error> {
+    if !reads_hypothesis {
+        let result = resolve_intrinsic_result(context, head_type, head, motive, mode)?;
+        if let Some(motive) = result.family() {
+            seed_motive(context, term, motive, head, mode)?;
+        }
+        return Ok(result);
+    }
+
+    let motive = resolve_intrinsic_motive(context, head_type, head, motive, mode)?;
+    refuse_captured_scrutinee(context, &motive, head)?;
+    seed_motive(context, term, &motive, head, mode)?;
+
+    Ok(MatchResult::Family(motive))
+}
+
+/// Whether a fold's written cons arm may read its induction hypothesis, the binder at `index`: it names the binder, or it holds a written goal, which stands for a term not yet written and may name anything in scope. Nothing else reaches the hypothesis without naming it — a metavariable is solved from types, and no type in scope mentions the hypothesis unless the arm does — so an arm that does neither elaborates to one that reads none, which is the occurrence the kernel and erasure read off the elaborated arm.
+fn may_read_hypothesis<N: Arity>(arm: &Scope<N>, index: usize) -> bool {
+    fn holds_goal(term: &Term) -> bool {
+        matches!(&**term, Subterm::Metavar(metavar) if metavar.origin == MetavarOrigin::Goal)
+            || term.any_child_term(&mut |child| holds_goal(child))
+    }
+
+    arm.uses(index) || holds_goal(arm.body())
+}
+
+/// One arm of a fold, at its case value: the scrutinee refined to it, a local typed by a variable scrutinee re-assumed at it under an ambient result, and the body checked against the result there.
+fn check_fold_arm(
+    context: &mut Context,
+    head: &Term,
+    result: &MatchResult,
+    value: &Term,
+    body: &Term,
+) -> Result<Term, Error> {
+    refine_head(context, head, value)?;
+    if result.ambient().is_some() {
+        shadow_specialized(context, head, &[], &[], value);
+    }
+    check(context, body, result.at(head, &[], &[], value))
+}
+
 fn elaborate_nat_match(
     context: &mut Context,
     head: &Term,
@@ -129,23 +180,20 @@ fn elaborate_nat_match(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
 
-    // Everything below opens the *rebuilt* motive: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
-    let motive = resolve_intrinsic_motive(
+    let reads_hypothesis = may_read_hypothesis(succ_case, 1);
+    let result = resolve_fold_result(
         context,
         &Subterm::Intrinsic(Intrinsic::NatType).into(),
         &head_elaborated,
         motive,
-        &mode,
+        (term, &mode),
+        reads_hypothesis,
     )?;
-    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
-
-    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its constructor in each arm (as `Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
     let zero_value: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))).into();
     let zero_elaborated = context.with_frame(|context| {
-        refine_head(context, &head_elaborated, &zero_value)?;
-        check(context, zero_case, motive.open(&[&zero_value]))
+        check_fold_arm(context, &head_elaborated, &result, &zero_value, zero_case)
     })?;
 
     let pred_label = context.fresh(succ_case.first_hint());
@@ -153,28 +201,26 @@ fn elaborate_nat_match(
 
     let succ_body = context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Intrinsic(Intrinsic::NatType).into());
-        context.assume(&ih_label, &motive.open(&[&Term::free_var(&pred_label)]));
+        if let Some(motive) = result.family().filter(|_| reads_hypothesis) {
+            context.assume(&ih_label, &motive.open(&[&Term::free_var(&pred_label)]));
+        }
 
         let succ_value: Term = Subterm::Intrinsic(Intrinsic::nat_add(
             Term::free_var(&pred_label),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         ))
         .into();
-        refine_head(context, &head_elaborated, &succ_value)?;
 
-        check(
-            context,
-            &succ_case.open(&[&Term::free_var(&pred_label), &Term::free_var(&ih_label)]),
-            motive.open(&[&succ_value]),
-        )
+        let body = succ_case.open(&[&Term::free_var(&pred_label), &Term::free_var(&ih_label)]);
+        check_fold_arm(context, &head_elaborated, &result, &succ_value, &body)
     })?;
 
     let succ_elaborated = Scope::close(Two, &[&pred_label, &ih_label], succ_body);
 
-    let result_type = motive.open(&[&head_elaborated]);
+    let result_type = result.of(&head_elaborated, &[]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive),
+        result,
         // `Nat` is the free monoid on one payload-less generator: its cons arm binds just (predecessor, ih), so the carrier is `Nat` and the head is absent.
         cases: Cases::FreeMonoid {
             carrier: Carrier::Nat {
@@ -205,11 +251,15 @@ fn elaborate_list_match(
         _ => return Err(Error::not_list_type(head_type)),
     };
 
-    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
-    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
-
-    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+    let reads_hypothesis = may_read_hypothesis(cons_case, 2);
+    let result = resolve_fold_result(
+        context,
+        &head_type,
+        &head_elaborated,
+        motive,
+        (term, &mode),
+        reads_hypothesis,
+    )?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do), so a hypothesis whose type mentions the scrutinee reduces at the arm's value without a hand-written convoy.
     let empty_value: Term = Subterm::Intrinsic(Intrinsic::List {
@@ -218,8 +268,7 @@ fn elaborate_list_match(
     })
     .into();
     let empty_elaborated = context.with_frame(|context| {
-        refine_head(context, &head_elaborated, &empty_value)?;
-        check(context, empty_case, motive.open(&[&empty_value]))
+        check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
     })?;
 
     let head_label = context.fresh(cons_case.first_hint());
@@ -229,7 +278,9 @@ fn elaborate_list_match(
     let cons_body = context.with_frame(|context| {
         context.assume(&head_label, &elem);
         context.assume(&tail_label, &head_type);
-        context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
+        if let Some(motive) = result.family().filter(|_| reads_hypothesis) {
+            context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
+        }
 
         // The cons value `head :: tail`, encoded as the monoid operation on a singleton and the tail (no separate prepend intrinsic).
         let cons_value: Term = Subterm::Intrinsic(Intrinsic::ListConcat {
@@ -244,25 +295,21 @@ fn elaborate_list_match(
             ],
         })
         .into();
-        refine_head(context, &head_elaborated, &cons_value)?;
 
-        check(
-            context,
-            &cons_case.open(&[
-                &Term::free_var(&head_label),
-                &Term::free_var(&tail_label),
-                &Term::free_var(&ih_label),
-            ]),
-            motive.open(&[&cons_value]),
-        )
+        let body = cons_case.open(&[
+            &Term::free_var(&head_label),
+            &Term::free_var(&tail_label),
+            &Term::free_var(&ih_label),
+        ]);
+        check_fold_arm(context, &head_elaborated, &result, &cons_value, &body)
     })?;
 
     let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);
 
-    let result_type = motive.open(&[&head_elaborated]);
+    let result_type = result.of(&head_elaborated, &[]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive),
+        result,
         cases: Cases::FreeMonoid {
             carrier: Carrier::List {
                 elem,
@@ -290,17 +337,20 @@ fn elaborate_bin_match(
     let (head_elaborated, head_type) =
         elaborate_intrinsic_head(context, head, IntrinsicHead::Bin(grain))?;
 
-    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
-    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
-
-    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+    let reads_hypothesis = may_read_hypothesis(cons_case, 2);
+    let result = resolve_fold_result(
+        context,
+        &head_type,
+        &head_elaborated,
+        motive,
+        (term, &mode),
+        reads_hypothesis,
+    )?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
     let empty_value: Term = Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into();
     let empty_elaborated = context.with_frame(|context| {
-        refine_head(context, &head_elaborated, &empty_value)?;
-        check(context, empty_case, motive.open(&[&empty_value]))
+        check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
     })?;
 
     let head_label = context.fresh(cons_case.first_hint());
@@ -315,7 +365,9 @@ fn elaborate_bin_match(
         .into();
         context.assume(&head_label, &atom_type);
         context.assume(&tail_label, &head_type);
-        context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
+        if let Some(motive) = result.family().filter(|_| reads_hypothesis) {
+            context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
+        }
 
         // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
         let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend {
@@ -329,25 +381,21 @@ fn elaborate_bin_match(
             operands: vec![singleton, Term::free_var(&tail_label)],
         })
         .into();
-        refine_head(context, &head_elaborated, &cons_value)?;
 
-        check(
-            context,
-            &cons_case.open(&[
-                &Term::free_var(&head_label),
-                &Term::free_var(&tail_label),
-                &Term::free_var(&ih_label),
-            ]),
-            motive.open(&[&cons_value]),
-        )
+        let body = cons_case.open(&[
+            &Term::free_var(&head_label),
+            &Term::free_var(&tail_label),
+            &Term::free_var(&ih_label),
+        ]);
+        check_fold_arm(context, &head_elaborated, &result, &cons_value, &body)
     })?;
 
     let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);
 
-    let result_type = motive.open(&[&head_elaborated]);
+    let result_type = result.of(&head_elaborated, &[]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive),
+        result,
         cases: Cases::FreeMonoid {
             carrier: Carrier::Bin {
                 grain,
@@ -361,7 +409,9 @@ fn elaborate_bin_match(
     Ok((rebuilt, result_type))
 }
 
-/// The result of a `Bool` or `Switch` elimination, which binds no induction hypothesis: an elided motive over a variable scrutinee checked against an expected type takes that type as its ambient result, and anything else resolves as an intrinsic motive. A fold keeps the family whatever its shape — its hypothesis is typed at the motive opened at the tail.
+/// The result of an elimination whose arms read no induction hypothesis — `Bool`, `Switch`, and a fold's case split (`resolve_fold_result`): an elided motive checked against an expected type takes that type as its ambient result, whatever the scrutinee, and anything else resolves as an intrinsic motive. A fold whose arm reads its hypothesis keeps the family — the hypothesis is typed at the motive opened at the tail.
+///
+/// An expression scrutinee takes the ambient form as a variable does: each arm checks against the goal with the scrutinee's syntactic occurrences standing for the case (`MatchResult::at`), and the arm's refinement reduces any occurrence the goal reaches only by unfolding. A family solved by `solve`'s occurrence abstraction instead sees the goal as it arrives reduced at its root, and an occurrence spelled through a `let` there escapes the abstraction while the application the refinement is keyed on has been unfolded away, which left an arm less than the unabstracted goal would have given it.
 fn resolve_intrinsic_result(
     context: &mut Context,
     head_type: &Term,
@@ -371,7 +421,6 @@ fn resolve_intrinsic_result(
 ) -> Result<MatchResult, Error> {
     if let Mode::Check(expected) = mode
         && is_elided_motive(motive)
-        && is_variable(head)
     {
         return Ok(MatchResult::Ambient(expected.clone()));
     }
@@ -676,11 +725,9 @@ fn elaborate_induct_match(
         indices: induct_decl.indices_at(&params),
     };
 
-    // An elided motive over a variable scrutinee, checked against an expected type, takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy used to arrange, and what the elaborator used to synthesize one for; the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. Anything else — a written motive, inference mode, an expression scrutinee, whose occurrences in the goal only `solve`'s occurrence abstraction can find — is a family, checked or solved as before.
+    // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy used to arrange, and what the elaborator used to synthesize one for; the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved as before.
     let result = match &mode {
-        Mode::Check(expected) if is_elided_motive(motive) && is_variable(&head_elaborated) => {
-            MatchResult::Ambient(expected.clone())
-        }
+        Mode::Check(expected) if is_elided_motive(motive) => MatchResult::Ambient(expected.clone()),
         _ => MatchResult::Family(check_motive(context, &shape, motive)?),
     };
 
@@ -916,11 +963,6 @@ fn shadow_specialized(
         let specialized = Scope::close(Many(binders.len()), &binders, type_).open(&values);
         context.assume(&name, &specialized);
     }
-}
-
-/// Whether a scrutinee is a variable with a binder — the one shape a case can be substituted for, and so the precondition of an ambient result.
-fn is_variable(head: &Term) -> bool {
-    matches!(&**head, Subterm::Var(var) if var.as_free().is_some())
 }
 
 /// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Only the elided form takes the ambient result; everything else is taken verbatim.

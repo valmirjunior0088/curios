@@ -194,26 +194,81 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     );
 }
 
-/// A fold's induction hypothesis is the fold at the tail, typed at the result at the tail, and an ambient goal has no tail to be taken at once the head is substituted away: refused, whatever the arms.
+/// A fold's induction hypothesis is the fold at the tail, typed at the result at the tail, and an ambient goal has no tail to be taken at once the head is substituted away: a fold whose arm reads its hypothesis is refused at one.
 #[test]
-fn an_ambient_fold_is_refused() {
+fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
     let mut kernel = kernel();
     let k = binder(80, "k");
     kernel.assume(&k, &nat_type());
 
+    let ih = binder(82, "ih");
     let fold = Term::match_ambient(
         Term::free_var(&k),
         nat_type(),
         Cases::FreeMonoid {
             carrier: Carrier::Nat {
                 empty_case: nat(0),
-                cons_case: Scope::close(Two, &[&binder(81, "pred"), &binder(82, "ih")], nat(0)),
+                cons_case: Scope::close(Two, &[&binder(81, "pred"), &ih], Term::free_var(&ih)),
             },
         },
     );
     assert!(matches!(
         infer(&mut kernel, &fold),
         Err(KernelError::AmbientFold(_))
+    ));
+}
+
+/// A case split reads no hypothesis, so nothing needs the type an ambient goal cannot give one: its reduct never contains the fold at the tail, and each arm is checked at its case value as a `Bool` arm is. The same match, its arms each inhabiting the goal, is inferred at the goal.
+#[test]
+fn an_ambient_case_split_is_checked_at_each_case() {
+    let mut kernel = kernel();
+    let k = binder(80, "k");
+    kernel.assume(&k, &nat_type());
+
+    let split = Term::match_ambient(
+        Term::free_var(&k),
+        nat_type(),
+        Cases::FreeMonoid {
+            carrier: Carrier::Nat {
+                empty_case: nat(0),
+                cons_case: Scope::close(
+                    Two,
+                    &[&binder(81, "pred"), &binder(82, "ih")],
+                    Term::free_var(&binder(81, "pred")),
+                ),
+            },
+        },
+    );
+    assert_eq!(
+        infer(&mut kernel, &split).expect("each arm inhabits the goal at its case"),
+        nat_type()
+    );
+}
+
+/// The split's arms are still held to the goal: an identity arm that does not inhabit it is refused as the mismatch it is.
+#[test]
+fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
+    let mut kernel = kernel();
+    let k = binder(80, "k");
+    kernel.assume(&k, &nat_type());
+
+    let split = Term::match_ambient(
+        Term::free_var(&k),
+        Term::intrinsic(Intrinsic::BoolType),
+        Cases::FreeMonoid {
+            carrier: Carrier::Nat {
+                empty_case: nat(0),
+                cons_case: Scope::close(
+                    Two,
+                    &[&binder(81, "pred"), &binder(82, "ih")],
+                    Term::intrinsic(Intrinsic::Bool(true)),
+                ),
+            },
+        },
+    );
+    assert!(matches!(
+        infer(&mut kernel, &split),
+        Err(KernelError::Mismatch { .. })
     ));
 }
 

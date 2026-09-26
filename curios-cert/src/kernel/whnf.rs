@@ -226,7 +226,7 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     }
 
     let canonical = canonical_operands(kernel, value)?;
-    // The dual under the reduced spelling too: a guard dispatched through a witness is recorded under the projection it elaborated to and answers only once its reduct is settled, so the dual is asked of the settled reducts exactly as the written spelling was asked of the record.
+    // The dual under the reduced spelling too: a guard whose operands the probe presents folded — the dispatch's resolved spelling carries them as written — answers only once its reduct is settled, so the dual is asked of the settled reducts exactly as the written and resolved spellings were asked of the record.
     let dual = match &*canonical {
         Subterm::Intrinsic(intrinsic) => dual_comparison(intrinsic).map(Term::intrinsic),
         _ => None,
@@ -357,6 +357,43 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
             arguments,
         }))),
     })
+}
+
+/// The spelling a dispatched scrutinee resolves to: its application spine opened a layer at a time through heads that reduce to functions — the intrinsic a concept method elaborates to, `(?w).1(a, hi)` reaching `NatLe(a, hi)` — or `None` where nothing opened, where what it reached carries no head a probe can present, or where sixteen layers did not settle it.
+///
+/// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: the kernel used to meet a dispatched guard's intrinsic shape only through its lazily settled reduct — after the decision procedure had already folded the probe, and as that fold's result — so in an arm whose guard the procedure decides against, the elaborator answered a dual spelling from the arm's equation and the kernel from the procedure.
+pub(crate) fn resolved_spelling(
+    kernel: &mut Kernel,
+    scrutinee: &Term,
+) -> Result<Option<Term>, ReduceError> {
+    let mut current = scrutinee.clone();
+
+    // Bounded: each step consumes one application layer of an elaborated dispatch, and a spine that has not settled in sixteen is not a dispatch.
+    for _ in 0..16 {
+        let Subterm::Apply(Apply { head, arguments }) = &*current else {
+            return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
+        };
+        let head = whnf(kernel, head.clone())?;
+        let Subterm::Func(Func { telescope, .. }) = &*head else {
+            return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
+        };
+        if telescope.len() != arguments.len() {
+            return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
+        }
+
+        kernel.spend(
+            Cost::collection(arguments.len() as u64)
+                .saturating_add(Cost::term(1).saturating_mul(arguments.len() as u64)),
+        )?;
+        let refs = arguments
+            .iter()
+            .map(|argument| &argument.term)
+            .collect::<Vec<_>>();
+        let opened = telescope.open(&refs);
+        current = opened;
+    }
+
+    Ok(None)
 }
 
 /// Projection: select a component out of a tuple, a struct, or a constructor's payload.

@@ -115,9 +115,9 @@ pub enum KernelError {
     NotASort(Term),
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
     NotAMotive(Term),
-    /// A free-monoid fold at an ambient goal. The fold's induction hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away.
+    /// A free-monoid fold whose arm reads its induction hypothesis, at an ambient goal. The hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away. A case split, whose arm reads none, takes an ambient goal as any other elimination does.
     AmbientFold(Term),
-    /// A free-monoid fold whose motive mentions its scrutinee other than through the binder. The induction hypothesis is typed at the motive opened at the tail, and the arm is checked with the scrutinee specialized to the cons value — so a captured occurrence is specialized too, and the hypothesis is assumed at the goal of the arm instead of at the tail's, which proves the goal from itself.
+    /// A free-monoid fold whose arm reads its induction hypothesis, under a motive that mentions its scrutinee other than through the binder. The hypothesis is typed at the motive opened at the tail, and the arm is checked with the scrutinee specialized to the cons value — so a captured occurrence is specialized too, and the hypothesis is assumed at the goal of the arm instead of at the tail's, which proves the goal from itself.
     FoldMotiveCapturesScrutinee(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
@@ -259,7 +259,7 @@ impl fmt::Display for Displayed<'_> {
                 let goal = goal.spelled(spelling);
                 write!(
                     formatter,
-                    "a fold needs a motive for its induction hypothesis, and `{goal}` is an ambient goal",
+                    "a fold that reads its induction hypothesis needs a motive to type it, and `{goal}` is an ambient goal",
                 )
             }
             KernelError::FoldMotiveCapturesScrutinee(scrutinee) => {
@@ -695,10 +695,22 @@ impl Kernel {
         outcome
     }
 
-    /// Assume an arm's case equation: within the arm, `scrutinee` — as written — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
-    pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) {
-        self.scope.refine(scrutinee, value);
+    /// Assume an arm's case equation: within the arm, `scrutinee` — as written, and as its dispatch resolves — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
+    ///
+    /// The resolved spelling is computed before the equation is pushed, so it rests only on the equations outside it, which retract no earlier than it does — the view [`Kernel::settle_refinement`] has to reconstruct by withholding, had for free here. Only a local-bearing scrutinee is resolved, since [`Scope::refine`](scope::Scope) records nothing else, and only one with no head a probe presents already. Exhaustion propagates, as a settlement's does; any other refusal records the written spelling alone.
+    pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) -> Result<(), ReduceError> {
+        let resolved = match scrutinee.has_local_free() && scrutinee.head_key().is_none() {
+            true => match whnf::resolved_spelling(self, &scrutinee) {
+                Ok(resolved) => resolved,
+                Err(error) if error.is_exhausted() => return Err(error),
+                Err(_) => None,
+            },
+            false => None,
+        };
+        self.scope.refine(scrutinee, resolved, value);
         self.memos.begin_equations();
+
+        Ok(())
     }
 
     /// The case value `term` is refined to under the written spelling, innermost arm first.
