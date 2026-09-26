@@ -7,7 +7,7 @@ use {
 
 // A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. They did not when the scrutinee carried an *inferred* metavariable: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness keyed differently and the arm silently refined nothing. Solved metavariables are now materialized into the key, which is what makes the two spellings one.
 //
-// Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one the kernel's refinement store reads, which a function parameter stopped being once `an_effect_behind_a_function_parameter_does_not_refine` landed. A concept dispatch is all three at once, and it is what `/std/Str/Valid/cont_len` refines on in production rather than a shape invented here.
+// Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one the kernel's refinement store reads, which a function parameter stopped being once `an_effect_behind_a_function_parameter_does_not_refine` landed. A concept dispatch is all three at once, and it is what `/std/Str/fold` and `/std/Str/Valid`'s decoder refine on in production — their `rem == 1` guard — rather than a shape invented here.
 //
 // Mutation-checked: dropping `zonk_solved_term_metas` from `canonical_scrutinee` refuses this program, with `p`'s expected type still reading the unrefined method body.
 #[test]
@@ -140,7 +140,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
             end;
 
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
-            | chunk(b) => b
+            | chunk(b, @_) => b
             | eof() => x[]
             | error(_) => x[]
             end;
@@ -173,6 +173,25 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
         /std/print(Nat/to_str(shown(7, 3)))
         "#;
     assert_eq!(run(source), b"7");
+}
+
+// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying. The kernel used to meet the resolved spelling only as the reduct of the written one, after the fold, and refused what the elaborator had accepted. `/std/Str/Valid`'s three-byte decoding is this shape.
+#[test]
+fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        let nested(cp : Nat) -> Nat =
+            match cp % 4096 / 64 <= 63
+            | false =>
+                let _e : Nat/Lt(63, cp % 4096 / 64) = Bool/True/qed();
+                0
+            | true => 1
+            end;
+
+        /std/print(Nat/to_str(nested(70000)))
+        "#;
+    assert_eq!(run(source), b"1");
 }
 
 // A guard decides a bound spelled across the `<`/`<=` seam. `List/slice`'s precondition is `s + l <= len`, so slicing one element at `i` asks for `i + 1 <= len(l)`, while the guard a program writes to establish it is `i < len(l)` — one proposition, two spellings, and the arm records only the one the author wrote. Both reducers retry a miss on the successor spelling, so a bound discharges without the author having to spell the comparison the way the standard library's signature happens to.

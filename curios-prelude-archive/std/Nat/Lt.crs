@@ -57,6 +57,10 @@ pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b
 pub let lt_of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
     lt_of_le_succ(a, c, Le/trans(le_succ_of_lt(a, b, p), q));
 
+--- A loose bound composed with a strict one stays strict.
+pub let lt_of_le_lt(a: Nat, b: Nat, c: Nat, p: Nat/Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
+    lt_of_le_succ(a, c, Le/trans(@a + 1, @b + 1, @c, p, le_succ_of_lt(b, c, q)));
+
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 ---
 --- The bound every positional encoding wants, and the one shape reduction cannot reach on its own — `a` and `b` arrive as binders carrying their bounds in proofs, where the oracle reads terms and finds nothing. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Le/mul_mono_r`].

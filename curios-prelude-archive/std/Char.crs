@@ -93,25 +93,58 @@ pub let is_alpha(c: Char) -> Bool =
 pub let is_alphanumeric(c: Char) -> Bool =
     is_alpha(c) || is_digit(c);
 
+-- The upper bound of an uppercase letter's code, read through `is_upper`'s own decision: a guard on `is_upper(c)` refines the call it matched, not `in_range`'s unfolding of it, so the bound is taken where the two still convert.
+let upper_code(c: Char, h: Bool/Holds(is_upper(c))) -> Nat/Le(c.code, 0x5A) =
+    Nat/Le/of_in_range(c.code, 0x41, 0x5A, h).high;
+
+-- The same for a lowercase letter.
+let lower_code(c: Char, h: Bool/Holds(is_lower(c))) -> Nat/Le(c.code, 0x7A) =
+    Nat/Le/of_in_range(c.code, 0x61, 0x7A, h).high;
+
 --- An ASCII uppercase letter lowered; anything else unchanged.
 pub let to_ascii_lower(c: Char) -> Char =
-    match is_upper(c) | true => Option/unwrap_or(of_nat(c.code + 0x20), c) | false => c end;
+    match is_upper(c)
+    | true =>
+        Char {
+            code = c.code + 0x20,
+            valid =
+                Valid/below_surrogates(
+                    c.code + 0x20,
+                    Nat/Lt/lt_of_lt_le(
+                        c.code + 0x20,
+                        0x7B,
+                        0xD800,
+                        upper_code(c, Bool/True/qed()),
+                        Bool/True/qed())),
+        }
+    | false => c
+    end;
 
 --- An ASCII lowercase letter raised; anything else unchanged.
 pub let to_ascii_upper(c: Char) -> Char =
-    match is_lower(c) | true => Option/unwrap_or(of_nat(c.code - 0x20), c) | false => c end;
+    match is_lower(c)
+    | true =>
+        Char {
+            code = c.code - 0x20,
+            valid =
+                Valid/below_surrogates(
+                    c.code - 0x20,
+                    Nat/Lt/lt_of_lt_le(
+                        c.code - 0x20,
+                        0x5B,
+                        0xD800,
+                        Nat/Le/sub_mono_r(0x20, lower_code(c, Bool/True/qed())),
+                        Bool/True/qed())),
+        }
+    | false => c
+    end;
 
-let ascii_zero: Char =
-    Char { code = 0x30, valid = Bool/True/qed() };
-
---- The lowercase hexadecimal digit for `nibble` modulo sixteen.
+--- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
 pub let hex_digit(nibble: Nat) -> Char =
-    let digit =
-        match nibble % 0x10 < 10
-        | true => nibble % 0x10 + 0x30
-        | false => nibble % 0x10 - 10 + 0x61
-        end;
-    Option/unwrap_or(of_nat(digit), ascii_zero);
+    match nibble % 0x10 < 10
+    | true => Char { code = nibble % 0x10 + 0x30, valid = Bool/True/qed() }
+    | false => Char { code = nibble % 0x10 - 10 + 0x61, valid = Bool/True/qed() }
+    end;
 
 --- The value of a hexadecimal digit in either case, or `none`.
 pub let of_hex_digit(c: Char) -> Option(Nat) =
@@ -133,26 +166,59 @@ pub let to_ascii(c: Char) -> Option(Byte) =
     | false => Option/none()
     end;
 
-let emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
-    match 0 < shift
-    | false => acc
-    | true =>
-        let group = codepoint / shift % 0x40;
-        emit_continuations(x[..acc, Nat/to_byte(0x80 + group)], codepoint, Nat/div(shift, 0x40))
-    end;
-
---- The UTF-8 encoding, one to four bytes.
+--- The UTF-8 encoding, one to four bytes: `/std/Str/Valid/encoded` proves them well-formed.
 ---
---- Each lead byte masks to the payload width its own form declares — seven bits for ASCII, five for the two-byte lead, four for the three-byte, three for the four-byte — so the value is in range on its face rather than because a guard three lines up says so. Three of the four arms are guarded and the mask is an identity under the guard; the fourth has no guard at all, and its width is the only thing standing between `0x10FFFF` and a lead byte that means something else.
+--- Each byte is built under the bound it is proved to satisfy, and none is masked. A continuation byte's six bits are below `0x40` by the remainder that selects them, which reduction decides. A lead byte's payload is below its family's width because the code point is below the family's end: the guard says so for the first three families, and for the fourth, which has no guard, `c.valid` does — a scalar value is at most `U+10FFFF`, so its lead byte is at most `F4`.
 pub let to_utf8(c: Char) -> Bytes =
-    let codepoint = c.code;
+    let code = c.code;
     choose
-    | codepoint < 0x80 => x[Nat/to_byte(codepoint % 0x80)]
-    | codepoint < 0x800 =>
-        emit_continuations(x[Nat/to_byte(0xC0 + codepoint / 0x40 % 0x20)], codepoint, 1)
-    | codepoint < 0x10000 =>
-        emit_continuations(x[Nat/to_byte(0xE0 + codepoint / 0x1000 % 0x10)], codepoint, 0x40)
-    | _ => emit_continuations(x[Nat/to_byte(0xF0 + codepoint / 0x40000 % 0x08)], codepoint, 0x1000)
+    | code < 0x80 =>
+        x[Nat/to_byte(code, @Nat/Lt/lt_of_lt_le(code, 0x80, 256, Bool/True/qed(), Bool/True/qed()))]
+    | code < 0x800 =>
+        x[
+            Nat/to_byte(
+                0xC0 + code / 0x40,
+                @Nat/Lt/lt_of_lt_le(
+                    0xC0 + code / 0x40,
+                    0xE0,
+                    256,
+                    Nat/div_mod/div_lt_of_lt_mul(0x20, code, 0x40, Bool/True/qed()),
+                    Bool/True/qed())),
+            Nat/to_byte(0x80 + code % 0x40)]
+    | code < 0x10000 =>
+        x[
+            Nat/to_byte(
+                0xE0 + code / 0x1000,
+                @Nat/Lt/lt_of_lt_le(
+                    0xE0 + code / 0x1000,
+                    0xF0,
+                    256,
+                    Nat/div_mod/div_lt_of_lt_mul(0x10, code, 0x1000, Bool/True/qed()),
+                    Bool/True/qed())),
+            Nat/to_byte(0x80 + code % 0x1000 / 0x40),
+            Nat/to_byte(0x80 + code % 0x40)]
+    | _ =>
+        x[
+            Nat/to_byte(
+                0xF0 + code / 0x40000,
+                @Nat/Lt/lt_of_lt_le(
+                    0xF0 + code / 0x40000,
+                    0xF5,
+                    256,
+                    Nat/div_mod/div_lt_of_lt_mul(
+                        5,
+                        code,
+                        0x40000,
+                        Nat/Lt/lt_of_le_lt(
+                            code,
+                            0x10FFFF,
+                            0x140000,
+                            Valid/at_most(code, c.valid),
+                            Bool/True/qed())),
+                    Bool/True/qed())),
+            Nat/to_byte(0x80 + code % 0x40000 / 0x1000),
+            Nat/to_byte(0x80 + code % 0x1000 / 0x40),
+            Nat/to_byte(0x80 + code % 0x40)]
     end;
 
 satisfy Eql(Char) {

@@ -7,6 +7,54 @@ use /std/Char/{is_valid};
 pub let Valid(code: Nat) -> Prop =
     Bool/Holds(is_valid(code));
 
+--- A code below the surrogates is a scalar value.
+pub let below_surrogates(code: Nat, p: Nat/Lt(code, 0xD800)) -> Valid(code) =
+    match code < 0xD800
+    | true => Bool/True/qed()
+    | false => match p end
+    end;
+
+--- A code past the surrogates and at most `U+10FFFF` is a scalar value.
+pub let above_surrogates(
+    code: Nat,
+    low: Nat/Le(0xE000, code),
+    high: Nat/Le(code, 0x10FFFF),
+) -> Valid(code) =
+    match code < 0xD800
+    | true => Bool/True/qed()
+    | false =>
+        match code >= 0xE000
+        | true => high
+        | false => match low end
+        end
+    end;
+
+--- A scalar value is at most `U+10FFFF`.
+pub let at_most(code: Nat, valid: Valid(code)) -> Nat/Le(code, 0x10FFFF) =
+    match code < 0xD800
+    | true => Nat/Le/trans(Nat/Lt/le_of_lt(code, 0xD800, Bool/True/qed()), Bool/True/qed())
+    | false =>
+        match code >= 0xE000
+        | true => valid
+        | false => match valid end
+        end
+    end;
+
+--- A scalar value below the end of the surrogates is below their start.
+pub let below_surrogates_of(
+    code: Nat,
+    valid: Valid(code),
+    below_end: Nat/Lt(code, 0xE000),
+) -> Nat/Lt(code, 0xD800) =
+    match code < 0xD800
+    | true => Bool/True/qed()
+    | false =>
+        match code >= 0xE000
+        | true => match below_end end
+        | false => match valid end
+        end
+    end;
+
 --- The evidence that `code` is a Unicode scalar value, or `none`.
 pub let try(code: Nat) -> Option(Valid(code)) =
     match is_valid(code): (r) => Option(Bool/Holds(r))

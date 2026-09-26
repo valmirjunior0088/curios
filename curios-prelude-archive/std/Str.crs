@@ -105,26 +105,194 @@ pub let count_scalars(s: Scan, b: Bytes) -> Nat =
         end
     end;
 
---- The continuation bytes from `off`, folded into `acc`.
-pub let take_continuations(
-    b: Bytes,
-    off: Nat,
-    remaining: Nat,
-    acc: Nat,
-    bound: Nat/Le(off + remaining, Bytes/len(b)),
-) -> {Nat, Nat} =
-    match remaining
-    | 0 => (acc, off)
-    | pred + 1 =>
-        let within =
-            Nat/Lt/lt_of_lt_le(off, off + (pred + 1), Bytes/len(b), Bool/True/qed(), bound);
-        let continuation = Byte/to_nat(Bytes/get(b, off, @within)) - 0x80;
-        take_continuations(b, off + 1, pred, acc * 0x40 + continuation, bound)
+--- Whether every code from `min` to `max` is a scalar value: the range lies below the surrogates, or past them and at most `U+10FFFF`. One contiguous range, so these two cases are the whole of it.
+let scalars(min: Nat, max: Nat) -> Bool =
+    max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
+
+--- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
+---
+--- The range is stated per remaining count at literal weights — each continuation byte shifts what came before by six bits — because `Nat/pow` recurses, and a type may not mention a recursion. No count past three begins a character, so those are refused along with zero.
+let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
+    match rem
+    | 0 => false
+    | r0 + 1 =>
+        match r0
+        | 0 => scalars(partial * 0x40 + (lo - 0x80), partial * 0x40 + (hi - 0x80))
+        | r1 + 1 =>
+            match r1
+            | 0 =>
+                scalars(
+                    (partial * 0x40 + (lo - 0x80)) * 0x40,
+                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F)
+            | r2 + 1 =>
+                match r2
+                | 0 =>
+                    scalars(
+                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
+                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F)
+                | _ + 1 => false
+                end
+            end
+        end
     end;
 
---- A decoded code point as a character.
-pub let certify_decoded(code: Nat) -> Char =
-    Option/unwrap_or(Char/of_nat(code), '?');
+--- A range of scalar values narrowed stays one.
+let scalars_within(
+    min: Nat,
+    max: Nat,
+    min2: Nat,
+    max2: Nat,
+    s: Bool/Holds(scalars(min, max)),
+    low: Nat/Le(min, min2),
+    high: Nat/Le(max2, max),
+) -> Bool/Holds(scalars(min2, max2)) =
+    match max < 0xD800
+    | true =>
+        match max2 < 0xD800
+        | true => Bool/True/qed()
+        | false => match Nat/Lt/lt_of_le_lt(max2, max, 0xD800, high, Bool/True/qed()) end
+        end
+    | false =>
+        match min >= 0xE000
+        | false => match s end
+        | true =>
+            match max <= 0x10FFFF
+            | false => match s end
+            | true =>
+                match max2 < 0xD800
+                | true => Bool/True/qed()
+                | false =>
+                    match min2 >= 0xE000
+                    | false => match Nat/Le/trans(@0xE000, @min, @min2, Bool/True/qed(), low) end
+                    | true =>
+                        match max2 <= 0x10FFFF
+                        | true => Bool/True/qed()
+                        | false =>
+                            match Nat/Le/trans(@max2, @max, @0x10FFFF, high, Bool/True/qed()) end
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+--- The last byte of a character, read in range, ends it at a scalar value.
+let concluded(
+    lo: Nat,
+    hi: Nat,
+    partial: Nat,
+    c: Nat,
+    p: Bool/Holds(pending(1, lo, hi, partial)),
+    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
+) -> Char/Valid(partial * 0x40 + (c - 0x80)) =
+    scalars_within(
+        partial * 0x40 + (lo - 0x80),
+        partial * 0x40 + (hi - 0x80),
+        partial * 0x40 + (c - 0x80),
+        partial * 0x40 + (c - 0x80),
+        p,
+        Nat/Le/add_mono_l(
+            partial * 0x40,
+            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).low)),
+        Nat/Le/add_mono_l(
+            partial * 0x40,
+            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).high)));
+
+--- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
+let advanced(
+    rem: Nat,
+    lo: Nat,
+    hi: Nat,
+    partial: Nat,
+    c: Nat,
+    p: Bool/Holds(pending(rem, lo, hi, partial)),
+    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
+    more: Bool/Holds(Bool/not(rem == 1)),
+) -> Bool/Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
+    let low =
+        Nat/Le/add_mono_l(
+            partial * 0x40,
+            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).low));
+    let high =
+        Nat/Le/add_mono_l(
+            partial * 0x40,
+            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).high));
+    match rem
+    | 0 => match p end
+    | r1 + 1 =>
+        match r1
+        | 0 => match more end
+        | r2 + 1 =>
+            match r2
+            | 0 =>
+                scalars_within(
+                    (partial * 0x40 + (lo - 0x80)) * 0x40,
+                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F,
+                    (partial * 0x40 + (c - 0x80)) * 0x40,
+                    (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
+                    p,
+                    Nat/Le/mul_mono_r(0x40, low),
+                    Nat/Le/mul_mono_r(0x40, high))
+            | r3 + 1 =>
+                match r3
+                | 0 =>
+                    scalars_within(
+                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
+                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+                        (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
+                        ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+                        p,
+                        Nat/Le/mul_mono_r(0x40, Nat/Le/mul_mono_r(0x40, low)),
+                        Nat/Le/mul_mono_r(0x40, Nat/Le/mul_mono_r(0x40, high)))
+                | _ + 1 => match p end
+                end
+            end
+        end
+    end;
+
+--- Whether the character `c` begins can only end at a scalar value: what `classify`'s ranges promise of a lead byte, and nothing to promise of any other.
+let begins_scalars(c: Byte) -> Bool =
+    match classify(c) | lead(rem, lo, hi, partial) => pending(rem, lo, hi, partial) | _ => true end;
+
+--- Whether every byte below `k` begins only scalar values.
+let each_below(k: Nat) -> Bool =
+    match k | 0 => true | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp) end;
+
+--- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
+let every_byte: Bool/Holds(each_below(256)) =
+    Bool/True/qed();
+
+--- A byte below `m`, read out of the check over every byte below `m`.
+let begins_below(
+    m: Nat,
+    n: Nat,
+    all: Bool/Holds(each_below(m)),
+    inside: Nat/Lt(n, m),
+) -> Bool/Holds(begins_scalars(Nat/to_byte(n % 256))) =
+    match m
+    | 0 => match inside end
+    | mp + 1 =>
+        match begins_scalars(Nat/to_byte(mp % 256))
+        | false => match all end
+        | true =>
+            match n < mp
+            | true => begins_below(mp, n, all, Bool/True/qed())
+            | false =>
+                Eq/subst(
+                    (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
+                    Nat/Le/antisym(
+                        mp,
+                        n,
+                        Nat/Lt/le_of_not_lt(n, mp, Bool/True/qed()),
+                        Nat/Lt/le_succ_of_lt(n, mp + 1, inside)),
+                    Bool/True/qed())
+            end
+        end
+    end;
+
+--- Every byte begins only scalar values.
+let begins_scalars_of(c: Byte) -> Bool/Holds(begins_scalars(c)) =
+    begins_below(256, Byte/to_nat(c), every_byte, Bool/True/qed());
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
@@ -147,7 +315,7 @@ pub let of_bytes(b: Bytes) -> Option(Str) =
 
 --- The one-character string.
 pub let of_char(c: Char) -> Str =
-    Option/unwrap_or(of_bytes(Char/to_utf8(c)), "");
+    Str { bytes = Char/to_utf8(c), valid = Valid/encoded(c) };
 
 --- Eql bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
@@ -208,35 +376,91 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
 pub let repeat(s: Str, n: Nat) -> Str =
     List/balanced(n, "", (_) => s, (l, r) => concat(l, r));
 
+--- Whether a scan state can only finish its character at a scalar value, `partial` being the bits gathered so far: `pending` inside a character, and nothing owed between them.
+let pending_at(sc: Scan, partial: Nat) -> Bool =
+    match sc | cont(rem, lo, hi) => pending(rem, lo, hi, partial) | _ => true end;
+
 --- Left to right over the characters with `f(char, acc)`.
+---
+--- The walk carries the string's validity from the state it has reached and, beside the bits of the character in flight, the proof that it can only end at a scalar value. So every character it hands `f` is built with its proof, and a byte the encoding does not admit is a contradiction rather than an arm. Both proofs erase, and the accumulator is what it was.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
-    let go(sc: Scan, b: Bytes, acc: {A, Nat}) -> {A, Nat} =
+    let go(
+        sc: Scan,
+        b: Bytes,
+        v: Valid/from(sc, b),
+        acc: {A, Nat},
+        p: Bool/Holds(pending_at(sc, acc.1)),
+    ) -> {A, Nat} =
         match b
         | x[] => acc
         | x[h, ..t] =>
             match sc
             | lead() =>
-                go(
-                    step(h, Scan/lead()),
-                    t,
-                    match classify(h)
-                    | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
-                    | lead(_, _, _, payload) => (acc.0, payload)
-                    | bad() => acc
-                    end)
-            | cont(rem, _, _) =>
+                match classify(h)
+                | ascii() =>
+                    go(
+                        Scan/lead(),
+                        t,
+                        v,
+                        (f(Char { code = Byte/to_nat(h), valid = Bool/True/qed() }, acc.0), 0),
+                        Bool/True/qed())
+                | lead(rem, lo, hi, partial) =>
+                    go(Scan/cont(rem, lo, hi), t, v, (acc.0, partial), begins_scalars_of(h))
+                | bad() => match Valid/from_bad(@t, v) end
+                end
+            | cont(rem, lo, hi) =>
                 let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
-                go(
-                    step(h, sc),
-                    t,
+                match Nat/in_range(Byte/to_nat(h), lo, hi)
+                | false => match Valid/from_bad(@t, v) end
+                | true =>
                     match rem == 1
-                    | true => (f(certify_decoded(partial), acc.0), 0)
-                    | false => (acc.0, partial)
-                    end)
-            | bad() => go(step(h, Scan/bad()), t, acc)
+                    | true =>
+                        let last =
+                            Eq/subst(
+                                (r: Nat) => Bool/Holds(pending(r, lo, hi, acc.1)),
+                                Nat/eq_of_eql(rem, 1, Bool/True/qed()),
+                                p);
+                        go(
+                            Scan/lead(),
+                            t,
+                            v,
+                            (
+                                f(
+                                    Char {
+                                        code = partial,
+                                        valid =
+                                            concluded(
+                                                lo,
+                                                hi,
+                                                acc.1,
+                                                Byte/to_nat(h),
+                                                last,
+                                                Bool/True/qed()),
+                                    },
+                                    acc.0),
+                                0),
+                            Bool/True/qed())
+                    | false =>
+                        go(
+                            Scan/cont(rem - 1, 0x80, 0xBF),
+                            t,
+                            v,
+                            (acc.0, partial),
+                            advanced(
+                                rem,
+                                lo,
+                                hi,
+                                acc.1,
+                                Byte/to_nat(h),
+                                p,
+                                Bool/True/qed(),
+                                Bool/True/qed()))
+                    end
+                end
+            | bad() => match Valid/from_bad(@x[h, ..t], v) end
             end
         end;
-    go(Scan/lead(), s.bytes, (init, 0)).0;
+    go(Scan/lead(), s.bytes, s.valid, (init, 0), Bool/True/qed()).0;
 
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =

@@ -1,0 +1,17 @@
+-- The `Char` surface past its scalar boundaries: the ASCII case conversions and the hexadecimal digit, each of which builds its character with the proof that its code is a scalar value.
+use /std/{Str, Char, List, Test};
+
+-- Each conversion flips a letter at either end of the alphabet, and leaves the characters just outside it, the other case and a letter past ASCII as they are.
+test ascii_case_flips_letters_and_nothing_beside_them =
+    let cases = ['@', 'A', 'Z', '[', '`', 'a', 'z', '{', 'é'];
+    let spelled(convert: (Char) -> Char) -> Str =
+        Str/flatten(List/map(cases, (c) => Str/of_char(convert(c))));
+    Test/all([
+        Test/equal(spelled(Char/to_ascii_lower), "@az[`az{é"),
+        Test/equal(spelled(Char/to_ascii_upper), "@AZ[`AZ{é")]);
+
+-- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
+test hex_digit_spells_a_nibble_modulo_sixteen =
+    Test/equal(
+        Str/flatten(List/map([0, 9, 10, 15, 16, 0xFF], (n) => Str/of_char(Char/hex_digit(n)))),
+        "09af0f");

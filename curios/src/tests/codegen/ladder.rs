@@ -375,6 +375,8 @@ fn walk_mirror_family_isolates_each_obligation() {
 ///
 /// M1a's interprocedural demand made `split_returns` eligible on the step component, so `/std/Str/step` hands its `Scan` back as four results rather than a tuple; each caller's resume then rebuilt that tuple once per arm, which is the allocation this probe used to pin at three sites. Variant-width splitting removed them in two moves. The fold's loop carries the scan as a discriminant and three payload slots, the interned nullary constructors entering it as one field and filler — which left exactly one construction, the head materialization the known call to `step` kept alive, because `step` took the aggregate whole. Splitting `step`'s own parameter removed that boundary too.
 ///
+/// The fold calls `step` no longer. Since it carries the string's validity, each arm names the state it moves to — `cont(rem, lo, hi)` after a lead byte, `lead` or `cont(rem - 1, 0x80, 0xBF)` after a continuation — and the validity it passes on is what holds that state to the one `step` computes, so the call and its four-result return are gone from the loop — the obligation the `inline_step` rung of [`walk_mirror_attribution_measurements`] bounds at roughly a fifth of the walk.
+///
 /// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `step` takes four field parameters beside its byte and hands back four results, constructing no scan at either end, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is the strongest form this probe can take and is deliberately about *every* allocation rather than the tuple shapes the campaign named, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
 #[test]
 fn the_per_character_walk_carries_its_scan_without_allocating() {
@@ -417,8 +419,8 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
     // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
         fold.body.matches("$/std/Str/step").count(),
-        3,
-        "the scan step is still a known call per arm — the fields travel through it rather than around it",
+        0,
+        "the walk steps its scan by the arm it is in rather than calling `step`",
     );
     assert_eq!(
         in_fold("call $bytes/slice"),
