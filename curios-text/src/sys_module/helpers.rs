@@ -4,8 +4,9 @@
 
 use {
     crate::{
-        Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Label, Name, Nat, NatLiteral, Subterm,
-        Term, TupleType, TupleTypeParam,
+        Apply, Argument, Field, Func, FuncParam, FuncType, FuncTypeParam, Intrinsic, Label, Match,
+        MatchPattern, MatrixArm, Name, Nat, NatLiteral, Pattern, Proj, Subterm, Term, Tuple,
+        TupleField, TupleType, TupleTypeParam,
     },
     curios_num::{Floating, Grain},
     curios_utilities::{Plicity, SyntaxName, SyntaxRegistry},
@@ -162,4 +163,60 @@ pub(super) fn prop() -> Term {
 // A `Flt` literal, for the two range bounds in the roster. The bounds are stated against the infinities rather than against a written magnitude, so no digit string has to be kept in step with the carrier.
 pub(super) fn flt_lit(value: f64) -> Term {
     intrinsic(Intrinsic::Flt(Floating::from(value)))
+}
+
+// A one-parameter lambda `(binder: annotation) => body`: the continuation a host row's adapter hands `Io/bind`.
+pub(super) fn lambda(binder: &str, annotation: Term, body: Term) -> Term {
+    Subterm::Func(Func {
+        params: vec![FuncParam {
+            plicity: Plicity::Explicit,
+            pattern: Pattern::Binder(Some(Label::from(binder))),
+            annotation: Some(annotation),
+        }],
+        body,
+    })
+    .into()
+}
+
+// `head.field`, a projection by label.
+pub(super) fn project(head: Term, field: &str) -> Term {
+    Subterm::Proj(Proj {
+        head,
+        field: Field::Label(field.to_string()),
+    })
+    .into()
+}
+
+// A tuple value with every field labelled — `(a = x, b = y)` — and the unit value `()` when there are none.
+pub(super) fn tuple(fields: Vec<(&str, Term)>) -> Term {
+    Subterm::Tuple(Tuple {
+        fields: fields
+            .into_iter()
+            .map(|(label, value)| TupleField {
+                label: Some(label.to_string()),
+                func_params: None,
+                value,
+            })
+            .collect(),
+    })
+    .into()
+}
+
+// `match condition | true => yes | false => no end`.
+pub(super) fn branch(condition: Term, yes: Term, no: Term) -> Term {
+    Subterm::Match(Match {
+        head: condition,
+        motive: None,
+        arms: vec![
+            MatrixArm {
+                pattern: MatchPattern::Bool(true),
+                body: yes,
+            },
+            MatrixArm {
+                pattern: MatchPattern::Bool(false),
+                body: no,
+            },
+        ],
+    })
+    .into()
 }

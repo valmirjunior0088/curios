@@ -10,6 +10,7 @@ mod file_tests;
 mod fs_tests;
 mod net_tests;
 mod os_tests;
+mod outcome_tests;
 mod plugin_tests;
 mod proc_tests;
 mod serial_tests;

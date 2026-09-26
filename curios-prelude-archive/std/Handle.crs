@@ -48,31 +48,51 @@ pub let poll(
 --- Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
 let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
-    choose
-    | r.status == /sys/status/would_block =>
-        let _ = poll([h], [Interest/readable], -1)!;
-        read_waiting(h, n)
-    | _ => Io/pure(Io/Chunk/of(r.status, r.bytes))
+    match r
+    | success(some(b)) => Io/pure(Io/Chunk/chunk(b))
+    | success(none()) => Io/pure(Io/Chunk/eof())
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = poll([h], [Interest/readable], -1)!;
+            read_waiting(h, n)
+        | _ => Io/pure(Io/Chunk/error(Io/Error/of(s)))
+        end
     end;
 
 --- The whole of `b`, waited for on this program's own behalf: a host that would block is polled until it would not, and a short write is resent; the first failure is the answer.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
-    choose
-    | r.status == /sys/status/would_block =>
-        let _ = poll([h], [Interest/writable], -1)!;
-        write_waiting(h, b)
-    | r.status != /sys/status/ok =>
-        Io/pure(
-            match Io/Error/of(r.status)
-            | some(e) => Result/failure(e)
-            | none() => Result/success(())
-            end)
-    | r.written < Bytes/len(b) =>
-        write_waiting(
-            h,
-            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
-    | _ => Io/pure(Result/success(()))
+    match r
+    | success(written) =>
+        choose
+        | written < Bytes/len(b) =>
+            write_waiting(
+                h,
+                Bytes/drop(b, written, @Nat/Lt/le_of_lt(written, Bytes/len(b), Bool/True/qed())))
+        | _ => Io/pure(Result/success(()))
+        end
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = poll([h], [Interest/writable], -1)!;
+            write_waiting(h, b)
+        | _ => Io/pure(Result/failure(Io/Error/of(s)))
+        end
+    end;
+
+--- What `h` holds of the writes it accepted, handed on and waited for on this program's own behalf.
+let flush_waiting(h: Handle) -> Io(Result(Io/Error, {})) =
+    let r = /sys/Handle/flush(h)!;
+    match r
+    | success(_) => Io/pure(Result/success(()))
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = poll([h], [Interest/writable], -1)!;
+            flush_waiting(h)
+        | _ => Io/pure(Result/failure(Io/Error/of(s)))
+        end
     end;
 
 let park_on(h: Handle, interest: Interest) -> Async({}) =
@@ -81,27 +101,52 @@ let park_on(h: Handle, interest: Interest) -> Async({}) =
 --- Up to `n` bytes, parking the fiber while the host would block.
 let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
-    choose
-    | r.status == /sys/status/would_block =>
-        let _ = park_on(h, Interest/readable)!;
-        read_parking(h, n)
-    | _ => Async/pure(Io/Chunk/of(r.status, r.bytes))
+    match r
+    | success(some(b)) => Async/pure(Io/Chunk/chunk(b))
+    | success(none()) => Async/pure(Io/Chunk/eof())
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = park_on(h, Interest/readable)!;
+            read_parking(h, n)
+        | _ => Async/pure(Io/Chunk/error(Io/Error/of(s)))
+        end
     end;
 
 --- The whole of `b`, parking while the host would block and resending a short write.
 let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
-    choose
-    | r.status == /sys/status/would_block =>
-        let _ = park_on(h, Interest/writable)!;
-        write_parking(h, b)
-    | some(e) = Io/Error/of(r.status) => Async/pure(Result/failure(e))
-    | r.written < Bytes/len(b) =>
-        let _ = park_on(h, Interest/writable)!;
-        write_parking(
-            h,
-            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
-    | _ => Async/pure(Result/success(()))
+    match r
+    | success(written) =>
+        choose
+        | written < Bytes/len(b) =>
+            let _ = park_on(h, Interest/writable)!;
+            write_parking(
+                h,
+                Bytes/drop(b, written, @Nat/Lt/le_of_lt(written, Bytes/len(b), Bool/True/qed())))
+        | _ => Async/pure(Result/success(()))
+        end
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = park_on(h, Interest/writable)!;
+            write_parking(h, b)
+        | _ => Async/pure(Result/failure(Io/Error/of(s)))
+        end
+    end;
+
+--- What `h` holds of the writes it accepted, handed on, parking while the host would block.
+let flush_parking(h: Handle) -> Async(Result(Io/Error, {})) =
+    let r = /sys/Handle/flush(h)!;
+    match r
+    | success(_) => Async/pure(Result/success(()))
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = park_on(h, Interest/writable)!;
+            flush_parking(h)
+        | _ => Async/pure(Result/failure(Io/Error/of(s)))
+        end
     end;
 
 satisfy Async/Read(Io, Handle) {
@@ -114,8 +159,10 @@ satisfy Async/Read(Async, Handle) {
 
 satisfy Async/Write(Io, Handle) {
     write(h, b) = write_waiting(h, b),
+    flush(h) = flush_waiting(h),
 }
 
 satisfy Async/Write(Async, Handle) {
     write(h, b) = write_parking(h, b),
+    flush(h) = flush_parking(h),
 }

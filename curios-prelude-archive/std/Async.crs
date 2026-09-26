@@ -163,9 +163,11 @@ pub concept Read(M: (Type) -> Type, S: Type): pub Type {
     read(S, Nat) -> M(Io/Chunk),
 }
 
---- What a stream is written through: the whole of the bytes, a short write resent.
+--- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
 pub concept Write(M: (Type) -> Type, S: Type): pub Type {
     write(S, Bytes) -> M(Result(Io/Error, {})),
+    --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
+    flush(S) -> M(Result(Io/Error, {})),
 }
 
 --- Everything up to the end of the stream; a failure before the end drops what was read.

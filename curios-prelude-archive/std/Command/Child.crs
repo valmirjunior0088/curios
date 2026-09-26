@@ -36,6 +36,7 @@ satisfy Async/Read(Async, Pipe) {
 
 satisfy Async/Write(Async, Pipe) {
     write(p, b) = Async/Write/write(p.0, b),
+    flush(p) = Async/Write/flush(p.0),
 }
 
 --- The pipe to the child's standard input, when it was piped.
@@ -68,15 +69,12 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
     let _ = Async/park([Async/Wait/ready(c.handle, Interest/readable)])!;
     let r = /sys/proc/wait(c.handle)!;
     let _ = close_pipes(c)!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() =>
-        Try/pure(
-            match r.signal == 0
-            | true => Exit/exited(r.code)
-            | false => Exit/signaled(r.signal)
-            end)
-    end;
+    let ended = Io/Error/of_result(r)!;
+    Try/pure(
+        match ended.signal == 0
+        | true => Exit/exited(ended.code)
+        | false => Exit/signaled(ended.signal)
+        end);
 
 -- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
 let release(c: Child) -> Io({}) =

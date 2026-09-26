@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
+use /std/{Bool, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
 
 --- How a child's standard stream is wired.
 pub mod Stdio;
@@ -58,38 +58,44 @@ let env_entry(entry: {Str, Str}) -> Bytes =
 let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Handle)) =
     match mode
     | piped() =>
-        let s = /sys/proc/stream(child, which)!;
-        match Io/Error/of(s.status)
-        | some(e) => Try/raise(e)
-        | none() => Try/pure(Option/some(s.handle))
-        end
+        let s = Io/Error/of_result(/sys/proc/stream(child, which)!)!;
+        Try/pure(Option/some(s))
     | _ => Try/pure(Option/none())
     end;
 
---- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends.
-pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
-    let r =
-        /sys/proc/spawn(
-            [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
-            match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
-            List/map(cmd.env, env_entry),
-            stdio_of(cmd.stdin),
-            stdio_of(cmd.stdout),
-            stdio_of(cmd.stderr))!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() =>
-        let stdin = pipe(r.child, 0, cmd.stdin)!;
-        let stdout = pipe(r.child, 1, cmd.stdout)!;
-        let stderr = pipe(r.child, 2, cmd.stderr)!;
-        Try/pure(
-            Child {
-                handle = r.child,
-                stdin = Option/map(stdin, (h) => Pipe { h }),
-                stdout = Option/map(stdout, (h) => Pipe { h }),
-                stderr = Option/map(stderr, (h) => Pipe { h }),
-            })
+--- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
+let names_a_variable(key: Str) -> Bool =
+    match Str/is_empty(key) | true => false | false => Bool/not(Str/contains(key, '=')) end;
+
+--- Nothing, or `EINVAL` for an entry whose key names no variable.
+let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
+    match List/all(env, (entry) => names_a_variable(entry.0))
+    | true => Result/success(())
+    | false => Result/failure(Io/Error/other(/sys/errno/inval))
     end;
+
+--- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
+pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
+    let _ = env_checked(cmd.env)!;
+    let child =
+        Io/Error/of_result(
+            /sys/proc/spawn(
+                [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
+                match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
+                List/map(cmd.env, env_entry),
+                stdio_of(cmd.stdin),
+                stdio_of(cmd.stdout),
+                stdio_of(cmd.stderr))!)!;
+    let stdin = pipe(child, 0, cmd.stdin)!;
+    let stdout = pipe(child, 1, cmd.stdout)!;
+    let stderr = pipe(child, 2, cmd.stderr)!;
+    Try/pure(
+        Child {
+            handle = child,
+            stdin = Option/map(stdin, (h) => Pipe { h }),
+            stdout = Option/map(stdout, (h) => Pipe { h }),
+            stderr = Option/map(stderr, (h) => Pipe { h }),
+        });
 
 let drain(p: Option(Pipe)) -> Async(Result(Io/Error, Bytes)) =
     match p | some(p) => Async/read_all(p) | none() => Async/pure(Result/success(x[])) end;

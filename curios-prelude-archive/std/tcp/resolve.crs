@@ -3,19 +3,15 @@ use /std/Handle/{Interest};
 
 let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     let _ = Async/park([Async/Wait/ready(h, Interest/readable)])!;
-    let a = /sys/dns/resolve(h)!;
-    match Io/Error/of(a.status)
-    | some(e) => Async/pure(Result/failure(e))
-    | none() => Async/pure(Result/success(Option/unwrap_or(List/try_get(a.addresses, 0), x[])))
-    end;
+    let r = /sys/dns/resolve(h)!;
+    Async/pure(
+        Result/map_success(
+            Io/Error/of_result(r),
+            (addresses) => Option/unwrap_or(List/try_get(addresses, 0), x[])));
 
 --- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber.
 pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
-    let r = /sys/dns/lookup(Str/to_bytes(host), port)!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() =>
-        let a = Async/using(Handle/close(r.handle), resolved_address(r.handle))!;
-        let addr = a!;
-        Try/pure(addr)
-    end;
+    let h = Io/Error/of_result(/sys/dns/lookup(Str/to_bytes(host), port)!)!;
+    let a = Async/using(Handle/close(h), resolved_address(h))!;
+    let addr = a!;
+    Try/pure(addr);

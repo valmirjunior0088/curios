@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List, Option, Show};
+use /std/{Nat, Str, List, Result, Show};
 
 --- Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
@@ -54,15 +54,13 @@ satisfy Show(Error) {
         end,
 }
 
---- The failure `status` names, or `none` for the two non-failure statuses, `ok` and `eof`.
-pub let of(status: Nat) -> Option(Error) =
-    choose
-    | status == /sys/status/ok => Option/none()
-    | status == /sys/status/eof => Option/none()
-    | _ =>
-        Option/some(
-            List/fold(
-                errors,
-                Error/other(status - /sys/status/other_base),
-                (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end))
-    end;
+--- The failure `status` names: one of the named statuses, or `other` with the errno the host passed through.
+pub let of(status: Nat) -> Error =
+    List/fold(
+        errors,
+        Error/other(status - /sys/status/other_base),
+        (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
+
+--- `r` with its failure read as the error its status names: how a fallible host operation's answer reaches the standard library.
+pub let of_result(@A: Type, r: Result(Nat, A)) -> Result(Error, A) =
+    Result/map_failure(r, of);

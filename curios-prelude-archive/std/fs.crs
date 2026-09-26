@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Path, Try, Io, Show};
+use /std/{Nat, Bool, List, Result, Path, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -43,22 +43,19 @@ pub struct Metadata: pub Type {
     mtime: Timestamp,
 }
 
-let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+let outcome(r: Result(Nat, {})) -> Try(Io, Io/Error, {}) =
+    let _ = Io/Error/of_result(r)!;
+    Try/pure(());
 
 --- What is at `path`.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
-    let r = /sys/file/stat(Path/to_bytes(path))!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() =>
-        Try/pure(
-            Metadata {
-                kind = kind_of(r.kind),
-                size = r.size,
-                mtime = Timestamp/of_unix(r.mtime_secs, r.mtime_nanos),
-            })
-    end;
+    let s = Io/Error/of_result(/sys/file/stat(Path/to_bytes(path))!)!;
+    Try/pure(
+        Metadata {
+            kind = kind_of(s.kind),
+            size = s.size,
+            mtime = Timestamp/of_unix(s.mtime_secs, s.mtime_nanos),
+        });
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
@@ -81,39 +78,33 @@ pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
 
 --- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
-    let r = /sys/dir/list(Path/to_bytes(path))!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(List/map(r.names, Path/of_bytes))
-    end;
+    let names = Io/Error/of_result(/sys/dir/list(Path/to_bytes(path))!)!;
+    Try/pure(List/map(names, Path/of_bytes));
 
 --- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
-    let status = /sys/dir/create(Path/to_bytes(path))!;
-    outcome(status);
+    let r = /sys/dir/create(Path/to_bytes(path))!;
+    outcome(r);
 
 --- Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
-    let status = /sys/dir/remove(Path/to_bytes(path))!;
-    outcome(status);
+    let r = /sys/dir/remove(Path/to_bytes(path))!;
+    outcome(r);
 
 --- Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
-    let status = /sys/file/remove(Path/to_bytes(path))!;
-    outcome(status);
+    let r = /sys/file/remove(Path/to_bytes(path))!;
+    outcome(r);
 
 --- Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
-    let status = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
-    outcome(status);
+    let r = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
+    outcome(r);
 
 --- The working directory.
 pub let cwd: Try(Io, Io/Error, Path) =
-    let r = /sys/proc/cwd!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(Path/of_bytes(r.path))
-    end;
+    let p = Io/Error/of_result(/sys/proc/cwd!)!;
+    Try/pure(Path/of_bytes(p));
 
 --- A directory at `path` and every missing parent; one that already exists is left as it is.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =

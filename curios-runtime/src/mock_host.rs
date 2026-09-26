@@ -21,9 +21,6 @@ const ROOT: &[u8] = b"/";
 /// `EBUSY`, the errno `rmdir(2)` reports on the root — `16` on both release targets, Linux and macOS.
 const EBUSY: u32 = 16;
 
-/// `EINVAL`, the errno a serial open reports for a frame outside the row's ranges — `22` on both release targets.
-const EINVAL: u32 = 22;
-
 /// One serial open as the scripted host records it: the path and `[baud, data_bits, parity, stop_bits, flow]`.
 type SerialOpen = (Vec<u8>, [u64; 5]);
 
@@ -894,7 +891,7 @@ impl HostOps for MockHost {
     ) -> Result<Handle, Failure> {
         // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
         if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
-            return Err(Failure::Other(EINVAL));
+            return Err(Failure::Other(errno::EINVAL));
         }
 
         let Some(chunks) = self.serial_devices.get(&path) else {

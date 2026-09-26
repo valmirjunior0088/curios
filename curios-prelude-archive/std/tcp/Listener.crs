@@ -7,22 +7,22 @@ pub struct Listener: Type {
     Handle,
 }
 
-let ok(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+let ok(r: Result(Nat, {})) -> Try(Io, Io/Error, {}) =
+    let _ = Io/Error/of_result(r)!;
+    Try/pure(());
 
 let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = Handle/close(h)!;
     Try/raise(e);
 
 let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
-    let s = /sys/socket/open(addr)!;
-    let _ = ok(s.status)!;
-    let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
-    let bound = /sys/socket/bind(s.handle, addr)!;
-    let _ = Try/rescue(ok(bound), (e) => close_raising(s.handle, e))!;
-    let listening = /sys/socket/listen(s.handle, 128)!;
-    let _ = Try/rescue(ok(listening), (e) => close_raising(s.handle, e))!;
-    Try/pure(Listener { s.handle });
+    let h = Io/Error/of_result(/sys/socket/open(addr)!)!;
+    let _ = /sys/socket/set_reuseaddr(h, true)!;
+    let bound = /sys/socket/bind(h, addr)!;
+    let _ = Try/rescue(ok(bound), (e) => close_raising(h, e))!;
+    let listening = /sys/socket/listen(h, 128)!;
+    let _ = Try/rescue(ok(listening), (e) => close_raising(h, e))!;
+    Try/pure(Listener { h });
 
 --- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
@@ -33,14 +33,14 @@ pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
 let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
     let go() -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l.0)!;
-        match r.status == /sys/status/would_block
-        | true =>
-            let _ = Async/park([Async/Wait/ready(l.0, Interest/readable)])!;
-            go()
-        | false =>
-            match Io/Error/of(r.status)
-            | some(e) => Async/pure(Result/failure(e))
-            | none() => Async/pure(Result/success(r.handle))
+        match r
+        | success(h) => Async/pure(Result/success(h))
+        | failure(s) =>
+            match s == /sys/status/would_block
+            | true =>
+                let _ = Async/park([Async/Wait/ready(l.0, Interest/readable)])!;
+                go()
+            | false => Async/pure(Result/failure(Io/Error/of(s)))
             end
         end;
     go();
@@ -65,8 +65,14 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
         end;
     go();
 
+--- `handler` over the connection, then what the connection holds of the writes it accepted handed on, so a TLS stream has sent its records before it is closed.
+let served(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+    let _ = handler(Socket { h })!;
+    let _ = Async/Write/flush(h)!;
+    Async/pure(());
+
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    Async/go(Async/using(Handle/close(h), handler(Socket { h })));
+    Async/go(Async/using(Handle/close(h), served(h, handler)));
 
 --- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
@@ -74,10 +80,10 @@ pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    let status = /sys/tls/start_server(h, cfg)!;
-    match status == /sys/status/ok
-    | true => serve_conn(h, handler)
-    | false => Async/lift(Handle/close(h))
+    let r = /sys/tls/start_server(h, cfg)!;
+    match r
+    | success(_) => serve_conn(h, handler)
+    | failure(_) => Async/lift(Handle/close(h))
     end;
 
 --- `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
@@ -88,9 +94,8 @@ pub let serve_tls(
     key: Bytes,
     handler: (Socket) -> Async({}),
 ) -> Try(Async, Io/Error, {}) =
-    let cfg = /sys/tls/server_config(cert, key)!;
-    let _ = ok(cfg.status)!;
+    let cfg = Io/Error/of_result(/sys/tls/server_config(cert, key)!)!;
     let l = listen(host, port)!;
     Async/using(
-        Handle/close(cfg.handle),
-        Async/using(close(l), accept_loop(l, (h) => serve_tls_conn(h, cfg.handle, handler))));
+        Handle/close(cfg),
+        Async/using(close(l), accept_loop(l, (h) => serve_tls_conn(h, cfg, handler))));

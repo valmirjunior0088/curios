@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds, and the [`errno`]s a host with no operating system of its own answers in one's place. Each set is mirrored by a guest-side `/sys` module of the same name; the host vocabulary's `Failure`, `Poll` and closed-code types cite these constants for the codes they cross as, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds, and the [`errno`]s named rather than passed through from an operating system. Each set is mirrored by a guest-side `/sys` module of the same name; the host vocabulary's `Failure`, `Poll` and closed-code types cite these constants for the codes they cross as, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Io/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
@@ -112,8 +112,10 @@ pub mod stdio {
     pub const STDERR: u32 = 2;
 }
 
-/// The errnos a host with no operating system of its own — the mock host, the browser — answers where the native host passes the operating system's through, each the value both release targets give it, so a portable failure crosses as one status whichever host answers it.
+/// The errnos named here rather than passed through from an operating system, each the value both release targets give it: what a host with no operating system of its own — the mock host, the browser — answers in one's place, and what the standard library raises for an argument it refuses before the call. Mirrored by `/sys/errno`, so a portable failure is one status whichever side names it.
 pub mod errno {
     /// A stream used in a direction it is not open for: reading `stdout` or `stderr`, writing `stdin`, or using a file against its open mode.
     pub const EBADF: u32 = 9;
+    /// An argument no host could act on: a serial frame outside the row's ranges, or an environment entry with no name.
+    pub const EINVAL: u32 = 22;
 }

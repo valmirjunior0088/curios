@@ -56,18 +56,16 @@ let of_flow(flow: Flow) -> Nat =
 ---
 --- Linux raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
 pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
-    let r =
-        /sys/serial/open(
-            Path/to_bytes(path),
-            c.baud,
-            c.data_bits,
-            of_parity(c.parity),
-            c.stop_bits,
-            of_flow(c.flow))!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(Serial { r.handle })
-    end;
+    let h =
+        Io/Error/of_result(
+            /sys/serial/open(
+                Path/to_bytes(path),
+                c.baud,
+                c.data_bits,
+                of_parity(c.parity),
+                c.stop_bits,
+                of_flow(c.flow))!)!;
+    Try/pure(Serial { h });
 
 --- Close `s`.
 pub let close(s: Serial) -> Io({}) =
@@ -87,11 +85,12 @@ satisfy Async/Read(Async, Serial) {
 
 satisfy Async/Write(Async, Serial) {
     write(s, b) = write(s, b),
+    flush(s) = Async/Write/flush(s.0),
 }
 
 let control(s: Serial, op: Nat, on: Bool) -> Try(Io, Io/Error, {}) =
-    let status = /sys/serial/control(s.0, op, on)!;
-    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    let _ = Io/Error/of_result(/sys/serial/control(s.0, op, on)!)!;
+    Try/pure(());
 
 --- The Data Terminal Ready line at `on`. Lowering and raising it is how most boards are reset.
 pub let set_dtr(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =

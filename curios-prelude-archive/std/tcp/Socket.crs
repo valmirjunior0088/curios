@@ -16,31 +16,32 @@ satisfy Async/Read(Async, Socket) {
 
 satisfy Async/Write(Async, Socket) {
     write(c, b) = write(c, b),
+    flush(c) = Async/Write/flush(c.0),
 }
 
 --- Close `c`.
 pub let close(c: Socket) -> Io({}) =
     Handle/close(c.0);
 
-let ok(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+let ok(r: Result(Nat, {})) -> Try(Io, Io/Error, {}) =
+    let _ = Io/Error/of_result(r)!;
+    Try/pure(());
 
 let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = Handle/close(h)!;
     Try/raise(e);
 
 let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
-    let s = /sys/socket/open(addr)!;
-    let _ = ok(s.status)!;
-    let status = /sys/socket/connect(s.handle, addr)!;
-    choose
-    | status == /sys/status/would_block => Try/pure((s.handle, true))
-    | _ =>
-        match Io/Error/of(status)
-        | some(e) =>
-            let _ = Handle/close(s.handle)!;
-            Try/raise(e)
-        | none() => Try/pure((s.handle, false))
+    let h = Io/Error/of_result(/sys/socket/open(addr)!)!;
+    let r = /sys/socket/connect(h, addr)!;
+    match r
+    | success(_) => Try/pure((h, false))
+    | failure(s) =>
+        match s == /sys/status/would_block
+        | true => Try/pure((h, true))
+        | false =>
+            let _ = Handle/close(h)!;
+            Try/raise(Io/Error/of(s))
         end
     end;
 
@@ -49,15 +50,22 @@ let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     | false => Try/pure(())
     | true =>
         let _ = Async/park([Async/Wait/ready(h, Interest/writable)])!;
-        let status = /sys/socket/finish_connect(h)!;
-        choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
+        let r = /sys/socket/finish_connect(h)!;
+        match r
+        | success(_) => Try/pure(())
+        | failure(s) =>
+            match s == /sys/status/would_block
+            | true => settle(h, true)
+            | false => Try/raise(Io/Error/of(s))
+            end
+        end
     end;
 
 let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls
     | true =>
-        let status = /sys/tls/start(h, Str/to_bytes(host))!;
-        ok(status)
+        let r = /sys/tls/start(h, Str/to_bytes(host))!;
+        ok(r)
     | false => Try/pure(())
     end;
 
@@ -84,8 +92,14 @@ pub let with(
     body: (Socket) -> Try(Async, Io/Error, A),
 ) -> Try(Async, Io/Error, A) =
     let c = open!;
-    let outcome = Async/using(close(c), Try/run(body(c)))!;
+    let outcome = Async/using(close(c), Try/run(flushed(c, body(c))))!;
     let a = outcome!;
+    Try/pure(a);
+
+--- `body`, then what `c` holds of the writes it accepted handed on, so a TLS stream has sent its records before `with` closes it; a failure to hand them on is the task's.
+let flushed(@A: Type, c: Socket, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+    let a = body!;
+    let _ = Try/attempt(Async/Write/flush(c))!;
     Try/pure(a);
 
 --- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.

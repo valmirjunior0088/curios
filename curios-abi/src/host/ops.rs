@@ -25,25 +25,25 @@ use {
 macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
-            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with between one and `n` bytes, or with none and no I/O at all when `n` is `0`; `Eof` with none once the stream has ended; or a failure. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it. The native host reads at most 64 KiB in one call, whatever `n` asks. Reading `stdout` or `stderr` fails with `EBADF`, as reading any descriptor opened only to write does.
+            /// Read up to `n` bytes from `h`: a success with between one and `n` bytes, or with none and no I/O at all when `n` is `0`; the end of the stream once it has ended; or a failure. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it. The native host reads at most 64 KiB in one call, whatever `n` asks. Reading `stdout` or `stderr` fails with `EBADF`, as reading any descriptor opened only to write does.
             HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> as Handle/read { yields: bytes, marks: [Blocks, Tls], checks: [Progress { request: n }] }
 
-            /// Write `b` to `h` in one attempt, returning `(status, written)` — the bytes it accepted, between one and all of them, or `0` for an empty `b`, which checks the handle and writes nothing. The contract is every handle's, the standard streams included: a handle may take only a prefix, and the caller resends the tail. A handle that can accept nothing now answers `WouldBlock`; an interruption before any progress is retried rather than reported; and a descriptor that accepts nothing and reports no error fails with the errno-less `Other(0)`. The host holds nothing of what a write accepted except a TLS stream's records, which `handle_flush` drains. Writing `stdin` fails with `EBADF`.
+            /// Write `b` to `h` in one attempt, succeeding with how many bytes it accepted — between one and all of them, or `0` for an empty `b`, which checks the handle and writes nothing. The contract is every handle's, the standard streams included: a handle may take only a prefix, and the caller resends the tail. A handle that can accept nothing now answers `WouldBlock`; an interruption before any progress is retried rather than reported; and a descriptor that accepts nothing and reports no error fails with the errno-less `Other(0)`. The host holds nothing of what a write accepted except a TLS stream's records, which `handle_flush` drains. Writing `stdin` fails with `EBADF`.
             HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> as Handle/write { yields: written, marks: [Blocks, Tls], checks: [Accepted { buffer: b }] }
 
             /// Drain what the host still holds for `h`: a TLS stream's pending records, answering `WouldBlock` until `rustls` holds nothing — `handle_poll` reports the handle writable meanwhile — and `Ok` at once for any other kind, whose accepted writes the host holds nothing of. It promises the host's own buffers are empty, not that a peer has received the bytes or a disk has stored them. `NotFound` for an unknown handle.
             HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> as Handle/flush { marks: [Blocks, Tls] }
 
-            /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.
+            /// Open the file at `path` in `mode`, succeeding with its handle.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> as file/open { yields: handle }
 
-            /// Start an asynchronous lookup of `host`:`port`. `(status, handle)`; on `Ok` the handle becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
+            /// Start an asynchronous lookup of `host`:`port`, succeeding with a handle that becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread. A `host` that is not UTF-8 names nothing a resolver can find and is `NotFound`, and a `port` past 65535 is `EINVAL`, both before any lookup starts.
             DnsLookup: fn dns_lookup(host: Vec<u8>, port: u64) -> Result<Handle, Failure> as dns/lookup { yields: handle, marks: [Blocks] }
 
-            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it. `(status, addresses)`; non-empty on `Ok`, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. `WouldBlock` before readiness.
+            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it: a success holds at least one, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. `WouldBlock` before readiness.
             DnsResolve: fn dns_resolve(handle: Handle) -> Result<Vec<Vec<u8>>, Failure> as dns/resolve { yields: addresses, marks: [Blocks], checks: [NonEmpty] }
 
-            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`. `(status, handle)` like `file_open`; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
+            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`, succeeding with its handle; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
             SocketOpen: fn socket_open(addr: Vec<u8>) -> Result<Handle, Failure> as socket/open { yields: handle }
 
             /// Bind socket `h` to the local address `addr`.
@@ -58,13 +58,13 @@ macro_rules! for_each_host_op {
             /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`). A refused listen leaves the socket unconnected, as it was.
             SocketListen: fn socket_listen(h: Handle, backlog: u64) -> Result<(), Failure> as socket/listen {}
 
-            /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else `(Ok, handle)`, a non-blocking byte stream like a connected socket.
+            /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else a success with its handle, a non-blocking byte stream like a connected socket.
             SocketAccept: fn socket_accept(h: Handle) -> Result<Handle, Failure> as socket/accept { yields: handle, marks: [Blocks] }
 
             /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `handle_close`. An upgrade that cannot start — an invalid server name among its reasons — fails `TlsError` and leaves the socket connected.
             TlsStart: fn tls_start(h: Handle, sni: Vec<u8>) -> Result<(), Failure> as tls/start { marks: [Tls] }
 
-            /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key. `(status, handle)` like `socket_open`: a host-owned config token consumed by `tls_start_server` and released by `handle_close`.
+            /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key, succeeding with a host-owned config token consumed by `tls_start_server` and released by `handle_close`.
             TlsServerConfig: fn tls_server_config(cert: Vec<u8>, key: Vec<u8>) -> Result<Handle, Failure> as tls/server_config { yields: handle, marks: [Tls] }
 
             /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `tls_start`'s is. The configuration stays filed for the next connection, and an upgrade that cannot start leaves the socket connected.
@@ -91,7 +91,7 @@ macro_rules! for_each_host_op {
             /// The process arguments, each an opaque byte string.
             ProcArgs: fn proc_args() -> Vec<Vec<u8>> as proc/args { yields: argv }
 
-            /// Look up the environment variable `name`. `(status, value)`: `Ok` with the value, possibly empty, or `NotFound` with empty bytes. A name that is empty or holds `=` or NUL names no variable, and is `NotFound`.
+            /// Look up the environment variable `name`: its value, possibly empty, or its absence. A name that is empty or holds `=` or NUL names no variable, and is absent.
             ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> as proc/env { yields: value }
 
             /// End the instance with `code`, the status every host hands its parent whole. The call never returns: the native host carries the code out as its guest-exit trap and the browser as its exit signal, neither ending the embedding process, and a host that returns anyway is refused rather than resumed.
@@ -100,16 +100,16 @@ macro_rules! for_each_host_op {
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
             TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> as tty/raw {}
 
-            /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
+            /// The terminal's dimensions (`TIOCGWINSZ`): a success with its `cols` and `rows`.
             TtySize: fn tty_size(h: Handle) -> Result<TtySize, Failure> as tty/size {}
 
-            /// Open the serial device at `path`: read-write, no controlling terminal and non-blocking, then raw termios with `CLOCAL` and `CREAD`, `baud` as the speed, and the frame `data_bits` (7 or 8), `parity` (a [`serial_parity`](crate::serial_parity) tag), `stop_bits` (1 or 2) and `flow` (a [`serial_flow`](crate::serial_flow) tag). No exclusive hold is taken, so whether another open of the same device is refused is the device's to say. `(status, handle)`: on `Ok` a non-blocking byte stream `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve as they serve a pipe to a child. A setting outside those ranges answers `EINVAL` through the errno lane without opening; a speed the platform cannot set answers what `tcsetattr` reports. Opening asserts DTR on Linux whatever the program wants, so a board that resets on DTR resets on open — a program that cares discards the boot noise afterwards.
+            /// Open the serial device at `path`: read-write, no controlling terminal and non-blocking, then raw termios with `CLOCAL` and `CREAD`, `baud` as the speed, and the frame `data_bits` (7 or 8), `parity` (a [`serial_parity`](crate::serial_parity) tag), `stop_bits` (1 or 2) and `flow` (a [`serial_flow`](crate::serial_flow) tag). No exclusive hold is taken, so whether another open of the same device is refused is the device's to say. A success is a non-blocking byte stream `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve as they serve a pipe to a child. A setting outside those ranges answers `EINVAL` through the errno lane without opening; a speed the platform cannot set answers what `tcsetattr` reports. Opening asserts DTR on Linux whatever the program wants, so a board that resets on DTR resets on open — a program that cares discards the boot noise afterwards.
             SerialOpen: fn serial_open(path: Vec<u8>, baud: u64, data_bits: u64, parity: SerialParity, stop_bits: u64, flow: SerialFlow) -> Result<Handle, Failure> as serial/open { yields: handle }
 
             /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). Break, the four status lines and drain are deliberately absent until a program needs them; drain in particular waits on the wire, which no row does.
             SerialControl: fn serial_control(h: Handle, op: SerialOp, on: bool) -> Result<(), Failure> as serial/control {}
 
-            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
+            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock. A dangling link reports the `SYMLINK` kind with zero sizes.
             FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> as file/stat {}
 
             /// Remove the file at `path`. `IsDirectory` on a directory.
@@ -130,13 +130,13 @@ macro_rules! for_each_host_op {
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
             ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> as proc/cwd { yields: path }
 
-            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
+            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
             ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<Handle, Failure> as proc/spawn { yields: child }
 
-            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; a stream that was not piped has none, and is `NotFound`. Closing the child leaves its streams filed.
+            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). A piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; a stream that was not piped has none, and is `NotFound`. Closing the child leaves its streams filed.
             ProcStream: fn proc_stream(child: Handle, which: ChildStream) -> Result<Handle, Failure> as proc/stream { yields: handle }
 
-            /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
+            /// How `child` ended, once its handle is readable: a success with `code` and `signal`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
             ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> as proc/wait { marks: [Blocks] }
 
             /// Send `child` `SIGKILL` if it still runs; `proc_wait` then reports the signal. A child whose end is already recorded is not signaled and answers `Ok`, since the host may have reaped its pid and the system handed it on.

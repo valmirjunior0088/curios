@@ -27,8 +27,8 @@ use {
         TopCase, TopInduct, TopItem,
     },
     curios_abi::{
-        ForeignStore, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status,
-        stdio, stdio_mode,
+        ForeignStore, errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity,
+        status, stdio, stdio_mode,
     },
     curios_num::{Grain, Integer, Rounding},
     curios_utilities::{Plicity, SyntaxRegistry},
@@ -1258,7 +1258,7 @@ fn handle_ops() -> Vec<Decl> {
     ]
 }
 
-/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow`, `serial_op` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
+/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow`, `serial_op`, and `errno` for the errnos a failure the standard library raises itself carries — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
 fn code_modules() -> Vec<SysModule> {
     vec![
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
@@ -1338,6 +1338,13 @@ fn code_modules() -> Vec<SysModule> {
                 pub_let("dtr", nat(), nat_lit(serial_op::DTR)),
                 pub_let("rts", nat(), nat_lit(serial_op::RTS)),
                 pub_let("discard_input", nat(), nat_lit(serial_op::DISCARD_INPUT)),
+            ],
+        ),
+        SysModule::ops(
+            "errno",
+            vec![
+                pub_let("badf", nat(), nat_lit(u64::from(errno::EBADF))),
+                pub_let("inval", nat(), nat_lit(u64::from(errno::EINVAL))),
             ],
         ),
     ]

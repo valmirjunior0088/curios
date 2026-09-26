@@ -35,7 +35,7 @@ impl Handle {
         token.to_bytes_le()
     }
 
-    /// No handle: the empty token, which no host mints. It is what a `(status, handle)` row hands back beside a status other than `Ok`, and what `proc/stream` answers for a stream that was not piped — the guest never inspects it, and `handle_close` on it is the no-op closing any unknown handle is.
+    /// No handle: the empty token, which no host mints. It is the padding a failed handle row answers beside its status — `proc/stream`'s for a stream that was not piped among them — which `/sys` never reads, since it reads a payload only under a success; and `handle_close` on it is the no-op closing any unknown handle is.
     pub fn none() -> Self {
         Handle::Other(Vec::new())
     }

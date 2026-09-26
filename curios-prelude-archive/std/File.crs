@@ -25,11 +25,8 @@ pub let of_mode(mode: Mode) -> Nat =
 
 --- The file at `path`, opened in `mode`.
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
-    let r = /sys/file/open(Path/to_bytes(path), of_mode(mode))!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(File { r.handle })
-    end;
+    let h = Io/Error/of_result(/sys/file/open(Path/to_bytes(path), of_mode(mode))!)!;
+    Try/pure(File { h });
 
 --- Close `f`.
 pub let close(f: File) -> Io({}) =
@@ -53,10 +50,12 @@ satisfy Async/Read(Async, File) {
 
 satisfy Async/Write(Io, File) {
     write(f, b) = Try/run(write(f, b)),
+    flush(f) = Async/Write/flush(f.0),
 }
 
 satisfy Async/Write(Async, File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
+    flush(f) = Async/lift(Async/Write/flush(f.0)),
 }
 
 --- `body` over the file at `path`, closed whichever way the body ends; the body's own failure is the answer after the close.

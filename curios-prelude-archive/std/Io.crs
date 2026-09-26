@@ -80,8 +80,10 @@ satisfy Async/Read(Async, Input) {
 
 satisfy Async/Write(Io, Output) {
     write(o, b) = written(o, b),
+    flush(o) = Async/Write/flush(o.0),
 }
 
 satisfy Async/Write(Async, Output) {
     write(o, b) = Async/Write/write(o.0, b),
+    flush(o) = Async/Write/flush(o.0),
 }

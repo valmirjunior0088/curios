@@ -24,16 +24,13 @@ satisfy Show(Size) {
 
 --- Raw mode on `t`, or off.
 pub let raw(t: Tty, on: Bool) -> Try(Io, Io/Error, {}) =
-    let status = /sys/tty/raw(t.0, on)!;
-    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    let _ = Io/Error/of_result(/sys/tty/raw(t.0, on)!)!;
+    Try/pure(());
 
 --- The terminal's size now.
 pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
-    let r = /sys/tty/size(t.0)!;
-    match Io/Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(Size { cols = r.cols, rows = r.rows })
-    end;
+    let s = Io/Error/of_result(/sys/tty/size(t.0)!)!;
+    Try/pure(Size { cols = s.cols, rows = s.rows });
 
 let restore(t: Tty) -> Io({}) =
     Io/bind(/sys/tty/raw(t.0, false), (_) => Io/pure(()));
