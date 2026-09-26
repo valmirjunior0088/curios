@@ -382,7 +382,7 @@ impl Intrinsic {
         }
     }
 
-    /// A `FltToLeBytes` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
+    /// A `FltToLeBytes` node (a float's eight little-endian bytes as a `Bin`) from anything term-shaped.
     pub fn flt_to_le_bytes<T>(inner: T) -> Self
     where
         T: Into<Term>,
