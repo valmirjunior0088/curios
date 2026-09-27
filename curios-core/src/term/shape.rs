@@ -282,7 +282,7 @@ pub enum MatchResult {
     Ambient(Term),
 }
 
-/// What one case substitutes in an ambient goal: each *variable* actual index for its target, and a variable scrutinee for the case's value. A repeated index variable takes its first target, exactly as an abstraction label binds it once; an expression index or scrutinee has nothing to substitute and is absent. The elaborator re-assumes every local whose type mentions one of these binders at the substituted type, as the kernel shadows them, which is what keeps a hypothesis typed by the scrutinee usable in the arm wherever the arm's refinements do not reach.
+/// What one case substitutes in an ambient goal: each *variable* actual index for its target, and a variable scrutinee for the case's value. A repeated index variable takes its first target, exactly as an abstraction label binds it once; an expression index or scrutinee has nothing to substitute and is absent. It states the goal and nothing else: the locals an arm re-types are the ones its case's whole solution reaches, which both checkers compute with `curios_analysis::retyped` — this set is narrower, and holds even for a case whose index equations clash, where the solution is empty.
 pub fn case_substitution<'a>(
     head: &'a Term,
     actual_indices: &'a [Term],

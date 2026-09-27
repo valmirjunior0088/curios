@@ -15,6 +15,9 @@ pub use satisfy::*;
 mod invert;
 pub use invert::*;
 
+mod specialize;
+pub use specialize::*;
+
 mod positivity;
 pub use positivity::*;
 

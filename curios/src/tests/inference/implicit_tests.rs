@@ -207,6 +207,100 @@ fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
     );
 }
 
+/// The size records of the test above, with `build` over them, for the arms below that re-type `z` by other routes.
+const SIZES: &str = r#"
+    use /std/{Nat, Vec};
+
+    induct Shape: Type
+    | leaf() | node(a: Shape, b: Shape)
+    end
+
+    let Sizes(s: Shape) -> Type =
+        match s | leaf() => Nat | node(a, b) => {Sizes(a), Sizes(b)} end;
+
+    let Total(s: Shape, z: Sizes(s)) -> Nat =
+        match s | leaf() => z | node(a, b) => Total(a, z.0) + Total(b, z.1) end;
+
+    let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+        match s
+        | leaf() => Vec/replicate(z, 0)
+        | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
+        end;
+
+    let tree: Shape = Shape/node(Shape/leaf(), Shape/node(Shape/leaf(), Shape/leaf()));
+    "#;
+
+// The arm above under a written motive. The motive makes the result a family rather than the ambient goal, and the elaborator re-typed locals only at an ambient goal, so `z` stayed `Sizes(s)` in the metavariable's birth context and `Vec/append`'s length refused `Total(a, z.0)`. The kernel re-types in every arm, and both now do by the one rule, `curios_analysis::retyped`.
+#[test]
+fn an_implicit_solves_in_an_arm_whose_written_motive_leaves_the_hypothesis_ambient() {
+    let source = format!(
+        r#"{SIZES}
+        let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+            match s : (_) => Vec(Nat, Total(s, z))
+            | leaf() => Vec/replicate(z, 0)
+            | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
+            end;
+
+        /std/print(Nat/to_str(Vec/len(built(tree, (2, (3, 4))))))
+        "#
+    );
+    assert_eq!(run(&source), b"9");
+}
+
+// The arm above learning its shape from inside an index. `w(a, b)` targets `node(node(a, b), leaf())` against the actual `node(s, leaf())`, so the case solves the outer `s := node(a, b)` — a variable that is neither the scrutinee nor an index, which the elaborator's own re-typing never reached, leaving `z : Sizes(s)` for the metavariable to read. The kernel re-types by the case's whole solution, and both now do by `curios_analysis::retyped`.
+#[test]
+fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index() {
+    let source = format!(
+        r#"{SIZES}
+        induct W : (s : Shape) -> Type
+        | w(a : Shape, b : Shape) : (Shape/node(Shape/node(a, b), Shape/leaf()))
+        end
+
+        let built(s : Shape, z : Sizes(s), x : W(Shape/node(s, Shape/leaf()))) -> Vec(Nat, Total(s, z)) =
+            match x | w(a, b) => Vec/append(build(a, z.0), build(b, z.1)) end;
+
+        let pair: Shape = Shape/node(Shape/leaf(), Shape/leaf());
+        let x : W(Shape/node(pair, Shape/leaf())) = W/w(Shape/leaf(), Shape/leaf());
+        /std/print(Nat/to_str(Vec/len(built(pair, (2, 3), x))))
+        "#
+    );
+    assert_eq!(run(&source), b"5");
+}
+
+// The arm above over a `let` of the scrutinee. The kernel has substituted the `let`, so its arm meets `s` and re-types `z`; the elaborator keeps `t` as a local definition, re-typed only what mentions `t`, and left `z : Sizes(s)` for the metavariable to read. `curios_analysis::scrutinee_solution` reads through the definition to the `s` the kernel sees. The second program types its hypothesis over `t` itself, which the elaborator's re-typing did reach, and which `curios_analysis::retyped` reaches by reading `t` through to `s`.
+#[test]
+fn an_implicit_solves_in_an_arm_over_a_let_bound_scrutinee() {
+    for (label, arms) in [
+        (
+            "a hypothesis typed over the variable",
+            "let t = s;
+            match t
+            | leaf() => Vec/replicate(z, 0)
+            | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
+            end",
+        ),
+        (
+            "a hypothesis typed over the let",
+            "let t = s;
+            let w : Sizes(t) = z;
+            match t
+            | leaf() => Vec/replicate(w, 0)
+            | node(a, b) => Vec/append(build(a, w.0), build(b, w.1))
+            end",
+        ),
+    ] {
+        let source = format!(
+            r#"{SIZES}
+            let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+                {arms};
+
+            /std/print(Nat/to_str(Vec/len(built(tree, (2, (3, 4))))))
+            "#
+        );
+        assert_eq!(run(&source), b"9", "{label}");
+    }
+}
+
 #[test]
 fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged() {
     // `n` is a `Nat`, not a proposition: nothing about it was ever an obligation, so the report says nothing determined it and shows its type, rather than claiming nothing discharged `Nat` — which is the wording a *bound* gets, and names a fault a reader cannot find here.

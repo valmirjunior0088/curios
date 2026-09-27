@@ -1,11 +1,13 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
-    curios_analysis::{Invert, invert_indices, pinned_by_targets, solve_indices},
+    curios_analysis::{
+        Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
+    },
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
         IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Scope, Subterm, Telescope,
-        Term, Three, Two, case_substitution,
+        Term, Three, Two,
     },
     curios_num::{Binary, Grain, Natural},
     std::collections::BTreeSet,
@@ -154,7 +156,7 @@ fn may_read_hypothesis<N: Arity>(arm: &Scope<N>, index: usize) -> bool {
     arm.uses(index) || holds_goal(arm.body())
 }
 
-/// One arm of a fold, at its case value: the scrutinee refined to it, a local typed by a variable scrutinee re-assumed at it under an ambient result, and the body checked against the result there.
+/// One arm of a fold, at its case value: the scrutinee refined to it, the locals its solution re-types re-assumed, and the body checked against the result there.
 fn check_fold_arm(
     context: &mut Context,
     head: &Term,
@@ -163,9 +165,7 @@ fn check_fold_arm(
     body: &Term,
 ) -> Result<Term, Error> {
     refine_head(context, head, value)?;
-    if result.ambient().is_some() {
-        shadow_specialized(context, head, &[], &[], value);
-    }
+    retype_locals(context, head, value, Vec::new());
     check(context, body, result.at(head, &[], &[], value))
 }
 
@@ -456,9 +456,7 @@ fn elaborate_switch(
         let body = context.with_frame(|context| {
             let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into();
             refine_head(context, &head_elaborated, &literal)?;
-            if result.ambient().is_some() {
-                shadow_specialized(context, &head_elaborated, &[], &[], &literal);
-            }
+            retype_locals(context, &head_elaborated, &literal, Vec::new());
             check(
                 context,
                 body,
@@ -596,9 +594,7 @@ fn elaborate_bool_match(
     let false_elaborated = context.with_frame(|context| {
         let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(false)).into();
         refine_head(context, &head_elaborated, &literal)?;
-        if result.ambient().is_some() {
-            shadow_specialized(context, &head_elaborated, &[], &[], &literal);
-        }
+        retype_locals(context, &head_elaborated, &literal, Vec::new());
         check(
             context,
             false_case,
@@ -609,9 +605,7 @@ fn elaborate_bool_match(
     let true_elaborated = context.with_frame(|context| {
         let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(true)).into();
         refine_head(context, &head_elaborated, &literal)?;
-        if result.ambient().is_some() {
-            shadow_specialized(context, &head_elaborated, &[], &[], &literal);
-        }
+        retype_locals(context, &head_elaborated, &literal, Vec::new());
         check(
             context,
             true_case,
@@ -859,20 +853,18 @@ fn elaborate_induct_match(
             );
             refine_head(context, &head_elaborated, &ctor_val)?;
 
-            // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is. Refinements never justify the typing (the motive application does); they are convertibility aids, so context hypotheses mentioning a solved variable reduce at the arm's indices.
-            if let Invert::Solved(solutions) =
-                solve_indices(context, &actual_indices, &ix_c, &labels)?
-            {
-                for (name, solution) in solutions {
-                    context.refine(&name, &solution);
-                }
+            // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+            let solutions = match solve_indices(context, &actual_indices, &ix_c, &labels)? {
+                Invert::Solved(solutions) => solutions,
+                Invert::Impossible => Vec::new(),
+            };
+            for (name, solution) in &solutions {
+                context.refine(name, solution);
             }
 
             // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
             let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
-            if result.ambient().is_some() {
-                shadow_specialized(context, &head_elaborated, &actual_indices, &ix_c, &ctor_val);
-            }
+            retype_locals(context, &head_elaborated, &ctor_val, solutions);
 
             let var_refs = vars.iter().collect::<Vec<_>>();
             check(context, &scope.open(&var_refs), expected)
@@ -930,33 +922,21 @@ fn assume_payload(
     }
 }
 
-/// Re-assume, at its specialized type, every local whose type mentions a variable the case substitutes for — the elaborator's copy of the kernel's `shadow`. The arm's refinements already make such a type *reduce* at the case, which is enough for the arm body's own conversions, but not for a metavariable solution parked and retried outside the frame: `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple where the solution is checked, which the shadow states outright. The substituted variables' own entries are left alone, exactly as the kernel leaves them.
-fn shadow_specialized(
+/// Re-assume every local a case's solution re-types, at its specialized type: `curios_analysis::retyped` over `solutions` joined by the scrutinee's own (`curios_analysis::scrutinee_solution`), which is the list and the rule the kernel's arm applies. The arm's refinements make such a type *reduce* at the case, which is enough for the body's own conversions, but not for a metavariable born in the arm: it keeps the types of its birth context and checks its solution against them, retried outside the frame — `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple there, which the re-typed entry states outright.
+fn retype_locals(
     context: &mut Context,
     head: &Term,
-    actual_indices: &[Term],
-    case_indices: &[Term],
-    case_value: &Term,
+    value: &Term,
+    mut solutions: Vec<(Free, Term)>,
 ) {
-    let substitution = case_substitution(head, actual_indices, case_indices, case_value);
-    if substitution.is_empty() {
-        return;
+    let value = value.substitute(&solutions);
+    if let Some(solution) = scrutinee_solution(&*context, head, &value) {
+        solutions.push(solution);
     }
-    let binders = substitution
-        .iter()
-        .map(|(name, _)| *name)
-        .collect::<Vec<_>>();
-    let values = substitution
-        .iter()
-        .map(|(_, value)| *value)
-        .collect::<Vec<_>>();
+
     let locals = context.locals().to_vec();
-    for (name, type_) in locals {
-        if binders.contains(&&name) || !binders.iter().any(|binder| type_.mentions_free(binder)) {
-            continue;
-        }
-        let specialized = Scope::close(Many(binders.len()), &binders, type_).open(&values);
-        context.assume(&name, &specialized);
+    for (name, type_) in retyped(&*context, &locals, &solutions) {
+        context.assume(&name, &type_);
     }
 }
 

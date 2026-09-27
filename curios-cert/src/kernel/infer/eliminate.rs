@@ -10,7 +10,7 @@
 //!
 //! Opening the motive at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/language/totality-of-the-erased-program.md` — is the license for solving those equations by first-order unification and substituting.
 //!
-//! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its refinement store, while the kernel holds no store, so it substitutes into the arm and shadows the affected locals instead, which the existing `mark`/`retract` bracket scopes exactly to the arm.
+//! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its refinement store, while the kernel holds no store, so it substitutes into the arm instead. Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`]), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the re-typed entries exactly to the arm.
 //!
 //! # The large-elimination guard
 //!
@@ -28,7 +28,9 @@ mod tests;
 use {
     super::{check, infer},
     crate::{Counted, InductAt, Kernel, KernelError, Sort, carries_information},
-    curios_analysis::{Invert, invert_indices, pinned_by_targets, solve_indices},
+    curios_analysis::{
+        Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
+    },
     curios_core::{
         Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
         Term, Variant,
@@ -138,7 +140,7 @@ fn check_arm(
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.
 ///
-/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for an intrinsic carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its written spelling for the reducer to consult instead.
+/// A variable scrutinee becomes a solution the arm is substituted through ([`scrutinee_solution`], which the elaborator's arms read too) — for a nominal arm the zero-index instance of the same index equations, and for an intrinsic carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its written spelling for the reducer to consult instead.
 ///
 /// **Recording costs nothing, which it did not use to.** This reduced the scrutinee to weak-head normal form here, once per arm, purely to obtain a key — and the scrutinee mentions a local, which is exactly the term the evaluation memos may not store, so a web of combinator definitions each naming the one before it twice unfolded exponentially before a single arm was checked. Fourteen such definitions refused on the reduction budget while the elaborator, which registers on the written spelling, checked the same program flat. `Scope::refine` and `whnf`'s `refined_reduct` carry the two-tier key that replaced it; the reduction happens there, at most once per equation, and only when a probe presents a term the written spelling does not answer.
 ///
@@ -157,11 +159,8 @@ pub(super) fn assume_case_value(
 ) -> Result<(), ReduceError> {
     let value = value.substitute(solutions);
 
-    if let Subterm::Var(var) = &**scrutinee
-        && var.as_bound().is_none()
-        && kernel.local_type(var.unwrap()).is_some()
-    {
-        solutions.push((var.unwrap().clone(), value));
+    if let Some(solution) = scrutinee_solution(&*kernel, scrutinee, &value) {
+        solutions.push(solution);
         return Ok(());
     }
 
@@ -183,9 +182,7 @@ fn specialize(
     )
 }
 
-/// Re-assume, at its specialized type, every local whose type mentions a solved variable. The shadow is what a lookup finds — locals resolve innermost-first — and the enclosing `mark`/`retract` bracket retracts it with the arm.
-///
-/// A solved variable's own entry is left alone: its occurrences in the arm were substituted away, so nothing looks it up at its stale type.
+/// Re-assume every local the solution re-types at its specialized type — the shared [`retyped`], which the elaborator's arms apply too. The shadow is what a lookup finds — locals resolve innermost-first — and the enclosing `mark`/`retract` bracket retracts it with the arm.
 pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
     if solutions.is_empty() {
         return;
@@ -197,18 +194,8 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
         .zip(kernel.local_types())
         .collect::<Vec<_>>();
 
-    for (name, type_) in locals {
-        if solutions.iter().any(|(solved, _)| *solved == name) {
-            continue;
-        }
-
-        let mentioned = type_.free_vars();
-        if solutions
-            .iter()
-            .any(|(solved, _)| mentioned.contains(solved))
-        {
-            kernel.assume(&name, &type_.substitute(solutions));
-        }
+    for (name, type_) in retyped(&*kernel, &locals, solutions) {
+        kernel.assume(&name, &type_);
     }
 }
 
