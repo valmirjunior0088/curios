@@ -18,6 +18,12 @@ pub use invert::*;
 mod specialize;
 pub use specialize::*;
 
+mod unfolding;
+pub use unfolding::*;
+
+#[cfg(test)]
+mod test_support;
+
 mod positivity;
 pub use positivity::*;
 
