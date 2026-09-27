@@ -28,6 +28,44 @@ pub let classify(c: Byte) -> Class =
     | _ => Class/bad()
     end;
 
+--- Whether `c` continues a character: a byte in `0x80..=0xBF`, which no character begins with.
+pub let continues(c: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(c), 0x80, 0xBF);
+
+--- That a class asks its continuation bytes for a range inside `0x80..=0xBF`.
+let class_continues(k: Class) -> Bool =
+    match k | ascii() => true | lead(_, lo, hi, _) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
+
+--- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
+let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
+    let n = Byte/to_nat(c);
+    match Nat/in_range(n, 0x0, 0x7F)
+    | true => Bool/True/qed()
+    | false =>
+        match Nat/in_range(n, 0xC2, 0xDF)
+        | true => Bool/True/qed()
+        | false =>
+            match Nat/in_range(n, 0xE0, 0xEF)
+            | true =>
+                match n == 0xE0
+                | true => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
+                | false => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
+                end
+            | false =>
+                match Nat/in_range(n, 0xF0, 0xF4)
+                | true =>
+                    match n == 0xF0
+                    | true =>
+                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
+                    | false =>
+                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
+                    end
+                | false => Bool/True/qed()
+                end
+            end
+        end
+    end;
+
 --- How far through a character a walk over bytes has come.
 pub induct Scan: pub Type
 --- Between characters, where a new one may begin.
@@ -57,6 +95,41 @@ pub let step(c: Byte, s: Scan) -> Scan =
         end
     end;
 
+--- A scan between characters that meets a byte continuing one goes bad: `classify` reports no lead for it, each of its guards refuted by the byte's range.
+let step_of_continuing(
+    c: Byte,
+    q: Bool/Holds(continues(c)),
+) -> Eq(step(c, Scan/lead()), Scan/bad()) =
+    let n = Byte/to_nat(c);
+    let range = Nat/Le/of_in_range(n, 0x80, 0xBF, q);
+    match Nat/in_range(n, 0x0, 0x7F)
+    | true =>
+        match Nat/Le/trans(range.low, Nat/Le/of_in_range(n, 0x0, 0x7F, Bool/True/qed()).high) end
+    | false =>
+        match Nat/in_range(n, 0xC2, 0xDF)
+        | true =>
+            match Nat/Le/trans(Nat/Le/of_in_range(n, 0xC2, 0xDF, Bool/True/qed()).low, range.high)
+            end
+        | false =>
+            match Nat/in_range(n, 0xE0, 0xEF)
+            | true =>
+                match Nat/Le/trans(
+                    Nat/Le/of_in_range(n, 0xE0, 0xEF, Bool/True/qed()).low,
+                    range.high)
+                end
+            | false =>
+                match Nat/in_range(n, 0xF0, 0xF4)
+                | true =>
+                    match Nat/Le/trans(
+                        Nat/Le/of_in_range(n, 0xF0, 0xF4, Bool/True/qed()).low,
+                        range.high)
+                    end
+                | false => Eq/refl()
+                end
+            end
+        end
+    end;
+
 --- The state reading all of `b` leaves the scan in.
 pub let scan_from(s: Scan, b: Bytes) -> Scan =
     match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
@@ -64,6 +137,10 @@ pub let scan_from(s: Scan, b: Bytes) -> Scan =
 --- That bytes are well-formed UTF-8, which is what `Str` carries: what that rests on, from any scan state, and what the operations carry it through.
 pub mod Valid;
 pub use Valid/{let Valid};
+
+--- A position in text: a byte offset at which a character may begin, typed by the text it belongs to. Deciding one reads a single byte; that such an offset is where valid text divides into valid text is `Valid/before` and `Valid/after`.
+pub mod At;
+pub use At/{let At};
 
 --- How many bytes the first `n` characters take from scan state `s`.
 pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
@@ -327,6 +404,20 @@ pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
 --- `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
     Str { bytes = x[..a.bytes, ..b.bytes], valid = Valid/concat(a.valid, b.valid) };
+
+--- The text before `at`, cut in O(1).
+pub let before(s: Str, at: At(s)) -> Str =
+    Str {
+        bytes = Bytes/slice(s.bytes, 0, at.offset, @at.within),
+        valid = Valid/before(s.valid, at.offset, at.within, at.boundary),
+    };
+
+--- The text from `at` on, cut in O(1).
+pub let after(s: Str, at: At(s)) -> Str =
+    Str {
+        bytes = Bytes/drop(s.bytes, at.offset, @at.within),
+        valid = Valid/after(s.valid, at.offset, at.within, at.boundary),
+    };
 
 let drop_n(n: Nat, s: Str) -> Str =
     Str {

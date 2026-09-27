@@ -86,6 +86,19 @@ pub let of_in_range(
     | false => match h end
     end;
 
+--- Two bounds facing a value as the range check they make: `of_in_range` read backwards.
+pub let to_in_range(
+    c: Nat,
+    lo: Nat,
+    hi: Nat,
+    low: Le(lo, c),
+    high: Le(c, hi),
+) -> Bool/Holds(Nat/in_range(c, lo, hi)) =
+    match c >= lo
+    | true => high
+    | false => match low end
+    end;
+
 --- Two bounds facing each other pin one value.
 pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
     match a

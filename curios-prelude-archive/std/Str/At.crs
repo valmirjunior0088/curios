@@ -1,0 +1,45 @@
+use /std/{Nat, Bytes, Bool, Option, Str};
+use /std/Nat/{Le};
+
+--- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
+---
+--- One byte decides it, which is what makes a position cheap to check. What gives the one-byte fact its meaning is UTF-8's self-synchronization, which `Str/Valid/before` and `Str/Valid/after` prove: valid text cut where a character may begin is valid text on both sides.
+pub let starts(rest: Bytes) -> Bool =
+    match rest | x[] => true | x[h, .._] => Bool/not(Str/continues(h)) end;
+
+--- A position in `s`: a byte offset at which a character may begin, with the bound and the boundary that say so, both erased.
+pub struct At(s: Str): pub Type {
+    --- The byte offset.
+    offset: Nat,
+    --- Why it lies within `s`.
+    within: Le(offset, Bytes/len(s.bytes)),
+    --- Why a character may begin there.
+    boundary: Bool/Holds(starts(Bytes/drop(s.bytes, offset, @within))),
+}
+
+--- The start of `s`.
+pub let start(s: Str) -> At(s) =
+    At { offset = 0, within = Bool/True/qed(), boundary = Str/Valid/begins(s.valid) };
+
+--- The end of `s`, past its last character.
+pub let finish(s: Str) -> At(s) =
+    At {
+        offset = Bytes/len(s.bytes),
+        within = Le/refl(Bytes/len(s.bytes)),
+        boundary = Bool/True/qed(),
+    };
+
+--- The position `k` bytes into `s`, or `none` when `k` is past the end or inside a character. Decided by the one byte at `k`.
+pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
+    match Le/try(k, Bytes/len(s.bytes))
+    | none() => Option/none()
+    | some(within) =>
+        match starts(Bytes/drop(s.bytes, k, @within))
+        | true => Option/some(At { offset = k, within = within, boundary = Bool/True/qed() })
+        | false => Option/none()
+        end
+    end;
+
+--- The byte offset of `at`.
+pub let to_offset(@s: Str, at: At(s)) -> Nat =
+    at.offset;

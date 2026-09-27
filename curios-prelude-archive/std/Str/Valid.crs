@@ -1,5 +1,6 @@
 use /std/Str/{classify, Scan, step, scan_from, drop_width, drop_width_within, pending, concluded,
-    advanced, begins_scalars_of};
+    advanced, begins_scalars_of, continues, classify_continues, step_of_continuing};
+use /std/Str/At/{starts};
 use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option};
 
 --- Whether a scan has come to rest between characters.
@@ -96,6 +97,159 @@ pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =
     match x
     | x[] => match w end
     | x[_, ..t] => from_bad(@t, w)
+    end;
+
+--- That a scan inside a character asks for continuation bytes: true of every state a scan reaches from `lead`.
+let scan_continues(s: Scan) -> Bool =
+    match s | lead() => true | cont(_, lo, hi) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
+
+--- Every step leaves a scan asking for continuation bytes, whatever it began in: a lead's range is `classify`'s, and a continuation's is `0x80..=0xBF` itself.
+let step_continues(c: Byte, s: Scan) -> Bool/Holds(scan_continues(step(c, s))) =
+    let n = Byte/to_nat(c);
+    match s
+    | bad() => Bool/True/qed()
+    | lead() =>
+        let asked = classify_continues(c);
+        match classify(c)
+        | ascii() => Bool/True/qed()
+        | lead(_, _, _, _) => asked
+        | bad() => Bool/True/qed()
+        end
+    | cont(rem, lo, hi) =>
+        match Bool/not(Nat/in_range(n, lo, hi))
+        | true => Bool/True/qed()
+        | false => match rem == 1 | true => Bool/True/qed() | false => Bool/True/qed() end
+        end
+    end;
+
+--- A character interrupted by a byte that continues none goes bad: the range it asks for lies inside `0x80..=0xBF`, which the byte is outside.
+let interrupted(
+    c: Byte,
+    rem: Nat,
+    lo: Nat,
+    hi: Nat,
+    h: Bool/Holds(scan_continues(Scan/cont(rem, lo, hi))),
+    q: Bool/Holds(Bool/not(continues(c))),
+) -> Eq(step(c, Scan/cont(rem, lo, hi)), Scan/bad()) =
+    let n = Byte/to_nat(c);
+    match Nat/in_range(n, lo, hi)
+    | false => Eq/refl()
+    | true =>
+        let range = Nat/Le/of_in_range(n, lo, hi, Bool/True/qed());
+        match 0x80 <= lo
+        | false => match h end
+        | true =>
+            let continuing =
+                Nat/Le/to_in_range(
+                    n,
+                    0x80,
+                    0xBF,
+                    Nat/Le/trans(Bool/True/qed(), range.low),
+                    Nat/Le/trans(range.high, h));
+            match Nat/in_range(n, 0x80, 0xBF)
+            | true => match q end
+            | false => match continuing end
+            end
+        end
+    end;
+
+--- Self-synchronization, first half: bytes valid from `s` and cut where a character may begin are valid up to the cut. A scan reaching the cut inside a character meets either the end, where validity says it must have left, or a byte continuing none, which sends it bad.
+let seam_before(
+    s: Scan,
+    h: Bool/Holds(scan_continues(s)),
+    @b: Bytes,
+    k: Nat,
+    within: Nat/Le(k, Bytes/len(b)),
+    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    d: from(s, b),
+) -> from(s, Bytes/slice(b, 0, k, @within)) =
+    match k
+    | 0 =>
+        match s
+        | lead() => Bool/True/qed()
+        | bad() => match from_bad(@b, d) end
+        | cont(rem, lo, hi) =>
+            match b
+            | x[] => match d end
+            | x[c, ..t] =>
+                match from_bad(
+                    @t,
+                    Eq/subst((sc: Scan) => from(sc, t), interrupted(c, rem, lo, hi, h, at), d))
+                end
+            end
+        end
+    | j + 1 =>
+        match b
+        | x[] => match within end
+        | x[c, ..t] => seam_before(step(c, s), step_continues(c, s), @t, j, within, at, d)
+        end
+    end;
+
+--- Self-synchronization, second half: bytes valid from `s` and cut where a character may begin are valid from the cut, read from between characters.
+let seam_after(
+    s: Scan,
+    h: Bool/Holds(scan_continues(s)),
+    @b: Bytes,
+    k: Nat,
+    within: Nat/Le(k, Bytes/len(b)),
+    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    d: from(s, b),
+) -> Valid(Bytes/drop(b, k, @within)) =
+    match k
+    | 0 =>
+        match s
+        | lead() => d
+        | bad() => match from_bad(@b, d) end
+        | cont(rem, lo, hi) =>
+            match b
+            | x[] => match d end
+            | x[c, ..t] =>
+                match from_bad(
+                    @t,
+                    Eq/subst((sc: Scan) => from(sc, t), interrupted(c, rem, lo, hi, h, at), d))
+                end
+            end
+        end
+    | j + 1 =>
+        match b
+        | x[] => match within end
+        | x[c, ..t] => seam_after(step(c, s), step_continues(c, s), @t, j, within, at, d)
+        end
+    end;
+
+--- Valid bytes cut where a character may begin are valid before the cut.
+pub let before(
+    @b: Bytes,
+    v: Valid(b),
+    k: Nat,
+    within: Nat/Le(k, Bytes/len(b)),
+    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+) -> Valid(Bytes/slice(b, 0, k, @within)) =
+    seam_before(Scan/lead(), Bool/True/qed(), k, within, at, v);
+
+--- Valid bytes cut where a character may begin are valid after the cut.
+pub let after(
+    @b: Bytes,
+    v: Valid(b),
+    k: Nat,
+    within: Nat/Le(k, Bytes/len(b)),
+    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+) -> Valid(Bytes/drop(b, k, @within)) =
+    seam_after(Scan/lead(), Bool/True/qed(), k, within, at, v);
+
+--- Valid bytes begin where a character may: none starts with a byte continuing one.
+pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(starts(b)) =
+    match b
+    | x[] => Bool/True/qed()
+    | x[c, ..t] =>
+        match continues(c)
+        | false => Bool/True/qed()
+        | true =>
+            match from_bad(
+                @t,
+                Eq/subst((sc: Scan) => from(sc, t), step_of_continuing(c, Bool/True/qed()), v))
+            end
+        end
     end;
 
 --- The rest of a character owed `rem` continuation bytes, the next between `lo` and `hi`, over the bits `partial` has gathered: read off the bytes the evidence says follow, and ended at a scalar value because it can only end at one.
