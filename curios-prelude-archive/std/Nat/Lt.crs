@@ -40,6 +40,17 @@ pub let lt_of_le_succ(a: Nat, b: Nat, p: Nat/Le(a + 1, b)) -> Lt(a, b) =
     | bp + 1 => match a | 0 => Bool/True/qed() | ap + 1 => lt_of_le_succ(ap, bp, p) end
     end;
 
+--- `a < b` gives `0 < b - a`: what lies between a value and a strict bound on it is not empty.
+pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
+    match a
+    | 0 => p
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 => sub_positive_of_lt(ap, bp, p)
+        end
+    end;
+
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 ---
 --- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.

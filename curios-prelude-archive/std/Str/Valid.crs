@@ -1,7 +1,6 @@
 use /std/Str/{classify, Scan, step, scan_from, drop_width, drop_width_within, pending, concluded,
     advanced, begins_scalars_of, continues, classify_continues, step_of_continuing};
-use /std/Str/At/{starts};
-use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option};
+use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
 
 --- Whether a scan has come to rest between characters.
 let at_lead(s: Scan) -> Bool =
@@ -160,7 +159,7 @@ let seam_before(
     @b: Bytes,
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> from(s, Bytes/slice(b, 0, k, @within)) =
     match k
@@ -192,7 +191,7 @@ let seam_after(
     @b: Bytes,
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> Valid(Bytes/drop(b, k, @within)) =
     match k
@@ -223,7 +222,7 @@ pub let before(
     v: Valid(b),
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/slice(b, 0, k, @within)) =
     seam_before(Scan/lead(), Bool/True/qed(), k, within, at, v);
 
@@ -233,12 +232,12 @@ pub let after(
     v: Valid(b),
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(starts(Bytes/drop(b, k, @within))),
+    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/drop(b, k, @within)) =
     seam_after(Scan/lead(), Bool/True/qed(), k, within, at, v);
 
 --- Valid bytes begin where a character may: none starts with a byte continuing one.
-pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(starts(b)) =
+pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(Str/At/starts(b)) =
     match b
     | x[] => Bool/True/qed()
     | x[c, ..t] =>

@@ -419,6 +419,10 @@ pub let after(s: Str, at: At(s)) -> Str =
         valid = Valid/after(s.valid, at.offset, at.within, at.boundary),
     };
 
+--- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
+pub let between(s: Str, from: At(s), to: At(s), @ordered: Nat/Le(from.offset, to.offset)) -> Str =
+    before(after(s, from), At/to_after(s, from, to, @ordered));
+
 let drop_n(n: Nat, s: Str) -> Str =
     Str {
         bytes =
