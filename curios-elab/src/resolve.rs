@@ -702,10 +702,8 @@ pub(crate) fn retry_witness(
     origin: Term,
     frame: super::FrozenFrame,
 ) -> Result<(), Error> {
-    let resolution = context.with_frame(|context| {
-        context.restore_frame(&frame);
-        resolve_witness(context, &goal, &origin)
-    })?;
+    let resolution =
+        context.with_retry_frame(&frame, |context| resolve_witness(context, &goal, &origin))?;
 
     match resolution {
         Resolution::Solved(term) => {

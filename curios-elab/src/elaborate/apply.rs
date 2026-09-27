@@ -205,8 +205,7 @@ pub(crate) fn retry_discharge(
     frame: FrozenFrame,
 ) -> Result<(), Error> {
     let waiting = context
-        .with_frame(|context| {
-            context.restore_frame(&frame);
+        .with_retry_frame(&frame, |context| {
             attempt_discharge(context, slot, &bound, &provenance)
         })
         .map_err(|error| error.at_opt(origin.span()))?;

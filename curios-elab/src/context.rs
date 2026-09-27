@@ -1599,14 +1599,41 @@ impl Context {
         self.frames.freeze()
     }
 
-    /// Reapply a frozen frame inside a fresh `with_frame`, restoring the equalities the parked problem's origin saw.
+    /// Decide a parked problem in exactly the context it froze: enter a frame, hide every local frame below it ([`Frames::hide_frames_below_here`]), restore `frame` above the floor, and run `work` there.
     ///
-    /// Only what is not already live is reapplied: an intra-item retry runs while the origin's outer binders are still in scope, and re-assuming a live identity would double it in Γ — a metavariable born under the doubled telescope carries a non-linear identity spine (`?m[V, m, V, m, …]`) that pattern inversion can never invert, leaving its goals parked forever. Identities are unique mints, so a name already assumed *is* the frozen binder and skipping it loses nothing.
-    pub(crate) fn restore_frame(&mut self, frame: &FrozenFrame) {
-        for (name, type_) in &frame.assumptions {
-            if self.assumption(name).is_none() {
-                self.assume(name, type_);
+    /// A retry is scheduled wherever a solution lands — a turnaround inside the same item, a nested or sibling arm, the drain after the item — and the live context at that point is not the problem's. Running on top of it, as retries once did, went wrong both ways: an arm's re-typed local lost to the same name live at its unspecialized type when the retry ran outside the arm, and a nested arm's re-typings and refinements decided a problem from an arm outside it. The floor makes the verdict a function of the problem and its frozen context alone, which is what parking promises.
+    ///
+    /// The caches are told when the floor hides a refinement, exactly as a suppression boundary tells them: a reduct computed with it visible must not answer under the floor, nor the other way round.
+    pub(crate) fn with_retry_frame<R>(
+        &mut self,
+        frame: &FrozenFrame,
+        work: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        curios_profile::profile!("ctx::retry_frame");
+        self.with_frame(|context| {
+            let (previous, hid_refinements) = context.frames.hide_frames_below_here();
+            if hid_refinements {
+                context.caches.invalidate_suppression_boundary();
             }
+
+            context.restore_frame(frame);
+            let result = work(context);
+
+            context.frames.restore_hidden_frames(previous);
+            if hid_refinements {
+                context.caches.invalidate_suppression_boundary();
+            }
+
+            result
+        })
+    }
+
+    /// Reapply a frozen frame above the floor [`Context::with_retry_frame`] set, restoring the context the parked problem's origin saw.
+    ///
+    /// Every assumption is reapplied, in binding order, so a name the frozen frame re-typed — an arm's specialization of a local — ends at its innermost type. This once reapplied only names not already live, because re-assuming a live identity doubled it in Γ and gave a metavariable born there a non-linear identity spine inversion cannot invert; the floor hides whatever was live, and a birth telescope keeps one entry per name, so nothing doubles and nothing is skipped.
+    fn restore_frame(&mut self, frame: &FrozenFrame) {
+        for (name, type_) in &frame.assumptions {
+            self.assume(name, type_);
         }
 
         // Definitions take the same test as the assumptions above, and for a sharper reason: a name still defined with the frozen body *is* the frozen definition, and re-defining it reads to the cache protocol as a redefinition, which clears both caches wholesale. A witness parked under a hundred `let` binders was retried a hundred clears at a time, and every reduct the region had memoized was recomputed after each — the slow half of a long `!` chain's cliff.

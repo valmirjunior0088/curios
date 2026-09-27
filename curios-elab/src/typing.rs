@@ -513,8 +513,7 @@ impl Context {
             }
 
             let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
-            let settled_term = self.with_frame(|context| {
-                context.restore_frame(&frame);
+            let settled_term = self.with_retry_frame(&frame, |context| {
                 settle_against(context, &term, &expected, SettleTier::Drain)
             });
             let rebuilt = match settled_term {
@@ -774,9 +773,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
         Blocked(Vec<super::Problem>),
     }
 
-    let outcome = context.with_frame(|context| {
-        context.restore_frame(&frame);
-
+    let outcome = context.with_retry_frame(&frame, |context| {
         Ok(
             match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
@@ -822,9 +819,7 @@ fn retry_checking(
         return Ok(());
     }
 
-    let rebuilt = context.with_frame(|context| {
-        context.restore_frame(&frame);
-
+    let rebuilt = context.with_retry_frame(&frame, |context| {
         // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly, matching the retired settle's behavior.
         if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
             return Ok(None);

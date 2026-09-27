@@ -1,6 +1,8 @@
 //! The lexical half of the kernel's state: assumptions, local definitions, counterfactual refinements, and the witness scope, all bracket-disciplined by `enter`/`leave`.
 //!
 //! Everything here lives and dies with binder frames — the opposite lifetime from the flat stores in [`Program`](super::Program) and [`Solutions`](super::Solutions). Cache coordination stays with the `Context` façade: a frame write that must clear or stamp the caches does so there, so this type's methods are pure store operations.
+//!
+//! Three brackets narrow what a lookup reads, each for its own reason. Suppression withholds the refinements a re-validation must not rest on; withholding hides a settlement's own frame and every frame inside it; and the retry floor hides the live local frames a parked problem's retry happens to run inside, so the problem is decided in exactly the context it froze.
 
 use {
     super::{SharedSpine, SharedTelescope},
@@ -35,7 +37,7 @@ impl DefEntry {
     }
 }
 
-/// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry must run under the same equalities its origin saw — including the arm-local refinements — while solution re-validation independently suppresses them, keeping committed solutions refinement-free.
+/// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry runs under exactly what its origin saw — the arm-local refinements included, and nothing of the live context it is scheduled inside (`Context::with_retry_frame`) — while solution re-validation independently suppresses the refinements, keeping committed solutions refinement-free.
 /// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
 #[derive(Debug, Clone)]
 pub(crate) struct ScrutineeEntry {
@@ -91,6 +93,10 @@ pub(crate) struct Frames {
     ///
     /// The other face of [`Frames::suppress_refinements_below`], and the one the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
+    /// The frame a retry runs in, while one runs — `None` otherwise.
+    ///
+    /// Every local frame below it is the live context the retry happens to be scheduled inside, which the parked problem never saw: it is hidden from assumptions, the local list, the witness scope and refinements, so the problem is decided in exactly the context it froze and nothing else. Definitions stay visible, because names are unique mints and a definition never changes — a live definition *is* the frozen one.
+    retry_floor: Option<usize>,
     /// The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
@@ -113,6 +119,7 @@ impl Frames {
             refinement_scrutinees: vec![HashMap::new()],
             suppress_refinements_below: None,
             withhold_refinements_from: None,
+            retry_floor: None,
             local: Vec::new(),
             local_marks: Vec::new(),
             witness_scope: Vec::new(),
@@ -176,7 +183,7 @@ impl Frames {
 
     /// The `use`-plicity binders in scope, in binding order (innermost last).
     pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {
-        &self.witness_scope
+        &self.witness_scope[self.visible_witness_start()..]
     }
 
     /// Re-join a frozen frame's witness binders (already re-assumed) to the scope; the enclosing frame's mark truncates them on exit.
@@ -208,10 +215,62 @@ impl Frames {
     }
 
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
-        self.assumptions
-            .iter()
+        self.visible(&self.assumptions)
             .rev()
             .find_map(|assumptions| assumptions.get(name))
+    }
+
+    /// The frames a lookup may read: the base frame, then every frame from the retry floor up — all of them when no retry runs.
+    fn visible<'a, T>(&self, stores: &'a [T]) -> impl DoubleEndedIterator<Item = &'a T> {
+        let floor = self.retry_floor.unwrap_or(1).clamp(1, stores.len());
+        stores[..1].iter().chain(&stores[floor..])
+    }
+
+    /// Where the part of `local` a lookup may read begins: past the top-level entries, and past every hidden frame's binders while a retry runs.
+    fn visible_local_start(&self) -> usize {
+        match self.retry_floor {
+            Some(floor) => self
+                .local_marks
+                .get(floor - 1)
+                .copied()
+                .unwrap_or(self.local.len()),
+            None => self.base_locals(),
+        }
+    }
+
+    /// Where the part of the witness scope a resolution may read begins: the whole of it, or past every hidden frame's binders while a retry runs.
+    fn visible_witness_start(&self) -> usize {
+        match self.retry_floor {
+            Some(floor) => self
+                .witness_marks
+                .get(floor - 1)
+                .copied()
+                .unwrap_or(self.witness_scope.len()),
+            None => 0,
+        }
+    }
+
+    /// Hide every local frame below the innermost one from every lookup but definitions, returning the previous floor — the bracket intrinsic for `Context::with_retry_frame`. Answers whether any refinement sits in the frames it hides, which is what the caches must be told.
+    pub(crate) fn hide_frames_below_here(&mut self) -> (Option<usize>, bool) {
+        self.locals_stamp.fresh();
+        let floor = self.assumptions.len() - 1;
+        let hidden = self.retry_floor.unwrap_or(1).min(floor)..floor;
+        let refined = self.refinements[hidden.clone()]
+            .iter()
+            .any(|f| !f.is_empty())
+            || self.refinement_projections[hidden.clone()]
+                .iter()
+                .any(|f| !f.is_empty())
+            || self.refinement_scrutinees[hidden]
+                .iter()
+                .any(|f| !f.is_empty());
+        (self.retry_floor.replace(floor), refined)
+    }
+
+    /// Restore a floor taken by [`hide_frames_below_here`](Self::hide_frames_below_here).
+    pub(crate) fn restore_hidden_frames(&mut self, previous: Option<usize>) {
+        self.locals_stamp.fresh();
+        self.retry_floor = previous;
     }
 
     /// Drop every base-frame binding of `name`: its assumption, its universe context, its definition, and its places in the local and witness scopes. Base frame only — an inner frame is popped whole by [`Frames::leave`] — because the one binding that needs forgetting singly is a top-level declaration's, undone when its item is refused.
@@ -231,8 +290,7 @@ impl Frames {
 
     /// The innermost registered universe context for `name`, if any.
     pub(crate) fn assumption_universe_context(&self, name: &Free) -> Option<UniverseContext> {
-        self.assumption_universes
-            .iter()
+        self.visible(&self.assumption_universes)
             .rev()
             .find_map(|contexts| contexts.get(name))
             .cloned()
@@ -244,9 +302,14 @@ impl Frames {
         name: &Free,
         universe_context: UniverseContext,
     ) {
-        let contexts = self
-            .assumption_universes
+        let floor = self
+            .retry_floor
+            .unwrap_or(1)
+            .clamp(1, self.assumption_universes.len());
+        let (base, local) = self.assumption_universes.split_at_mut(1);
+        let contexts = base
             .iter_mut()
+            .chain(&mut local[floor - 1..])
             .rev()
             .find(|contexts| contexts.contains_key(name))
             .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
@@ -274,9 +337,12 @@ impl Frames {
             .any(|frame| frame.contains_key(name))
     }
 
-    /// The local assumption context in binding order (outermost first). The dependent-match generalizer (`elaborate_match`) walks this to find the hypotheses whose type depends on a scrutinee index being abstracted: they must ride into the motive as Π-binders, or the synthesized motive is ill-typed. Binding order matters — a hypothesis's type can only mention earlier binders, so the telescope it yields is already well-ordered.
+    /// The local assumption context in binding order (outermost first) — while a retry runs, only the part past its floor, which is the whole of the retried problem's local context. The dependent-match generalizer (`elaborate_match`) walks this to find the hypotheses whose type depends on a scrutinee index being abstracted: they must ride into the motive as Π-binders, or the synthesized motive is ill-typed. Binding order matters — a hypothesis's type can only mention earlier binders, so the telescope it yields is already well-ordered.
     pub(crate) fn locals(&self) -> &[(Free, Term)] {
-        &self.local
+        match self.retry_floor {
+            Some(_) => &self.local[self.visible_local_start()..],
+            None => &self.local,
+        }
     }
 
     /// Insert `name`'s definition into the innermost frame. The façade decides the cache protocol from [`Frames::is_defined`] first.
@@ -475,7 +541,11 @@ impl Frames {
             .withhold_refinements_from
             .unwrap_or(self.refinements.len())
             .min(self.refinements.len());
-        let floor = self.suppress_refinements_below.unwrap_or(0).min(ceiling);
+        let floor = self
+            .suppress_refinements_below
+            .unwrap_or(0)
+            .max(self.retry_floor.unwrap_or(0))
+            .min(ceiling);
         floor..ceiling
     }
 
@@ -553,7 +623,7 @@ impl Frames {
         // One entry per name, at its innermost binding. `check_generalized_arm` re-`assume`s a generalized hypothesis under its case-specialized type and its *original* name, deliberately shadowing the ambient binder, so `local` can hold the same `Free` twice. Γ is a context rather than a stack of bindings: a shadowed entry is unreachable by construction, and leaving it in gives every metavariable born in such an arm a spine with a repeated argument — which `Convert::solve`'s inversion cannot invert, since a name reachable through two slots is not provably determined. The candidate is then refused by the scope check for mentioning a hypothesis that is plainly in scope, and the implicit surfaces as never solved.
         //
         // Keeping the *last* occurrence keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was itself generalized — that is what the generalization set is — so every mentioner is re-assumed after it, and no surviving entry refers to the occurrence that was dropped.
-        let locals = &self.local[self.base_locals()..];
+        let locals = &self.local[self.visible_local_start()..];
         let telescope = Rc::new({
             let mut innermost = HashMap::with_capacity(locals.len());
             for (index, (name, _)) in locals.iter().enumerate() {
@@ -580,24 +650,26 @@ impl Frames {
         (telescope, spine)
     }
 
-    /// Freeze the live local frame (the way metavariable birth freezes Γ): the base frame persists for the whole elaboration, so only the local frames — which pop before a retry can happen — are captured.
+    /// Freeze the live local frame (the way metavariable birth freezes Γ): the base frame persists for the whole elaboration, so only the local frames are captured, and they are the whole of a retry's context — `Context::with_retry_frame` hides whatever other frames are live when the retry runs, where this once assumed they had all popped.
     pub(crate) fn freeze(&self) -> FrozenFrame {
         fn flatten_frames<K: Clone, V: Clone>(frames: &[HashMap<K, V>]) -> Vec<(K, V)> {
             frames
                 .iter()
-                .skip(1)
                 .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
                 .collect()
         }
 
+        // The frames a retry would hide are not this problem's context either, so a problem parked during a retry freezes what the retry sees. Definitions are the exception, as they are for every lookup: a definition restored by being left live sits in a hidden frame, and is still the problem's.
+        let from = self.retry_floor.unwrap_or(1);
+
         FrozenFrame {
             // Past `base_locals`, exactly as `identity_snapshot` slices Γ. The whole of `local` would also carry the top-level binders, and `restore_frame` re-`assume`s whatever it is given — which stamps each restored name with an *empty* universe context in the new frame. A polymorphic global would then be shadowed by a monomorphic copy of itself, and instantiating it at its real levels fails the arity check against the wrong scheme.
-            assumptions: self.local[self.base_locals()..].to_vec(),
-            definitions: flatten_frames(&self.definitions),
-            refinements: flatten_frames(&self.refinements),
-            refinement_projections: flatten_frames(&self.refinement_projections),
-            refinement_scrutinees: flatten_frames(&self.refinement_scrutinees),
-            witness_binders: self.witness_scope.clone(),
+            assumptions: self.local[self.visible_local_start()..].to_vec(),
+            definitions: flatten_frames(&self.definitions[1..]),
+            refinements: flatten_frames(&self.refinements[from..]),
+            refinement_projections: flatten_frames(&self.refinement_projections[from..]),
+            refinement_scrutinees: flatten_frames(&self.refinement_scrutinees[from..]),
+            witness_binders: self.witness_scope[self.visible_witness_start()..].to_vec(),
         }
     }
 }
