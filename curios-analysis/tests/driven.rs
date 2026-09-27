@@ -10,7 +10,7 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
         Coverage, Declarations, Invert, PositivityRefusal, fixture::SYNTAX, group_totality,
-        invert_indices, positivity_vectors,
+        invert_indices, positivity_vectors, solve_indices,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1290,4 +1290,75 @@ fn a_let_alias_of_the_arm_payload_descends() {
         panic!("the fixture changed shape");
     };
     assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
+
+/// The outer direction reaches a variable inside an index, and only a local's.
+///
+/// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the second direction solves the outer variable there. The kernel always had this, the elaborator only bound an index that *was* a variable, and `solve_indices` is where both now get it. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.
+#[test]
+fn the_outer_direction_solves_a_variable_inside_an_index() {
+    let n = Free::local(900, Some("n"));
+    let nat = |k: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(k)));
+    let actual = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+
+    for (label, local) in [("a local", true), ("a name no case refines", false)] {
+        let mut kernel = kernel();
+        if local {
+            kernel.assume(&n, &Term::intrinsic(Intrinsic::NatType));
+        }
+
+        let Invert::Solved(solutions) =
+            solve_indices(&mut kernel, slice::from_ref(&actual), &[nat(1)], &[])
+                .expect("the kernel answers")
+        else {
+            panic!("{label}: a reachable case was reported unreachable");
+        };
+
+        match local {
+            true => assert_eq!(solutions, vec![(n.clone(), nat(0))], "{label}"),
+            false => assert!(solutions.is_empty(), "{label}: {solutions:?}"),
+        }
+    }
+}
+
+/// A binder the first direction pins is rewritten through what the second solves, so the arm's substitution is idempotent.
+///
+/// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first direction pins `k := n + 1`, and the second learns `n := 0` from the other position. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; composed, `k`'s value no longer mentions `n` at all. The kernel's `specialize` has always composed them this way, and the composition moved here with it.
+#[test]
+fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
+    let mut kernel = kernel();
+    let n = Free::local(900, Some("n"));
+    let k = Free::local(901, Some("k"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    kernel.assume(&n, &nat_type);
+    kernel.assume(&k, &nat_type);
+
+    let actual = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let Invert::Solved(solutions) = solve_indices(
+        &mut kernel,
+        &[actual.clone(), actual],
+        &[Term::free_var(&k), nat(1)],
+        slice::from_ref(&k),
+    )
+    .expect("the kernel answers") else {
+        panic!("a reachable case was reported unreachable");
+    };
+
+    let value_of = |name: &Free| {
+        solutions
+            .iter()
+            .find(|(solved, _)| solved == name)
+            .map(|(_, value)| value.clone())
+    };
+    assert_eq!(
+        value_of(&n),
+        Some(nat(0)),
+        "the outer variable: {solutions:?}"
+    );
+    let pinned = value_of(&k).expect("the binder is pinned");
+    assert!(
+        !pinned.mentions_free(&n),
+        "the pinned value still names what the substitution replaces: {pinned}"
+    );
 }

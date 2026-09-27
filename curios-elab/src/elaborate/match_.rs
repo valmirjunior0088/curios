@@ -1,7 +1,7 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
-    curios_analysis::{Invert, invert_indices, pinned_by_targets},
+    curios_analysis::{Invert, invert_indices, pinned_by_targets, solve_indices},
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
         IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Scope, Subterm, Telescope,
@@ -859,17 +859,12 @@ fn elaborate_induct_match(
             );
             refine_head(context, &head_elaborated, &ctor_val)?;
 
-            // Rung B — definitional learning: a scrutinee index that is a `Var` reduces, inside this arm, to the case's target index — the same counterfactual, frame-scoped move as `head := ctor_val`. A constructor index records an inert entry (`refine_head`); the inverter below pins the arm binders the other way. Refinements never justify the typing (the motive application does); they are convertibility aids, so context hypotheses mentioning the key reduce at the arm's index.
-            for (actual, target) in actual_indices.iter().zip(&ix_c) {
-                refine_head(context, actual, target)?;
-            }
-
-            // Rung C — inversion, arm side: a scrutinee index in constructor form pins arm binders to forced values (`m + 1 ~ n + 1` pins `m := n`), registered as the same frame-scoped reducts. A definite clash here means the arm is unreachable; it was written, so it is simply checked as is.
+            // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is. Refinements never justify the typing (the motive application does); they are convertibility aids, so context hypotheses mentioning a solved variable reduce at the arm's indices.
             if let Invert::Solved(solutions) =
-                invert_indices(context, &actual_indices, &ix_c, &labels)?
+                solve_indices(context, &actual_indices, &ix_c, &labels)?
             {
-                for (label, solution) in solutions {
-                    context.refine(&label, &solution);
+                for (name, solution) in solutions {
+                    context.refine(&name, &solution);
                 }
             }
 

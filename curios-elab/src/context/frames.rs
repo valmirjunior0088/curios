@@ -87,6 +87,10 @@ pub(crate) struct Frames {
     ///
     /// A depth rather than a flag, because the two refinements a re-validation meets are not the same kind. The *ambient* ones — the arm the solver is currently inside — are counterfactual with respect to a committed solution, and withholding them is the whole point (`Convert::solve_refinement_free`). The ones a frame *above* this depth registers are the candidate's own: `check` descending into a match arm of the term being validated re-establishes exactly the equalities that made that arm's body well-typed where it was written. Withholding those rejects correct solutions — a proof discharged by reduction inside an arm, `True/qed()` against `Nat/Lt(0, Bytes/len(b))` in `/std/Str`'s scan fold, fails to re-check and the solution is thrown away — so suppression stops at the depth it started from.
     suppress_refinements_below: Option<usize>,
+    /// How much of the refinement stack a settlement withholds from the inside, as the frame the entry being settled was registered in — `None` for none of it.
+    ///
+    /// The other face of [`Frames::suppress_refinements_below`], and the one the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
+    withhold_refinements_from: Option<usize>,
     /// The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
@@ -108,6 +112,7 @@ impl Frames {
             refinement_projections: vec![HashMap::new()],
             refinement_scrutinees: vec![HashMap::new()],
             suppress_refinements_below: None,
+            withhold_refinements_from: None,
             local: Vec::new(),
             local_marks: Vec::new(),
             witness_scope: Vec::new(),
@@ -368,7 +373,7 @@ impl Frames {
     /// The whole entry rather than its value, for the reason [`Frames::scrutinee_entry`] gives: the key cannot decide a universe instance, so the read above compares the unerased bases instead.
     pub(crate) fn projection_entry(&self, base: &Term, index: usize) -> Option<&ProjectionEntry> {
         let base = project_erased_universes(base);
-        self.refinement_projections[self.refinement_floor()..]
+        self.refinement_projections[self.refinement_window()]
             .iter()
             .rev()
             .find_map(|p| p.get(&(base.clone(), index)))
@@ -417,7 +422,7 @@ impl Frames {
     ///
     /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
     pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
-        self.refinement_scrutinees[self.refinement_floor()..]
+        self.refinement_scrutinees[self.refinement_window()]
             .iter()
             .rev()
             .flat_map(|frame| frame.iter())
@@ -430,10 +435,27 @@ impl Frames {
     ///
     /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) compares the unerased spellings and declines where they disagree on one both sides have decided.
     pub(crate) fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
-        self.refinement_scrutinees[self.refinement_floor()..]
+        self.refinement_scrutinees[self.refinement_window()]
             .iter()
             .rev()
             .find_map(|f| f.get(canonical))
+    }
+
+    /// Every scrutinee entry the window leaves visible, with the frame it was registered in, innermost frame first — what a stuck reduct is compared against once its written spelling missed, and the frame each must be settled from. Borrowed rather than collected: `reduce::refined_reduct` walks this at every stuck form under a live guard, and a copy per walk was most of what that cost.
+    pub(crate) fn visible_scrutinee_entries(
+        &self,
+    ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
+        let window = self.refinement_window();
+        let floor = window.start;
+        self.refinement_scrutinees[window]
+            .iter()
+            .enumerate()
+            .rev()
+            .flat_map(move |(offset, frame)| {
+                frame
+                    .iter()
+                    .map(move |(key, entry)| (floor + offset, key, entry))
+            })
     }
 
     /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so `solve_refinement_free`'s committed (refinement-free) spelling stays a term the live refinement can still fire on.
@@ -447,16 +469,19 @@ impl Frames {
         self.suppress_refinements_below.is_some()
     }
 
-    /// The lowest refinement frame suppression does not withhold: the depth it began at, or the base frame when nothing is suppressed. Clamped, so a frame popped below the suppression point withholds everything rather than slicing out of range.
-    fn refinement_floor(&self) -> usize {
-        self.suppress_refinements_below
-            .unwrap_or(0)
-            .min(self.refinements.len())
+    /// The refinement frames neither suppression nor a settlement withholds: from the depth suppression began at, or the base frame, up to the frame a settlement withholds from, or the top. Both ends clamped, so a frame popped past either point withholds everything rather than slicing out of range.
+    fn refinement_window(&self) -> std::ops::Range<usize> {
+        let ceiling = self
+            .withhold_refinements_from
+            .unwrap_or(self.refinements.len())
+            .min(self.refinements.len());
+        let floor = self.suppress_refinements_below.unwrap_or(0).min(ceiling);
+        floor..ceiling
     }
 
-    /// The name-keyed refinement frames suppression does not withhold, outermost first.
+    /// The name-keyed refinement frames the window leaves visible, outermost first.
     fn visible_refinements(&self) -> std::slice::Iter<'_, HashMap<Free, Term>> {
-        self.refinements[self.refinement_floor()..].iter()
+        self.refinements[self.refinement_window()].iter()
     }
 
     /// Begin withholding every refinement registered so far, returning the previous depth — the bracket intrinsic for `Context::with_suppressed_refinements`. Frames entered after this keep their own refinements live, which is what lets a candidate's own match arms re-establish the equalities that made them well-typed.
@@ -468,6 +493,18 @@ impl Frames {
     /// Restore a depth taken by [`suppress_refinements_here`](Self::suppress_refinements_here).
     pub(crate) fn restore_refinement_suppression(&mut self, previous: Option<usize>) {
         self.suppress_refinements_below = previous;
+    }
+
+    /// Begin withholding the refinements of `frame` and every frame inside it, returning the previous limit — the bracket intrinsic for `Context::with_refinements_withheld_from`.
+    ///
+    /// Always at or outside the current limit, since a settlement is only ever asked for an entry the window already shows, so nesting narrows the window and restoring widens it back.
+    pub(crate) fn withhold_refinements_from(&mut self, frame: usize) -> Option<usize> {
+        self.withhold_refinements_from.replace(frame)
+    }
+
+    /// Restore a limit taken by [`withhold_refinements_from`](Self::withhold_refinements_from).
+    pub(crate) fn restore_withheld_refinements(&mut self, previous: Option<usize>) {
+        self.withhold_refinements_from = previous;
     }
 
     /// Whether any counterfactual refinement is currently live — the gate for the refinement-free candidate re-reduction in `Convert::solve_refinement_free`, so the common refinement-free path pays nothing.

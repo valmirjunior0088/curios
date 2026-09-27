@@ -378,6 +378,10 @@ impl Env for Kernel {
         self.local_type(name)
     }
 
+    fn is_local(&self, name: &Free) -> bool {
+        self.local_type(name).is_some()
+    }
+
     fn fresh(&mut self, hint: Option<&str>) -> Free {
         Kernel::fresh(self, hint)
     }

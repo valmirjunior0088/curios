@@ -194,6 +194,72 @@ fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     assert_eq!(run(source), b"1");
 }
 
+// A guard answers its own definition one unfolding down. `small(k)` is `k < 10` by definition, so the arm's hypothesis `Holds(k < 10)` is the guard itself, and each checker answers it from the guard's reduced spelling — the kernel always has, and the elaborator refused it while it compared keys only as written, with their arguments reduced and their heads never opened. Certifying is what asserts the two agree.
+#[test]
+fn a_guard_answers_its_definition_one_unfolding_down() {
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        let small(n : Nat) -> Bool = n < 10;
+
+        let below(k : Nat) -> Nat =
+            match small(k)
+            | true => (let _p : Bool/Holds(k < 10) = Bool/True/qed(); k)
+            | false => 10
+            end;
+
+        /std/print(Nat/to_str(below(3)))
+        "#;
+    assert_eq!(run(source), b"3");
+}
+
+// The same unfolding met late: a struct literal whose parameter is inferred checks its fields before the parameter is known, so the proof's check parks on a metavariable already unfolded past the guard's head, and is retried as `k < 10` once the parameter is solved. Writing `Below(k) { … }` avoided the unfolding and hid the gap.
+#[test]
+fn a_field_checked_before_its_struct_parameter_is_inferred_meets_the_guard() {
+    let source = r#"
+        use /std/{Nat, Bool, Option};
+
+        let small(n : Nat) -> Bool = n < 10;
+
+        struct Below(k : Nat) : pub Type {
+            value : Nat,
+            proof : Bool/Holds(small(k)),
+        }
+
+        let below(k : Nat) -> Option(Below(k)) =
+            match small(k)
+            | true => Option/some(Below { value = k, proof = Bool/True/qed() })
+            | false => Option/none()
+            end;
+
+        /std/print(Nat/to_str(Option/unwrap_or(Option/map(below(3), (b) => b.value), 10)))
+        "#;
+    assert_eq!(run(source), b"3");
+}
+
+// A guard whose definition unfolds to a `match` rather than a comparison — `Nat/in_range`'s shape — answers the same `match` reached through another definition. The reduced spellings are compared as terms, so the two bodies must agree even in the result their `match` states, which two definitions elaborated alike do.
+#[test]
+fn a_guard_whose_definition_is_a_match_answers_that_match() {
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        let between(n : Nat) -> Bool =
+            match n >= 3 | true => n <= 9 | false => false end;
+
+        let also_between(n : Nat) -> Bool =
+            match n >= 3 | true => n <= 9 | false => false end;
+
+        let inside(k : Nat) -> Nat =
+            match between(k)
+            | true => (let _p : Bool/Holds(also_between(k)) = Bool/True/qed(); k)
+            | false => 0
+            end;
+
+        /std/print(Nat/to_str(inside(5)))
+        "#;
+    assert_eq!(run(source), b"5");
+}
+
 // A guard decides a bound spelled across the `<`/`<=` seam. `List/slice`'s precondition is `s + l <= len`, so slicing one element at `i` asks for `i + 1 <= len(l)`, while the guard a program writes to establish it is `i < len(l)` — one proposition, two spellings, and the arm records only the one the author wrote. Both reducers retry a miss on the successor spelling, so a bound discharges without the author having to spell the comparison the way the standard library's signature happens to.
 //
 // It certifies, which is the half that matters: the elaborator discharged this first while the kernel still refused it, and the seam is a rule only when both checkers look in the same two places.

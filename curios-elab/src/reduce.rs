@@ -10,7 +10,7 @@ mod reduction_tests;
 pub(crate) mod test_support;
 
 use {
-    super::{Context, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
         FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
@@ -70,6 +70,12 @@ impl curios_analysis::Env for Context {
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
         Context::assumption(self, name)
+    }
+
+    /// A local binder in scope, whether assumed or kept as a `let` definition. `Context::assumption` answers for top-level names too, which the kernel's locals never include.
+    fn is_local(&self, name: &Free) -> bool {
+        name.is_local()
+            && (Context::assumption(self, name).is_some() || self.definition_body(name).is_some())
     }
 
     fn fresh(&mut self, hint: Option<&str>) -> Free {
@@ -317,39 +323,43 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
         //
         // The operands, never the node: the discipline the `Apply` arm above states as keeping the head verbatim. Reducing the node would meet this very key's refinement and canonicalize it to the arm's own value.
         //
-        // The two passes agree on what a child is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
-        Subterm::Intrinsic(intrinsic) => {
-            let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
-            intrinsic.traverse(&mut masking);
-
-            let mut operands = Vec::new();
-            for operand in masking.take_masked_children() {
-                operands.push(match reduce(context, operand.clone()) {
-                    Ok(value) => value,
-                    Err(spent) if spent.is_exhausted() => return Err(spent),
-                    Err(_) => operand,
-                });
-            }
-
-            let mut index = 0;
-            let rebuilt = intrinsic.traverse(&mut Visit::rewriting(
-                |_, _: &Var| None,
-                Box::new(move |_, operand: &Term| {
-                    let value = operands.get(index).cloned();
-                    index += 1;
-
-                    Some(value.unwrap_or_else(|| operand.clone()))
-                }),
-            ));
-
-            Ok(Subterm::Intrinsic(rebuilt).into())
-        }
+        Subterm::Intrinsic(intrinsic) => canonical_operands(context, intrinsic),
         _ => Ok(term.clone()),
     }?;
     // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — then stores a key no probe can match. The refinement silently did not fire, while the identical term with the implicit supplied explicitly did. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
     let canonical = zonk_solved_term_metas(context, &canonical);
     // Erased for the same reason, and unsound for the same reason, as in [`shallow_scrutinee`] — which carries the account and the measurement that says deleting it is not the repair.
     Ok(project_erased_universes(&canonical))
+}
+
+/// `intrinsic` with each operand in weak-head normal form, best-effort as [`canonical_scrutinee`]'s arguments are: an operand that cannot reduce is kept as written, and exhaustion is the one error that propagates.
+///
+/// The operands and never the node, and the two passes agree on what an operand is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
+fn canonical_operands(context: &mut Context, intrinsic: &Intrinsic) -> Result<Term, ReduceError> {
+    let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
+    intrinsic.traverse(&mut masking);
+
+    let mut operands = Vec::new();
+    for operand in masking.take_masked_children() {
+        operands.push(match reduce(context, operand.clone()) {
+            Ok(value) => value,
+            Err(spent) if spent.is_exhausted() => return Err(spent),
+            Err(_) => operand,
+        });
+    }
+
+    let mut index = 0;
+    let rebuilt = intrinsic.traverse(&mut Visit::rewriting(
+        |_, _: &Var| None,
+        Box::new(move |_, operand: &Term| {
+            let value = operands.get(index).cloned();
+            index += 1;
+
+            Some(value.unwrap_or_else(|| operand.clone()))
+        }),
+    ));
+
+    Ok(Subterm::Intrinsic(rebuilt).into())
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
@@ -759,6 +769,177 @@ fn refined_by_spelling(
     Ok(None)
 }
 
+/// The refinement probe at a stuck reduct: an entry's *reduced* spelling, where the written one and its canonical form both missed.
+///
+/// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here keeps a key's head as written — the shallow key verbatim, the escalation with only its arguments reduced — so a stuck form reduction reached *through* the guard's definition never met it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answered it `true`, and the elaborator refused it. A field checked before its struct's parameter was inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
+///
+/// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — and the dual and successor spellings with it, exactly as the kernel settles and compares. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
+///
+/// **What decides whether to settle at all is the kernel's filter**: an entry is a candidate only if the probe names no local its key does not, since reduction can drop a local and never introduce one. Without it, every stuck form under a binder some other judgment opened would settle some key in any arm. And the probe must bear a local itself, as the kernel's must: a local-free term has nothing an arm's equation could be about that reduction would not already have decided.
+fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, ReduceError> {
+    if !context.has_scrutinee_refinements()
+        || !value.has_local_free()
+        || context.visible_scrutinee_entries().next().is_none()
+    {
+        return Ok(None);
+    }
+    curios_profile::profile!("reduce::refined_reduct");
+
+    let probe = reduct_spelling(context, value)?;
+    // The three spellings a settled entry can answer, each with whether its literal is negated on the way: the probe itself and its successor spelling are the entry's proposition, the dual is its negation.
+    let intrinsic = match &*probe {
+        Subterm::Intrinsic(intrinsic) => Some(intrinsic),
+        _ => None,
+    };
+    let spellings = [
+        Some((probe.clone(), false)),
+        intrinsic
+            .and_then(dual_comparison)
+            .map(|dual| (Term::intrinsic(dual), true)),
+        intrinsic
+            .and_then(successor_comparison)
+            .map(|successor| (Term::intrinsic(successor), false)),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|(spelling, negated)| (project_erased_universes(&spelling), negated))
+    .collect::<Vec<_>>();
+
+    loop {
+        match scan_settled(context, value, &probe, &spellings)? {
+            Scan::Answer(answer) => return Ok(Some(answer)),
+            Scan::Settle {
+                frame,
+                key,
+                original,
+            } => settle(context, frame, key, &original)?,
+            Scan::Miss => return Ok(None),
+        }
+    }
+}
+
+/// What one pass over the visible entries found for a stuck reduct.
+enum Scan {
+    /// A settled spelling answered: the entry's value, negated where the probe met it as its dual.
+    Answer(Term),
+    /// Nothing settled answered, and this is the innermost entry the probe could be a reduct of that has never been settled.
+    Settle {
+        frame: usize,
+        key: Term,
+        original: Term,
+    },
+    /// Nothing settled answered, and nothing the probe could be a reduct of is left to settle.
+    Miss,
+}
+
+/// One pass, innermost first: a settled spelling that answers wins outright, and only where none does is the first eligible unsettled entry handed back to be settled — the kernel's order, which asks every settled spelling before it pays for a settlement. Every comparison is a cached hash until two terms are equal.
+fn scan_settled(
+    context: &Context,
+    value: &Term,
+    probe: &Term,
+    spellings: &[(Term, bool)],
+) -> Result<Scan, ReduceError> {
+    let mut unsettled = None;
+
+    for (frame, key, entry) in context.visible_scrutinee_entries() {
+        match context.settled_key(frame, key) {
+            Some(Some(settled)) => {
+                for (spelling, negated) in spellings {
+                    if settled.compared != *spelling
+                        || levels_clash_on_a_decided_instance(context, value, &settled.unerased)?
+                    {
+                        continue;
+                    }
+
+                    let answer = match negated {
+                        false => Some(entry.value.clone()),
+                        true => entry
+                            .value
+                            .as_bool()
+                            .map(|literal| Term::intrinsic(Intrinsic::Bool(!literal))),
+                    };
+                    if let Some(answer) = answer {
+                        return Ok(Scan::Answer(answer));
+                    }
+                }
+            }
+            Some(None) => {}
+            None => {
+                if unsettled.is_none() && could_reduce_to(&entry.original, probe) {
+                    unsettled = Some((frame, key.clone(), entry.original.clone()));
+                }
+            }
+        }
+    }
+
+    Ok(match unsettled {
+        Some((frame, key, original)) => Scan::Settle {
+            frame,
+            key,
+            original,
+        },
+        None => Scan::Miss,
+    })
+}
+
+/// Settle the reduced spelling of the entry `key` registered in `frame`: its unerased spelling reduced with that frame and every frame inside it withheld, then brought to [`reduct_spelling`]'s form.
+///
+/// **Withheld for the kernel's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
+///
+/// **Capped where the kernel is not**, at the allowance a canonical key takes, because it is the same kind of work: optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once; the elaborator settles one again after every invalidation that clears the settled spellings, which `Caches::settled_keys` accounts for. A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
+fn settle(
+    context: &mut Context,
+    frame: usize,
+    key: Term,
+    original: &Term,
+) -> Result<(), ReduceError> {
+    curios_profile::profile!("reduce::settle");
+    let settled = context.with_refinements_withheld_from(frame, |context| {
+        context.within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
+            let reduct = reduce(context, original.clone())?;
+            reduct_spelling(context, &reduct)
+        })
+    });
+
+    match settled {
+        Ok(reduct) => {
+            let settled = reduct.map(|unerased| Settled {
+                compared: project_erased_universes(&unerased),
+                unerased,
+            });
+            context.record_settled_key(frame, key, settled);
+            Ok(())
+        }
+        Err(error) => {
+            context.record_settled_key(frame, key, None);
+            Err(error)
+        }
+    }
+}
+
+/// The spelling a reduct is compared in: its operands in weak-head normal form where it is a tagged comparison — a connective's right operand behind a stuck left is otherwise left as written, and the two sides would differ by exactly the fold the escalation exists to see through — and its solved metavariables materialized. Unerased: a hit reads its universe instance from it, and erasure is the comparison's.
+///
+/// The kernel's `canonical_operands`, gated the same way, on a `head_key` rather than on every intrinsic.
+fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
+    let spelled = match (&**term, term.head_key()) {
+        (Subterm::Intrinsic(intrinsic), Some(_)) => canonical_operands(context, intrinsic)?,
+        _ => term.clone(),
+    };
+
+    Ok(zonk_solved_term_metas(context, &spelled))
+}
+
+/// Whether reducing `key` could possibly produce `candidate`: every local `candidate` names, `key` names too. A filter and not a rule — see `curios-cert`'s `could_reduce_to`, which this is, for why reduction can drop a local and never introduce one, and why globals are not tested.
+fn could_reduce_to(key: &Term, candidate: &Term) -> bool {
+    let allowed = key.free_vars_shared();
+
+    candidate
+        .free_vars_shared()
+        .iter()
+        .filter(|name| name.is_local())
+        .all(|name| allowed.contains(name))
+}
+
 /// A comparison's spelling across the `<`/`<=` seam, as a term.
 fn successor_spelling(term: &Term) -> Option<Term> {
     match &**term {
@@ -798,6 +979,8 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
     }
 
     let entry = term.clone();
+    // Whether the loop is continuing from an answer the reduced spellings gave. See the `Reduce::Break` arm below.
+    let mut answered = false;
 
     loop {
         context.spend(Cost::STEP)?;
@@ -886,10 +1069,25 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 
         match step {
             Reduce::Continue(next) => term = next,
-            Reduce::Break(result) => {
-                context.reduce(entry, &result);
-                return Ok(result);
-            }
+            // A stuck form standing under an arm's equation *is* that case's value, and the written spellings have all been asked by now: the one probe left is the entries' reduced spellings, the kernel's second point.
+            //
+            // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, and a frozen frame restored for a retry re-registers an arm's equation in a frame inside its own, whose spelling then settles to the very value it assumes. Asked again, such a value answered itself, which the loop took for progress until the budget ran out — a hundred thousand times a settlement in `/std/Toml/build`'s `walk` — and two entries spelled as each other's values traded it back and forth the same way.
+            Reduce::Break(result) => match answered {
+                true => {
+                    context.reduce(entry, &result);
+                    return Ok(result);
+                }
+                false => match refined_reduct(context, &result)? {
+                    Some(value) => {
+                        answered = true;
+                        term = value;
+                    }
+                    None => {
+                        context.reduce(entry, &result);
+                        return Ok(result);
+                    }
+                },
+            },
         }
     }
 }

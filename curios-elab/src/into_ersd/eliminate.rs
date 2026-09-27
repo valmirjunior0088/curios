@@ -11,7 +11,7 @@ use {
         Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_case_key, reduce_with,
         refine_head,
     },
-    curios_analysis::{case_target_indices, pinned_by_targets},
+    curios_analysis::{Invert, case_target_indices, pinned_by_targets, solve_indices},
     curios_core::{Free, Level, MatchResult},
     curios_num::{Binary, Grain, Natural},
 };
@@ -818,7 +818,7 @@ impl Lowering {
     }
 }
 
-/// Assume the payload binders at their instantiated types, refine the scrutinee to `tag(vars)` and the actual indices to this case's targets, and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
+/// Assume the payload binders at their instantiated types, refine the scrutinee to `tag(vars)` and the index equations to their most-general solution, and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
 fn refine_arm(
     context: &mut Context,
     m: &InductMatch<'_>,
@@ -848,8 +848,13 @@ fn refine_arm(
         vars.to_vec(),
     );
     refine_head(context, m.head, &constructor_value)?;
-    for (actual, target) in m.actual_indices.iter().zip(&target_indices) {
-        refine_head(context, actual, target)?;
+    // The index equations by the function elaboration and the kernel solve them with, both directions — which erasure's arm used to learn in one direction alone, the arm binders a constructor index pins never pinned here.
+    if let Invert::Solved(solutions) =
+        solve_indices(context, m.actual_indices, &target_indices, labels)?
+    {
+        for (name, solution) in solutions {
+            context.refine(&name, &solution);
+        }
     }
 
     Ok(m.result.at(

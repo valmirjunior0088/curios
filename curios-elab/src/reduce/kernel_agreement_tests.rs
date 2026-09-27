@@ -3,10 +3,13 @@
 //! Agreement is worth asserting precisely because the implementations are separate. If the kernel simply called this reducer the tests would be tautologies; because it does not, a divergence here is a real disagreement about what a term computes to, and one of the two is wrong.
 //!
 //! The known *deliberate* divergences are internal to reduction and invisible in the result: a `let` is an environment step here and a substitution there, and a match arm binds a projection of the scrutinee here and the payload itself there. Both routes land on the same weak-head normal form, which is exactly what these assertions pin.
+//!
+//! One case puts an arm's equation in, where the two sides meet it through different doors: the kernel through its arm rule, which is all its public surface offers, and the elaborator through the reducer under the equation registered as an arm registers it.
 
 use curios_core::*;
 use {
     super::test_support::{context, nat, nominal},
+    crate::refine_head,
     curios_analysis::fixture::SYNTAX,
     curios_cert::Kernel,
 };
@@ -190,4 +193,69 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
         group,
         Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
     ));
+}
+
+/// A guard answers its own definition one unfolding down, in both checkers.
+///
+/// With `small(x) = x < 10`, the type `T = match n < 10 | true => Nat | false => Bool` is `Nat` in the true arm of `match small(n)` and `Bool` in the false one — the guard itself, met unfolded. The kernel settles the guard's reduced spelling and answers `n < 10` from it; the elaborator refused it, comparing guards only as written, until it settled reduced spellings as the kernel does. So the kernel is asked to accept the match whose arms inhabit `T` at `0` and `false`, and the elaborator to reduce `T` to each carrier under the arm's equation. Mutation-checked: without `reduce::refined_reduct`, the elaborator's `T` stays a stuck match in both arms.
+#[test]
+fn a_guard_answers_its_definition_one_unfolding_down() {
+    let mut context = context();
+    let mut kernel = kernel();
+    let n = context.fresh(Some("n"));
+    let small = context.fresh(Some("small"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+
+    let small_type = Term::func_type([(x.clone(), nat_type.clone())], bool_type.clone());
+    let small_body = Term::func(
+        [(x.clone(), nat_type.clone())],
+        Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&x), nat(10))),
+    );
+    let guard = Term::apply(Term::free_var(&small), [Term::free_var(&n)]);
+    // The carrier the unfolded guard picks: `Nat` below ten, `Bool` otherwise.
+    let carrier = Term::bool_match(
+        Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(10))),
+        None,
+        Term::type_ground(),
+        bool_type.clone(),
+        nat_type.clone(),
+    );
+
+    kernel.define(
+        &small,
+        &small_type,
+        &small_body,
+        &UniverseContext::default(),
+    );
+    kernel.assume(&n, &nat_type);
+    let split = Term::bool_match(
+        guard.clone(),
+        None,
+        carrier.clone(),
+        Term::intrinsic(Intrinsic::Bool(false)),
+        nat(0),
+    );
+    assert_eq!(
+        curios_cert::check(&mut kernel, &split, &carrier),
+        Ok(()),
+        "the kernel answers the unfolded guard in each arm"
+    );
+
+    context.assume(&small, &small_type);
+    context.define(&small, &small_body, None);
+    context.assume(&n, &nat_type);
+    for (value, expected) in [(true, nat_type), (false, bool_type)] {
+        let reduced = context.with_frame(|context| {
+            refine_head(context, &guard, &Term::intrinsic(Intrinsic::Bool(value)))
+                .expect("the arm's equation registers");
+            super::reduce(context, carrier.clone())
+        });
+        assert_eq!(
+            reduced,
+            Ok(expected),
+            "the elaborator answers the unfolded guard in the {value} arm"
+        );
+    }
 }

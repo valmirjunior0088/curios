@@ -877,13 +877,13 @@ fn retry_checking(
     }
 }
 
-/// Register a counterfactual match-arm refinement of a scrutinee (or a learned scrutinee index), so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
+/// Register a counterfactual match-arm refinement of a scrutinee, so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
 /// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the kernel substitutes a `let` rather than binding it, so the scrutinee it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
 /// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
 ///
-/// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where `actual` is a scrutinee index: a `Var` index is the live case, and a *constructor* index records an entry the reducer never fires (it has no applied-head symbol to probe) — the inverter pins the arm binders the other way. A stuck-*application* index would be the genuinely cyclic case, but no inductive in the library is indexed by one.
+/// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. This once drove that too, keying a non-variable index — a constructor, a stuck application — as an equation on the index itself, the reverse of what the inverter pins or a fact the kernel does not have.
 ///
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///

@@ -2,13 +2,13 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What each side supplies for itself is reduction and conversion, through [`Judge`] — see that module for the line, and for the concession borrowing conversion represents.
+//! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, so a second implementation would be a second run of the same function on the same input rather than a second opinion. They share its composition too: [`solve_indices`] runs both directions and composes them into the one substitution an arm is specialized by, so what the arm learns about its indices is computed by one function whichever checker asks. What each side supplies for itself is reduction and conversion, through [`Judge`] — see that module for the line, and for the concession borrowing conversion represents.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::Judge,
+    crate::{Env, Judge},
     curios_core::{Free, Peel, Subterm, Telescope, Term, peel_intrinsic},
     std::collections::BTreeSet,
 };
@@ -95,6 +95,68 @@ pub fn invert_indices_outer<J: Judge>(
     flex: &[Free],
 ) -> Result<Invert, J::Error> {
     invert_with(judge, actuals, targets, flex, true)
+}
+
+/// The most-general solution of `actuals ~ targets` for one case, in both directions, as one idempotent substitution: what an arm is specialized by, computed here so both checkers compute it by one function.
+///
+/// Direction one pins a payload binder to the rigid actual it must equal ([`invert_indices`]). Direction two refines an outer variable to the target it must equal, and is the same unifier with its sides swapped ([`invert_indices_outer`]): it solves flexible variables on what is now the target side, the occurs check refusing a solution that mentions any other refinable variable — which is exactly the parameter cycle (`b := b + 1` through a family parameter) that must not substitute. The directions run in sequence, the first solution applied to the targets before the second runs, which keeps one equation from being solved twice in opposite orientations; and a pinned binder's value may mention an outer variable the second direction refined, so the first solution is rewritten through the second — the reverse cannot happen, the second having run on targets the first was already applied to — which makes the union idempotent in one pass.
+///
+/// The outer variables are the locals the actual indices mention ([`Env::is_local`]), never a top-level name, whose meaning no case can refine; a local carrying a definition contributes the locals its definition mentions instead, which is what the index mentions once the `let` is substituted, as the kernel has it.
+///
+/// **This was the kernel's alone**, and the elaborator approximated it: it bound an index only when the index was a variable, recorded any other index as an equation keyed on the index itself — the reverse of what the first direction pins, or a fact the kernel does not have — and never reached an outer variable inside an index at all, so a case whose target `1` meets an actual `n + 1` taught the kernel `n := 0` and the elaborator nothing.
+///
+/// `Impossible` when either direction finds a definite clash, which makes the case unreachable.
+pub fn solve_indices<J: Judge>(
+    judge: &mut J,
+    actuals: &[Term],
+    targets: &[Term],
+    binders: &[Free],
+) -> Result<Invert, J::Error> {
+    let pinned = match invert_indices(judge, actuals, targets, binders)? {
+        Invert::Impossible => return Ok(Invert::Impossible),
+        Invert::Solved(solutions) => solutions,
+    };
+
+    let residual = targets
+        .iter()
+        .map(|target| target.substitute(&pinned))
+        .collect::<Vec<_>>();
+    let outer = outer_variables(judge, actuals);
+
+    let refined = match invert_indices_outer(judge, &residual, actuals, &outer)? {
+        Invert::Impossible => return Ok(Invert::Impossible),
+        Invert::Solved(solutions) => solutions,
+    };
+
+    let mut solutions = pinned
+        .into_iter()
+        .map(|(name, value)| (name, value.substitute(&refined)))
+        .collect::<Vec<_>>();
+    solutions.extend(refined);
+
+    Ok(Invert::Solved(solutions))
+}
+
+/// The locals `actuals` mention, reading through local definitions: [`solve_indices`]'s outer variables. Their order is immaterial, the unifier reading them only for membership.
+fn outer_variables<E: Env>(env: &E, actuals: &[Term]) -> Vec<Free> {
+    let mut outer = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut pending = actuals
+        .iter()
+        .flat_map(|actual| actual.free_vars())
+        .collect::<Vec<_>>();
+
+    while let Some(name) = pending.pop() {
+        if !seen.insert(name.clone()) || !env.is_local(&name) {
+            continue;
+        }
+        match env.unfold(&name) {
+            Some(definition) => pending.extend(definition.free_vars()),
+            None => outer.push(name),
+        }
+    }
+
+    outer
 }
 
 fn invert_with<J: Judge>(

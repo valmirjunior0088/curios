@@ -145,3 +145,38 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
         "cannot eliminate the proposition",
     );
 }
+
+// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices` now; the elaborator used to bind an index only when it was itself a variable, never reached the `n` inside `n + 1`, and refused this where the kernel's own specialization would have certified it. The control is the same arm claiming `Eq(n, 1)`, which learning `n := 0` must refuse, and whose refusal states the goal as the arm sees it, `Eq(0, 1)`.
+#[test]
+fn an_arm_learns_an_outer_variable_inside_an_index() {
+    let source = r#"
+        use /std/{Nat, Eq};
+
+        induct One : (k : Nat) -> Type
+        | one() : (1)
+        end
+
+        let zero_below(n : Nat, x : One(n + 1)) -> Eq(n, 0) =
+            match x | one() => Eq/refl() end;
+
+        let _ = zero_below(0, One/one());
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+
+    rejected_by(
+        r#"
+        use /std/{Nat, Eq};
+
+        induct One : (k : Nat) -> Type
+        | one() : (1)
+        end
+
+        let one_below(n : Nat, x : One(n + 1)) -> Eq(n, 1) =
+            match x | one() => Eq/refl() end;
+
+        /std/print("unreachable")
+        "#,
+        "expected: Eq(@Nat, 0, 1)",
+    );
+}

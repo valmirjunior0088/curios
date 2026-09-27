@@ -515,8 +515,8 @@ fn check_cases(
 
             check(
                 kernel,
-                &eliminate::substitute(body, &solutions),
-                &eliminate::substitute(&expected, &solutions),
+                &body.substitute(&solutions),
+                &expected.substitute(&solutions),
             )
         })
     };
@@ -633,8 +633,8 @@ fn check_free_monoid(
 
             check(
                 kernel,
-                &eliminate::substitute(body, &solutions),
-                &eliminate::substitute(&expected, &solutions),
+                &body.substitute(&solutions),
+                &expected.substitute(&solutions),
             )
         })
     };

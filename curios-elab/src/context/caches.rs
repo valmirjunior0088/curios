@@ -31,6 +31,13 @@ pub(crate) struct ElaborationStamp {
     universes: Entropy,
 }
 
+/// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
+#[derive(Debug, Clone)]
+pub(crate) struct Settled {
+    pub(crate) compared: Term,
+    pub(crate) unerased: Term,
+}
+
 /// The reduction, elaboration and canonical-key caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
 pub(crate) struct Caches {
@@ -48,6 +55,12 @@ pub(crate) struct Caches {
     ///
     /// Derived by reduction, so it is invalidated wherever a reduct is.
     canonical_keys: HashMap<Term, Term>,
+    /// A registered refinement key's *reduced* spelling, by the frame it was registered in and its key — or `None` where reducing it refused or outran its allowance: `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
+    ///
+    /// A reduct of a refinement key, exactly as a canonical key is, so it is invalidated wherever one is and by no rule of its own.
+    ///
+    /// **That protocol is coarser than a settled spelling needs, and the cost is accepted.** A spelling is filed under its entry's frame and read only through the window, so it rests on nothing but the frames outside its entry and what reduction reads globally; a suppression bracket, a registration or the exit of a frame inside its entry changes none of that, and each clears it here all the same. Settling again after those clears is most of what the escalation costs: the prelude elaborates in about 48.5 seconds with it against about 40 without, eleven thousand settlements of some twelve hundred keys. Invalidating by the spelling's own dependencies recovers part of that — keeping them across suppression brackets alone took the prelude to 46.9 seconds and a third of the settlements away — at the price of a rule argued at every invalidation site rather than borrowed from one already there, which was declined for now.
+    settled_keys: HashMap<(usize, Term), Option<Settled>>,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
@@ -129,6 +142,7 @@ impl Caches {
     pub(crate) fn begin_declaration(&mut self) {
         self.reduction_local.clear();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
     }
 
     pub(crate) fn canonical_key_get(&self, key: &Term) -> Option<Term> {
@@ -137,6 +151,15 @@ impl Caches {
 
     pub(crate) fn canonical_key_insert(&mut self, key: Term, canonical: Term) {
         self.canonical_keys.insert(key, canonical);
+    }
+
+    /// The settled reduced spelling of the entry `key` registered in `frame`: `None` if it was never asked for, `Some(None)` if reducing it refused.
+    pub(crate) fn settled_key_get(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
+        self.settled_keys.get(&(frame, key.clone()))
+    }
+
+    pub(crate) fn settled_key_insert(&mut self, frame: usize, key: Term, settled: Option<Settled>) {
+        self.settled_keys.insert((frame, key), settled);
     }
 
     pub(crate) fn elaboration_get(
@@ -176,6 +199,7 @@ impl Caches {
         self.note_write();
         self.clear_reductions();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
         self.elaboration.clear();
     }
 
@@ -184,6 +208,7 @@ impl Caches {
         self.note_write();
         self.clear_reductions();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
         self.elaboration.clear();
     }
 
@@ -197,9 +222,14 @@ impl Caches {
             .retain(|_, key| reduction.contains_key(key));
         self.reduction_local
             .retain(|_, reduct| !reduct.mentions_free(name));
-        // A canonical key is a reduct of the same kind, retained by the same test.
+        // A canonical key is a reduct of the same kind, retained by the same test, and so is a settled one.
         self.canonical_keys
             .retain(|_, canonical| !canonical.mentions_free(name));
+        self.settled_keys.retain(|_, settled| {
+            settled
+                .as_ref()
+                .is_some_and(|settled| !settled.unerased.mentions_free(name))
+        });
     }
 
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
@@ -217,17 +247,26 @@ impl Caches {
         if dropped_refinements {
             self.clear_reductions();
             self.canonical_keys.clear();
+            self.settled_keys.clear();
             self.elaboration.clear();
         } else if dropped_definitions {
             self.clear_reductions();
             self.canonical_keys.clear();
+            self.settled_keys.clear();
         }
+    }
+
+    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables and canonical keys clear on both sides as they do there. The settled spellings stay, each resting only on frames outside its entry, which a settlement leaves as they were.
+    pub(crate) fn invalidate_settlement_boundary(&mut self) {
+        self.clear_reductions();
+        self.canonical_keys.clear();
     }
 
     /// A refinement-suppression boundary is being crossed with refinements registered: refinement-applied and refinement-suppressed reducts must never contaminate each other's cache, so both clear — on both sides of the bracket, unstamped (the flag flip itself writes nothing).
     pub(crate) fn invalidate_suppression_boundary(&mut self) {
         self.clear_reductions();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
         self.elaboration.clear();
     }
 
@@ -235,6 +274,7 @@ impl Caches {
     pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
         self.clear_reductions();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
         self.elaboration.clear();
     }
 
@@ -244,6 +284,7 @@ impl Caches {
         self.note_universe_write();
         self.clear_reductions();
         self.canonical_keys.clear();
+        self.settled_keys.clear();
         // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
         self.elaboration.clear();
     }

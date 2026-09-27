@@ -1979,6 +1979,42 @@ impl Term {
         ))
     }
 
+    /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
+    ///
+    /// `Scope::close` followed by `open` computes the same term, but `close`'s capture rebuilds every node — unpruned and unshared — so each arm's specialization expanded shared subtrees into trees and re-copied nested bodies once per enclosing arm. Inserting a value verbatim under any binder depth is sound only while the value carries no loose index to shift; the solutions an arm's specialization produces — case values and inverted index targets, complete terms both — never do, and the assert is what keeps that a checked contract.
+    pub fn substitute(&self, solutions: &[(Free, Term)]) -> Term {
+        if solutions.is_empty() {
+            return self.clone();
+        }
+
+        for (_, value) in solutions {
+            assert!(value.closed(), "substitution value carries a loose index");
+        }
+
+        let solutions = solutions.to_vec();
+        let mut visit = Visit::rewriting_shared(
+            |_, _| None,
+            Box::new(move |_, term| {
+                if let Subterm::Var(var) = &**term
+                    && let Some(name) = var.as_free()
+                    && let Some((_, value)) = solutions.iter().find(|(solved, _)| solved == name)
+                {
+                    return Some(value.clone());
+                }
+
+                match solutions
+                    .iter()
+                    .any(|(solved, _)| term.mentions_free(solved))
+                {
+                    true => None,
+                    false => Some(term.clone()),
+                }
+            }),
+        );
+
+        self.traverse(&mut visit)
+    }
+
     /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.
     pub fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()

@@ -491,6 +491,16 @@ impl Context {
         }
     }
 
+    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Caches::settled_keys`] carries the invalidation protocol.
+    pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
+        self.caches.settled_key_get(frame, key)
+    }
+
+    /// Record a settlement. Every one is recorded, whatever its metavariables — unlike [`Context::record_canonical_key`], whose caller recomputes a miss, the escalation loop settles the innermost entry *not yet asked*, so an unrecorded settlement would be asked for again forever.
+    pub(crate) fn record_settled_key(&mut self, frame: usize, key: Term, settled: Option<Settled>) {
+        self.caches.settled_key_insert(frame, key, settled);
+    }
+
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
     ///
     /// **For work whose result is optional and whose cost must not be a program's cost.** Canonicalizing a refinement key is the case: settling it collapses two spellings of one comparison, failing to settle it leaves the two uncollapsed, and neither outcome changes what the program means. A guard over an opaque parameter settles in a handful of steps; one over a subject built by a hundred thousand iterations does not settle at all, and without a ceiling that single attempt spends the whole declaration.
@@ -1011,6 +1021,12 @@ impl Context {
         self.frames.scrutinee_entries(head)
     }
 
+    pub(crate) fn visible_scrutinee_entries(
+        &self,
+    ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
+        self.frames.visible_scrutinee_entries()
+    }
+
     pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
         self.frames.is_scrutinee_key(canonical)
     }
@@ -1031,6 +1047,21 @@ impl Context {
     /// Run `f` with every refinement registered *so far* suppressed (re-validation). A frame `f` enters keeps its own refinements live: those belong to the term being validated rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
     ///
     /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
+    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule and [`Caches::invalidate_settlement_boundary`] the cache protocol at each side.
+    pub(crate) fn with_refinements_withheld_from<R>(
+        &mut self,
+        frame: usize,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.caches.invalidate_settlement_boundary();
+        let previous = self.frames.withhold_refinements_from(frame);
+        let result = f(self);
+        self.frames.restore_withheld_refinements(previous);
+        self.caches.invalidate_settlement_boundary();
+
+        result
+    }
+
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();

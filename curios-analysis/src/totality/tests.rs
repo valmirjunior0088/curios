@@ -29,6 +29,10 @@ impl Env for Probe {
         None
     }
 
+    fn is_local(&self, _: &Free) -> bool {
+        false
+    }
+
     fn fresh(&mut self, hint: Option<&str>) -> Free {
         let index = self.minted.get();
         self.minted.set(index + 1);
