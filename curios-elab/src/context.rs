@@ -990,9 +990,23 @@ impl Context {
     }
 
     /// [`Frames::refine_scrutinee`], with the refinement cache protocol.
-    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, original: Term, value: Term) {
+    /// Record one guard's equation under every spelling it is met by — each `(canonical, original, alias)` — with the refinement cache protocol run once for all of them rather than once per spelling.
+    pub(crate) fn refine_scrutinee_spellings(
+        &mut self,
+        spellings: Vec<(Term, Term, bool)>,
+        value: &Term,
+    ) {
         self.caches.invalidate_for_refinement();
-        self.frames.refine_scrutinee(canonical, original, value);
+        for (canonical, original, alias) in spellings {
+            self.frames.refine_scrutinee(
+                canonical,
+                ScrutineeEntry {
+                    original,
+                    value: value.clone(),
+                    alias,
+                },
+            );
+        }
     }
 
     pub(crate) fn has_scrutinee_refinements(&self) -> bool {
@@ -1656,10 +1670,9 @@ impl Context {
         }
 
         for (canonical, entry) in &frame.refinement_scrutinees {
-            self.refine_scrutinee(
-                canonical.clone(),
-                entry.original.clone(),
-                entry.value.clone(),
+            self.refine_scrutinee_spellings(
+                vec![(canonical.clone(), entry.original.clone(), entry.alias)],
+                &entry.value,
             );
         }
 

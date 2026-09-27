@@ -740,7 +740,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
         [nat(0)],
     );
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
-    context.refine_scrutinee(canonical, registered, nat(1));
+    context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
 
     assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
 }
@@ -760,7 +760,7 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let registered = at(Level::zero());
     let probe = at(Level::zero().succ().expect("level zero has a successor"));
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
-    context.refine_scrutinee(canonical, registered, nat(1));
+    context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
 
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
 }

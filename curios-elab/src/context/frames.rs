@@ -43,6 +43,8 @@ impl DefEntry {
 pub(crate) struct ScrutineeEntry {
     pub(crate) original: Term,
     pub(crate) value: Term,
+    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement and canonicalization skip it, since the equation's own spelling already answers every probe they could.
+    pub(crate) alias: bool,
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
@@ -465,11 +467,11 @@ impl Frames {
     }
 
     /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling the probe-time canonicalization reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
-    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, original: Term, value: Term) {
+    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
         self.refinement_scrutinees
             .last_mut()
             .unwrap()
-            .insert(canonical, ScrutineeEntry { original, value });
+            .insert(canonical, entry);
     }
 
     /// Whether any scrutinee refinement is registered (regardless of suppression). The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
@@ -492,7 +494,7 @@ impl Frames {
             .iter()
             .rev()
             .flat_map(|frame| frame.iter())
-            .filter(|(key, _)| key.head_key() == Some(head))
+            .filter(|(key, entry)| !entry.alias && key.head_key() == Some(head))
             .map(|(key, entry)| (key.clone(), entry.clone()))
             .collect()
     }
@@ -520,6 +522,7 @@ impl Frames {
             .flat_map(move |(offset, frame)| {
                 frame
                     .iter()
+                    .filter(|(_, entry)| !entry.alias)
                     .map(move |(key, entry)| (floor + offset, key, entry))
             })
     }

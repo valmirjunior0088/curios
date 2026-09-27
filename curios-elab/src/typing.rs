@@ -2,6 +2,7 @@
 mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
+use curios_analysis::Unfolding;
 use curios_core::{
     Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
     IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
@@ -903,32 +904,48 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {
-            // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here is what used to make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
-            let canonical = super::shallow_scrutinee(context, head);
+            let mut spellings = scrutinee_spellings(context, head)?
+                .into_iter()
+                .map(|(key, original)| (key, original, false))
+                .collect::<Vec<_>>();
 
-            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
-            let resolved = match canonical.head_key().is_none() {
-                true => spine_whnf(context, head)?
-                    .map(|spined| {
-                        let key = super::shallow_scrutinee(context, &spined);
-                        (key, spined)
-                    })
-                    .filter(|(resolved, _)| {
-                        resolved.head_key().is_some() && *resolved != canonical
-                    }),
-                false => None,
-            };
-
-            // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce::canonical_key` does it at the probe instead, under a ceiling and once per key — from the *unerased* spelling stored beside the key, since the erased one cannot unfold the polymorphic heads reduction must see through.
-            if let Some((resolved, spined)) = resolved {
-                context.refine_scrutinee(resolved, spined, value.clone());
+            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it, since the written spelling already answers every probe a settlement could.
+            let unfolded = Unfolding::everything(&*context).term(head);
+            if unfolded != *head {
+                for (key, original) in scrutinee_spellings(context, &unfolded)? {
+                    if !spellings.iter().any(|(written, _, _)| *written == key) {
+                        spellings.push((key, original, true));
+                    }
+                }
             }
 
-            context.refine_scrutinee(canonical, head.clone(), value.clone());
+            context.refine_scrutinee_spellings(spellings, value);
         }
     }
 
     Ok(())
+}
+
+/// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
+fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, Term)>, Error> {
+    // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here is what used to make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
+    let canonical = super::shallow_scrutinee(context, head);
+
+    // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
+    let resolved = match canonical.head_key().is_none() {
+        true => spine_whnf(context, head)?
+            .map(|spined| {
+                let key = super::shallow_scrutinee(context, &spined);
+                (key, spined)
+            })
+            .filter(|(resolved, _)| resolved.head_key().is_some() && *resolved != canonical),
+        false => None,
+    };
+
+    // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce::canonical_key` does it at the probe instead, under a ceiling and once per key — from the *unerased* spelling stored beside the key, since the erased one cannot unfold the polymorphic heads reduction must see through.
+    let mut spellings = vec![(canonical, head.clone())];
+    spellings.extend(resolved);
+    Ok(spellings)
 }
 
 /// A scrutinee's applied spine taken to weak-head normal form one application layer at a time, or `None` when it is not an application spine or nothing moved.

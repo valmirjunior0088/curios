@@ -433,3 +433,44 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
         b"ok"
     );
 }
+
+// A guard written over the arm's own `let` meets the same guard reached through a definition that spells the value. The arm binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; `outside` spells that guard over `Byte/to_nat(c)` itself. The kernel substituted `n` before it recorded the arm's equation, and the elaborator recorded it over the name — so its lookup filter never let the probe, which names `c`, reach the key, and a settlement of the key unfolded `n` only where reduction touched it, leaving it named inside the branch `Bool/not`'s match keeps. The equation is recorded under the kernel's spelling too.
+#[test]
+fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Byte, Bool, Eq};
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+            choose | Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi)) => false | _ => true end;
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+            let n = Byte/to_nat(c);
+            match Bool/not(Nat/in_range(n, lo, hi))
+            | true => 0
+            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
+
+// Both sides of the guard spelled over a `let`: the arm's own, and the one inside `outside`, which is how `/std/Str/step` binds the byte it reads and how a proof walking its guards names it. Each side's `let` is met the way the kernel meets it — the definition's by substitution, the arm's by the equation's recorded kernel spelling — so they meet.
+#[test]
+fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Byte, Bool, Eq};
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+            let n = Byte/to_nat(c);
+            choose | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+            let m = Byte/to_nat(c);
+            match Bool/not(Nat/in_range(m, lo, hi))
+            | true => 0
+            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

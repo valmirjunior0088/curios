@@ -1,10 +1,10 @@
 //! What the kernel sees of a term that one of its checkers holds under local definitions.
 //!
-//! The kernel substitutes a `let` before it checks what follows; the elaborator keeps one as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver whose locals carry no definitions, as the kernel's do not, sees every term unchanged.
+//! The kernel substitutes a `let` before it checks what follows; the elaborator keeps one as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is, the spelling a guard's equation is recorded under — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver whose locals carry no definitions, as the kernel's do not, sees every term unchanged.
 //!
 //! # Why one reading
 //!
-//! It was three. The re-typing inlined the definitions that reached a solved variable, the index solver collected the locals behind definitions, and the case's own solution followed a chain of variables, each with its own guard against a definition that mentions itself. A reading written once is one to test.
+//! It was three. The re-typing inlined the definitions that reached a solved variable, the index solver collected the locals behind definitions, and the case's own solution followed a chain of variables, each with its own guard against a definition that mentions itself. A reading written once is one to test — and the elaborator's guard keys, which named their `let`s outright until a guard over one missed the same guard met through an unfolded definition, took it up as a fourth reader rather than a fourth reading.
 
 #[cfg(test)]
 mod tests;
