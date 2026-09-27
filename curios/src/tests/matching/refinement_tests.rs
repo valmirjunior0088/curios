@@ -413,3 +413,23 @@ fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
         "#;
     assert_eq!(run(source), b"2");
 }
+
+// A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The elaborator's reducer once bound `n` as a fresh definition when it unfolded `outside`, so the guard it met was spelled over a name the arm's key never mentions, and the lookup never considered the key. The reducer substitutes a `let` as the kernel does, so the unfolded guard is the arm's own spelling.
+#[test]
+fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Byte, Bool, Eq};
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+            let n = Byte/to_nat(c);
+            choose | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+            match Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi))
+            | true => 0
+            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

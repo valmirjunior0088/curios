@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
-    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y` — which the reducer splays into a context definition rather than substituting. The scope check once hard-failed that spelling as an out-of-scope name, so this program refused with a type mismatch; the reification loop in `solve` now unfolds the definition back into the candidate.
+    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y`. The reducer once bound `y` as a fresh context definition rather than substituting it, and the scope check hard-failed that spelling as an out-of-scope name, so this program refused with a type mismatch; a loop in `solve` then reified such definitions back out of the candidate. The reducer now substitutes a `let` as the kernel does, so the candidate names nothing the scope does not cover, and the loop is gone.
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
 

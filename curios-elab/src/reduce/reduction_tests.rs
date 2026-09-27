@@ -257,7 +257,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
 
 #[test]
 fn let_binds_each_value_to_its_own_slot() {
-    // Two distinct bindings referenced together in the tail: pins the positional correctness of `reduce_let`'s environment open. The tail is `(λ p q. q) a b`, so the result is `b`'s value — and only if `a`/`b` land in the right slots. A transposed open would beta-reduce to `a`'s value instead.
+    // Two distinct bindings referenced together in the tail: pins the positional correctness of `reduce_let`'s substitution. The tail is `(λ p q. q) a b`, so the result is `b`'s value — and only if `a`/`b` land in the right slots. A transposed open would beta-reduce to `a`'s value instead.
     let mut context = context();
     let p = context.fresh(Some("p"));
     let q = context.fresh(Some("q"));

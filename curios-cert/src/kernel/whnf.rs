@@ -459,7 +459,7 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
 
 /// Zeta: substitute a `let`'s bindings into its tail.
 ///
-/// The elaborator instead binds each value as a fresh definition and opens the tail over *those*, which avoids copying a value into every use. The kernel substitutes, because a substitution is visibly the rule and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
+/// The elaborator's reducer substitutes by the same rule. It once bound each value as a fresh definition and opened the tail over *those*, which avoided copying a value into every use but spelled its reducts with names this copy of the reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
     // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
     let bindings = let_.bindings.len() as u64;

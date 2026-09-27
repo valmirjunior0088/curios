@@ -399,3 +399,20 @@ let _ = std/Io/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
         b"ok"
     );
 }
+
+// A position past the first two operands of a concatenation is the third operand's start, however the second operand's width is spelled. The offset spells it through `Char/to_utf8(c)` and the operand through `Str/of_char(c).bytes`; the peel compares positions by spelling, and the elaborator's reducer once named `to_utf8`'s `let` afresh on each unfolding, so the two never met and the drop stayed stuck. The reducer substitutes a `let` as the kernel does.
+#[test]
+fn a_position_past_a_character_meets_the_operand_after_it() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bytes, Bool, Char, Str, Eq};
+        let _past(a: Bytes, b: Bytes, c: Char)
+            -> Eq(
+                Bytes/drop(x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @Bool/True/qed()),
+                b) =
+            Eq/refl();
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

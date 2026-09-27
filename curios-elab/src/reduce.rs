@@ -570,30 +570,28 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
     }
 }
 
+/// Zeta: substitute a `let`'s bindings into its tail, as the kernel's `step_let` does.
+///
+/// This once bound each value as a fresh context definition and opened the tail over those names, which copies no value into its uses. The names it minted then stood in reducts where the kernel's copy of the same reduction has the values: two unfoldings of one definition named its `let`s differently, so every comparison by spelling — a sum's cancellation, a position's peel through a concatenation, a guard's refinement key — missed terms conversion identifies, and the metavariable solver had to reify minted names back out of its candidates. Substituting is the kernel's rule, so a reduct is spelled as the kernel spells it. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
-    // Bind each value as a fresh definition and continue with the tail opened over those definitions — an environment step (like `unfold_rec`) rather than a substitution, so no value is copied into the tail. Left to right: a `let` is non-recursive, so binding `i` sees only labels `0..i`, which are already defined; each value is released against just that prefix. The definitions land in the enclosing context and outlive this call; their labels are entropy-fresh, so nothing collides.
-    // Three vectors the length of the binding run, and one release per binding against the prefix before it. The kernel's zeta is triangular here because it copies each value into every use; this one is linear, and the two are charged for what each actually builds.
+    // One values vector, and a fresh ref vector at every binding — triangular in the run's length, and charged as the kernel charges it.
     let bindings = let_.bindings.len() as u64;
     context.spend(
         Cost::collection(bindings)
-            .saturating_mul(3)
+            .saturating_add(Cost::buffer(
+                bindings.saturating_mul(bindings.saturating_add(1)) / 2,
+            ))
             .saturating_add(Cost::term(1).saturating_mul(bindings)),
     )?;
 
-    let labels = let_
-        .tail
-        .hint_iter()
-        .map(|label| context.fresh(label))
-        .collect::<Vec<_>>();
-
-    let label_terms = labels.iter().map(Term::free_var).collect::<Vec<_>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-
-    for (i, (label, binding)) in labels.iter().zip(&let_.bindings).enumerate() {
-        context.define(label, &binding.value().release(&label_refs[..i]), None);
+    let mut values: Vec<Term> = Vec::with_capacity(let_.bindings.len());
+    for binding in &let_.bindings {
+        let refs = values.iter().collect::<Vec<_>>();
+        values.push(binding.value().release(&refs));
     }
 
-    Ok(Reduce::Continue(let_.tail.open(&label_refs)))
+    let refs = values.iter().collect::<Vec<_>>();
+    Ok(Reduce::Continue(let_.tail.open(&refs)))
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {

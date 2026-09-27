@@ -425,3 +425,18 @@ fn a_late_pinned_bound_that_holds_only_under_a_refinement_is_still_refused() {
     )
     .expect("written first, the bound is filled inside the arm");
 }
+
+// A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`; the elaborator's reducer once bound that as a fresh definition per unfolding, so the two lengths came back spelled with differently named `code`s, the sum's cancellation met them as unequal, and `k + w <= k + w + 1` was refused although conversion identifies the two. The reducer substitutes a `let` as the kernel does, and both unfoldings spell one term.
+#[test]
+fn a_bound_over_one_length_reached_by_two_routes_discharges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bytes, Bool, Char, Str};
+        let _within(c: Char, k: Nat)
+            -> Nat/Le(k + Bytes/len(Char/to_utf8(c)), k + Bytes/len(Str/of_char(c).bytes) + 1) =
+            Bool/True/qed();
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
