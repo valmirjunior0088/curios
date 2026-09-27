@@ -714,7 +714,7 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 
 /// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
 ///
-/// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application carries it on its head — the same place [`unfold_rec_apply`] reads it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
+/// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application carries it at the head of its spine — the same place [`unfold_rec_apply`] reads it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
 fn forced_group(kernel: &mut Kernel, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
     if let Some((group, _)) = folded.as_rec_proj() {
         return Ok(Some(group.clone()));
@@ -726,7 +726,7 @@ fn forced_group(kernel: &mut Kernel, folded: &Term) -> Result<Option<RecGroup>, 
             let head = whnf(kernel, head.clone())?;
             let head = expose_rec_tail(kernel, head)?;
 
-            Ok(head.as_rec_proj().map(|(group, _)| group.clone()))
+            Ok(head.spine_rec_proj().map(|(group, _)| group.clone()))
         }
         _ => Ok(None),
     }
@@ -772,8 +772,19 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
         None => head,
     };
 
-    let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
-        return Ok(None);
+    let telescope = match Term::unwrap_or_clone(body) {
+        Subterm::Func(Func { telescope, .. }) => telescope,
+        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, as the elaborator's twin takes it — read one level deep, `f(a)(b)` was a neutral no demand unfolded.
+        Subterm::Apply(inner) => {
+            return Ok(unfold_rec_apply(kernel, inner)?.map(|unfolded| {
+                Subterm::Apply(Apply {
+                    head: unfolded,
+                    arguments,
+                })
+                .into()
+            }));
+        }
+        _ => return Ok(None),
     };
     // Saturation, for the reason `step_apply` needs it: this is the recursive twin of the β step, and `Telescope::open` asserts. An application that does not saturate its member declines to unfold rather than aborting the walk.
     if telescope.len() != arguments.len() {

@@ -125,6 +125,11 @@ enum Frame {
         folded: Term,
         group: RecGroup,
     },
+    /// A forced application whose head is itself a folded call — a member whose result is a function, applied past its own parameters — waiting for that call's forced value to apply its own arguments to.
+    Spine {
+        arguments: Vec<Argument>,
+        demand: Demand,
+    },
     /// The restuck test of `force`: a reduct that is still neutral and still mentions the group achieved nothing, and the folded spelling stays the canonical normal form.
     RecGuard {
         folded: Term,
@@ -586,12 +591,32 @@ impl Machine {
                             .collect();
                         self.beta(host, telescope, params, demand)
                     }
+                    // A head evaluated at the plain demand comes back a folded call when the application is a member's call applied past its own parameters. A forced demand reaches through it, as the strategies' `unfold_rec_apply` does: force the call, and apply what it becomes to these arguments. A plain demand stops at the folded spine, its normal form.
+                    head if matches!(demand, Demand::Forced) && head.spine_rec_proj().is_some() => {
+                        self.push(host, Frame::Spine { arguments, demand })?;
+                        Ok(Step::Eval(head.into(), Demand::Forced))
+                    }
                     head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
                         head: head.into(),
                         arguments,
                     })))),
                 }
             }
+
+            Frame::Spine { arguments, demand } => match Term::unwrap_or_clone(value) {
+                Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
+                    let params = arguments
+                        .into_iter()
+                        .map(|argument| argument.term)
+                        .collect();
+                    self.beta(host, telescope, params, demand)
+                }
+                // The call did not expose a saturated function — it restuck, and `force` keeps it folded — so its application stays the normal form. Nothing is forced again, which is what keeps a restuck spine from looping here.
+                head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
+                    head: head.into(),
+                    arguments,
+                })))),
+            },
 
             Frame::RecBody {
                 params,
@@ -668,9 +693,7 @@ impl Machine {
 
             Frame::Memo { key } => {
                 // A folded recursive spelling is a weak-head value that a *forced* probe must not be served, and the memo does not tag demands — so a rec-shaped value is simply not recorded. Every other weak-head value is its own forced form, since forcing only unfolds recursive heads.
-                let folded = value.as_rec_proj().is_some()
-                    || matches!(&*value, Subterm::Rec(_))
-                    || matches!(&*value, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some());
+                let folded = value.spine_rec_proj().is_some() || matches!(&*value, Subterm::Rec(_));
 
                 if !folded {
                     // One entry of two `Term` handles, on the buffer row, charged before the write.

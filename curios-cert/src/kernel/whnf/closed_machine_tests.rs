@@ -257,9 +257,61 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
+    // A member whose result is a function, called past its own parameters: `f(2)(3)` is the call `f(2)` applied to `3`. The plain demand stops at the folded spine, and the forced one reaches through it to the call — which the machine's head frame, evaluating a head at the plain demand, handed back unforced while the strategies unfolded it.
+    let past_parameters = {
+        let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
+        let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
+        let arrow = Term::func_type([(x.clone(), nat_type())], nat_type());
+        let body = Term::func(
+            [(n.clone(), nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive_b),
+                arrow.clone(),
+                Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+                &pred,
+                &hypothesis,
+                Term::func(
+                    [(x.clone(), nat_type())],
+                    Term::apply(
+                        Term::apply(Term::free_var(&member), [Term::free_var(&pred)]),
+                        [Term::free_var(&x)],
+                    ),
+                ),
+            ),
+        );
+        let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+            [(
+                member.clone(),
+                Term::func_type([(n.clone(), nat_type())], arrow),
+                body,
+            )],
+            Term::apply(Term::apply(Term::free_var(&member), [nat(2)]), [nat(3)]),
+        )) else {
+            unreachable!("built as a rec")
+        };
+
+        unfold_rec(rec)
+    };
+
+    // The same call demanded plainly and then forced, in one run: the `let` value is released at the plain demand, where the folded spine is the answer, and the tail's operand is forced. The memo does not tag demands, so its guard must recognize the spine as folded and decline to record it — read one application deep, it recorded the spine and served it to the forced probe, and the sum stuck on it.
+    let plain_then_forced = {
+        let call = past_parameters.clone();
+        let released = binder(6, "released");
+
+        Term::let_(
+            &released,
+            nat_type(),
+            call.clone(),
+            Term::intrinsic(Intrinsic::nat_add(call, nat(0))),
+        )
+    };
+
     for term in [
         chain(64),
         dissolved_group,
+        past_parameters,
+        plain_then_forced,
         ih_fold,
         tail_fold,
         countdown,

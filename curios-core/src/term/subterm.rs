@@ -47,6 +47,18 @@ impl Subterm {
         rec.as_proj().map(|index| (&rec.group, index))
     }
 
+    /// The group and index at the head of this application spine: [`as_rec_proj`](Self::as_rec_proj) read through every enclosing application, or of the term itself when it is none.
+    ///
+    /// This, and not `as_rec_proj` on an application's immediate head, is what recognizes a folded recursive call. A member whose result is a function, applied past its own parameters, is `f(a)(b)` — the call `f(a)` applied to what is left — and its immediate head is that call rather than the member. Read one level deep, it was a neutral no demand ever unfolded.
+    pub fn spine_rec_proj(&self) -> Option<(&RecGroup, usize)> {
+        let mut term = self;
+        while let Subterm::Apply(apply) = term {
+            term = &apply.head;
+        }
+
+        term.as_rec_proj()
+    }
+
     pub(super) fn any_direct_universe_meta(
         &self,
         pred: &mut impl FnMut(UniverseMetaId) -> bool,

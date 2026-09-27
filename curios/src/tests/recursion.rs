@@ -54,6 +54,32 @@ fn a_local_group_is_mutually_recursive() {
     assert_eq!(run(source), b"1");
 }
 
+/// A recursive definition whose result is a function computes when applied past its own parameters, at the top level, locally, and as the loop `WellFounded/recurse` runs when its motive is a function: `f(3)(1)` is the call `f(3)` applied to what is left, and a demand for its value unfolds that call rather than stopping at the outer application. A symbolic argument past the parameters rides along, so the last claim is a law rather than a sample.
+#[test]
+fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
+    let source = r#"
+        use /std/{Nat, Bool, Eq, WellFounded};
+        let top(n : Nat) -> (Nat) -> Nat =
+            match n | 0 => (x) => x | p + 1 => (x) => top(p)(x) + 1 end;
+        let nested(n : Nat) -> (Nat) -> Nat =
+            let go(m : Nat) -> (Nat) -> Nat = match m | 0 => (x) => x | p + 1 => (x) => go(p)(x) + 1 end;
+            go(n);
+        let measured(n : Nat, k : Nat) -> Nat =
+            WellFounded/recurse(
+                (_ : Nat) => (k : Nat) -> Nat,
+                (x, ih) => (k) => match x | 0 => k | p + 1 => ih(p, Bool/True/qed())(k) + 1 end,
+                n,
+                WellFounded/lt(n))(k);
+        let _top : Eq(top(3)(1), 4) = Eq/refl();
+        let _nested : Eq(nested(3)(1), 4) = Eq/refl();
+        let _measured : Eq(measured(3, 10), 13) = Eq/refl();
+        let _symbolic(k : Nat) -> Eq(top(2)(k), k + 2) = Eq/refl();
+        /std/print(Nat/to_str(measured(3, 10)))
+        "#;
+
+    assert_eq!(run(source), b"13");
+}
+
 // A self-reference under a lambda is a knot forced by need, which the erased program ties through a cell: legal, and the shape a lazy structure takes.
 #[test]
 fn a_value_that_names_itself_under_a_lambda_is_admitted() {

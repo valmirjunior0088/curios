@@ -94,6 +94,52 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     assert_eq!(reduce_forced(&mut context, concrete), Ok(nat(0)));
 }
 
+/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application was a neutral the force handed back folded.
+#[test]
+fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let m = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let f = context.fresh(Some("f"));
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let arrow = Term::func_type([(x.clone(), nat_type.clone())], nat_type.clone());
+    let called = |on: &Free, argument: Term| {
+        Term::apply(
+            Term::apply(Term::free_var(&f), [Term::free_var(on)]),
+            [argument],
+        )
+    };
+    let body = Term::func(
+        [(n.clone(), nat_type.clone())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&m),
+            arrow.clone(),
+            Term::func([(x.clone(), nat_type.clone())], Term::free_var(&x)),
+            &pred,
+            &ih,
+            Term::func(
+                [(x.clone(), nat_type.clone())],
+                called(&pred, Term::free_var(&x)),
+            ),
+        ),
+    );
+
+    let term = Term::rec(
+        [(f.clone(), Term::func_type([(n, nat_type)], arrow), body)],
+        Term::apply(
+            Term::apply(Term::free_var(&f), [nat(2)]),
+            [Term::free_var(&y)],
+        ),
+    );
+
+    assert_eq!(reduce_forced(&mut context, term), Ok(Term::free_var(&y)));
+}
+
 #[test]
 fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let mut context = context();

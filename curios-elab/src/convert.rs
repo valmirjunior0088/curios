@@ -1777,7 +1777,7 @@ impl Convert {
                     }
                 }
                 // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time was where a `Str` literal's validity check went quadratic in retention and superlinear in wall clock — every round re-reduced the next folded spelling, whose argument carried the scan's state unreduced, one `step` deeper per character, and stored it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold it always did, so a comparison against an unfolded body still meets it.
-                (Subterm::Apply(apply), other) if apply.head.as_rec_proj().is_some() => {
+                (Subterm::Apply(apply), other) if apply.head.spine_rec_proj().is_some() => {
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
                             self.enqueue(type_, forced, other.into());
@@ -1786,7 +1786,7 @@ impl Convert {
                         None => false,
                     }
                 }
-                (other, Subterm::Apply(apply)) if apply.head.as_rec_proj().is_some() => {
+                (other, Subterm::Apply(apply)) if apply.head.spine_rec_proj().is_some() => {
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
                             self.enqueue(type_, other.into(), forced);

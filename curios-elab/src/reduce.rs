@@ -145,10 +145,6 @@ pub(crate) fn unfold_rec_apply(
     apply: Apply,
 ) -> Result<Option<Term>, ReduceError> {
     let Apply { head, arguments } = apply;
-    let params = arguments
-        .into_iter()
-        .map(|argument| argument.term)
-        .collect::<Vec<_>>();
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
 
@@ -161,14 +157,28 @@ pub(crate) fn unfold_rec_apply(
         }
         None => head,
     };
-    let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
-        return Ok(None);
+    let telescope = match Term::unwrap_or_clone(body) {
+        Subterm::Func(Func { telescope, .. }) => telescope,
+        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, which is what lets a demand reach through `f(a)(b)` to `f(a)` — read one level deep, the outer application was a neutral nothing unfolded.
+        Subterm::Apply(inner) => {
+            return Ok(unfold_rec_apply(context, inner)?.map(|unfolded| {
+                Subterm::Apply(Apply {
+                    head: unfolded,
+                    arguments,
+                })
+                .into()
+            }));
+        }
+        _ => return Ok(None),
     };
     context.spend(
-        Cost::collection(params.len() as u64)
-            .saturating_add(Cost::term(1).saturating_mul(params.len() as u64)),
+        Cost::collection(arguments.len() as u64)
+            .saturating_add(Cost::term(1).saturating_mul(arguments.len() as u64)),
     )?;
-    let param_refs = params.iter().collect::<Vec<_>>();
+    let param_refs = arguments
+        .iter()
+        .map(|argument| &argument.term)
+        .collect::<Vec<_>>();
 
     Ok(Some(telescope.open(&param_refs)))
 }
@@ -180,11 +190,9 @@ pub(crate) fn unfold_rec_apply(
 /// Testing the head alone, as this once did, conflates *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc` and a bare `Var` was thrown away, which made the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`. Counted once, by an `eprintln!` per arm here and one `cargo build -p curios-prelude`: of 613,610 decisions over the fixed prelude, 6,472 reach this arm head-exposed and 16,919 reach it as a bare `Var`, so each half of the rule is load-bearing at scale rather than in principle.
 ///
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
-/// A folded recursive spelling: a `rec` projection, a `rec` block, or an application headed by a projection — the one weak-head value a forced demand must not be served.
+/// A folded recursive spelling: a `rec` projection, a `rec` block, or an application spine headed by a projection — the one weak-head value a forced demand must not be served.
 fn is_folded(term: &Term) -> bool {
-    term.as_rec_proj().is_some()
-        || matches!(&**term, Subterm::Rec(_))
-        || matches!(&**term, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some())
+    term.spine_rec_proj().is_some() || matches!(&**term, Subterm::Rec(_))
 }
 
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
@@ -253,7 +261,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
 
 /// The group whose call `folded` is, for [`force_rec`]'s occurrence test.
 ///
-/// A projection and a bare `rec` value carry it directly; an application carries it on its head, which is where `unfold_rec_apply` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.
+/// A projection and a bare `rec` value carry it directly; an application carries it at the head of its spine, which is where `unfold_rec_apply` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.
 fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
     if let Some((group, _)) = folded.as_rec_proj() {
         return Ok(Some(group.clone()));
@@ -265,7 +273,7 @@ fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGrou
             let head = reduce(context, head.clone())?;
             let head = expose_rec_tail(context, head)?;
 
-            Ok(head.as_rec_proj().map(|(group, _)| group.clone()))
+            Ok(head.spine_rec_proj().map(|(group, _)| group.clone()))
         }
         _ => Ok(None),
     }

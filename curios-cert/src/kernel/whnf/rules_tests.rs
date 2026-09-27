@@ -310,6 +310,49 @@ fn a_recursive_application_stays_folded_until_forced() {
     assert_eq!(kernel.reduce_forced(concrete), Ok(nat(0)));
 }
 
+/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application was a neutral the force handed back folded.
+#[test]
+fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let motive = binder(1, "m");
+    let pred = binder(2, "pred");
+    let hypothesis = binder(3, "ih");
+    let f = binder(4, "f");
+    let x = binder(5, "x");
+    let y = binder(6, "y");
+    let arrow = Term::func_type([(x.clone(), nat_type())], nat_type());
+
+    let body = Term::func(
+        [(n.clone(), nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            arrow.clone(),
+            Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+            &pred,
+            &hypothesis,
+            Term::func(
+                [(x.clone(), nat_type())],
+                Term::apply(
+                    Term::apply(Term::free_var(&f), [Term::free_var(&pred)]),
+                    [Term::free_var(&x)],
+                ),
+            ),
+        ),
+    );
+
+    let term = Term::rec(
+        [(f.clone(), Term::func_type([(n, nat_type())], arrow), body)],
+        Term::apply(
+            Term::apply(Term::free_var(&f), [nat(2)]),
+            [Term::free_var(&y)],
+        ),
+    );
+
+    assert_eq!(kernel.reduce_forced(term), Ok(Term::free_var(&y)));
+}
+
 /// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice was `2^n` under every demand — see `reduce_bool_binary`.
 #[test]
 fn a_stuck_left_operand_leaves_the_right_as_written() {

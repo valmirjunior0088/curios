@@ -718,12 +718,14 @@ fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
     (this_skeleton == that_skeleton).then(|| kernel.level_pairs_eq(&this_levels, &that_levels))
 }
 
-/// The head of an application, or the term itself: what `rec_instances` is asked about when a folded recursive call arrives applied.
+/// The head of an application spine, or the term itself: what `rec_instances` is asked about when a folded recursive call arrives applied — past its own parameters too, where the call is the head of an application of its own.
 fn applied_head(term: &Term) -> &Term {
-    match &**term {
-        Subterm::Apply(apply) => &apply.head,
-        _ => term,
+    let mut term = term;
+    while let Subterm::Apply(apply) = &**term {
+        term = &apply.head;
     }
+
+    term
 }
 
 /// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`. The binders are assumed at `Type` as a stand-in, sound because `ground` is already the untyped concession: a binder's recorded type feeds only the conversion history's context key, identically on both sides.
