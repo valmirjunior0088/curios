@@ -447,6 +447,8 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
 
     for index in dependency_order(module, &judged) {
         let item = &module.items[index];
+        // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the kernel is read beside its cost in the elaborator by the same key.
+        curios_profile::profile!("certify_declaration", group = %item.describe());
         let item_name = item.declared_names().first().map(|&name| name.clone());
 
         match item {
@@ -594,6 +596,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
 ///
 /// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
 fn universe_verdict(context: &UniverseContext) -> Option<KernelError> {
+    curios_profile::profile!("universe_verdict");
     if !context.is_closed() {
         return Some(KernelError::UnclosedUniverses);
     }

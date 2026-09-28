@@ -180,6 +180,7 @@ pub(crate) fn check_induct_decl(
     kernel: &mut Kernel,
     declaration: &InductDecl,
 ) -> Result<(), KernelError> {
+    curios_profile::profile!("check_induct_decl");
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
@@ -339,6 +340,7 @@ pub(crate) fn check_struct_decl(
     kernel: &mut Kernel,
     declaration: &StructDecl,
 ) -> Result<(), KernelError> {
+    curios_profile::profile!("check_struct_decl");
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
 
@@ -449,6 +451,7 @@ pub(crate) fn check_entrypoint(
     body: &Term,
     expected: Option<&Term>,
 ) -> Result<(), KernelError> {
+    curios_profile::profile!("check_entrypoint");
     kernel.restore_budget();
     kernel.assume_universes(&UniverseContext::empty());
 

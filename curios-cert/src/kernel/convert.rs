@@ -52,6 +52,7 @@ pub fn convert(
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
+    curios_profile::profile!("convert");
     let mut history = History::default();
 
     compare(kernel, &mut history, type_, this, that)

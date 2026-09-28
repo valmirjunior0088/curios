@@ -145,6 +145,7 @@ fn invert_with<J: Judge>(
     flex: &[Free],
     solve_keys: bool,
 ) -> Result<Invert, J::Error> {
+    curios_profile::profile!("invert_with");
     let mut solutions = Vec::new();
 
     for (actual, target) in actuals.iter().zip(targets) {

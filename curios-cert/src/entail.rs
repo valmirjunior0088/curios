@@ -6,6 +6,7 @@ use curios_core::{Level, LevelHead, UniverseConstraint};
 ///
 /// Sound and deliberately incomplete, in the kernel's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. The left side decomposes exactly — `max(c, a₁, …) ≤ u` holds iff each part is bounded — and each atom is bounded either structurally or through an assumed constraint whose lower side mentions its head: from `h + j ≤ U`, raising both sides gives `h + k ≤ U + (k ∸ j)`, and the shifted upper bound recurses. A goal already on the path refuses (cyclic hypotheses such as `u ≤ v, v ≤ u` are legal), and a fuel bound refuses hypothesis chains that grow offsets without repeating — both incomplete, neither unsound.
 pub(crate) fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
+    curios_profile::profile!("entails");
     let fuel = 4 * assumed.len() + 4;
 
     level_entailed(assumed, lower, upper, &mut Vec::new(), fuel)

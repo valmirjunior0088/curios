@@ -50,6 +50,7 @@ fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
 /// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        curios_profile::profile!("reduce");
         whnf(self, term)
     }
 
@@ -57,6 +58,8 @@ impl Reducer for Kernel {
         if let Some(replayed) = self.whnf_hit(&term, true) {
             return Ok(replayed);
         }
+        // Past the memo, so the span times reductions the table did not answer: a hit costs a lookup, and a span per hit would cost the profile more rows than any other site and bill each its own row-writing.
+        curios_profile::profile!("reduce_forced");
 
         let before = self.consumption();
         let reduced = whnf(self, term.clone())?;

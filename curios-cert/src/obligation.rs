@@ -59,6 +59,7 @@ pub(crate) fn partial_definitions(
     module: &Module,
     globals: &Globals,
 ) -> (BTreeSet<Global>, Vec<(Global, KernelError)>) {
+    curios_profile::profile!("partial_definitions");
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     let mut partial: BTreeSet<Global> = globals.partial().clone();
     let mut stamped_total: Vec<Global> = Vec::new();
@@ -137,6 +138,7 @@ pub(crate) fn check_positions(
     partial: &BTreeSet<Global>,
     memo: &mut HashMap<Term, bool>,
 ) -> Result<(), KernelError> {
+    curios_profile::profile!("check_positions");
     for (term, erased) in positions {
         if let Some(reached) = term
             .free_vars()

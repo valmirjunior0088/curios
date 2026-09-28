@@ -57,6 +57,7 @@ const EXPAND_FUEL: usize = 16;
 ///
 /// This is the whole of size-change termination as this compiler applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
 pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
+    curios_profile::profile!("group_totality");
     let mut members = Vec::new();
     for index in 0..group.length() {
         members.push(Member::of(env, group, index));
