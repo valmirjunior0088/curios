@@ -303,6 +303,11 @@ impl Sink {
                     fs::create_dir_all(parent)?;
                 }
 
+                // A stream is the current file and its predecessor, and `fold_at` reads the two as one run. Truncating the current file alone would leave an earlier run's predecessor to be folded in front of this one's rows, so the pair is started over together.
+                match fs::remove_file(predecessor(&path)) {
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+                    _ => {}
+                }
                 let file = File::create(&path)?;
 
                 (Box::new(file), Some((path, cap)))

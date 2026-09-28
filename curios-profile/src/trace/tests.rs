@@ -179,3 +179,41 @@ fn a_rotation_restates_the_header_and_the_callsite_table() {
         "the table is restated: {current}"
     );
 }
+
+// A stream is the current file and its predecessor, read back as one run. An earlier run's predecessor left beside a new current file would be folded in front of it — a certification's rows reported ahead of the next one's — so opening a stream starts the pair over, and a run that never rotates folds as itself alone.
+#[test]
+fn opening_a_rotating_stream_discards_an_earlier_run_s_predecessor() {
+    let directory = Temporary::new("profile", "stale-predecessor");
+    std::fs::create_dir_all(&directory).expect("a temporary directory");
+    let path = directory.join("profile.tsv");
+    let stale = predecessor(&path);
+    std::fs::write(
+        &stale,
+        "D\t0\tcurios_cert\tearlier\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         X\t1\t0\t500\t0\t0\t0\t0\n\
+         C\t1\t0\t500\n",
+    )
+    .expect("an earlier run's predecessor");
+
+    trace(
+        Destination::Rotating {
+            path: path.clone(),
+            cap: ROTATION_CAP,
+        },
+        || {
+            let _span = tracing::trace_span!("later").entered();
+        },
+    )
+    .expect("a rotating destination opens");
+
+    assert!(!stale.exists(), "the earlier predecessor is gone");
+    let names = crate::fold_at(&path)
+        .expect("the stream folds")
+        .summaries
+        .into_iter()
+        .map(|summary| summary.name)
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["later".to_owned()]);
+}
