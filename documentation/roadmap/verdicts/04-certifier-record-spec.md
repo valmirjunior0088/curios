@@ -2,7 +2,7 @@
 
 Working specification for replacing the elaborator's carried totality stamps with the certifier's own verdict record, and for recording call sites — and every read of another item — during the certifier's own typing walk. These are independently verifiable changes to where certification gets its authority. The record is specified per declaration, because it is the verdict cell [part 5](05-one-environment-spec.md)'s environment holds; until part 5 lands it is filed with its unit.
 
-It needs [part 1](01-measured-spec.md)'s baseline and nothing else: no arithmetic search, and no certificate language. The stronger restrictions on trusted reasoning, and evidence, are [part 7](07-checked-evidence-spec.md)'s.
+It needs [the certifier's profile baseline](../../../curios-cert/README.md#measuring-the-certifier) and nothing else: no arithmetic search, and no certificate language. The stronger restrictions on trusted reasoning, and evidence, are [part 7](07-checked-evidence-spec.md)'s.
 
 ## What this builds on
 
@@ -40,7 +40,7 @@ Each lands alone, with focused verification and the repository's validation disc
 - File a false totality stamp through the elaborator and require the kernel to refuse what rests on it. Exercise later-unit consumption of the certifier record as well as certification of the original unit.
 - Check storage and reuse under the certifier identity, including missing or inapplicable records, without accepting a fallback elaborator verdict.
 - Compare recorded call sites with shared discovery over the corpus and investigate differences. A mutation hiding a call must be caught, so agreement is not the only evidence.
-- Measure the certifier before and after each stage against part 1's baseline, naming the judgment or stage.
+- Measure the certifier before and after each stage against its [recorded baseline](../../../curios-cert/README.md#measuring-the-certifier), naming the judgment or stage.
 
 ## Documentation and rejected alternatives
 

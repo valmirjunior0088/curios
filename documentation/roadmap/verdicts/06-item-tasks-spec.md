@@ -2,7 +2,7 @@
 
 Working specification for multithreaded compilation, the payoff of the parts before it. Once every read goes through [part 5](05-one-environment-spec.md)'s environment, no artifact carries a minted identity ([part 3](03-no-minted-identity-spec.md)) and no verdict depends on history ([part 2](02-no-history-spec.md)), the items of a compilation can run on as many workers as the product supplies, and the determinism the earlier parts established is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
-It needs every earlier part but [part 7](07-checked-evidence-spec.md), and [part 1](01-measured-spec.md)'s Cranelift stage is already its first parallelism.
+It needs every earlier part but [part 7](07-checked-evidence-spec.md), and [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
 ## What this builds on
 
