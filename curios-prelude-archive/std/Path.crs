@@ -35,7 +35,8 @@ let ends_with_separator(b: Bytes) -> Bool =
     | none() => false
     end;
 
-let components(b: Bytes) -> List(Bytes) =
+--- The components before the last separator, and the one after it, which every path has: empty after a trailing separator, and the whole path when there is none.
+let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =
     let (done, current): {List(Bytes), Bytes} =
         Bytes/fold(
             b,
@@ -45,7 +46,7 @@ let components(b: Bytes) -> List(Bytes) =
                 | true => ([..done, current], x[])
                 | false => (done, x[..current, byte])
                 end);
-    [..done, current];
+    (before = done, last = current);
 
 --- `a/b`, with one separator between them whatever `a` ends in; an empty side is the other side.
 pub let join(a: Path, b: Path) -> Path =
@@ -58,16 +59,15 @@ pub let join(a: Path, b: Path) -> Path =
 
 --- The last component; empty after a trailing separator.
 pub let name(p: Path) -> Path =
-    Path { Option/unwrap_or(List/last(components(p.0)), x[]) };
+    Path { components(p.0).last };
 
 --- Everything before the last separator: `none` for a bare name, and `/` for a child of the root.
 pub let parent(p: Path) -> Option(Path) =
-    let parts = components(p.0);
-    let n = List/len(parts);
-    match n < 2
-    | true => Option/none()
-    | false =>
-        let above = Bytes/join(x[separator], List/take(parts, n - 1));
+    let before = components(p.0).before;
+    match before
+    | [] => Option/none()
+    | _ =>
+        let above = Bytes/join(x[separator], before);
         Option/some(
             Path { match Bytes/len(above) == 0 | true => x[separator] | false => above end })
     end;

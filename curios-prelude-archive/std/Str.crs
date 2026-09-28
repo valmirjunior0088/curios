@@ -416,7 +416,7 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
 
 --- `s` written `n` times.
 pub let repeat(s: Str, n: Nat) -> Str =
-    List/balanced(n, "", (_) => s, (l, r) => concat(l, r));
+    List/balanced(n, "", (_, _) => s, (l, r) => concat(l, r));
 
 --- Whether a scan state can only finish its character at a scalar value, `partial` being the bits gathered so far: `pending` inside a character, and nothing owed between them.
 let pending_at(sc: Scan, partial: Nat) -> Bool =
@@ -578,7 +578,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(
         List/len(parts),
         "",
-        (i) => Option/unwrap_or(List/try_get(parts, i), ""),
+        (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
 
 --- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.

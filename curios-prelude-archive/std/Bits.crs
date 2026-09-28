@@ -143,7 +143,7 @@ pub let join(sep: Bits, parts: List(Bits)) -> Bits =
     List/balanced(
         List/len(parts),
         b[],
-        (i) => Option/unwrap_or(List/try_get(parts, i), b[]),
+        (i, ok) => List/get(@Bits, parts, i, @ok),
         (l, r) => b[..l, ..sep, ..r]);
 
 --- Bitwise from index zero, a proper prefix first.

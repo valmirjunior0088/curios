@@ -255,7 +255,7 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
     List/balanced(
         List/len(parts),
         x[],
-        (i) => Option/unwrap_or(List/try_get(parts, i), x[]),
+        (i, ok) => List/get(@Bytes, parts, i, @ok),
         (l, r) => x[..l, ..sep, ..r]);
 
 --- Bytewise, a proper prefix first.

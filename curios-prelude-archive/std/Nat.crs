@@ -14,20 +14,9 @@ pub let Lt(a: Nat, b: Nat) -> Prop =
 pub let Le(a: Nat, b: Nat) -> Prop =
     Bool/Holds(le(a, b));
 
+--- The decimal digit of `d` modulo ten.
 let single_digit(d: Nat) -> Str =
-    match d
-    | 0 => "0"
-    | 1 => "1"
-    | 2 => "2"
-    | 3 => "3"
-    | 4 => "4"
-    | 5 => "5"
-    | 6 => "6"
-    | 7 => "7"
-    | 8 => "8"
-    | 9 => "9"
-    | _ => "0"
-    end;
+    Str/of_char(Char/hex_digit(d % 10));
 
 --- The decimal digits of `n`.
 pub let to_str(n: Nat) -> Str =

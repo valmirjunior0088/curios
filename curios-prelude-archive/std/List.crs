@@ -176,23 +176,39 @@ pub let sort_by(@T: Type, l: List(T), ord: (T, T) -> Ordering) -> List(T) =
 pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
     sort_by(l, (a, b) => Ord/ord(a, b));
 
---- `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`.
+--- `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`. Each single is asked for with the proof that its index is below `n`, so a caller indexing `n` elements reads them without a default.
 ---
---- The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type.
-pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
-    let go(fuel: Nat, lo: Nat, hi: Nat) -> A =
+--- The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type. The interval's end stays within `n`, since a midpoint is below the end it halves.
+pub let balanced(
+    @A: Type,
+    n: Nat,
+    empty: A,
+    single: (i: Nat, Nat/Lt(i, n)) -> A,
+    combine: (A, A) -> A,
+) -> A =
+    let go(fuel: Nat, lo: Nat, hi: Nat, bounded: Nat/Le(hi, n)) -> A =
         match fuel
         | 0 => empty
         | pred + 1 =>
             choose
             | lo + 1 < hi =>
                 let mid = (lo + hi) / 2;
-                combine(go(pred, lo, mid), go(pred, mid, hi))
-            | lo < hi => single(lo)
+                let apart: Nat/Le(lo + 1, hi) = Nat/Lt/le_of_lt(lo + 1, hi, Bool/True/qed());
+                let twice: Nat/Lt(lo + hi, hi * 2) =
+                    Nat/Lt/lt_of_le_succ(lo + hi, hi * 2, Nat/Le/add_mono_l(hi, apart));
+                let below: Nat/Lt(mid, hi) = Nat/div_mod/div_lt_of_lt_mul(hi, lo + hi, 2, twice);
+                combine(
+                    go(
+                        pred,
+                        lo,
+                        mid,
+                        Nat/Le/trans(@mid, @hi, @n, Nat/Lt/le_of_lt(mid, hi, below), bounded)),
+                    go(pred, mid, hi, bounded))
+            | lo < hi => single(lo, Nat/Lt/lt_of_lt_le(lo, hi, n, Bool/True/qed(), bounded))
             | _ => empty
             end
         end;
-    go(n, 0, n);
+    go(n, 0, n, Nat/Le/refl(n));
 
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql(a, b) =

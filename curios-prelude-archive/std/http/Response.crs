@@ -84,20 +84,22 @@ let hex_value(byte: Byte) -> Option(Nat) =
     | _ => Option/none()
     end;
 
-let is_hex(byte: Byte) -> Bool =
-    Option/is_some(hex_value(byte));
-
-let hex_number(b: Bytes) -> Nat =
-    Bytes/fold(b, 0, (byte, acc) => acc * 16 + Option/unwrap_or(hex_value(byte), 0));
+--- One hexadecimal digit's value; declines, consuming nothing, at anything else.
+let hex_digit: Parse(Nat) =
+    Parse/bind(Parse/any_byte, (byte) =>
+        match hex_value(byte)
+        | some(v) => Parse/pure(v)
+        | none() => Parse/fail("a hexadecimal digit")
+        end);
 
 --- One chunk's size line: the hexadecimal size, any extension after `;` ignored, then the line's end.
 let chunk_size: Parse(Nat) =
-    let digits = Parse/take_while(is_hex)!;
+    let digits = Parse/many0(hex_digit)!;
     let _ = Parse/take_while(until('\r'))!;
     let _ = Parse/take_literal("\r\n")!;
-    match Bytes/len(digits) == 0
-    | true => Parse/fail("a chunk states its size")
-    | false => Parse/pure(hex_number(digits))
+    match digits
+    | [] => Parse/fail("a chunk states its size")
+    | _ => Parse/pure(List/fold(digits, 0, (digit, acc) => acc * 16 + digit))
     end;
 
 --- The chunks until the empty one, then any trailers, then the block's end; `acc` is what has arrived.
