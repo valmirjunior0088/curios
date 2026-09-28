@@ -4,7 +4,7 @@
 //!
 //! `mark` and `retract` are `pub(super)` and `Kernel::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
-use curios_core::{Free, Term};
+use curios_core::{Bound, Free, Term};
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
 #[derive(Clone, Copy)]
@@ -33,10 +33,19 @@ enum Reduct {
     Known(Option<Term>),
 }
 
+/// A binder the walk in progress opened.
+struct Local {
+    name: Free,
+    /// What it was opened at. A local has a type and never a value: `let` substitutes rather than binding, so nothing in scope here can be unfolded.
+    type_: Term,
+    /// `type_` as the conversion history keys it, with every binder opened before it renamed to its position — or `None` for a type with loose indices, whose renaming depends on how many binders stand beside it and is taken at each key instead. See [`Scope::history_context`].
+    keyed: Option<Term>,
+}
+
 #[derive(Default)]
 pub(super) struct Scope {
-    /// Binders opened by the walk in progress, with their types, outermost first. A local has a type and never a value: `let` substitutes rather than binding, so nothing in scope here can be unfolded.
-    locals: Vec<(Free, Term)>,
+    /// Binders opened by the walk in progress, outermost first.
+    locals: Vec<Local>,
     /// The case equations of the arms currently being checked, innermost last: within an arm, the scrutinee expression *is* the case's value, definitionally — the built-in face of the convoy pattern, which is how the elaborator's refinement store reads inside an arm. The reducer consults these at stuck heads.
     refinements: Vec<Refinement>,
     /// How many equations are currently in force, when that is fewer than there are. `Some(n)` withholds everything from `n` inwards for the duration of one [`Scope::unasked_refinement`] settlement — see [`Scope::hide_refinements_from`].
@@ -46,7 +55,19 @@ pub(super) struct Scope {
 impl Scope {
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     pub(super) fn assume(&mut self, name: &Free, type_: &Term) {
-        self.locals.push((name.clone(), type_.clone()));
+        let keyed = (type_.reach() == 0).then(|| {
+            let opened = self
+                .locals
+                .iter()
+                .map(|local| &local.name)
+                .collect::<Vec<_>>();
+            type_.capture(&opened)
+        });
+        self.locals.push(Local {
+            name: name.clone(),
+            type_: type_.clone(),
+            keyed,
+        });
     }
 
     /// Whether any arm's case equation is currently in force — the judgment-side half of the closed machine's gate: inside an arm a closed scrutinee *is* the assumed value, so closed evaluation must stand aside for the strategy that consults these.
@@ -133,14 +154,35 @@ impl Scope {
         self.hidden = previous;
     }
 
-    /// The types of the binders currently in scope, outermost first. The conversion history keys on this: the same goal under a different context is a different goal.
+    /// The types of the binders currently in scope, outermost first.
     pub(super) fn local_types(&self) -> Vec<Term> {
-        self.locals.iter().map(|(_, type_)| type_.clone()).collect()
+        self.locals
+            .iter()
+            .map(|local| local.type_.clone())
+            .collect()
     }
 
     /// The identities of the binders currently in scope, outermost first — parallel to [`Scope::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
     pub(super) fn local_names(&self) -> Vec<Free> {
-        self.locals.iter().map(|(name, _)| name.clone()).collect()
+        self.locals.iter().map(|local| local.name.clone()).collect()
+    }
+
+    /// The types of the binders currently in scope, outermost first, each with every binder renamed to its position: the context the conversion history keys a goal on, since the same goal under a different context is a different goal.
+    ///
+    /// **Renamed once per binder, when it opens, rather than at every goal.** A local's type mentions only binders opened before it, and `capture` gives a binder the index of its position in the list — so renaming it against the binders in scope at a goal, all of them, gives what renaming it against those before it gave, and the history's keys are unchanged. What changed is the cost. The history keys every comparison it enters, and renamed the whole context each time: a type-level text search compared under binders whose types carry its positions, whose graphs are large, entered thirty-eight thousand goals and spent fifty-four of its sixty seconds renaming the same context over again. A type with loose indices is the exception, because its renaming shifts them past however many binders stand beside it, so it is renamed at each key exactly as before.
+    pub(super) fn history_context(&self) -> Vec<Term> {
+        let names = self
+            .locals
+            .iter()
+            .map(|local| &local.name)
+            .collect::<Vec<_>>();
+        self.locals
+            .iter()
+            .map(|local| match &local.keyed {
+                Some(keyed) => keyed.clone(),
+                None => local.type_.capture(&names),
+            })
+            .collect()
     }
 
     /// The type `name` was opened at, if it is a binder currently in scope.
@@ -150,8 +192,8 @@ impl Scope {
         self.locals
             .iter()
             .rev()
-            .find(|(bound, _)| bound == name)
-            .map(|(_, type_)| type_)
+            .find(|local| local.name == *name)
+            .map(|local| &local.type_)
     }
 
     /// The current depth of both stacks, to be handed back to [`Scope::retract`].

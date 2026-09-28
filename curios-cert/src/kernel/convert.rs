@@ -83,7 +83,7 @@ impl History {
         let rename = |term: &Term| term.capture(&refs);
 
         let goal = Goal {
-            context: kernel.local_types().iter().map(rename).collect(),
+            context: kernel.history_context(),
             type_: rename(type_),
             this: rename(this),
             that: rename(that),

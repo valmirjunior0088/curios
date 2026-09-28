@@ -755,9 +755,14 @@ impl Kernel {
         self.scope.has_refinements()
     }
 
-    /// The types of the binders currently in scope, outermost first. The conversion history keys on this: the same goal under a different context is a different goal.
+    /// The types of the binders currently in scope, outermost first.
     pub(crate) fn local_types(&self) -> Vec<Term> {
         self.scope.local_types()
+    }
+
+    /// The context the conversion history keys a goal on: the binders' types with every binder renamed to its position, taken once per binder when it opens — see the scope's `history_context`.
+    pub(crate) fn history_context(&self) -> Vec<Term> {
+        self.scope.history_context()
     }
 
     /// The identities of the binders currently in scope, outermost first — parallel to [`Kernel::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
