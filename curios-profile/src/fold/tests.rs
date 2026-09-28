@@ -200,6 +200,110 @@ fn a_span_re_entered_within_itself_measures_each_extent() {
     assert_eq!(report.summaries[0].total, Duration::from_nanos(500));
 }
 
+// Self time is what a row per judgment can be added up by: each span keeps only the part of its extent no span entered directly inside it took, in time and in bytes alike.
+#[test]
+fn self_time_excludes_the_spans_entered_directly_inside() {
+    let report = folded(
+        "D\t0\tcurios_cert\tcertify_declaration\n\
+         D\t1\tcurios_cert\tkernel::convert\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         S\t2\t1\t100\n\
+         E\t2\t1\t100\t0\t100\t0\t0\n\
+         X\t2\t1\t400\t0\t400\t0\t0\n\
+         C\t2\t1\t400\n\
+         S\t3\t1\t500\n\
+         E\t3\t1\t500\t0\t500\t0\t0\n\
+         X\t3\t1\t700\t0\t600\t0\t0\n\
+         C\t3\t1\t700\n\
+         X\t1\t0\t1000\t0\t1000\t0\t0\n\
+         C\t1\t0\t1000\n",
+    );
+
+    let row = |name: &str| {
+        report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name)
+            .expect("the span folds")
+    };
+    let declaration = row("certify_declaration");
+    let convert = row("kernel::convert");
+
+    assert_eq!(declaration.total, Duration::from_nanos(1000));
+    assert_eq!(declaration.self_total, Duration::from_nanos(500));
+    assert_eq!(
+        (declaration.allocated, declaration.self_allocated),
+        (1000, 600)
+    );
+    assert_eq!(convert.total, Duration::from_nanos(500));
+    assert_eq!(convert.self_total, Duration::from_nanos(500));
+    assert_eq!((convert.allocated, convert.self_allocated), (400, 400));
+}
+
+// The case inclusive time cannot serve: a span entered within itself counts the inner extent in both entries' totals, and once in their self times, so a recursive judgment's self row is the time it actually took.
+#[test]
+fn a_span_re_entered_within_itself_counts_each_nanosecond_once_in_its_self_time() {
+    let report = folded(
+        "D\t0\tcurios_cert\tkernel::convert\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         S\t2\t0\t200\n\
+         E\t2\t0\t200\t0\t0\t0\t0\n\
+         X\t2\t0\t600\t0\t0\t0\t0\n\
+         C\t2\t0\t600\n\
+         X\t1\t0\t1000\t0\t0\t0\t0\n\
+         C\t1\t0\t1000\n",
+    );
+
+    let summary = &report.summaries[0];
+    assert_eq!(summary.total, Duration::from_nanos(1400));
+    assert_eq!(summary.self_total, Duration::from_nanos(1000));
+}
+
+// Spans that do not nest cannot be told apart from a stream that interleaved threads, so an exit from below the innermost entry keeps its whole extent as its own and credits no parent, rather than handing its time to whichever span happens to be innermost.
+#[test]
+fn an_exit_that_is_not_the_innermost_entry_credits_no_parent() {
+    let report = folded(
+        "D\t0\tcurios_core\tfirst\n\
+         D\t1\tcurios_core\tsecond\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         S\t2\t1\t100\n\
+         E\t2\t1\t100\t0\t0\t0\t0\n\
+         X\t1\t0\t300\t0\t0\t0\t0\n\
+         C\t1\t0\t300\n\
+         X\t2\t1\t500\t0\t0\t0\t0\n\
+         C\t2\t1\t500\n",
+    );
+
+    let row = |name: &str| {
+        report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name)
+            .expect("the span folds")
+    };
+    assert_eq!(row("first").self_total, Duration::from_nanos(300));
+    assert_eq!(row("second").self_total, Duration::from_nanos(400));
+}
+
+// A rotation can discard the entry of a span whose children survive, and nothing is invented for it: the children keep their own time, and the exit the stream never saw entered credits no one.
+#[test]
+fn a_span_whose_parent_entered_before_the_stream_opened_keeps_its_own_time() {
+    let report = folded(
+        "D\t0\tcurios_cert\tkernel::convert\n\
+         E\t5\t0\t100\t0\t0\t0\t0\n\
+         X\t5\t0\t300\t0\t0\t0\t0\n\
+         C\t5\t0\t300\n\
+         X\t4\t0\t900\t0\t0\t0\t0\n",
+    );
+
+    let summary = &report.summaries[0];
+    assert_eq!(summary.calls, 1);
+    assert_eq!(summary.self_total, Duration::from_nanos(200));
+}
+
 // A row cut short by a kill is the normal ending of a stream, not a corruption, so a partial last line is skipped and everything before it still folds.
 #[test]
 fn a_row_cut_short_by_a_kill_is_skipped() {

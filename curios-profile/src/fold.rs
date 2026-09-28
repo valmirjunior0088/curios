@@ -2,6 +2,8 @@
 //!
 //! Every statistic here is derived, which is the point. A duration is an exit differenced against its entry, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the `V` rows — so a question the columns below do not answer is asked of the file directly rather than by changing what a capture keeps.
 //!
+//! **Self time is derived the same way, from the order the rows arrive in.** Each exit credits its extent to the span it was entered inside, so a span's own share is its extent less what its children took. That needs no new row: nesting is already in the stream, as the order of the `E` and `X` rows on the one thread a stream's spans nest on.
+//!
 //! **A truncated stream folds.** Rotation discards the older file, so the surviving one can open in the middle of a span's life: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
 //!
 //! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process. Which files a rotated stream occupies is the writer's decision, so it is answered here rather than by whoever asks.
@@ -78,7 +80,9 @@ impl SampleSummary {
 
 /// Aggregate statistics for every span with the same target, name and group.
 ///
-/// Every figure counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, so they are all zero unless the binary that wrote the stream was built with `enabled`, which is what installs the counting allocator.
+/// Every figure but the two *self* ones counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, so they are all zero unless the binary that wrote the stream was built with `enabled`, which is what installs the counting allocator.
+///
+/// **The self figures are what the inclusive ones cannot be for mutually recursive work.** A judgment that re-enters itself through another — typing calls conversion, which types again — counts each nested extent once per enclosing entry, so its inclusive row overstates it and a row per judgment cannot be added up. [`self_total`](Self::self_total) and [`self_allocated`](Self::self_allocated) subtract every span entered directly inside, so each nanosecond and each byte is attributed to exactly one span, the innermost one entered, and the self rows of one stream partition what its spans cover.
 #[derive(Debug)]
 pub struct ProfileSummary {
     /// The tracing target that owns the span.
@@ -91,6 +95,8 @@ pub struct ProfileSummary {
     pub calls: u64,
     /// Sum of the time for which the spans were entered.
     pub total: Duration,
+    /// The part of [`total`](Self::total) no span entered inside these ones accounts for.
+    pub self_total: Duration,
     /// Shortest closed span.
     pub min: Duration,
     /// Longest closed span.
@@ -99,6 +105,8 @@ pub struct ProfileSummary {
     pub retained: i64,
     /// Bytes the spans took while entered, whether or not later returned. A pass that allocates heavily and frees as it goes shows large `allocated` beside near-zero [`retained`](Self::retained).
     pub allocated: u64,
+    /// The part of [`allocated`](Self::allocated) no span entered inside these ones accounts for.
+    pub self_allocated: u64,
     /// Trips through the allocator while the spans were entered. Divided into [`allocated`](Self::allocated) it gives the average request size, which is what separates a pass that wants fewer allocations from one that wants a smaller structure.
     pub allocations: u64,
 }
@@ -135,18 +143,20 @@ impl ProfileReport {
     /// One renderer, because there were two. The CLI and the prelude build script each formatted these columns by hand and had already drifted apart in which ones they printed, which is the drift a second implementation of one format buys.
     pub fn render(&self) -> String {
         let mut rendered = format!(
-            "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\tgroup\t(peak {:.1} MiB)\n",
+            "total_ms\tself_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tself_allocated_mb\tallocs\ttarget\tname\tgroup\t(peak {:.1} MiB)\n",
             self.peak as f64 / (1024.0 * 1024.0),
         );
         for summary in &self.summaries {
             rendered.push_str(&format!(
-                "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}\n",
+                "{:.3}\t{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}\n",
                 summary.total.as_secs_f64() * 1_000.0,
+                summary.self_total.as_secs_f64() * 1_000.0,
                 summary.calls,
                 summary.min.as_secs_f64() * 1_000.0,
                 summary.max.as_secs_f64() * 1_000.0,
                 summary.retained as f64 / (1024.0 * 1024.0),
                 summary.allocated as f64 / (1024.0 * 1024.0),
+                summary.self_allocated as f64 / (1024.0 * 1024.0),
                 summary.allocations,
                 summary.target,
                 summary.name,
@@ -193,12 +203,22 @@ impl ProfileReport {
 struct Open {
     callsite: u32,
     group: Option<String>,
-    /// One reading set per entry not yet matched by an exit, so a span re-entered within itself is measured over each extent rather than the outermost.
-    entered: Vec<Readings>,
+    /// One entry not yet matched by an exit, so a span re-entered within itself is measured over each extent rather than the outermost.
+    entered: Vec<Entry>,
     elapsed: u128,
+    own: u128,
     retained: i64,
     allocated: u64,
+    own_allocated: u64,
     allocations: u64,
+}
+
+/// One entry of a span: the readings it opened with, and what the spans entered directly inside it have taken so far — the part of its extent that is not its own.
+#[derive(Clone, Copy, Default)]
+struct Entry {
+    readings: Readings,
+    nested: u128,
+    nested_allocated: u64,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -215,10 +235,12 @@ struct Readings {
 struct Aggregate {
     calls: u64,
     total: u128,
+    own: u128,
     min: Option<u128>,
     max: u128,
     retained: i64,
     allocated: u64,
+    own_allocated: u64,
     allocations: u64,
 }
 
@@ -234,6 +256,8 @@ struct Distribution {
 struct Fold {
     callsites: BTreeMap<u32, (String, String)>,
     open: BTreeMap<u64, Open>,
+    /// The spans entered and not yet exited, innermost last — what an exit credits its extent to. One stack for the stream, because the spans a stream records nest on one thread: the compiler is single-threaded by construction, and a build script runs on one. A stream that did interleave threads would fold with its inclusive figures intact and its self figures misattributed, which is why an exit that is not the innermost entry credits no one.
+    stack: Vec<u64>,
     spans: BTreeMap<(String, String, Option<String>), Aggregate>,
     samples: BTreeMap<(String, String), Distribution>,
     peak: u64,
@@ -304,7 +328,11 @@ impl Fold {
         let span = self.open.entry(id).or_default();
         // A stream that opened mid-life has no creation row for this span; the id still names its callsite.
         span.callsite = callsite;
-        span.entered.push(readings);
+        span.entered.push(Entry {
+            readings,
+            ..Entry::default()
+        });
+        self.stack.push(id);
     }
 
     fn exit<'row>(&mut self, columns: impl Iterator<Item = &'row str>) {
@@ -320,10 +348,37 @@ impl Fold {
             return;
         };
 
-        span.elapsed += readings.at.saturating_sub(entry.at);
-        span.retained += readings.live as i64 - entry.live as i64;
-        span.allocated += readings.allocated.saturating_sub(entry.allocated);
-        span.allocations += readings.allocations.saturating_sub(entry.allocations);
+        let elapsed = readings.at.saturating_sub(entry.readings.at);
+        let allocated = readings.allocated.saturating_sub(entry.readings.allocated);
+        span.elapsed += elapsed;
+        span.own += elapsed.saturating_sub(entry.nested);
+        span.retained += readings.live as i64 - entry.readings.live as i64;
+        span.allocated += allocated;
+        span.own_allocated += allocated.saturating_sub(entry.nested_allocated);
+        span.allocations += readings
+            .allocations
+            .saturating_sub(entry.readings.allocations);
+
+        // Credited to the span it was entered inside only when it is the innermost entry, which is what properly nested spans always are; an exit from anywhere else is left out of every parent's nesting rather than attributed to the wrong one.
+        match self.stack.last() {
+            Some(&innermost) if innermost == id => {
+                self.stack.pop();
+                if let Some(parent) = self
+                    .stack
+                    .last()
+                    .and_then(|parent| self.open.get_mut(parent))
+                    .and_then(|parent| parent.entered.last_mut())
+                {
+                    parent.nested += elapsed;
+                    parent.nested_allocated += allocated;
+                }
+            }
+            _ => {
+                if let Some(position) = self.stack.iter().rposition(|&entered| entered == id) {
+                    self.stack.remove(position);
+                }
+            }
+        }
     }
 
     fn close<'row>(&mut self, mut columns: impl Iterator<Item = &'row str>) {
@@ -338,6 +393,7 @@ impl Fold {
         let aggregate = self.spans.entry((target, name, span.group)).or_default();
         aggregate.calls += 1;
         aggregate.total += span.elapsed;
+        aggregate.own += span.own;
         aggregate.min = Some(
             aggregate
                 .min
@@ -346,6 +402,7 @@ impl Fold {
         aggregate.max = aggregate.max.max(span.elapsed);
         aggregate.retained = aggregate.retained.saturating_add(span.retained);
         aggregate.allocated = aggregate.allocated.saturating_add(span.allocated);
+        aggregate.own_allocated = aggregate.own_allocated.saturating_add(span.own_allocated);
         aggregate.allocations = aggregate.allocations.saturating_add(span.allocations);
     }
 
@@ -386,10 +443,12 @@ impl Fold {
                 group: group.clone(),
                 calls: aggregate.calls,
                 total: nanos(aggregate.total),
+                self_total: nanos(aggregate.own),
                 min: nanos(aggregate.min.unwrap_or_default()),
                 max: nanos(aggregate.max),
                 retained: aggregate.retained,
                 allocated: aggregate.allocated,
+                self_allocated: aggregate.own_allocated,
                 allocations: aggregate.allocations,
             })
             .collect::<Vec<_>>();
@@ -436,7 +495,7 @@ impl Fold {
                     name,
                     group: span.group.clone(),
                     depth: span.entered.len(),
-                    entered: entered.at,
+                    entered: entered.readings.at,
                 })
             })
             .collect::<Vec<_>>();
