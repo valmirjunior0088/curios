@@ -699,7 +699,7 @@ impl Remembered {
     }
 }
 
-/// A memo keyed by node identity for a walk written by hand rather than driven by a [`Visit`] — the elaborator's strict zonk is one — under [`Memo`]'s law and its span rule: a hit whose rebuild carries the span of the occurrence that filled it takes the asking occurrence's.
+/// A memo keyed by node identity for a walk written by hand rather than driven by a [`Visit`] — the elaborator's strict zonk is one — under the visit memo's law and its span rule: a hit whose rebuild carries the span of the occurrence that filled it takes the asking occurrence's.
 ///
 /// **It holds every key it was filled from**, where a visit's memo holds none. A visit keys only the nodes of the value it walks, which that value keeps alive; a hand-written walk may key a term it built itself, and a key freed while the memo lives is an address the allocator can hand to another node, whose lookup would then answer with the first one's rebuild.
 #[derive(Default)]
