@@ -620,6 +620,30 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// # What it last printed
 ///
+/// Taken **2026-09-28**, **debug**, on `aarch64-apple-darwin`, after the standard-library invariants work, which rewrote how a literal's validity is decided and replaced the cut's `Str/slice` with `Str/before` at a position.
+///
+/// ```text
+///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
+///   Str literal, n=250           27130       2      25082         64997       28411       6      22267             0     1.0x
+///   Str literal, n=500           39445       1      38421         65028       39489       1      38465             0     1.0x
+///   Str literal, n=1000          73945       1      72921         65090       73989       1      72965             0     1.0x
+///   Str literal, n=2000         142945       1     141921         65215      142989       1     141965             0     1.0x
+///   Str literal, n=4000         280945       1     279921         65465      280989       1     279965             0     1.0x
+///   Str literal, n=8000         556945       1     555921         65965      556989       1     555965             0     1.0x
+///   Str n=500, 1 uses            39445       1      38421         65192       39489       1      38465             0     1.0x
+///   Str n=500, 3 uses            39445       1      38421         65192       39489       1      38465             0     1.0x
+///   Bytes literal, n=500         27130       2      25082         64715       28411       6      22267             0     1.0x
+///   Str n=500, cut               39445       1      38421         67423       39489       1      38465             0     1.0x
+/// ```
+///
+/// **A character still costs 69 units on each checker**, read between the `n=4000` and `n=8000` rows as in the table below: the decision behind the certificate was rewritten and its price did not move.
+///
+/// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers; its elaborator retention is 2 395 units, 3.7%, above the bare row's.
+///
+/// **The `kernel/elab` column reads 1.0× at every size, and the elaborator's retention is still flat**: 64 997 to 65 965 units across the ladder, one unit per eight characters as before, about 2 900 above the previous take. The `n=250` and `Bytes` rows still measure the heaviest declaration other than the literal, now 27 130 units on the elaborator where it was 25 832.
+///
+/// # What it printed on 2026-09-17
+///
 /// Taken **2026-09-17**, **debug**, on `x86_64-unknown-linux-gnu`, with the literal's certificate `True/qed()` against the decided `Str/Valid`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
