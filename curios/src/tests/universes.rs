@@ -361,3 +361,24 @@ fn a_self_recursive_call_a_level_above_its_own_certifies() {
 
     assert_eq!(run(source), b"0");
 }
+
+// **A type's spelling carries a universe its value need not.** `Pick(true)` is `Nat`, in `Type 0`, but a call to `Pick` is typed by `Pick`'s codomain, `Type 1`, which the other arm's quantifier over `Type` needs. `three`'s type is that call, so `same`'s `@A` meets it as written; solved by that spelling, `A` would sit in `Type 1`, where `Nat`'s `Eql` witness, at `Type 0`, then asks it to be strictly below itself. A solver that committed the rigid side as written did exactly that; one that commits the reduct names the type at its own universe.
+#[test]
+fn a_type_named_through_a_higher_universe_solves_at_its_own() {
+    let source = r#"
+        use /std/{Bool, Nat};
+        use /std/ops/{Eql};
+
+        let Pick(b: Bool) -> Type =
+            match b
+            | true => Nat
+            | false => (A: Type) -> A
+            end;
+        let same(@A: Type, use Eql(A), x: A, y: A) -> Bool = x == y;
+        let three: Pick(true) = 3;
+
+        /std/print(Bool/to_str(same(three, 3)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}

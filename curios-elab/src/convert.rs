@@ -25,7 +25,8 @@ mod test_support;
 
 use {
     super::{
-        Context, applied_head, check, infer, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
+        Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
+        unfold_rec_apply,
     },
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Free, Func, FuncType,
@@ -1474,10 +1475,10 @@ impl Convert {
         rigid_raw: &Term,
     ) -> Result<Solved, ReduceError> {
         if !context.has_refinements() {
-            // The rigid side is committed as written when that passes every check, and falls back to its reduced spelling on any other verdict, so no equation this decided before is lost. The two are one term — the reduced spelling is a reduct of the written one, and reduction takes the written one back to it wherever a value is demanded — so what the choice decides is only what is stored, and every later reader walks what is stored: re-validation checks it, a report materializes it, the kernel receives it.
-            //
-            // The written spelling is what the program wrote, and its size is the source's. A reduct's is not bounded by anything the program shows: a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the position before it four times — and re-validating one such solution cost the whole of an eight-character search stated in a type. The rule began narrower, for a name that only unfolded into a stuck form (`double(n)` to the folded call's neutral), where it keeps the name in reports and the call in the kernel's term instead of an inlined copy of the recursive group; those reasons are the general case's too.
-            if let Solved::Done = self.solve(context, metavar, rigid_raw)? {
+            // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation this decided before is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
+            if stalled_unfolding(rigid_raw, rigid)
+                && let Solved::Done = self.solve(context, metavar, rigid_raw)?
+            {
                 return Ok(Solved::Done);
             }
             return self.solve(context, metavar, rigid);

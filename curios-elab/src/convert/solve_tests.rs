@@ -17,30 +17,6 @@ fn flex_rigid_commits_solution() {
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat));
 }
 
-/// A flexible side is solved by the rigid side as written, not as reduced: here a redex, not the `3` it computes. The two are one term, and the written one is the program's size, while a reduct can be a graph whose tree is exponential — and re-validation, a report and the kernel each walk what the solution stores. Both orders of the problem commit the same spelling.
-#[test]
-fn a_flexible_side_is_solved_by_the_rigid_side_as_written() {
-    for flexible_first in [true, false] {
-        let mut context = context();
-        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
-        let x = context.fresh(Some("x"));
-        let redex = Term::apply(
-            Term::func(
-                [(x.clone(), nat_type())],
-                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
-            ),
-            [nat(2)],
-        );
-
-        let verdict = match flexible_first {
-            true => conv(&mut context, &Term::hole(0), &redex),
-            false => conv(&mut context, &redex, &Term::hole(0)),
-        };
-        assert_eq!(verdict, Ok(true));
-        assert_eq!(context.metavar_solution(MetavarId(0)), Some(&redex));
-    }
-}
-
 #[test]
 fn solve_is_symmetric() {
     let mut context = context();
