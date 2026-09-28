@@ -38,7 +38,7 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
     let bytes = curios_binaryen::optimize(raw, cfg!(feature = "profile"));
 
-    curios_runtime::precompile(&bytes)
+    curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
 }
 
 /// Optimize `module` and emit `Stage::WasmOptm` — Binaryen's own text rendering of the result — through `observe`, exactly as the driver emits every other stage at its production site. This is the one stage the pure pipeline cannot emit, produced here because this crate is where Binaryen runs; the caller chose this function *because* it wants the dump, so names ride unconditionally.
