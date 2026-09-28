@@ -45,3 +45,58 @@ The reduction inside `infer_type` is what makes the two mechanisms interlock: ty
 **Counts are checked at the boundary, because typing never sees them.** An occurrence's parameters and indices, a value's parameters, a constructor tag's uniqueness, a plicity vector's parallelism: no typing rule reads a length, so no ordering discipline will ever catch these. They are checked where the declaration is consulted, and removing them leaves a malformed occurrence *certified* rather than merely aborting — the permissive failure, not the loud one.
 
 **Rationale.** Six defects arrived through the gap between "the kernel reads a field" and "something established the field". Two produced level capture and a bypassed large-elimination guard; four aborted the walk. Fixing them one guard at a time closed instances, never the class. The split above is what makes each class impossible rather than caught: shapes by typing, counts by the boundary, and neither able to abort.
+
+## Measuring the certifier
+
+**The instrument.** `cargo x clippy` builds `curios-prelude` with `--all-features`, and its build script certifies the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`; the elaboration's stream is `curios-prelude-archive/.artifacts/profile.tsv`. The walk carries three kinds of span:
+
+- **per item:** `certify_declaration`, grouped by `Item::describe` as the elaborator's `declaration` span is, so one item's cost in each checker is found under one key;
+- **per stage of the walk:** `universe_verdict`; `partial_definitions` and `check_positions` for obligations (T) and (V); `check_entrypoint`; `check_induct_decl` and `check_struct_decl`; and the shared `positivity_vectors`. What no span covers — the residue and escape checks — is `recheck_module`'s own self time;
+- **per judgment:** `convert`; `reduce` and `reduce_forced`, reduction entered from outside reduction, the second past its memo so a hit costs no row; `Sort::of`; `entails`; and the shared analyses' `group_totality` and `invert_with`. Typing is `certify_declaration`'s self time.
+
+**To retake.** Run `cargo x clippy`, then fold the stream with `cargo run --all-features --package curios -- profile curios-prelude/.artifacts/profile.tsv`. Read the self columns: a fold attributes each nanosecond and each byte to the innermost span entered, so judgment rows that re-enter one another add up where their inclusive totals do not. The stream is an instrumented debug build script's, so a duration is inflated — the spans themselves cost the walk about ten seconds — while call counts and allocation are the stable figures. An item's cost in the kernel is read beside its cost in the elaborator by summing each stream's per-item span by group and joining the two:
+
+```sh
+per_item() { awk -F'\t' -v span="$1" '$1=="D"{n[$2]=$4} $1=="S"&&n[$3]==span{g="";for(i=5;i<=NF;i++)if(substr($i,1,6)=="group=")g=substr($i,7);of[$2]=g} $1=="E"&&($2 in of){at[$2]=$4} $1=="X"&&($2 in at){t[of[$2]]+=$4-at[$2];delete at[$2]} END{for(g in t)printf "%.1f\t%s\n",t[g]/1e6,g}' "$2" | sort -t$'\t' -k2; }
+join -t$'\t' -1 2 -2 2 <(per_item declaration curios-prelude-archive/.artifacts/profile.tsv) <(per_item certify_declaration curios-prelude/.artifacts/profile.tsv) | sort -t$'\t' -k3 -rn | head
+```
+
+The columns are the item, its elaboration milliseconds and its certification milliseconds. `Item::describe` names every witness of a module alike, so a module's witnesses share one row.
+
+**The baseline**, at `19809241`, over `/sys` and `/std`:
+
+| Span | Calls | Total | Self | Allocated | Self allocated |
+| --- | --- | --- | --- | --- | --- |
+| `recheck_module` | 2 | 52.4 s | 1.0 s | 8 139 MB | 119 MB |
+| `certify_declaration` | 2 421 | 49.3 s | 11.1 s | 7 742 MB | 1 653 MB |
+| `reduce_forced` | 96 579 | 19.9 s | 6.5 s | 1 772 MB | 509 MB |
+| `Sort::of` | 147 378 | 16.1 s | 8.4 s | 3 348 MB | 1 909 MB |
+| `convert` | 101 155 | 14.3 s | 3.3 s | 2 571 MB | 350 MB |
+| `entails` | 42 824 | 9.6 s | 9.6 s | 2 220 MB | 2 220 MB |
+| `machine::reduce_closed` | 85 622 | 6.5 s | 5.5 s | 878 MB | 849 MB |
+| `partial_definitions` | 2 | 1.1 s | 0.8 s | 86 MB | 39 MB |
+| `check_positions` | 2 423 | 0.48 s | 0.47 s | 88 MB | 87 MB |
+| `group_totality` | 1 146 | 0.37 s | 0.18 s | 52 MB | 27 MB |
+| `check_induct_decl` | 64 | 0.18 s | 0.06 s | 57 MB | 19 MB |
+| `check_struct_decl` | 94 | 0.15 s | 0.05 s | 24 MB | 8 MB |
+| `positivity_vectors` | 2 | 0.10 s | 0.03 s | 20 MB | 2 MB |
+| `reduce` | 3 063 | 0.10 s | 0.05 s | 17 MB | 8 MB |
+| `invert_with` | 4 726 | 0.03 s | 0.03 s | 1 MB | 1 MB |
+| `universe_verdict` | 2 605 | 0.02 s | 0.02 s | 3 MB | 3 MB |
+
+The `nat::*` and `truth::decide_bool` rows beside these are the algebra's, whose record is its own.
+
+The heaviest items in the kernel, beside their elaboration:
+
+| Item | Elaboration | Certification |
+| --- | --- | --- |
+| the witnesses in `/std/Try` | 1 210 ms | 9 504 ms |
+| `/std/http/Url/lit` | 57 ms | 1 224 ms |
+| `/std/Flt/significant` | 201 ms | 1 073 ms |
+| the witnesses in `/std/Tuple` | 1 546 ms | 1 033 ms |
+| `/std/Flt/to_str` | 1 537 ms | 808 ms |
+| `/std/Tui/input/decode` | 787 ms | 787 ms |
+| `/std/Flt/of_decimal_in` | 295 ms | 623 ms |
+| `/std/Cli/step` | 915 ms | 622 ms |
+
+**What it showed first.** `entails` is almost wholly one witness: 9.2 s of its 9.6 s is `/std/Try`'s lift between two `Try`s, 46 level questions under 27 assumed `max(…) ≤ max(…)` constraints, each answered `true` after a depth-first search whose dead ends it never remembers — the costliest of them asking for a bound the hypotheses state verbatim.
