@@ -99,7 +99,7 @@ pub(crate) fn js_test() -> Result<(), String> {
     Ok(())
 }
 
-/// The one spelling of the rustdoc build: the gate's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
+/// The one spelling of the rustdoc build: the gate's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
 pub(crate) fn rust_docs() -> Result<(), String> {
     runtime()?;
 
@@ -108,6 +108,7 @@ pub(crate) fn rust_docs() -> Result<(), String> {
         "--workspace",
         "--no-deps",
         "--document-private-items",
+        "--keep-going",
     ])?;
 
     let landing = target_directory().join("doc").join("index.html");
