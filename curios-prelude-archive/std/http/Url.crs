@@ -217,7 +217,7 @@ pub let decode(component: Str) -> Option(Str) =
     let b = Str/to_bytes(component);
     Option/bind(decode_at(b, 0, x[], Bytes/len(b) + 1), Str/of_bytes);
 
---- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair that does not decode is dropped.
+--- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value, as the form encoding reads it, and a pair that does not decode is dropped.
 pub let query_pairs(u: Url) -> List({Str, Str}) =
     match u.query
     | none() => []

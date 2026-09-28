@@ -660,7 +660,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
             "Eq(Bytes/len(Flt/to_le_bytes(f)), 8)",
         ],
-        // A candidate law, refused because nothing decides it: true of the model now that every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/flt-laws-spec.md` states it among the decided laws to land.
+        // A candidate law, refused because nothing decides it: true of the model now that every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/algebra/03-declared-operations-spec.md` states it among the decided laws to land.
         refused: &["Eq(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
     },
     Carrier {
@@ -671,7 +671,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(a == b, b == a)",
             "Eq(a != b, b != a)",
         ],
-        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/flt-laws-spec.md` requests these laws; `documentation/roadmap/algebra-pt2-spec.md` retains the unrefined declaration and canonical-form design. Sorting operands in a fold would respell a term a guard's refinement is keyed on.
+        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/algebra/03-declared-operations-spec.md` declares them symmetric, decided by operand order in the judgment rather than by sorting in a fold, which would respell a term a guard's refinement is keyed on.
         refused: &[
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
             "Eq(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",
@@ -696,7 +696,7 @@ const CARRIERS: &[Carrier] = &[
         name: "Flt, sign operations and roundings",
         binders: "a: Flt, b: Flt, c: Flt",
         held: &[],
-        // Candidate laws, each a declaration `documentation/roadmap/flt-laws-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
+        // Candidate laws, each a declaration `documentation/roadmap/algebra/03-declared-operations-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
         refused: &[
             "Eq(Flt/neg(Flt/neg(a)), a)",
             "Eq(Flt/abs(Flt/abs(a)), Flt/abs(a))",

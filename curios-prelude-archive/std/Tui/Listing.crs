@@ -46,7 +46,7 @@ pub let move(l: Listing, code: Code) -> Listing =
         end
     end;
 
---- The items as rows, the selected one in `highlight`, scrolled so the selection is in view.
+--- The items as rows, the selected one in `highlight`, scrolled so the selection is in view. An empty listing selects nothing and draws from the top.
 pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
     let chosen = Option/unwrap_or(index(l), 0);
     let first = match chosen < h | true => 0 | false => chosen + 1 - h end;

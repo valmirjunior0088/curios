@@ -83,18 +83,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
   - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
+- [ ] `spine_whnf` checks a spine's length against the arity it opens, where a mismatch reaches `Telescope::open`'s assertion as a panic today; no program is known to reach it
 
 ### The certifier
 
 - [x] [Independent kernel in `curios-cert` re-checking what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)
-- [ ] [Certifier, part 1: independent certification records and call-site discovery](roadmap/certifier-pt1-spec.md) — totality stamps still come from elaboration and call-site discovery is shared
-  - [ ] The certifier profiled
-  - [ ] Its own verdict record in place of the carried totality stamps
-  - [ ] Call sites recorded during the certifier's own typing walk
-- [ ] [Certifier, part 2: checked evidence and trusted reasoning](roadmap/certifier-pt2-spec.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations
-  - [ ] Evidence checked, beginning with linear integer arithmetic's certificates
-  - [ ] Trusted-code requirements refined and enforced by the dependency graph
-  - [ ] The remaining soundness-perimeter changes, including the evaluator and shared reasoning
+- [ ] The certifier's own verdicts, read from its own walk, and checked evidence in place of trusted search — parts of the verdicts campaign under [Compiler architecture](#compiler-architecture)
 
 ### What conversion decides about the carriers
 
@@ -102,19 +96,16 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [Euclid's identity, a comparison split by sign, `Nat/to_int` as an ordered-semiring embedding, and a shift by a symbolic count](soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), each decided by both checkers and moved from the law grid's refused rows to its held ones
 - [x] [A product of two symbolic sums is its own weak-head form](design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md)
 - [x] [A stuck comparison is spelled one way](design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)
-- [ ] [Algebra, part 1: one owner for existing behavior](roadmap/algebra-pt1-spec.md) — today's mathematics is interleaved with Core terms and its comparison strategy is repeated in both checkers
-  - [ ] Existing intrinsic algebra consolidated into `curios-algebra`, with term adapters in Core
-  - [ ] One shared comparison strategy in Analysis and an inversion interface restricted to admissible deductions
-  - [ ] Baseline behavior and costs verified, replaced implementations removed, and durable contracts documented
-- [ ] [Algebra, part 2: broader reasoning and representations](roadmap/algebra-pt2-spec.md) — not refined yet; capabilities beyond the existing algebra
-  - [ ] Canonical algebraic forms and refinement keys
-  - [ ] Stronger Boolean and bitwise reasoning
-  - [ ] Linear integer arithmetic with search outside the certifier and checked certificates
-  - [ ] Expanded polynomial reasoning and unification
-  - [ ] Additional operation and morphism declarations, including `pow`
-  - [ ] One internal sequence carrier, preserving the guest carriers
-  - [ ] Bounds discharged from hypotheses by ordinary proofs
-  - [ ] Declaration-generated law grids and a theory audit
+- [ ] The carriers' algebra: one owner, declared operations, and bounds proved from the facts in scope
+  - [ ] [Algebra, part 0: what the campaign's baseline assumes](roadmap/algebra/00-prerequisites-spec.md) — `x + 1 <= y` and `x < y` are two relations at `Nat` though one at `Int`, and an implicit bound whose proposition is solved after its insertion is never filled
+  - [ ] [Algebra, part 1: one owner for the carriers' theory, declared and evidenced](roadmap/algebra/01-one-owner-spec.md) — today's mathematics is interleaved with Core terms, its comparison strategy is repeated in both checkers, and each carrier's laws are stated by hand
+  - [ ] [Algebra, part 2: a bound that follows from the facts in scope is proved by the elaborator](roadmap/algebra/02-bounds-from-facts-spec.md) — a bound that follows from a hypothesis or a guard by linear arithmetic is refused, and the author writes the lemma chain
+  - [ ] [Algebra, part 3: declared operations for `pow`, `min` and `max`, `abs` and `sign`, and the float identities](roadmap/algebra/03-declared-operations-spec.md) — `min`, `max`, `abs` and `sign` are library functions conversion sees unfolded, `pow` is no operation, and the float laws that hold for every bit pattern are refused
+  - [ ] [Algebra, part 4: relational facts decided in conversion, justified by checked evidence](roadmap/algebra/04-relational-layer-spec.md) — not refined yet; waits for a consumer that needs a relational fact by conversion rather than by proof
+- [ ] Canonical refinement keys in place of the spelling probes, deferred to a consumer
+- [ ] Polynomial unification proposals, deferred to a consumer
+- [ ] Boolean and bitwise normal forms, with a priced budget in place of the truth table's eight-atom cap, deferred to a consumer
+- [ ] A reflection law for `Bytes/eql`, deferred to a consumer
 
 ### Compile-time cost
 
@@ -126,6 +117,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A string literal is checked once per use
 - [x] The unfolding discard decides on progress
 - [x] Five measured cliffs where an ordinary spelling cost superlinearly, or refused
+- [ ] Elaboration linear in `let` depth: a chain of 6,000 `let`s did not finish in 25 minutes
 
 ## Numbers and intrinsic carriers
 
@@ -161,13 +153,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ### Numeric library
 
-- [ ] [`Nat`: the Euclidean remainder past certified division, the unsigned binary scale, and `min` and `max` as declared operations](roadmap/nat-laws-spec.md)
-- [ ] [`Int`: multiplicative cancellation, `abs`, `sign`, `min` and `max` as declared operations, and the signed scale](roadmap/int-laws-spec.md)
-- [ ] [`Flt`: its decided laws and the theorems over its bits](roadmap/flt-laws-spec.md)
-- [ ] [Correctly rounded Flt elementary functions](roadmap/flt-elementary-spec.md) — the §9.2 functions are absent; fuel and exhaustion still need a contract
-- [ ] [Alternate floating-point exception handling](roadmap/flt-exception-handling-spec.md) — the remaining §8 policies and per-operation substitution and recording
-- [ ] [Rat, part 1: exact rationals and their laws](roadmap/rat-pt1-spec.md) — a canonical rational library, executable binary64 conversions, exact decimals and library proofs
-- [ ] [Rat, part 2: proofs of rational–binary64 conversion](roadmap/rat-pt2-spec.md) — not refined yet; the formal boundary theorems need a specified connection to the primitive floating-point model
+- [ ] [Numeric laws: the Euclidean layer, the binary scales, the integer order, and the float bits](roadmap/numeric-laws-spec.md) — `Divides` lacks its converse bridge, no `gcd` a type may mention exists, `Int` lacks multiplicative cancellation and its signed scale, and `Flt`'s `ord` is not proved a total order
+- [ ] `Flt` past IEEE 754's required operations: its recommended exception handling and elementary functions
+  - [ ] [Flt, part 1: alternate floating-point exception handling](roadmap/flt/01-exception-handling-spec.md) — the remaining §8 policies and per-operation substitution and recording
+  - [ ] [Flt, part 2: correctly rounded elementary functions](roadmap/flt/02-elementary-functions-spec.md) — the §9.2 functions are absent; fuel and exhaustion still need a contract
+- [ ] Exact rationals, and their conversion to binary64 proved
+  - [ ] [Rat, part 1: exact rationals and their laws](roadmap/rat/01-exact-rationals-spec.md) — a canonical rational library, executable binary64 conversions, exact decimals and library proofs
+  - [ ] [Rat, part 2: proofs of rational–binary64 conversion](roadmap/rat/02-binary64-proofs-spec.md) — not refined yet; the formal boundary theorems need a specified connection to the primitive floating-point model
 
 ## Modules and packages
 
@@ -194,16 +186,16 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Build-scoped archived prelude and replay (`curios-prelude-archive`, certified by `curios-prelude`), erased once at compiler build time and replayed from the archive
 - [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
 - [x] [Recursion restored to the defunctionalized walks](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
-- [ ] [Multithreaded compilation](roadmap/multithreaded-compilation-spec.md) — a compilation walks one unit and one item at a time through state shared across items, so it occupies one core, and whether an item is accepted can depend on which items were elaborated before it
-  - [ ] Cranelift compiles in parallel
-  - [ ] One caching rule for both checkers
-  - [ ] Interned names and a source map
-  - [ ] Artifacts that carry no minted identity
-  - [ ] Elaboration local to an item, against a complete witness index
-  - [ ] One declaration environment, its reads recorded
-  - [ ] Erasure per item, linked by name
-  - [ ] A term representation that crosses threads, its cost measured
-  - [ ] The executor, and the gate holding one worker and many to the same bytes
+- [ ] The parser buys its depth with stack, as the lowerings do: nested calls overflow the 8 MiB main stack at about 200 levels in a debug build, and nested parentheses or `+` at about 400
+- [ ] A verdict is a function of what it reads — the certifier's own verdicts and checked evidence, and a compilation scheduled as a graph of item tasks
+  - [ ] [Verdicts, part 1: the certifier measured, and Cranelift in parallel](roadmap/verdicts/01-measured-spec.md) — the certifier's profile does not distinguish its judgments, and Cranelift precompiles serially
+  - [ ] [Verdicts, part 2: no verdict depends on history](roadmap/verdicts/02-no-history-spec.md) — the elaborator's closed-reduct cache outlives its declaration and hits free, so acceptance can depend on which items were compiled first
+  - [ ] [Verdicts, part 3: artifacts carry no minted identity](roadmap/verdicts/03-no-minted-identity-spec.md) — floors and the universe-seed table resume above the previous unit's, so an artifact's identities depend on what was compiled before it
+  - [ ] [Verdicts, part 4: the certifier files its own verdicts](roadmap/verdicts/04-certifier-record-spec.md) — totality stamps still come from elaboration, and call-site discovery is shared
+  - [ ] [Verdicts, part 5: one environment, and every read recorded](roadmap/verdicts/05-one-environment-spec.md) — the item graph is computed three times, and the elaborator threads state from item to item
+  - [ ] [Verdicts, part 6: a compilation is a graph of item tasks](roadmap/verdicts/06-item-tasks-spec.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
+  - [ ] [Verdicts, part 7: checked evidence and trusted reasoning](roadmap/verdicts/07-checked-evidence-spec.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [Algebra, part 4](roadmap/algebra/04-relational-layer-spec.md)'s relational layer has a consumer
+- [ ] One internal sequence carrier for `List`, `Bits` and `Bytes`, preserving the guest carriers, deferred to a consumer
 
 ## Code generation
 
@@ -250,6 +242,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit), and full table and element section support (plural tables, every segment mode)
 - [x] Wasm-emission optimizations: `struct.new` construction with immutable fields, and direct `br` for single-target regions
 - [x] Binaryen closed-world post-optimization pass, observable as `Stage::WasmOptm` through `wonder stage`
+- [ ] Locals reused across a function's bindings: every binding gets a fresh local and the module is validated before Binaryen merges them, so 200 `let`s of 30 operations each panic with "too many locals"
 
 ### Measured workloads
 
@@ -334,7 +327,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ### Library-wide
 
-- [ ] [Explicit invariants in the standard library](roadmap/standard-library-invariants-spec.md) — where a branch is unreachable for a reason the types do not state, `/std` answers a made-up value: a decoded character becomes `'?'`, re-encoded text `""`, and every text parser re-checks the `Str` it was handed
+- [x] [Explicit invariants in the standard library](../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position) — decoding and encoding carry their certificates, text is addressed by proved byte positions (`Str/At`) and cut between them in O(1), one parser type is indexed by what its positions know, escaping is one walk, indices carry their bounds, and a host's facts arrive first-order; the compiler findings that stood in the way were fixed first
+- [ ] Standard-library invariants, continued — what the invariants work found and left; [algebra part 0](roadmap/algebra/00-prerequisites-spec.md) took its prerequisites for the algebra campaign
+  - [ ] [Standard-library invariants, part 1: the checkers agree on what they accept](roadmap/invariants/01-checkers-agree-spec.md) — solving re-validates without the refinements a metavariable was born under, a guard on a projection or an application counts as no refinement, and the checkers disagree on a refinement key that mentions no local
+  - [ ] [Standard-library invariants, part 2: universes the elaborator does not record](roadmap/invariants/02-unrecorded-universes-spec.md) — not refined yet; a written type can violate levels its reduct hides, and the kernel types the reduct
+  - [ ] [Standard-library invariants, part 3: a shared term costs its size](roadmap/invariants/03-shared-term-costs-spec.md) — settlement is a quarter of `/std`'s elaboration, `capture` loses sharing, and a type-level `index_of` does not finish
+  - [ ] [Standard-library invariants, part 4: the library's remaining invented values](roadmap/invariants/04-remaining-invented-values-spec.md) — `Json` accepts `01`, HTTP reads a malformed length and a missing host as values, and the text formats re-check the UTF-8 of input that began as text
 
 ## Diagnostics
 
@@ -368,6 +366,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Profiling is a property of the build, not a subcommand (`curios profile` retired; a `profile` build files every span and event of whatever it ran to `.artifacts/profile.tsv` beside the crate that wrote it, and `cargo x profile` folds it)
 - [ ] What checking a declaration cost, in the budget's own machine-independent units (not refined yet)
 - [ ] How often each priced site ran, from one execution (not refined yet)
+- [ ] A buffered stream beside the written-through one, for a run where writing each row as it is made costs more than surviving an abort is worth — about 11% on `/std`'s elaboration, measured on a shared machine
 
 ### Distribution
 

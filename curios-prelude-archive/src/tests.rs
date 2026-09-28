@@ -11,7 +11,7 @@ use {
 
 /// Every `.crs` file this crate authors, in the one tree it owns.
 ///
-/// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake the Curios index catches, and one added without being formatted should not need a second list to catch it.
+/// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk, and one added without being formatted should not need a second list to catch it.
 pub(crate) fn authored() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut sources = Vec::new();

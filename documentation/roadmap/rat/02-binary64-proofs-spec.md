@@ -1,6 +1,6 @@
 # Rat, part 2: proofs of rational–binary64 conversion
 
-**Not refined yet.** This specification preserves the formal boundary theorems deferred from [part 1](rat-pt1-spec.md). Their targets are recorded below, but the connection between primitive floating-point results and their exact interpretation still lacks a specified foundation. This is not an implementation plan until that foundation and the proof obligations are refined.
+**Not refined yet.** This specification preserves the formal boundary theorems deferred from [part 1](01-exact-rationals-spec.md). Their targets are recorded below, but the connection between primitive floating-point results and their exact interpretation still lacks a specified foundation. This is not an implementation plan until that foundation and the proof obligations are refined.
 
 ## Scope and dependencies
 
@@ -10,7 +10,7 @@ The boundary between executable evidence and formal theorems remains explicit. P
 
 ## Theorem targets
 
-Stated over `Rat` and `/std/Flt`'s exact layer. The rounding the conversions go through, `Flt/rounded/of_dyadic`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model. Each statement below reads a primitive's result through its exact value — `Dyadic/of` goes through `/sys/Flt/mantissa` and `/sys/Flt/exponent` — and so needs a stated tie between a primitive and its exact result. The reflected model that was to state it is dropped from [the `Flt` laws](flt-laws-spec.md) for now, so this work waits until that foundation has a specified owner and contract.
+Stated over `Rat` and `/std/Flt`'s exact layer. The rounding the conversions go through, `Flt/rounded/of_dyadic`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model. Each statement below reads a primitive's result through its exact value — `Dyadic/of` goes through `/sys/Flt/mantissa` and `/sys/Flt/exponent` — and so needs a stated tie between a primitive and its exact result. The reflected model that was to state it is no part of [algebra part 3](../algebra/03-declared-operations-spec.md)'s float declarations, which hold identities of the model rather than tie it to exact values, so this work waits until that foundation has a specified owner and contract.
 
 - **Round trip.** `to_flt(r, of_flt(f, @ok))` is `f` for every finite `f` but `-0.0`, in every direction; `-0.0` widens to canonical zero and canonical zero narrows to `+0.0`.
 - **The directions.** For `x` narrowing to a finite `f` toward negative, `f ≤ x` and no finite binary64 lies in `(f, x]`; toward positive and toward zero by symmetry.
@@ -21,10 +21,10 @@ The proof library isolates the field interpretation, the grid spacing and adjace
 
 ## Decisions required before implementation
 
-- Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. The reflected model previously considered is a proposal to revisit, not an interface supplied by the current Flt-law specification.
+- Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. The reflected model previously considered is a proposal to revisit, not an interface [algebra part 3](../algebra/03-declared-operations-spec.md) supplies.
 - Give each theorem its precise premises and equality notion, including negative zero, finite results, overflow and all rounding directions. The target descriptions above do not replace elaborated theorem statements.
-- Identify the reusable lemmas for grid spacing, adjacent values, quotient bounds and guard/sticky reasoning. Keep integer facts with the numeric library and implementation contracts with part 1's eventual permanent owner.
-- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion from algebra part 2 is available only when the required capability actually lands.
+- Identify the reusable lemmas for grid spacing, adjacent values, quotient bounds and guard/sticky reasoning. Keep integer facts with [the numeric laws](../numeric-laws-spec.md) and implementation contracts with part 1's eventual permanent owner.
+- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion from the algebra campaign — [part 3](../algebra/03-declared-operations-spec.md)'s declarations, and [part 4](../algebra/04-relational-layer-spec.md) if its consumer appears — is available only when the required capability actually lands.
 
 ## Verification to refine
 

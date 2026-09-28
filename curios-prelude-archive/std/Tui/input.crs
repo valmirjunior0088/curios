@@ -84,6 +84,7 @@ let kitty(code: Nat) -> Option(Code) =
     | _ => Option/map(Char/of_nat(code), Code/char)
     end;
 
+--- The parameters of the control sequence whose parameter bytes begin at `i`, its final byte and where it ends, or `none` when the chunk ends first. Parameters read as ECMA-48 reads them: digits accumulate from zero, and an empty one before a separator stands for 1. An empty last one is left out, for the reader of each final byte to default.
 let parameters(b: Bytes, i: Nat) -> Option({nums: List(Nat), final: Nat, next: Nat}) =
     let go(
         j: Nat,
@@ -179,6 +180,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
     let csi(i: Nat, j: Nat) -> Step(E) =
         match parameters(input, j)
         | none() => Step/cut()
+        -- An omitted parameter is 1, ECMA-48's default for these sequences: no modifiers, and the first key of the `~` table.
         | some(p) =>
             let m = Option/unwrap_or(List/try_get(p.nums, 1), 1);
             choose

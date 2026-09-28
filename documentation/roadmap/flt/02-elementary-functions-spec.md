@@ -1,10 +1,10 @@
-# Correctly rounded Flt elementary functions
+# Flt, part 2: correctly rounded elementary functions
 
-Working specification for the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. [Alternate exception handling](flt-exception-handling-spec.md) is a separate, independently retirable capability. [The Flt laws](flt-laws-spec.md) are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. The fuel and exhaustion contract below remains a decision required before dependent implementation.
+Working specification for the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. [Alternate exception handling](01-exception-handling-spec.md) is a separate, independently retirable capability. The float laws — [algebra part 3](../algebra/03-declared-operations-spec.md)'s declared identities and [the numeric laws](../numeric-laws-spec.md)' theorems over the bits — are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. The fuel and exhaustion contract below remains a decision required before dependent implementation.
 
 ## What this builds on
 
-- **The model.** `curios_num::Floating` is binary64 with every one of the 2⁶⁴ bit patterns a distinct value, one symmetric NaN rule and five rounding directions, as [the `Flt` design decision](../design/language/flt-is-specified-by-a-model-and-the-runtime-conforms.md) states; [The binary64 model and its NaN rule](../soundness/per-term-rules/the-binary64-model-and-its-nan-rule.md) holds the running program to it.
+- **The model.** `curios_num::Floating` is binary64 with every one of the 2⁶⁴ bit patterns a distinct value, one symmetric NaN rule and five rounding directions, as [the `Flt` design decision](../../design/language/flt-is-specified-by-a-model-and-the-runtime-conforms.md) states; [The binary64 model and its NaN rule](../../soundness/per-term-rules/the-binary64-model-and-its-nan-rule.md) holds the running program to it.
 - **The exact layer.** `/std/Dyadic` holds a finite float's exact value, `mantissa · 2^exponent`, with arithmetic that never rounds; `Flt/rounded/of_dyadic(r, d)` is `Floating`'s rounding written in Curios, line for line, and every `/std` operation that rounds a computed value rounds through it.
 - **The surface.** `Flt/rounded/<op>(r, …)` in every direction, `Flt/signals/<op>(r, …)` answering the `Exceptions` IEEE raises, and `Flt/Env`, the floating-point environment as a monad that rounds in its direction and records what is raised. Text reads and writes decimal and hexadecimal in every direction; §9.4's reductions and §9.5's augmented operations are exact then rounded once.
 

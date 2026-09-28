@@ -179,6 +179,7 @@ pub let text(r: Response) -> Option(Str) =
 pub let json(r: Response) -> Result(Parse/Error, Json) =
     Parse/run(Json/decode, r.body);
 
+--- The reason phrase usually sent with `code`, or the empty phrase for a code this table lacks: HTTP makes the phrase optional, and a client reads the code.
 let reason_of(code: Nat) -> Str =
     match code
     | 200 => "OK"

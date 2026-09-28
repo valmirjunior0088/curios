@@ -109,7 +109,7 @@ pub use Command/{let Command};
 pub mod Async;
 pub use Async/{let Async};
 
---- One Unicode scalar value, certified against the surrogate range. Classification and case conversion are ASCII-only.
+--- One Unicode scalar value, certified against the surrogate range. A conversion that always yields one builds its certificate, and one that may not answers an `Option`, so no character is ever a stand-in. Classification and case conversion are ASCII-only.
 pub mod Char;
 pub use Char/{let Char};
 
@@ -155,7 +155,7 @@ pub use WellFounded/{let WellFounded};
 pub mod Eq;
 pub use Eq/{let Eq};
 
---- Text as certified UTF-8, addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Comparison is code-point order.
+--- Text as certified UTF-8, addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
 
@@ -172,7 +172,7 @@ pub use Bool/{let Bool};
 --- The witnesses for the positional tuple shapes, up to eight fields. A labeled product wanting the same is a `struct`.
 pub mod Tuple;
 
---- A parser monad over bytes.
+--- A parser monad over an input's bytes or its text.
 ---
 --- One parser type, `Parse/Of(P, A)`, indexed by what its positions know: over bytes, `Parse(A)`, that a position lies within the input; over text, `Parse/Text(A)`, that the input is valid text and a character begins there, so a text primitive reads characters and pieces of the input by position. The combinators are written once for both. A parser declines when the input is not its shape, and `or` tries the alternative, reporting the refusal that reached further when neither fits; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
 pub mod Parse;

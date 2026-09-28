@@ -37,7 +37,6 @@ impl DefEntry {
     }
 }
 
-/// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry runs under exactly what its origin saw — the arm-local refinements included, and nothing of the live context it is scheduled inside (`Context::with_retry_frame`) — while solution re-validation independently suppresses the refinements, keeping committed solutions refinement-free.
 /// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
 #[derive(Debug, Clone)]
 pub(crate) struct ScrutineeEntry {
@@ -56,6 +55,7 @@ pub(crate) struct ProjectionEntry {
     pub(crate) value: Term,
 }
 
+/// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry runs under exactly what its origin saw — the arm-local refinements included, and nothing of the live context it is scheduled inside (`Context::with_retry_frame`) — while solution re-validation independently suppresses the refinements, keeping committed solutions refinement-free.
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
     pub(crate) assumptions: Vec<(Free, Term)>,

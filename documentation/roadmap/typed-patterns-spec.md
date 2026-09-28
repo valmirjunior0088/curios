@@ -2,6 +2,8 @@
 
 Working specification for compiling nested pattern matches where the scrutinee's type is known — in elaboration rather than in text lowering — so that a wildcard may stand beside a concrete pattern in any column, coverage is decided against each type's real constructors, and an arm no value can reach is reported. The algorithm is Maranget's decision-tree compilation ("Compiling Pattern Matching to Good Decision Trees", ML Workshop 2008) with the usefulness check of "Warnings for Pattern Matching" (JFP 2007); what changes is where it runs.
 
+It moves match compilation into `curios-elab`: not the solver, but the elaborator, so it does not land beside [the invariants campaign's part 1](invariants/01-checkers-agree-spec.md)'s change to solving.
+
 ## What this builds on
 
 `curios-text/src/into_core/match_compile.rs` already compiles a pattern matrix into Core's single-level match forms, and most of Maranget's scheme is there:
@@ -46,11 +48,12 @@ Neither patch holds. Detecting dead code after synthesizing it — skipping a de
 - a binder row joins every constructor's group of the column's inductive, named or not, so a default matrix arises only where a user's catch-all or a bind arm's fallthrough supplies one, and nothing dead is ever built;
 - a constructor Rung-C discharges is not a group at all, so a binder row is not specialized into an impossible case;
 - the motive attaches to the head's split exactly as a written motive attaches today; a match whose head is not a single dispatch still refuses one;
+- an elided motive is ambient at every split the compiler builds, as it is at any split ([An elimination at an ambient goal](../soundness/per-term-rules/an-elimination-at-an-ambient-goal.md)), except a `Nat`, list or packed column compiled as induction whose hypothesis a row uses, which keeps its family;
 - a `Nat` column is induction when a row peels a successor and literal dispatch otherwise, and dispatch still needs a default — a binder row now supplies it as well as a catch-all does.
 
 **Bodies are shared, not copied.** A binder row joining several groups would copy its body into each leaf. Each body a row reaches from more than one leaf is bound once as a join point — a local function of the row's pattern variables — and every leaf applies it to what that path bound, so code size stays linear in the arms however the tree branches. A body reached once stays inline, which is every body in a match without mixed columns and keeps today's output there.
 
-**`!` in a body.** Lowering hoists a `!` in an arm body today with the tree already built around it — the matrix compiler takes the region lowering as its leaf. With bodies lowered once, before the tree exists, each body has to be lowered as the region it is now at its leaf, so that where a `!` sequences does not move; the first thing to establish is that the leaf's region is the body's own and depends on nothing the tree binds above it, which the region fixtures in `curios/src/tests` then hold.
+**`!` in a body.** Lowering hoists a `!` in an arm body today with the tree already built around it — the matrix compiler takes the region lowering as its leaf. With bodies lowered once, before the tree exists, each body has to be lowered as the region it is now at its leaf, so that where a `!` sequences does not move; the first thing to establish is that the leaf's region is the body's own and depends on nothing the tree binds above it, which the region fixtures in `curios/src/tests` then hold. [The invariants campaign's part 2](invariants/02-unrecorded-universes-spec.md) records a `!` in a match arm refused at a large success type where the same `!` in a flat body passes; that program joins the region fixtures, so moving where a body is lowered neither hides the refusal nor adds to it.
 
 **Column order.** Leftmost first, as today; it is correct and it keeps the output of every current match unchanged. A necessity-based choice shrinks trees, and is worth adding only for a match whose tree is measured to be large.
 
@@ -61,7 +64,7 @@ The typed compiler computes Maranget's *usefulness* as it goes, which gives two 
 - **Non-exhaustive, with a witness.** A value no row matches is reported as a pattern — `(none(), some(_))` is not matched — rather than as a missing constructor inside a synthesized sub-match.
 - **Redundant arms.** A row useful for no value is an error naming it: a second arm shadowed by an earlier wildcard (`| (_, true) => … | (some(x), true) => …`), and a `| _ =>` after arms that already cover every constructor, which is checked today and silently unreachable.
 
-Whether a redundant arm is an error or a warning is decided when this lands. There is no warning channel in elaboration today, which argues for an error, as a duplicate row is one now.
+Whether a redundant arm is an error or a lint is decided when this lands, against [A lint is an exact finding read off the compilation](../design/toolchain/a-lint-is-an-exact-finding-read-off-the-compilation.md). Usefulness is exact, which is that decision's criterion, but the decision admits four lints and decides each where names resolve, and a redundant arm is found in elaboration: making it a lint extends that decision, and making it an error, as a duplicate row is one now, needs no channel elaboration lacks.
 
 ## What changes and what stays
 
@@ -77,6 +80,13 @@ Stays: every Core match form the elaborator emits, and so the kernel, erasure, t
 - Each diagnostic has a fixture: a non-exhaustive match reporting its witness, a shadowed arm, a dead catch-all, and an indexed family where Rung-C removes a constructor and a binder row must not be specialized into it.
 - `cargo x clippy`'s elaboration of all of `/std` and the full test suite pass unchanged.
 
-## Completion
+## Rejected
+
+- **Closing the gap in lowering**, by always emitting the default matrix, by emitting none, or by skipping a synthesized default no constructor reaches, for the reasons under *Why lowering cannot close it*.
+- **Maranget's necessity heuristic as the column order.** It avoids the default matrix in most matches but not in all, and it changes the output of matches that compile today; it is worth adding only for a match whose tree is measured to be large.
+
+## Completion and retirement
 
 Done when a wildcard may stand in any column beside concrete patterns, coverage and redundancy are decided against the scrutinee's type with the diagnostics above, no match compiles to a default no constructor can reach, and every match that compiled before compiles to the same Core.
+
+The contract moves to [syntax.md](../syntax.md)'s multiple-scrutinee section and `curios-elab`'s match documentation, and a design decision records that patterns are compiled where their types are known, with the lowering-side attempts as its rejected alternatives. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
