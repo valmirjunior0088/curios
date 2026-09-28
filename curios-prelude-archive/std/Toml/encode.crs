@@ -44,21 +44,19 @@ let pad(n: Nat, width: Nat) -> Str =
     let s = Nat/to_str(n);
     Str/concat(Str/repeat("0", width - Str/len(s)), s);
 
+--- `ns` nanoseconds as the fraction after a time's point: its nine digits with the trailing zeros dropped and one kept at least, or nothing at all for none.
 let ns_str(ns: Nat) -> Str =
     match ns == 0
     | true => ""
     | false =>
-        let digits = pad(ns, 9);
-        let keep(k: Nat) -> Nat =
-            match k <= 1
-            | true => 1
-            | false =>
-                match Option/unwrap_or(Str/try_get(digits, k - 1), '1') == '0'
-                | true => keep(k - 1)
-                | false => k
-                end
+        let trimmed(n: Nat, width: Nat) -> {Nat, Nat} =
+            match width
+            | 0 => (n, 0)
+            | w + 1 =>
+                match w == 0 || n % 10 != 0 | true => (n, width) | false => trimmed(n / 10, w) end
             end;
-        Str/concat(".", Str/slice(digits, 0, keep(9)))
+        let (digits, width) = trimmed(ns, 9);
+        Str/concat(".", pad(digits, width))
     end;
 
 let date_str(d: Date) -> Str =

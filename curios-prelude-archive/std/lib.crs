@@ -155,7 +155,7 @@ pub use WellFounded/{let WellFounded};
 pub mod Eq;
 pub use Eq/{let Eq};
 
---- Text as certified UTF-8, counted in Unicode scalar values rather than bytes. Comparison is code-point order.
+--- Text as certified UTF-8, addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
 

@@ -1,51 +1,84 @@
 use /std/{Nat, Str};
-use /std/Nat/{Le};
 use /std/Tui/{Style, Frame, Key, text};
 
---- A line of text and a cursor within it.
+--- A line of text and a cursor within it, at a position of the text rather than a count of its characters.
 pub struct Field: pub Type {
     text: Str,
-    cursor: Nat,
-    ok: Le(cursor, Str/len(text)),
+    cursor: Str/At(text),
 }
 
 --- No text.
 pub let empty: Field =
-    Field { text = "", cursor = 0, ok = Le/refl(0) };
+    Field { text = "", cursor = Str/At/start("") };
 
 --- `s` with the cursor at its end.
 pub let of_str(s: Str) -> Field =
-    Field { text = s, cursor = Str/len(s), ok = Le/refl(Str/len(s)) };
+    Field { text = s, cursor = Str/At/finish(s) };
 
-let place(s: Str, at: Nat) -> Field =
-    match Le/try(at, Str/len(s))
-    | some(ok) => Field { text = s, cursor = at, ok = ok }
-    | none() => of_str(s)
-    end;
+--- `left` and `right` joined, with the cursor between them.
+let joined(left: Str, right: Str) -> Field =
+    Field {
+        text = Str/concat(left, right),
+        cursor = Str/At/of_left(left, right, Str/At/finish(left)),
+    };
 
 --- Insert a character, delete before or after the cursor, or move it; any other key leaves the field.
 pub let handle(i: Field, k: Key) -> Field =
-    let before = Str/slice(i.text, 0, i.cursor);
-    let after = Str/slice(i.text, i.cursor, Str/len(i.text) - i.cursor);
+    let before = Str/before(i.text, i.cursor);
+    let after = Str/after(i.text, i.cursor);
     match k.code
     | char(c) =>
         match k.ctrl || k.alt
         | true => i
-        | false => place(Str/flatten([before, Str/of_char(c), after]), i.cursor + 1)
+        | false => joined(Str/concat(before, Str/of_char(c)), after)
         end
     | backspace() =>
-        match i.cursor | 0 => i | p + 1 => place(Str/concat(Str/slice(i.text, 0, p), after), p) end
-    | delete() => place(Str/concat(before, Str/slice(after, 1, Str/len(after) - 1)), i.cursor)
-    | left() => match i.cursor | 0 => i | p + 1 => place(i.text, p) end
-    | right() => place(i.text, i.cursor + 1)
-    | home() => place(i.text, 0)
+        match Str/At/try_prev(i.text, i.cursor)
+        | none() => i
+        | some(back) => joined(Str/before(i.text, back.past), after)
+        end
+    | delete() =>
+        match Str/At/try_next(i.text, i.cursor)
+        | none() => i
+        | some(forth) => joined(before, Str/after(i.text, forth.past))
+        end
+    | left() =>
+        match Str/At/try_prev(i.text, i.cursor)
+        | none() => i
+        | some(back) => Field { text = i.text, cursor = back.past }
+        end
+    | right() =>
+        match Str/At/try_next(i.text, i.cursor)
+        | none() => i
+        | some(forth) => Field { text = i.text, cursor = forth.past }
+        end
+    | home() => Field { text = i.text, cursor = Str/At/start(i.text) }
     | end_key() => of_str(i.text)
     | _ => i
     end;
 
+--- The leftmost position of `s` a view of `room` columns may start at and still hold everything from there to `at`: walking back from `at`, a character joins the view while the view has room for it.
+let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
+    Str/At/backward(
+        (_) => (Nat) -> Str/At(s),
+        (here, again) =>
+            (used) =>
+                match Str/At/try_prev(s, here)
+                | none() => here
+                | some(back) =>
+                    let wider = used + text/char_width(back.char);
+                    match wider <= room
+                    | true => again(back.past, back.progress)(wider)
+                    | false => here
+                    end
+                end,
+        at)(0);
+
 --- One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
 pub let draw(i: Field, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
-    let ahead = text/width(Str/slice(i.text, 0, i.cursor));
-    let first = match ahead < w | true => 0 | false => ahead + 1 - w end;
-    let shown = Str/slice(i.text, first, Str/len(i.text) - first);
-    (frame = Frame/fit(Frame/text(style, shown).frame, w, 1), cursor_x = ahead - first);
+    let first = scrolled(i.text, i.cursor, w - 1);
+    let shown = Str/after(i.text, first);
+    let skipped = text/width(Str/before(i.text, first));
+    (
+        frame = Frame/fit(Frame/text(style, shown).frame, w, 1),
+        cursor_x = text/width(Str/before(i.text, i.cursor)) - skipped);

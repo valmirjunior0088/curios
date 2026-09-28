@@ -142,34 +142,6 @@ pub use Valid/{let Valid};
 pub mod At;
 pub use At/{let At};
 
---- How many bytes the first `n` characters take from scan state `s`.
-pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
-    match b
-    | x[] => 0
-    | x[h, ..t] =>
-        match s
-        | lead() => match n | 0 => 0 | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t) end
-        | cont(_, _, _) => 1 + drop_width(n, step(h, s), t)
-        | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
-        end
-    end;
-
---- `drop_width` never passes the end.
-pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
-    match b
-    | x[] => Bool/True/qed()
-    | x[h, ..t] =>
-        match s
-        | lead() =>
-            match n
-            | 0 => Bool/True/qed()
-            | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
-            end
-        | cont(_, _, _) => drop_width_within(n, step(h, s), t)
-        | bad() => drop_width_within(n, step(h, Scan/bad()), t)
-        end
-    end;
-
 --- How many characters `b` holds from scan state `s`.
 pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     match b
@@ -423,31 +395,6 @@ pub let after(s: Str, at: At(s)) -> Str =
 pub let between(s: Str, from: At(s), to: At(s), @ordered: Nat/Le(from.offset, to.offset)) -> Str =
     before(after(s, from), At/to_after(s, from, to, @ordered));
 
-let drop_n(n: Nat, s: Str) -> Str =
-    Str {
-        bytes =
-            Bytes/drop(
-                s.bytes,
-                drop_width(n, Scan/lead(), s.bytes),
-                @drop_width_within(n, Scan/lead(), s.bytes)),
-        valid = Valid/drop(n, Scan/lead(), s.valid),
-    };
-
-let take_n(n: Nat, s: Str) -> Str =
-    Str {
-        bytes =
-            Bytes/slice(
-                s.bytes,
-                0,
-                drop_width(n, Scan/lead(), s.bytes),
-                @drop_width_within(n, Scan/lead(), s.bytes)),
-        valid = Valid/take(n, Scan/lead(), s.valid),
-    };
-
---- The `n` characters from `x`, stopping at either end, so a window past the end is what is there.
-pub let slice(s: Str, x: Nat, n: Nat) -> Str =
-    take_n(n, drop_n(x, s));
-
 --- The concatenation, in order.
 pub let flatten(parts: List(Str)) -> Str =
     List/fold(parts, "", (p, acc) => concat(acc, p));
@@ -625,47 +572,6 @@ pub let find(s: Str, pred: (Char) -> Bool) -> Option(Char) =
 --- Whether `target` occurs in `s`.
 pub let contains(s: Str, target: Char) -> Bool =
     Option/is_some(index_of(s, target));
-
---- The character at `i`, or `none` past the end.
-pub let try_get(s: Str, i: Nat) -> Option(Char) =
-    let (_, found): {Nat, Option(Char)} =
-        fold(
-            s,
-            (0, Option/none()),
-            (codepoint, (idx, found)) =>
-                match found
-                | some(_) => (idx, found)
-                | none() =>
-                    match idx == i
-                    | true => (idx + 1, Option/some(codepoint))
-                    | false => (idx + 1, Option/none())
-                    end
-                end);
-    found;
-
---- The character at `i`, under the evidence that `i` is within the length.
-pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
-    let go(
-        sc: Scan,
-        b: Bytes,
-        valid: Valid/from(sc, b),
-        i: Nat,
-        within: Nat/Lt(i, count_scalars(sc, b)),
-    ) -> Char =
-        match b
-        | x[] => match within end
-        | x[h, ..t] =>
-            match sc
-            | lead() =>
-                match i
-                | 0 => Valid/decode_head(h, valid)
-                | pred + 1 => go(step(h, Scan/lead()), t, valid, pred, within)
-                end
-            | cont(_, _, _) => go(step(h, sc), t, valid, i, within)
-            | bad() => go(step(h, Scan/bad()), t, valid, i, within)
-            end
-        end;
-    go(Scan/lead(), s.bytes, s.valid, i, ok);
 
 --- `parts` with `sep` between each pair.
 pub let join(sep: Str, parts: List(Str)) -> Str =

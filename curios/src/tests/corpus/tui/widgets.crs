@@ -37,7 +37,7 @@ test an_input_edits_at_its_cursor =
     let past = Field/handle(Field/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
     Test/all([
         Test/equal(Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]), "aXb  :2"),
-        Test/equal(past.cursor, 3),
+        Test/equal(Str/At/to_offset(past.cursor), 3),
         Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
 
 -- A viewport is a window onto a larger frame, blank past its edge.

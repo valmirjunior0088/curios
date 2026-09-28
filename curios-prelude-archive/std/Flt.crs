@@ -422,6 +422,10 @@ let generate(fuel: Nat, r: Nat, s: Nat, mp: Nat, mm: Nat, even: Bool) -> List(Na
 let digits_to_str(ds: List(Nat)) -> Str =
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
+--- The decimal digits of `n`, most significant first.
+let digits_of(n: Nat) -> List(Nat) =
+    match n < 10 | true => [n] | false => [..digits_of(n / 10), n % 10] end;
+
 let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
     match ds
     | [] => ([], false)
@@ -455,9 +459,10 @@ let setup(f_mant: Nat, exp_field: Nat) -> {Nat, Nat, Nat, Nat} =
         end
     end;
 
-let layout(digits_str: Str, k: Int) -> Str =
-    let len = Str/len(digits_str);
-    let leading = (pad: Nat) => Str/concat(Str/concat("0.", Str/repeat("0", pad)), digits_str);
+--- The digits `ds` with the decimal point `k` places into them: before them behind zeros when `k` is not positive, between two of them when it falls inside, and after them behind zeros when it falls past the end. The digits are split as a list, where the point's place needs no proof of being a character boundary.
+let layout(ds: List(Nat), k: Int) -> Str =
+    let len = List/len(ds);
+    let leading = (pad: Nat) => Str/flatten(["0.", Str/repeat("0", pad), digits_to_str(ds)]);
     match k >= +0
     | false => leading(Int/abs(k))
     | true =>
@@ -465,12 +470,13 @@ let layout(digits_str: Str, k: Int) -> Str =
         match kn == 0
         | true => leading(0)
         | false =>
-            match kn < len
-            | true =>
-                Str/concat(
-                    Str/concat(Str/slice(digits_str, 0, kn), "."),
-                    Str/slice(digits_str, kn, len - kn))
-            | false => Str/concat(digits_str, Str/repeat("0", kn - len))
+            match Nat/Lt/try(kn, len)
+            | some(inside) =>
+                Str/flatten([
+                    digits_to_str(List/take(ds, kn)),
+                    ".",
+                    digits_to_str(List/drop(@Nat, ds, kn, @Nat/Lt/le_of_lt(kn, len, inside)))])
+            | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - len))
             end
         end
     end;
@@ -481,10 +487,7 @@ let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
     let (r1, mp1, mm1, k2) = scale_down(scaling_fuel, r0, mp0, mm0, s1, k1);
     let digits = generate(digit_fuel, r1, s1, mp1, mm1, even);
     let (norm, carry) = normalize(digits);
-    match carry
-    | true => layout(digits_to_str([1, ..norm]), k2 + 1)
-    | false => layout(digits_to_str(norm), k2)
-    end;
+    match carry | true => layout([1, ..norm], k2 + 1) | false => layout(norm, k2) end;
 
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
@@ -823,7 +826,7 @@ let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
     let settled: {Nat, Int} =
         match first.0 >= high | true => (low, first.1 + +1) | false => first end;
     let (digits, k) = settled;
-    Str/concat(sign, layout(Nat/to_str(digits), k + Nat/to_int(n)));
+    Str/concat(sign, layout(digits_of(digits), k + Nat/to_int(n)));
 
 --- The finite half of `of_str`: `s` read as a decimal whose digits begin at `start`.
 let of_decimal_str(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =

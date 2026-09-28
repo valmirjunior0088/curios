@@ -285,14 +285,14 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
     );
 }
 
-// `WellFounded/recurse` over `WellFounded/lt` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `Str/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `recurse` carries it along the accessibility of `<`.
+// `WellFounded/recurse` over `WellFounded/lt` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `List/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `recurse` carries it along the accessibility of `<`.
 //
 // The proof is consumed where erasure deletes it; `tests::erasure` pins the other route, a proof bound by a value-level `let`, which runs a `Type`-valued combinator with a step erased to a function returning the unit constant.
 #[test]
 fn well_founded_recursion_serves_a_proposition_and_a_computation() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bool, Char, WellFounded};
+        use /std/{Nat, Str, Bool, Char, List, WellFounded};
         let below(n: Nat) -> Nat/Lt(n, n + 3) =
             WellFounded/recurse((k) => Nat/Lt(k, k + 3), (k, ih) => Bool/True/qed(), n, WellFounded/lt(n));
         let fib(n: Nat) -> Nat =
@@ -309,7 +309,11 @@ fn well_founded_recursion_serves_a_proposition_and_a_computation() {
                     end,
                 n,
                 WellFounded/lt(n));
-        /std/print(Str/flatten([Str/of_char(Str/get("hello", 2, below(2))), Nat/to_str(fib(1)), ",", Nat/to_str(fib(10))]))
+        /std/print(Str/flatten([
+            Str/of_char(List/get(@Char, ['h', 'e', 'l', 'l', 'o'], 2, @below(2))),
+            Nat/to_str(fib(1)),
+            ",",
+            Nat/to_str(fib(10))]))
         "#),
         b"l1,55"
     );

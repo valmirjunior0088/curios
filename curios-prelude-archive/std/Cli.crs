@@ -366,9 +366,8 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
             match Str/eql(t, "--")
             | true => step(spec, Walk { ..w, literal = true }, more)
             | false =>
-                match Str/starts_with(t, "--")
-                | true =>
-                    let body = Str/slice(t, 2, Str/len(t));
+                choose
+                | some(body) = Str/strip_prefix(t, "--") =>
                     match Str/split_once(body, "=")
                     | some((name, value)) =>
                         match long_index(spec, name)
@@ -397,23 +396,22 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
                             end
                         end
                     end
-                | false =>
-                    match Str/starts_with(t, "-") && Nat/lt(1, Str/len(t))
-                    | true =>
-                        match run_cluster(spec, w, Str/to_list(Str/slice(t, 1, Str/len(t))), t)
-                        | broke(f) => Result/failure(f)
-                        | settled(w2) => step(spec, w2, more)
-                        | needs(w2, i, name) =>
-                            match more
-                            | [] => Result/failure(Failure/missing_value(name))
-                            | [v, ..rest2] =>
-                                step(spec, Walk { ..w2, slots = push_at(w2.slots, i, v) }, rest2)
-                            end
+                | some(cluster) = Option/filter(
+                    Str/strip_prefix(t, "-"),
+                    (c) => Bool/not(Str/is_empty(c))) =>
+                    match run_cluster(spec, w, Str/to_list(cluster), t)
+                    | broke(f) => Result/failure(f)
+                    | settled(w2) => step(spec, w2, more)
+                    | needs(w2, i, name) =>
+                        match more
+                        | [] => Result/failure(Failure/missing_value(name))
+                        | [v, ..rest2] =>
+                            step(spec, Walk { ..w2, slots = push_at(w2.slots, i, v) }, rest2)
                         end
-                    | false =>
-                        let w2 = place(spec, w, t)!;
-                        step(spec, w2, more)
                     end
+                | _ =>
+                    let w2 = place(spec, w, t)!;
+                    step(spec, w2, more)
                 end
             end
         end

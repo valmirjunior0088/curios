@@ -2,7 +2,7 @@
 
 use crate::tests::error;
 
-// Past the end the bound reduces to `False`, and nothing fills it: the report names the binder, exactly as an out-of-range `Str/get` does.
+// Past the end the bound reduces to `False`, and nothing fills it: the report names the binder, exactly as an out-of-range `List/get` does.
 #[test]
 fn get_past_the_length_is_refused_by_the_bound() {
     let source = r#"

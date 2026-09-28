@@ -31,16 +31,14 @@ let is_redirect(code: Nat) -> Bool =
 
 --- Where a redirect points: an absolute `Location`, or a path on the same origin.
 let target_of(from: Url, location: Str) -> Option(Url) =
-    match Str/starts_with(location, "/")
-    | true =>
+    match Str/strip_prefix(location, "/")
+    | some(path) =>
         match Url/of_str(
-            Str/flatten([
-                Url/to_str(Url { ..from, path = "/", query = Option/none() }),
-                Str/slice(location, 1, Str/len(location) - 1)]))
+            Str/flatten([Url/to_str(Url { ..from, path = "/", query = Option/none() }), path]))
         | success(u) => Option/some(u)
         | failure(_) => Option/none()
         end
-    | false =>
+    | none() =>
         match Url/of_str(location) | success(u) => Option/some(u) | failure(_) => Option/none() end
     end;
 

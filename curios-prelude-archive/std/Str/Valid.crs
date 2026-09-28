@@ -1,5 +1,5 @@
-use /std/Str/{classify, Scan, step, scan_from, drop_width, drop_width_within, pending, concluded,
-    advanced, begins_scalars_of, continues, classify_continues, step_of_continuing};
+use /std/Str/{classify, Scan, step, scan_from, pending, concluded, advanced, begins_scalars_of,
+    continues, classify_continues, step_of_continuing};
 use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
 
 --- Whether a scan has come to rest between characters.
@@ -50,46 +50,6 @@ pub let concat(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a,
                 append(Scan/lead(), a, b),
                 Eq/cong((sc: Scan) => scan_from(sc, b), lead_of(scan_from(Scan/lead(), a), va)))),
         vb);
-
---- Validity carried past the first `n` characters.
-pub let drop(
-    n: Nat,
-    s: Scan,
-    @b: Bytes,
-    d: from(s, b),
-) -> Valid(Bytes/drop(b, drop_width(n, s, b), @drop_width_within(n, s, b))) =
-    match b
-    | x[] =>
-        match s
-        | lead() => Bool/True/qed()
-        | cont(_, _, _) => match d end
-        | bad() => match d end
-        end
-    | x[c, ..t] =>
-        match s
-        | lead() => match n | 0 => d | pred + 1 => drop(pred, step(c, Scan/lead()), @t, d) end
-        | cont(_, _, _) => drop(n, step(c, s), @t, d)
-        | bad() => drop(n, step(c, Scan/bad()), @t, d)
-        end
-    end;
-
---- Validity carried onto the first `n` characters.
-pub let take(
-    n: Nat,
-    s: Scan,
-    @b: Bytes,
-    d: from(s, b),
-) -> from(s, Bytes/slice(b, 0, drop_width(n, s, b), @drop_width_within(n, s, b))) =
-    match b
-    | x[] => d
-    | x[c, ..t] =>
-        match s
-        | lead() =>
-            match n | 0 => Bool/True/qed() | pred + 1 => take(pred, step(c, Scan/lead()), @t, d) end
-        | cont(_, _, _) => take(n, step(c, s), @t, d)
-        | bad() => take(n, step(c, Scan/bad()), @t, d)
-        end
-    end;
 
 --- Nothing is valid from the bad state.
 pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =

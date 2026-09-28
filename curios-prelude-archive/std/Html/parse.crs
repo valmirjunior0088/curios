@@ -72,17 +72,17 @@ let hex_of_str(s: Str) -> Option(Nat) =
 
 let numeric_reference(digits: Str) -> Option(Str) =
     let code =
-        match Str/starts_with(digits, "x") || Str/starts_with(digits, "X")
-        | true => hex_of_str(Str/slice(digits, 1, Str/len(digits) - 1))
-        | false => Nat/of_str(digits)
+        match Option/or(Str/strip_prefix(digits, "x"), Str/strip_prefix(digits, "X"))
+        | some(hex) => hex_of_str(hex)
+        | none() => Nat/of_str(digits)
         end;
     Option/bind(code, (n) => Option/map(Char/of_nat(n), Str/of_char));
 
 --- What the reference `&body;` stands for, or `none` when it names nothing known.
 let reference(body: Str) -> Option(Str) =
-    match Str/starts_with(body, "#")
-    | true => numeric_reference(Str/slice(body, 1, Str/len(body) - 1))
-    | false => named_reference(body)
+    match Str/strip_prefix(body, "#")
+    | some(digits) => numeric_reference(digits)
+    | none() => named_reference(body)
     end;
 
 --- The reference at the start of a piece that followed an `&`, when it is one.

@@ -115,21 +115,16 @@ pub let not(x: Int) -> Int =
 
 --- The number an optional sign and a nonempty run of decimal digits spell, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Int) =
-    match Str/is_empty(s)
-    | true => Option/none()
-    | false =>
-        let first = Str/try_get(s, 0)!;
-        let digits =
-            match first == '+' || first == '-'
-            | true => Str/slice(s, 1, Str/len(s) - 1)
-            | false => s
-            end;
-        let negative = first == '-';
-        let n = Nat/of_str(digits)!;
-        match negative
-        | true => Option/some(+0 - Nat/to_int(n))
-        | false => Option/some(Nat/to_int(n))
-        end
+    let (negative, digits): {Bool, Str} =
+        match Str/strip_prefix(s, "-")
+        | some(rest) => (true, rest)
+        | none() =>
+            match Str/strip_prefix(s, "+") | some(rest) => (false, rest) | none() => (false, s) end
+        end;
+    let n = Nat/of_str(digits)!;
+    match negative
+    | true => Option/some(+0 - Nat/to_int(n))
+    | false => Option/some(Nat/to_int(n))
     end;
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.

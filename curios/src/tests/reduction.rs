@@ -705,7 +705,7 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// **The kernel/elab column is a demand count, not a price list.** Both checkers run the same machine on the same closed scan, so one demand costs both the same; the elaborator's 3.5× is it demanding the scan at several sites and spellings — checking, conversion, and the passes after — where the kernel demands it once and replays its memo. The construction-dominated programs in [`kernel_memo_charge_measurements`] still floor at 1× between the checkers, which is where the price-list parity claim lives and holds.
 ///
-/// **Use count is flat**, which is what spec 01's first milestone bought and this keeps honest. **Slicing is not what costs**, exactly as before: the sliced arm is the bare arm, since `Str/slice` supplies its bounds with `@drop_width_within`.
+/// **Use count is flat**, which is what spec 01's first milestone bought and this keeps honest. **Cutting should not be what costs.** The cut row cuts the literal with `Str/before` at a position, whose boundary is decided by the one byte at it and discharged by reduction, so it should sit on the bare row; the tables below measured the `Str/slice` it replaced, which supplied its bounds with `@drop_width_within` and did.
 ///
 /// **Wall clock is superlinear where units are exactly linear.** The bisection's rungs, release: 16K in 7.1 s, 32K in 22.6 s, 64K in 82.5 s, 128K in 249.5 s, 185K in 492.5 s — growth near n^1.8 against unit columns that are linear to the third digit. The unit model prices what a reduction builds and transitions, not the O(size) hashing of large keys the elaborator's caches perform; the excess wall shares a source with the retention residue below.
 ///
@@ -761,10 +761,13 @@ fn str_literal_cost_measurements() {
     // The control: the same bytes with no proof over them.
     cost_row("Bytes literal, n=500", &bytes_literal(500));
 
-    // Slicing supplies its bounds with `@drop_width_within` rather than leaving a decided proposition to reduce, so this should sit within a few percent of the bare literal — the check is the cost, not the slice.
+    // A cut at a position decides its boundary by the one byte there, discharged by reduction, so this should sit within a few percent of the bare literal — the check is the cost, not the cut.
     cost_row(
-        "Str n=500, sliced",
-        &str_literal(500, 0).replace(r#"/std/print("ok")"#, r#"/std/print(Str/slice(s, 0, 10))"#),
+        "Str n=500, cut",
+        &str_literal(500, 0).replace(
+            r#"/std/print("ok")"#,
+            r#"/std/print(Str/before(s, Str/At/of_offset(s, 10)))"#,
+        ),
     );
 }
 

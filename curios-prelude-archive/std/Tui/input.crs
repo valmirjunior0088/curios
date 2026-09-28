@@ -145,9 +145,9 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
                 match Str/of_bytes(window(input, i, len))
                 | none() => Step/emit(Option/none(), i + 1)
                 | some(s) =>
-                    match Str/try_get(s, 0)
+                    match Str/At/try_next(s, Str/At/start(s))
                     | none() => Step/emit(Option/none(), i + len)
-                    | some(c) => Step/emit(key(Key/plain(Code/char(c))), i + len)
+                    | some(first) => Step/emit(key(Key/plain(Code/char(first.char))), i + len)
                     end
                 end
             end

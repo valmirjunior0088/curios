@@ -149,7 +149,7 @@ The leading whitespace the non-blank lines and the closer's line share is remove
 
 A one-line string literal does not span lines: a raw newline inside `"…"` is refused, naming the block form.
 
-`Str` stores certified UTF-8 bytes. Its logical length, indexing, slicing, folding, and search operations count Unicode scalar values (`Char`), not bytes or grapheme clusters.
+`Str` stores certified UTF-8 bytes and is addressed by position: a `/std/Str/At(s)` is a byte offset into `s` at which a character begins, so a piece cut between two positions is whole characters, and stepping from one position to the next reads one Unicode scalar value (`Char`). Its length, folding, and search operations count and visit scalar values, not bytes or grapheme clusters.
 
 ### Boolean literals
 
