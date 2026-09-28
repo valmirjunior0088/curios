@@ -172,7 +172,8 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
     }
 
     let hole = Term::free_var(&context.fresh(Some("_")));
-    let mut visit = Visit::rewriting(
+    // Memoized on node identity: every metavariable blanks to the one hole, so a node's answer is the node's alone.
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| {
             matches!(&**term, Subterm::Metavar(_)).then(|| hole.clone())
@@ -718,12 +719,14 @@ fn watched_blockers(
 pub(crate) type Provenance = (MetavarOrigin, Option<Span>);
 
 /// Every metavariable occurrence across `terms` that carries an origin, by id, with the span of its first occurrence.
+///
+/// Memoized on node identity: the hook only records an id's first occurrence, which a memoized walk still reaches first, and `convert`'s solver asks this of a candidate — a reduct, whose tree can be exponential in its depth — whenever it postpones one.
 pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
     let origins: Rc<RefCell<BTreeMap<MetavarId, Provenance>>> =
         Rc::new(RefCell::new(BTreeMap::new()));
     for term in terms {
         let sink = Rc::clone(&origins);
-        let mut visit = Visit::rewriting(
+        let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term: &Term| {
                 if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {

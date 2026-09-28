@@ -50,7 +50,7 @@ use {
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module, StructDecl,
         Term, UniverseContext, Zonked, derived_binder_floor_outside,
-        rewrite_universe_levels_scoped, universe_metas,
+        rewrite_universe_levels_scoped_shared, universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -272,7 +272,7 @@ fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
 ///
 /// Scoped rather than flat: a nested scheme binds its own parameters innermost, so the bound at any point is the enclosing binder depth plus the declaration's count, exactly as `curios-elab`'s `validate_bound_universes` computes it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
 fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<KernelError> {
-    rewrite_universe_levels_scoped(value, move |depth, level| {
+    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let visible = depth.checked_add(parameter_count).ok_or(())?;
         match level.params().any(|param| param.0 >= visible) {
             true => Err(()),

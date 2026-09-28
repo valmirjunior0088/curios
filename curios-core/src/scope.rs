@@ -273,12 +273,13 @@ impl Bound for () {
     }
 }
 
+/// [`rewrite_universe_levels_scoped_shared`] for a hook that reads no depth.
 pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
     value: &B,
     rewrite: impl FnMut(&Level) -> Result<Level, E> + 'static,
 ) -> Result<B, E> {
     let mut rewrite = rewrite;
-    rewrite_universe_levels_scoped(value, move |_, level| rewrite(level))
+    rewrite_universe_levels_scoped_shared(value, move |_, level| rewrite(level))
 }
 
 /// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-Ersd lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over `Nat` summands, where no level can reach a number, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the route it admits anywhere else.
@@ -286,15 +287,36 @@ pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
 
+/// Every level `value` carries through `rewrite`, at the universe binder depth it stands at, once per occurrence and in walk order: for a hook whose answer is the occurrences themselves, as the level sequence two spellings are aligned by is. The first error `rewrite` answers is the result, and no level is asked after it.
 pub fn rewrite_universe_levels_scoped<B: Bound, E: 'static>(
     value: &B,
     rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+) -> Result<B, E> {
+    rewrite_levels_through(value, rewrite, Visit::rewriting_levels_scoped)
+}
+
+/// [`rewrite_universe_levels_scoped`], once per node and depth rather than once per occurrence: for a hook whose answer is a function of the level and the depth — a substitution, an instantiation, a check — or whose effect is idempotent. Every such caller walks what finalization and certification walk, and a solution stored as a reduct is a graph whose tree can be exponential in its depth. The first error is the same as the per-occurrence walk's, since skipping a revisit leaves the order first occurrences are met in unchanged.
+pub fn rewrite_universe_levels_scoped_shared<B: Bound, E: 'static>(
+    value: &B,
+    rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+) -> Result<B, E> {
+    rewrite_levels_through(value, rewrite, Visit::rewriting_levels_scoped_shared)
+}
+
+/// The variable callback of a walk that rewrites levels and leaves every variable as it is.
+type Unchanged = fn(usize, &Var) -> Option<Subterm>;
+
+/// The level walk both entry points share, driven by the visit `visit` builds.
+fn rewrite_levels_through<B: Bound, E: 'static>(
+    value: &B,
+    rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+    visit: fn(Unchanged, LevelRewrite) -> Visit<Unchanged>,
 ) -> Result<B, E> {
     let rewrite = Rc::new(RefCell::new(rewrite));
     let error = Rc::new(RefCell::new(None));
     let rewrite_for_visit = Rc::clone(&rewrite);
     let error_for_visit = Rc::clone(&error);
-    let mut visit = Visit::rewriting_levels_scoped(
+    let mut visit = visit(
         |_, _| None,
         Box::new(move |depth, level| {
             if error_for_visit.borrow().is_some() {
@@ -336,7 +358,7 @@ pub fn instantiate_universe_levels_scoped<B: Bound>(
     arguments: &[Level],
 ) -> Result<B, UniverseError> {
     let arguments = arguments.to_vec();
-    rewrite_universe_levels_scoped(value, move |depth, level| {
+    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let arguments = arguments
             .iter()
             .map(|argument| shift_universe_params(argument, depth))
@@ -791,16 +813,18 @@ where
         }
     }
 
-    pub fn rewriting_universes(visit: F, rewrite: Rewrite) -> Self {
+    /// [`rewriting_shared`](Self::rewriting_shared), visiting only nodes that carry universe data. Memoized on node identity, so it is sound for a hook [`rewriting_shared`](Self::rewriting_shared) admits; its one caller latches the first invalid universe context it meets.
+    pub fn rewriting_universes_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
             mode: Mode::RewritingUniverses(rewrite),
-            memo: Memo::None,
+            memo: Memo::ByNode(HashMap::new()),
         }
     }
 
+    /// A level hook at every level of every node that carries universe data, once per occurrence and in walk order: for a hook whose answer is the occurrences themselves.
     pub(crate) fn rewriting_levels_scoped(visit: F, rewrite: LevelRewrite) -> Self {
         Self {
             term_depth: 0,
@@ -808,6 +832,17 @@ where
             visit,
             mode: Mode::RewritingLevels(rewrite),
             memo: Memo::None,
+        }
+    }
+
+    /// [`rewriting_levels_scoped`](Self::rewriting_levels_scoped), memoized on node identity and both binder depths: for a hook whose answer is a function of the level and the universe depth it stands at, or whose effect is idempotent.
+    pub(crate) fn rewriting_levels_scoped_shared(visit: F, rewrite: LevelRewrite) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::RewritingLevels(rewrite),
+            memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
 

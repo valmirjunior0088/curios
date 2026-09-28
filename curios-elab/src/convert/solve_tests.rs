@@ -28,6 +28,28 @@ fn solve_is_symmetric() {
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat));
 }
 
+/// Abstracting a subject out of a candidate costs the candidate's graph, not its tree: each level sums the one below with itself, sixty over, and the subject at the base is abstracted once. The result stays a graph — both operands of its root are one node.
+#[test]
+fn abstraction_walks_a_shared_candidate_once_per_node() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let birth = context.fresh(Some("b"));
+    let subject = Term::apply(Term::free_var(&f), [nat(1)]);
+
+    let mut candidate = subject.clone();
+    for _ in 0..60 {
+        candidate = Term::intrinsic(Intrinsic::nat_add(candidate.clone(), candidate));
+    }
+    let abstracted = super::abstract_occurrences(&candidate, &[(subject, birth.clone())]);
+
+    assert!(!abstracted.mentions_free(&f));
+    assert!(abstracted.mentions_free(&birth));
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*abstracted else {
+        panic!("the abstraction changed the root: {abstracted}");
+    };
+    assert!(std::ptr::eq::<Subterm>(&**left, &**right));
+}
+
 #[test]
 fn occurs_check_rejects_cyclic_solution() {
     let mut context = context();

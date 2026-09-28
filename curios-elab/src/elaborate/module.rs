@@ -34,11 +34,13 @@ use {
 /// An application reaches finalization in either of two forms: the nominal normal form, which carries its instance in [`StructType`](curios_core::StructType)'s or [`InductType`](curios_core::InductType)'s own universe vector, or an explicit instance on an unreduced occurrence of the type-former. Both name the same levels in the same order, so either answers the question.
 ///
 /// The two nominal cases are separate arms rather than one, because the node a declaration normalizes to is what distinguishes a concept from an inductive here. Nothing about the *name* does — deciding by inspecting `name` would be guessing at a fact the term already states.
+///
+/// Memoized on node identity: the hook only latches the first occurrence, which a memoized walk still reaches first, and a finalized value can hold a solution stored as a reduct, whose tree can be exponential in its depth.
 fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
     let name = name.clone();
-    let mut visit = Visit::rewriting(
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| {
             let levels = match &**term {

@@ -10,7 +10,7 @@ use {
         MetavarId, MetavarOrigin, Module, Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct,
         StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext,
         UniverseError, UniverseMetaId, Var, Variant, Visit, project_erased_universes,
-        rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
+        rewrite_universe_levels_scoped_shared, shift_universe_params, universe_metas,
     },
     curios_utilities::Span,
     std::{
@@ -272,7 +272,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
 ) -> Result<(), Error> {
     let nested_error = Rc::new(RefCell::new(None));
     let error = Rc::clone(&nested_error);
-    let mut visit = Visit::rewriting_universes(
+    let mut visit = Visit::rewriting_universes_shared(
         |_, _| None,
         Box::new(move |_, term| {
             let contexts: Vec<&UniverseContext> = match &**term {
@@ -297,7 +297,7 @@ pub(crate) fn validate_bound_universes<B: Bound>(
     }
 
     let owner = owner.to_string();
-    let _: B = rewrite_universe_levels_scoped(value, move |depth, level| {
+    let _: B = rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let visible_parameter_count = depth
             .checked_add(parameter_count)
             .ok_or_else(|| format!("{owner}: universe binder depth overflow"))?;
@@ -772,7 +772,8 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
         let seen_goals = Rc::clone(seen_goals);
         let referenced = Rc::clone(referenced);
         let owner = owner.cloned();
-        let mut visit = Visit::rewriting(
+        // Memoized on node identity: a goal is latched by its first occurrence, which a memoized walk still reaches first, and the log of the rest is drained through `scanned`, so logging each node once rather than each path through it changes nothing it yields. A definition can hold a solution stored as a reduct, whose tree can be exponential in its depth.
+        let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
                 if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {
@@ -1445,7 +1446,7 @@ pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
     }
 
     let solver = solver.clone();
-    rewrite_universe_levels_scoped(value, move |depth, level| {
+    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let mut replacements = BTreeMap::new();
         for meta in level.metas() {
             if let Some(solution) = solver.solution(meta) {

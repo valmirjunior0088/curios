@@ -5,7 +5,10 @@
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
-    curios_core::{Free, Level, LevelHead, Term, UniverseMetaId, rewrite_universe_levels_scoped},
+    curios_core::{
+        Free, Level, LevelHead, Term, UniverseMetaId, rewrite_universe_levels_scoped,
+        rewrite_universe_levels_scoped_shared,
+    },
     curios_utilities::Entropy,
     std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
@@ -330,7 +333,7 @@ fn adapted_across_levels(key: &Term, query: &Term, reduct: &Term) -> Option<Term
         return Some(reduct.clone());
     }
 
-    rewrite_universe_levels_scoped(reduct, move |_, level| {
+    rewrite_universe_levels_scoped_shared(reduct, move |_, level| {
         level.substitute(|head| match head {
             LevelHead::Meta(meta) => map.get(&meta).cloned(),
             LevelHead::Param(_) => None,
@@ -343,6 +346,7 @@ fn adapted_across_levels(key: &Term, query: &Term, reduct: &Term) -> Option<Term
 fn levels_in_order(term: &Term) -> Vec<Level> {
     let levels = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&levels);
+    // Once per occurrence, deliberately: the sequence is the answer, and two spellings are aligned by position in it, so a walk that skipped a revisit on one side would pair the wrong levels.
     let _ = rewrite_universe_levels_scoped(term, move |_, level: &Level| {
         sink.borrow_mut().push(level.clone());
         Ok::<_, ()>(level.clone())

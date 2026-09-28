@@ -93,7 +93,8 @@ pub(crate) fn method_table(context: &Context) -> Methods {
 pub(crate) fn denoise_for_display(table: &Methods, binders: &BinderTypes, term: &Term) -> Term {
     let captured = Rc::clone(table);
     let scope = Rc::clone(binders);
-    let mut visit = Visit::rewriting(
+    // Memoized on node identity: a fold reads the node and the two fixed tables alone, and a report can materialize a reduct, whose tree can be exponential in its depth.
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| fold(&captured, &scope, term)),
     );
@@ -117,7 +118,8 @@ pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
 
 fn refold_with(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Term {
     let captured = Rc::clone(table);
-    let mut visit = Visit::rewriting(
+    // Memoized on node identity, for `denoise_for_display`'s reason: a refold reads the node and the fixed table alone.
+    let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| refold_node(&captured, term)),
     );

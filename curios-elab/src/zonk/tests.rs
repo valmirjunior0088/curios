@@ -236,3 +236,30 @@ fn materializes_a_shared_graph_once_per_node() {
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
+
+/// A module's goals are gathered once per node of its graph, not once per path: one written goal at the base of sixty levels that each sum the one below with itself is one report.
+#[test]
+fn goals_are_gathered_once_per_node() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+
+    let mut body = Term::goal(0);
+    for _ in 0..60 {
+        body = Term::intrinsic(Intrinsic::nat_add(body.clone(), body));
+    }
+    let reports = collect_goal_reports(&mut context, &lowered_module(body, Vec::new()));
+
+    assert_eq!(reports.len(), 1);
+}
+
+/// A value's universes are validated once per node of its graph, not once per path: a level at the base of sixty levels that each sum the one below with itself is checked in the graph's size.
+#[test]
+fn universes_are_validated_once_per_node() {
+    let mut value = Term::type_at(Level::param(UniverseParam(0)));
+    for _ in 0..60 {
+        value = Term::intrinsic(Intrinsic::nat_add(value.clone(), value));
+    }
+
+    assert!(validate_bound_universes(&value, 1, "doubled").is_ok());
+    assert!(validate_bound_universes(&value, 0, "doubled").is_err());
+}

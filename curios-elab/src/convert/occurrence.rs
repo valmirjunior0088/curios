@@ -6,13 +6,15 @@ use {
 };
 
 /// Replace every occurrence of a subject term in `t` — matched by the same term equality conversion uses, at any depth (binder names are entropy-fresh, so a free-named subject cannot be captured by an inner scope) — with its birth binder's name. Top-down: an outer match wins and is not descended into. Subjects are pairwise distinct by construction, so the match is unambiguous.
+///
+/// Memoized on node identity: the answer at a node is a function of the node and the subjects alone, and a candidate is a reduct, whose tree can be exponential in its depth.
 pub(super) fn abstract_occurrences(t: &Term, subjects: &[(Term, Free)]) -> Term {
     if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
         return Term::free_var(name);
     }
 
     let owned = subjects.to_vec();
-    t.traverse(&mut Visit::rewriting(
+    t.traverse(&mut Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| {
             owned

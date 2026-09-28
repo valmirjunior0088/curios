@@ -1,4 +1,4 @@
-//! What one run reports when an item is refused: every independent refusal in item order, nothing from an item that reaches a refused one, and a context with nothing of the refused item left in it.
+//! What one run reports when an item is refused: every independent refusal in item order, nothing from an item that reaches a refused one, and a context with nothing of the refused item left in it — and what finalization reads off a declaration's value.
 
 use {
     crate::*,
@@ -30,6 +30,27 @@ fn boolean(value: bool) -> Term {
 
 fn mention(path: &str) -> Term {
     Term::free_var(&Free::from(&nominal(path)))
+}
+
+/// A declaration's instance is read once per node of a value's graph, not once per path: the family occurs at the base of sixty levels that each sum the one below with itself.
+#[test]
+fn a_declaration_instance_is_read_once_per_node() {
+    let family = nominal("Family");
+    let level = Level::param(UniverseParam(0));
+    let mut value = Term::induct_type_at(
+        family.clone(),
+        vec![level.clone()],
+        Vec::<Term>::new(),
+        Vec::<Term>::new(),
+    );
+    for _ in 0..60 {
+        value = Term::intrinsic(Intrinsic::nat_add(value.clone(), value));
+    }
+
+    assert_eq!(
+        super::declaration_instance(&value, &family),
+        Some(vec![level])
+    );
 }
 
 fn let_item(path: &str, type_: Term, body: Term) -> Item {

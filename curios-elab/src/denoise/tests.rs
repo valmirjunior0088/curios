@@ -1,6 +1,6 @@
 use {
     super::{Method, MethodTable, denoise_for_display},
-    curios_core::{Apply, Free, Global, Infix, Subterm, Term, Transient},
+    curios_core::{Apply, Free, Global, Infix, Intrinsic, Subterm, Term, Transient},
     curios_utilities::{InfixOp, Qualifier},
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -37,6 +37,48 @@ fn folded_op(term: &Term) -> InfixOp {
         panic!("the projection folds to an infix node");
     };
     *op
+}
+
+/// `base` under sixty levels that each sum the one below with itself: a tree past anything a walk per path finishes, and a graph of sixty-one nodes.
+fn doubled(base: Term) -> Term {
+    let mut term = base;
+    for _ in 0..60 {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
+    term
+}
+
+fn root_operands_shared(term: &Term) -> bool {
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &**term else {
+        panic!("the walk changed the root: {term}");
+    };
+    std::ptr::eq::<Subterm>(&**left, &**right)
+}
+
+/// A report's term is folded once per node of its graph, not once per path, and stays a graph: the projection at the base of a shared sum folds, and the sum around it is walked in its own size.
+#[test]
+fn a_shared_term_is_denoised_once_per_node() {
+    let witness = Global::Authored(Qualifier::from(["std", "Nat", "w"]));
+    let mut table = MethodTable::default();
+    table
+        .by_witness
+        .insert((witness.clone(), 0), operator(InfixOp::Eql));
+    let call = Term::apply(
+        Term::proj(Term::free_var(&Free::Global(witness)), 0),
+        operands(),
+    );
+
+    let folded = denoise_for_display(&Rc::new(table), &Rc::new(BTreeMap::new()), &doubled(call));
+
+    assert!(root_operands_shared(&folded));
+}
+
+/// A report's term is refolded once per node of its graph, not once per path, and stays a graph.
+#[test]
+fn a_shared_term_is_refolded_once_per_node() {
+    let refolded = super::refold_with(&Rc::new(Vec::new()), &doubled(operands().remove(0)));
+
+    assert!(root_operands_shared(&refolded));
 }
 
 // `Neq` has its own concept slot, so a `neq` projection keeps the disequality spelling rather than folding to an equality the reader would have to un-negate.

@@ -45,6 +45,43 @@ fn display_parameterless_witness_concept_states_the_rule() {
     );
 }
 
+/// Each level sums the one below with itself, sixty over, around a hole at the base: a tree past anything a walk per path finishes, and a graph of sixty-one nodes.
+fn doubled_around_a_hole() -> Term {
+    let mut term = Term::hole(0);
+    for _ in 0..60 {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
+    term
+}
+
+/// Whether both operands of a sum at the root are one node — what a walk that kept the graph hands back.
+fn root_operands_shared(term: &Term) -> bool {
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &**term else {
+        panic!("the walk changed the root: {term}");
+    };
+    std::ptr::eq::<Subterm>(&**left, &**right)
+}
+
+/// Reading a candidate's metavariables for a blocked solve costs the candidate's graph, not its tree.
+#[test]
+fn metavariable_origins_are_read_once_per_node() {
+    let origins = metavar_origins(&[&doubled_around_a_hole()]);
+
+    assert_eq!(origins.keys().copied().collect::<Vec<_>>(), [MetavarId(0)]);
+}
+
+/// Blanking a stranded region's metavariables for its report costs the type's graph, not its tree, and keeps the graph.
+#[test]
+fn a_required_region_type_blanks_once_per_node() {
+    let mut context = Context::new(100_000, SYNTAX);
+
+    let blanked = super::required_region_type(&mut context, &doubled_around_a_hole())
+        .expect("the monad is not itself a hole");
+
+    assert!(blanked.metavars().is_empty());
+    assert!(root_operands_shared(&blanked));
+}
+
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.
 ///
 /// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. The two disagreed once, in the direction that matters: the kernel additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, and a closed inhabitant of `False` followed. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.

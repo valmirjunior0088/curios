@@ -2007,6 +2007,8 @@ impl Term {
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
     /// Driven by [`Term::try_walk`] for [`Term::any_metavar`]'s reason: it is a read-only walk over `any_child_term`, and a needle sought under a data-shaped spine would otherwise descend it natively. The free-variable head is read once here rather than re-matched at every node, which the recursive spelling did because each level re-entered through the same entry point.
+    ///
+    /// Each node is visited once, for [`Term::any_metavar`]'s other reason: whether a subtree holds the needle is a fact about the node, and a compound needle has no cached bit to prune by, so a reduct — a graph whose tree can be exponential in its depth — was searched once per path.
     pub fn mentions_term(&self, needle: &Term) -> bool {
         let free = match &**needle {
             Subterm::Var(var) => var.as_free(),
@@ -2014,8 +2016,12 @@ impl Term {
         };
 
         self.try_walk(
-            &mut (),
-            |_, term| {
+            &mut HashSet::<*const Node>::new(),
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+
                 if term == needle {
                     return ControlFlow::Break(());
                 }
@@ -2043,7 +2049,8 @@ impl Term {
         }
         let needle = needle.clone();
         let replacement = replacement.clone();
-        self.traverse(&mut Visit::rewriting(
+        // Memoized on node identity: the answer at a node is the node's alone, since `replacement` carries no loose index to shift.
+        self.traverse(&mut Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term: &Term| (*term == needle).then(|| replacement.clone())),
         ))

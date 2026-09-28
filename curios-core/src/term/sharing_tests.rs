@@ -145,3 +145,91 @@ fn equal_graphs_compare_in_their_own_size() {
 
     assert_eq!(build(), build());
 }
+
+/// `base` under sixty levels that each sum the one below with itself: a tree past anything a walk per path finishes, and a graph of sixty-one nodes.
+fn doubled(base: Term, depth: usize) -> Term {
+    let mut term = base;
+    for _ in 0..depth {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
+    term
+}
+
+fn root_operands_shared(term: &Term) -> bool {
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = term.as_ref() else {
+        panic!("the walk changed the root: {term}");
+    };
+    Rc::ptr_eq(&left.inner, &right.inner)
+}
+
+/// A compound needle is sought once per node, since it has no cached bit to prune by: present at the base of a shared sum it is found, and absent the whole graph is searched in its own size.
+#[test]
+fn a_needle_is_sought_once_per_node() {
+    let f = Free::local(0, Some("f"));
+    let base = Term::apply(
+        Term::free_var(&f),
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)))],
+    );
+    let absent = Term::apply(
+        Term::free_var(&f),
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(2usize)))],
+    );
+    let term = doubled(base.clone(), 60);
+
+    assert!(term.mentions_term(&base));
+    assert!(!term.mentions_term(&absent));
+}
+
+/// A replacement is made once per node, and the graph it is made in stays a graph.
+#[test]
+fn a_replacement_is_made_once_per_node() {
+    let f = Free::local(0, Some("f"));
+    let base = Term::apply(
+        Term::free_var(&f),
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)))],
+    );
+    let replacement = Term::intrinsic(Intrinsic::Nat(Nat::new(2usize)));
+
+    let replaced = doubled(base.clone(), 60).replace_term(&base, &replacement);
+
+    assert!(!replaced.mentions_free(&f));
+    assert!(root_operands_shared(&replaced));
+}
+
+/// The shared level walk asks its hook once per node and depth: the one level at the base of a shared sum is asked once, and the graph stays a graph.
+#[test]
+fn a_shared_level_walk_asks_each_level_once_per_node() {
+    let meta = UniverseMetaId(0);
+    let term = doubled(Term::type_at(Level::meta(meta)), 60);
+    let asked = Rc::new(std::cell::Cell::new(0));
+    let counter = Rc::clone(&asked);
+
+    let rewritten: Term = rewrite_universe_levels_scoped_shared(&term, move |_, level| {
+        counter.set(counter.get() + 1);
+        level.substitute(|head| match head {
+            LevelHead::Meta(found) if found == meta => Some(Level::zero()),
+            _ => None,
+        })
+    })
+    .expect("substituting a ground level cannot overflow");
+
+    assert_eq!(asked.get(), 1);
+    assert!(rewritten.universe_metas().is_empty());
+    assert!(root_operands_shared(&rewritten));
+}
+
+/// The per-occurrence level walk asks its hook at every occurrence, in walk order: the sequence two spellings are aligned by has one entry per occurrence, so a shared level at the base of three doublings is asked eight times.
+#[test]
+fn the_per_occurrence_level_walk_asks_every_occurrence() {
+    let term = doubled(Term::type_at(Level::meta(UniverseMetaId(0))), 3);
+    let asked = Rc::new(std::cell::Cell::new(0));
+    let counter = Rc::clone(&asked);
+
+    let _: Term = rewrite_universe_levels_scoped(&term, move |_, level| {
+        counter.set(counter.get() + 1);
+        Ok::<_, ()>(level.clone())
+    })
+    .expect("the identity cannot fail");
+
+    assert_eq!(asked.get(), 8);
+}
