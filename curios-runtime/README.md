@@ -12,6 +12,12 @@ The runtime-only Curios engine: deserialize a precompiled `.cwasm` module and ru
 
 **Rationale.** Bundled-executable startup should do no compilation work, and slimness is a dependency-graph property: it holds because the capability is absent, not because a code path declines to use it. A workspace build cannot witness it, since feature unification can quietly pull a compiler backend into the graph — which is why a launcher produced by a workspace build is not evidence of anything.
 
+### Compilation runs across threads, and only where compilation exists
+
+**Decision.** The `cranelift` feature brings Wasmtime's `parallel-compilation` with it, so the native product compiles a module's functions across a thread pool — on by default once the feature is in, with no configuration of its own — while the launcher, which never enables `cranelift`, links no pool at all.
+
+**Rationale.** Precompiling is the one step of a `curios run` that parallelizes without anything upstream changing: Wasmtime compiles each function on its own and joins the results in order, so the artifact does not depend on how many threads produced it — `curios compile programs/monad_async.crs` writes the same executable byte for byte with the pool and without it, which is also why a payload's store address needs no new component. Measured on a sixteen-thread machine with the debug build the workspace tests with, `programs/monad_async.crs` spent 1.61–1.64 s in its `precompile` span serially and 0.38–0.42 s in parallel, over three runs each; retaken with `curios --profile <PATH> run programs/monad_async.crs` fed a workload size on standard input, and the fold's `precompile` row. Tying the feature to `cranelift` rather than listing it beside is what keeps the launcher's graph a fact: `cargo tree -p curios-runtime -e normal` names no `rayon`, as it names no `cranelift-codegen`.
+
 ### The heap is sized ahead of its churn
 
 **Decision.** The shared engine sets `gc_heap_initial_size` to sixteen mebibytes. Nothing else changes: the collector stays the semi-space copier `Collector::Auto` resolves to under the `gc-copying` feature, and the launcher and product boundaries stay where they were. The constant is engine-wide because the knob is — wasmtime bakes the tunable into the `.cwasm` compatibility stamp, so an artifact precompiled under the size can only ever run under it, and the single-pin invariant above extends over the knob with no new mechanism.
