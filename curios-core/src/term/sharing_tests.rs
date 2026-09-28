@@ -1,6 +1,10 @@
 //! Memoized rewrites keep sharing, and a deep term compares, releases and captures without native recursion.
 
-use {crate::*, std::rc::Rc};
+use {
+    crate::*,
+    curios_utilities::{Source, Span},
+    std::rc::Rc,
+};
 
 use super::test_support::*;
 
@@ -23,6 +27,44 @@ fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
         Rc::ptr_eq(&tuple.fields[0].inner, &tuple.fields[1].inner),
         "a memoized rewrite split one shared subterm into two nodes"
     );
+}
+
+/// A memoized walk answers a shared node once, and each occurrence under its own span: one node under two spans comes back under the same two, through a capture and through a hook that spans its answer by the occurrence it replaced, while a hook's own replacement keeps the span it was given. Handed back as stored, a hit gave the second occurrence the first one's span, so a diagnostic there pointed at the other.
+#[test]
+fn a_memoized_walk_keeps_each_occurrence_s_span() {
+    let source = Source::inline("a b c");
+    let span = |start| Some(Span::new(Rc::clone(&source), start, start + 1));
+    let f = Free::local(0, Some("f"));
+    let x = Free::local(1, Some("x"));
+    let shared = Term::apply(Term::free_var(&f), [Term::free_var(&x)]);
+    let term = Term::tuple([
+        shared.clone().respanned(span(0)),
+        shared.clone().respanned(span(2)),
+    ]);
+    let spans = |walked: &Term| {
+        let Subterm::Tuple(tuple) = walked.as_ref() else {
+            panic!("the walk changed the term's shape");
+        };
+        (tuple.fields[0].span(), tuple.fields[1].span())
+    };
+
+    assert_eq!(spans(&term.capture(&[&x])), (span(0), span(2)));
+
+    let needle = shared.clone();
+    let spanned_by_occurrence: Term = term.traverse(&mut Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, node: &Term| {
+            (*node == needle).then(|| Term::free_var(&f).respanned(node.span()))
+        }),
+    ));
+    assert_eq!(spans(&spanned_by_occurrence), (span(0), span(2)));
+
+    let replacement = Term::free_var(&x).respanned(span(4));
+    let spanned_by_hook: Term = term.traverse(&mut Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, node: &Term| (*node == shared).then(|| replacement.clone())),
+    ));
+    assert_eq!(spans(&spanned_by_hook), (span(4), span(4)));
 }
 
 /// A rewrite that rebuilds a shared node once per *occurrence* rather than once per node turns a DAG into its expansion. This is the shape that made it matter: a string literal lowers to a chain threading a scan state, where every link mentions the previous state, so the term is linear in distinct nodes but triangular expanded. Losing the memo here cost O(n^2) nodes for an n-byte literal, and every later pass over the term inherited it.

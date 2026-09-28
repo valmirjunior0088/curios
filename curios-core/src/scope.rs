@@ -7,6 +7,7 @@ use {
         Free, Global, Level, LevelHead, MetavarId, Subterm, Term, UniverseError, UniverseMetaId,
         UniverseParam,
     },
+    curios_utilities::Span,
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap},
@@ -649,13 +650,31 @@ pub(crate) struct MaskedLevels {
 /// **When it is legal.** [`Memo::ByNode`] needs the variable callback and the rewrite hook pure in the node; [`Memo::ByNodeAndDepth`] needs them pure in the node and the depth. Purity is not the whole condition: a hook with an *effect* may still memoize when the effect is idempotent — a set insert, a first-error latch — and may not when it is not. Three hooks serve operands by position (an `index` or an iterator) and one pushes into a `Vec`; for those the answer differs per occurrence and [`Memo::None`] is the only correct choice.
 ///
 /// Every constructor takes one explicitly. There is no default, deliberately: both defects above were omissions, so neither defaulting direction is safe — a wrong `None` costs an exponent and a wrong memo costs a wrong answer.
+///
+/// **A span is an occurrence's, not a node's.** It sits on the `Term` wrapper, and one node is shared under wrappers spanning different text — the elaborator's cache hands every occurrence of a subterm one node and stamps each with its own span. An unmemoized rebuild keeps each occurrence's span; a hit that handed back the stored rebuild as it was gave every later occurrence the first one's, so a diagnostic at the second occurrence of a shared subterm pointed at the first. So an entry keeps the span of the occurrence that filled it ([`Remembered`]), and a hit whose rebuild carries that span — a rebuild, or a hook's answer spanned by the occurrence it replaced — takes the asking occurrence's instead. A hook's own replacement, spanned by something else, is handed back as it was, which is what rebuilding the occurrence would have produced.
 enum Memo {
     /// Rebuild every occurrence. Correct for a hook whose answer depends on how many times it has run.
     None,
     /// Keyed on input node identity. Addresses are stable for the traversal because the caller's value holds every node alive.
-    ByNode(HashMap<usize, Term>),
-    /// Keyed on input node identity *and* binder depth, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices.
-    ByNodeAndDepth(HashMap<(usize, usize), Term>),
+    ByNode(HashMap<usize, Remembered>),
+    /// Keyed on input node identity *and* both binder depths, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices. The universe binder depth is in the key beside the term's because a level rewrite reads it: a node under a `rec` group's universe context sits one universe binder deeper at the same term depth.
+    ByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
+}
+
+/// One memo entry: a node's rebuild, and the span of the occurrence whose visit filled it — see [`Memo`] for why a hit needs the second.
+struct Remembered {
+    filled_at: Option<Span>,
+    rebuilt: Term,
+}
+
+impl Remembered {
+    /// The rebuild as `at`'s own: respanned when it carries the span of the occurrence that filled it, as it was otherwise.
+    fn for_occurrence(&self, at: &Term) -> Term {
+        match self.rebuilt.span() == self.filled_at {
+            true => self.rebuilt.clone().respanned(at.span()),
+            false => self.rebuilt.clone(),
+        }
+    }
 }
 
 /// What a traversal does beyond rewriting variables.
@@ -949,24 +968,30 @@ where
         !matches!(self.memo, Memo::None)
     }
 
-    /// The memoized rebuild of the input node at `key`, at the depth this visit currently stands at for the modes whose memo is depth-keyed.
-    pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
-        match &self.memo {
+    /// The memoized rebuild of the input node at `key`, at the depths this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its span.
+    pub(crate) fn memo_get(&self, key: usize, at: &Term) -> Option<Term> {
+        let remembered = match &self.memo {
             Memo::None => None,
-            Memo::ByNode(memo) => memo.get(&key).cloned(),
-            Memo::ByNodeAndDepth(memo) => memo.get(&(key, self.term_depth)).cloned(),
-        }
+            Memo::ByNode(memo) => memo.get(&key),
+            Memo::ByNodeAndDepth(memo) => memo.get(&(key, self.term_depth, self.universe_depth)),
+        }?;
+
+        Some(remembered.for_occurrence(at))
     }
 
-    pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
-        let depth = self.term_depth;
+    /// Remember `rebuilt` as the rebuild of the input node at `key`, filled by the occurrence `at`.
+    pub(crate) fn memo_put(&mut self, key: usize, at: &Term, rebuilt: Term) {
+        let remembered = Remembered {
+            filled_at: at.span(),
+            rebuilt,
+        };
         match &mut self.memo {
             Memo::None => {}
             Memo::ByNode(memo) => {
-                memo.insert(key, term);
+                memo.insert(key, remembered);
             }
             Memo::ByNodeAndDepth(memo) => {
-                memo.insert((key, depth), term);
+                memo.insert((key, self.term_depth, self.universe_depth), remembered);
             }
         }
     }

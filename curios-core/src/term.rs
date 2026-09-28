@@ -665,6 +665,14 @@ impl Term {
         self.span.clone()
     }
 
+    /// This term under `span` in place of its own, the node shared: the same subterm at another occurrence.
+    pub(crate) fn respanned(self, span: Option<Span>) -> Self {
+        Term {
+            span,
+            inner: self.inner,
+        }
+    }
+
     /// Attaches a span to this term. If the term already carries a span (the innermost one), it is preserved — innermost wins, matching how `Error::at` keeps the first span it sees as errors propagate up.
     pub fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
@@ -1741,11 +1749,11 @@ impl Bound for Term {
         recurse(|| {
             if visit.memoizes() {
                 let key = Rc::as_ptr(&self.inner) as usize;
-                if let Some(hit) = visit.memo_get(key) {
+                if let Some(hit) = visit.memo_get(key, self) {
                     return hit;
                 }
                 let rebuilt = self.traverse_unmemoized(visit).canonicalized(visit);
-                visit.memo_put(key, rebuilt.clone());
+                visit.memo_put(key, self, rebuilt.clone());
                 return rebuilt;
             }
 
@@ -1854,7 +1862,8 @@ impl Term {
                 Work::Enter(term, prechecked) => {
                     if !prechecked {
                         if visit.memoizes()
-                            && let Some(hit) = visit.memo_get(Rc::as_ptr(&term.inner) as usize)
+                            && let Some(hit) =
+                                visit.memo_get(Rc::as_ptr(&term.inner) as usize, &term)
                         {
                             rewritten.push(hit);
                             continue;
@@ -1882,7 +1891,7 @@ impl Term {
                         _ => {
                             let key = Rc::as_ptr(&term.inner) as usize;
                             let rebuilt = term.traverse_children(visit);
-                            visit.memo_put(key, rebuilt.clone());
+                            visit.memo_put(key, &term, rebuilt.clone());
                             rewritten.push(rebuilt);
                             continue;
                         }
@@ -1943,7 +1952,7 @@ impl Term {
                         _ => unreachable!("only spine nodes create universe traversal frames"),
                     };
                     let rebuilt = term.rebuilt(subterm);
-                    visit.memo_put(Rc::as_ptr(&term.inner) as usize, rebuilt.clone());
+                    visit.memo_put(Rc::as_ptr(&term.inner) as usize, &term, rebuilt.clone());
                     rewritten.push(rebuilt);
                 }
             }
