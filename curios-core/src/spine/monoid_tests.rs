@@ -1,6 +1,9 @@
 //! The free-monoid prefix step `Bin` and `List` share: how a run is grouped, regrouping a spelling it cannot enter, the clashes it may and may not report, and a fill against the cons it equals.
 
-use super::{test_support::*, *};
+use {
+    super::{test_support::*, *},
+    curios_num::{Binary, Grain},
+};
 
 fn bytes(run: impl Into<Vec<u8>>) -> Term {
     Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.into())))
@@ -18,7 +21,7 @@ fn nats(run: impl IntoIterator<Item = u32>) -> Term {
     })
 }
 
-// **How a literal run is grouped is invisible to the peel, and that is the premise the fusion cap rests on.** Reduction fuses an all-literal concatenation into one value today; capping that leaves the `Concat` node standing instead, so a capped spelling and the literal it would have fused to must still decide equal. They do because [`bin_atoms`] flattens a concatenation into segments and [`push`] merges every pair of adjacent literal runs, so both groupings reach the same segment list before anything is compared.
+// **How a literal run is grouped is invisible to the peel, and that is the premise the fusion cap rests on.** Reduction fuses an all-literal concatenation into one value today; capping that leaves the `Concat` node standing instead, so a capped spelling and the literal it would have fused to must still decide equal. They do because `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges every pair of adjacent runs, so both groupings reach the same segment list before anything is compared.
 //
 // A trailing symbolic operand is what makes this a test rather than a tautology: without it both sides are all-literal, reduction fuses each into one value on the way in, and the assertion holds without the peel having decided anything. With it, neither side fuses and the peel is the only thing that can equate them.
 #[test]

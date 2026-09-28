@@ -38,6 +38,9 @@ pub use intrinsic::*;
 mod spine;
 pub use spine::*;
 
+mod words;
+use words::*;
+
 mod free_monoid;
 pub use free_monoid::*;
 

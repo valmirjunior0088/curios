@@ -37,3 +37,11 @@ The consolidation that is moving the rest of the carriers' reasoning here — co
 **Decision.** `LinearForm` is a comparison read as the difference of its sides over ℤ: each monomial once, its atoms in rank order, the monomials ordered lexicographically, the constant separated, and the atoms known non-negative recorded beside it. Atoms of equal rank are ordered by the order their caller handed them out in.
 
 **Rationale.** A relation stated two ways — commuted, reassociated, a term moved across — is one form, so a reader outside the converters can ask what conversion decides of a comparison without reading the folds. The second key is the one place a form can depend on how its sums were written, and it is reached only when ranks collide, where it orders two atoms and never merges them.
+
+### A word's measures are its caller's
+
+**Decision.** A `Word` is generic over an `Alphabet`, which supplies the arithmetic and identity of the word's numbers, a chunk's length, how a position is rooted through the windows it is read through, and where an operand begins inside a root. Everything the free monoid decides from those answers is stated here: the normal form, window fusion, the prefix strip and its verdicts, and when two positions are one.
+
+**Rationale.** A window's offset and length are `Nat`s, and their normal form under addition includes Euclid's recombination, which reads which summand is the remainder of which division — terms this crate never sees. Summed here, two windows that fuse or meet today would stop. Read through the alphabet, a number is also read only where it is compared, which is what a word cost before it moved. The alphabet converts and reduces nothing, so the host trait rejected above stays rejected: its sum is the carrier's normal form, its identity is `Nat`'s cancellation under Core's atom identity, and the rest reads how a term is built.
+
+**Rejected.** Offsets and lengths held here as `Combination`s: they would still need the recombining sum from the caller, and would add an atom table per comparison and read and project every window number up front.

@@ -624,6 +624,18 @@ impl Nat {
             .map(|cancelled| Self::rebuild_cancelled(cancelled, left, right))
     }
 
+    /// Whether two reduced `Nat` terms are certainly one number: syntactic identity first, then the cancellation, which reads every summand up to universe instances — so `len(xs)` is one number at every instance, bare or inside a sum. `false` declines; it never claims the two differ.
+    pub(crate) fn same(left: &Term, right: &Term) -> bool {
+        if left == right {
+            return true;
+        }
+        curios_profile::profile!("nat::cancel_common");
+        matches!(
+            Self::cancellation(left, right).deduction(),
+            Deduction::Equal
+        )
+    }
+
     /// `left` against `right` read over one table of atoms, with what they share taken off both.
     fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, Term> {
         let mut atoms = Atoms::default();

@@ -1,6 +1,9 @@
 //! Positions: a read through a window, a window of a window, and the declining side of each.
 
-use super::{test_support::*, *};
+use {
+    super::{test_support::*, *},
+    curios_num::Grain,
+};
 
 fn list_window(base: Term, start: Term, count: Term) -> Term {
     Term::intrinsic(Intrinsic::list_slice(
@@ -239,5 +242,48 @@ fn peel_position_declines_an_operand_read_at_another_offset() {
             Some(Deduction::Undecided)
         ),
         "a base the concatenation does not hold is not one of its operands"
+    );
+}
+
+// A word's numbers take the numeric identity bare as well as inside a sum. Two occurrences of one polymorphic name are one number at every instance, so `get(xs, n<0>)` reads the position `get(xs, n<1>)` does, a window starting at one meets a window starting at the other, and a window ending at `n<0>` touches one starting at `n<1>`. Until `curios-algebra` owned words, a bare pair of positions fell back to syntactic equality and declined all three, while the same pair inside a sum cancelled.
+#[test]
+fn a_word_number_is_one_number_across_a_universe_instance() {
+    let (xs, l) = (sym(0, "xs"), sym(1, "l"));
+    let n = |level: u32| {
+        Term::instance(
+            crate::InstanceHead::Var(crate::Var::free(crate::Free::local(2, Some("n")))),
+            vec![crate::Level::constant(level)],
+        )
+    };
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+
+    assert!(
+        matches!(
+            peel_position(&list_get(xs.clone(), n(0)), &list_get(xs.clone(), n(1))),
+            Some(Deduction::Equal)
+        ),
+        "`n<0>` and `n<1>` are one position"
+    );
+
+    let starting = |level| list_window(xs.clone(), n(level), l.clone());
+    assert!(
+        matches!(
+            peel_list(as_intrinsic(&starting(0)), as_intrinsic(&starting(1))),
+            Some(Deduction::Equal)
+        ),
+        "two windows starting at `n<0>` and `n<1>` are one window"
+    );
+
+    let touching = list_cat(vec![
+        list_window(xs.clone(), zero.clone(), n(0)),
+        list_window(xs.clone(), n(1), l.clone()),
+    ]);
+    let whole = list_window(xs, zero, add(n(0), l));
+    assert!(
+        matches!(
+            peel_list(as_intrinsic(&touching), as_intrinsic(&whole)),
+            Some(Deduction::Equal)
+        ),
+        "a window ending at `n<0>` fuses with one starting at `n<1>`"
     );
 }

@@ -416,7 +416,7 @@ impl FreeMonoid {
     ///
     /// **The one place a carrier says what a measured node is.** The walks below are one walk over this, as the structural eliminator is one recursion over [`FreeMonoid::uncons`]: a carrier that could be measured differently by `get` than by `slice` is the shape this removes. `Unary` answers `None` throughout — its spine carries the value rather than operands, and nothing indexes into it.
     ///
-    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` today — conversion holds a window's very emptiness undecidable (`against_identity` answers `Stuck`) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
+    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` today — conversion holds a window's very emptiness undecidable (`curios-algebra`'s word strip answers `Undecided` against the empty value) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
     fn spine<'a>(self, value: &'a Term) -> Option<Spine<'a>> {
         match (self, &**value) {
             (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
@@ -539,7 +539,7 @@ impl FreeMonoid {
     ///
     /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
     ///
-    /// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose contents are symbolic but whose length it carries outright; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
+    /// **The notion is not new here — conversion has had it all along.** `curios-algebra`'s `Segment::Window` is documented as a stretch whose contents are unknown and whose length is known; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
     fn segments(self, value: &Term) -> Option<Vec<(&Term, usize)>> {
         let mut segments = Vec::new();
         let mut pending = vec![value];
@@ -673,7 +673,7 @@ fn window(
 ///
 /// So the corpus fuses almost nothing, and what it does fuse is one to three generators; the pathological case is unbounded. Any cap of four or more leaves every normal form the corpus reaches untouched, and this one clears the observed maximum by more than an order of magnitude while stopping the accumulation within a handful of steps. The third row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
 ///
-/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that used to close by literal equality failing to close through the peel. It does not: `bin_atoms`/`list_atoms` flatten a concatenation into segments and `push` merges adjacent literal runs (`crate::spine`), so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
+/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that used to close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;
 
 /// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
@@ -699,7 +699,7 @@ impl Run for Vec<Term> {
 ///
 /// **`merge` is fallible and the other two are not**, and the asymmetry is the price list's rather than this function's: fusing is the only branch that *constructs* anything, so it is the only one that has to charge before it does. Dropping an empty operand and rebuilding the survivors both hand back storage that already exists. That makes this function fallible for its caller, which is the shape the audit says to expect at every fusing seam rather than only at this one.
 ///
-/// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the spine peel's job when *deciding equality* (`spine::push`); reduction only needs a normal form, and conversion closes any residual gap.
+/// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the word strip's job when *deciding equality* (`curios-algebra`'s `Word::push`); reduction only needs a normal form, and conversion closes any residual gap.
 pub(crate) fn normalize_concat<C: Run, E>(
     operands: Vec<Term>,
     literal: impl Fn(&Term) -> Option<&C>,
