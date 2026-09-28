@@ -551,6 +551,20 @@ impl Context {
     ) -> Result<(Term, Term), E> {
         match self.probe_elaborated(term, expected) {
             ElabProbe::Hit(hit) => Ok(hit),
+            // A miss as much as a term the gate refuses: a miss is recorded only when its run wrote nothing, and a run over this declaration's levels writes, so a miss is what the oracle's re-runs were.
+            probe if self.oracle_memoizable(term, expected) => {
+                let privacy_checked = self.island.is_some();
+                if let Some(hit) = self.caches.oracle_get(term, expected, privacy_checked) {
+                    return Ok(hit);
+                }
+                let result = compute(self)?;
+                if let ElabProbe::Miss(stamp) = probe {
+                    self.record_elaborated(term, expected, stamp, &result);
+                }
+                self.caches
+                    .oracle_insert(term, expected, privacy_checked, &result);
+                Ok(result)
+            }
             ElabProbe::Uncacheable => compute(self),
             ElabProbe::Miss(stamp) => {
                 let result = compute(self)?;
@@ -558,6 +572,16 @@ impl Context {
                 Ok(result)
             }
         }
+    }
+
+    /// Whether an elaboration the cache refuses may be remembered for the live oracle bracket: the term, and the expected type when checking, name no metavariable and no local — only the universe metavariables and the impurity the cache's gate refuses are admitted.
+    ///
+    /// **An oracle's answer is its verdict.** Its three callers — `convert`'s re-validation of a candidate, `suggest`'s check of one, a test — read `Ok` or `Err` and discard the elaborated term, so what a hit must preserve is the verdict alone. Within one bracket the context only accumulates — every rollback clears the table ([`Caches::invalidate_for_rollback`]), and a nested bracket keeps a table of its own — and a local-free, metavariable-free term reads nothing a later point in the bracket could have changed; so elaborating it again against the same expectation would repeat the first run's writes — mint its own fresh metavariables, solve them alike, add level constraints already present — and reach the same verdict, which is what skipping it hands back. The cache's purity gate exists because its entries outlive the run that made them; these do not outlive the bracket.
+    ///
+    /// **What it is for.** A candidate is a reduct, and a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the one before it four times. Elaborating one writes — the level constraints its instances raise, the metavariables its implicit arguments mint — so the cache kept almost none of it, and re-validation checked the tree: of the 105,243 elaborations re-validating a three-character `Str/trim` stated in a type asked for, 73,480 were misses the cache then declined to record, and the claim ran out of steps.
+    fn oracle_memoizable(&self, term: &Term, expected: Option<&Term>) -> bool {
+        let closed = |t: &Term| !t.has_metavar() && !t.has_local_free();
+        self.caches.in_oracle() && closed(term) && expected.is_none_or(closed)
     }
 
     /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`] for the full contract). Applies the O(1) groundness gate, then either answers from the cache (`Hit`), reports the term ineligible (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread back into [`record_elaborated`](Self::record_elaborated) (`Miss`). Pure: it never mutates the context, so a driver may probe speculatively at a frame push.
@@ -1731,11 +1755,15 @@ impl Context {
         self.solutions.parking_suppressed()
     }
 
-    /// Run `f` as a yes/no *oracle* around full elaboration (re-validation): parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — counterfactual refinements are suppressed with it, and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter.
+    /// Run `f` as a yes/no *oracle* around full elaboration (re-validation): parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — counterfactual refinements are suppressed with it, and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
     pub(crate) fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.with_suppressed_parking(|context| {
+        self.caches.begin_oracle();
+        let result = self.with_suppressed_parking(|context| {
             context.with_suppressed_refinements(|context| context.with_suppressed_privacy(f))
-        })
+        });
+        self.caches.end_oracle();
+
+        result
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {

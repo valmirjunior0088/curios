@@ -65,6 +65,8 @@ pub(crate) struct Caches {
     /// **That protocol is coarser than a settled spelling needs, and the cost is accepted.** A spelling is filed under its entry's frame and read only through the window, so it rests on nothing but the frames outside its entry and what reduction reads globally; a suppression bracket, a registration or the exit of a frame inside its entry changes none of that, and each clears it here all the same. Settling again after those clears is most of what the escalation costs: the prelude elaborates in about 48.5 seconds with it against about 40 without, eleven thousand settlements of some twelve hundred keys. Invalidating by the spelling's own dependencies recovers part of that — keeping them across suppression brackets alone took the prelude to 46.9 seconds and a third of the settlements away — at the price of a rule argued at every invalidation site rather than borrowed from one already there, which was declined for now.
     settled_keys: HashMap<(usize, Term), Option<Settled>>,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
+    /// Elaborations inside an oracle bracket (`Context::with_oracle`) that the table above must refuse, one table per live bracket, innermost last: see `Context::get_or_init_elaborated` for what they admit and why. Cleared wherever the table above is, and discarded with their bracket.
+    oracle: Vec<HashMap<ElaborationKey, (Term, Term)>>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
@@ -197,13 +199,71 @@ impl Caches {
         );
     }
 
+    /// Open a table for an oracle bracket being entered.
+    pub(crate) fn begin_oracle(&mut self) {
+        self.oracle.push(HashMap::new());
+    }
+
+    /// Discard the table of the oracle bracket being left.
+    pub(crate) fn end_oracle(&mut self) {
+        self.oracle.pop();
+    }
+
+    /// Whether an oracle bracket is live, so an elaboration the table above refuses may be remembered for it.
+    pub(crate) fn in_oracle(&self) -> bool {
+        !self.oracle.is_empty()
+    }
+
+    pub(crate) fn oracle_get(
+        &self,
+        term: &Term,
+        expected: Option<&Term>,
+        privacy_checked: bool,
+    ) -> Option<(Term, Term)> {
+        self.oracle
+            .last()?
+            .get(&ElaborationKey {
+                term: term.clone(),
+                expected: expected.cloned(),
+                privacy_checked,
+            })
+            .cloned()
+    }
+
+    pub(crate) fn oracle_insert(
+        &mut self,
+        term: &Term,
+        expected: Option<&Term>,
+        privacy_checked: bool,
+        result: &(Term, Term),
+    ) {
+        if let Some(table) = self.oracle.last_mut() {
+            table.insert(
+                ElaborationKey {
+                    term: term.clone(),
+                    expected: expected.cloned(),
+                    privacy_checked,
+                },
+                result.clone(),
+            );
+        }
+    }
+
+    /// Every remembered elaboration: the table that outlives a bracket and every live bracket's. An oracle's entries rest on everything the table above's do and on more — they may carry level metavariables and certify no purity — so every protocol below that clears the one clears the others through this.
+    fn clear_elaborations(&mut self) {
+        self.elaboration.clear();
+        for table in &mut self.oracle {
+            table.clear();
+        }
+    }
+
     /// A counterfactual refinement was registered: a refinement key can be a `#`-free stuck application of globals, so it can have influenced any entry — both caches clear wholesale, and the write is stamped.
     pub(crate) fn invalidate_for_refinement(&mut self) {
         self.note_write();
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// A name was *re*defined (or an assumption's universe scheme rewritten in place): the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the name, leaving nothing for a selective retain to key on — both caches clear wholesale, and the write is stamped.
@@ -212,7 +272,7 @@ impl Caches {
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
@@ -238,7 +298,7 @@ impl Caches {
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
     pub(crate) fn invalidate_for_reassumption(&mut self) {
         self.note_write();
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// A local frame was dropped. A dropped refinement can have influenced any entry, so both caches clear; a dropped frame *definition* clears only the reduction cache — `reduce_let` defines under written binder labels a reduct can fold in, while elaboration-position terms name only `/`-qualified globals and `#`-minted locals, so no elaboration entry can reference a written frame label. No stamp: the frame's own writes were stamped when they landed.
@@ -251,7 +311,7 @@ impl Caches {
             self.clear_reductions();
             self.canonical_keys.clear();
             self.settled_keys.clear();
-            self.elaboration.clear();
+            self.clear_elaborations();
         } else if dropped_definitions {
             self.clear_reductions();
             self.canonical_keys.clear();
@@ -270,7 +330,7 @@ impl Caches {
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// Universe levels were rewritten in place (defaulting, finalization, instance closure): cached reducts and elaborations may embed the pre-rewrite levels, so both clear. The solver write itself is stamped by the `UniverseMutation` guard.
@@ -278,7 +338,7 @@ impl Caches {
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// Solutions were rolled back — the one *un*-monotonic store transition. Reducts may have been cached through the unwound solutions, so both caches clear and both stamps tick.
@@ -289,17 +349,17 @@ impl Caches {
         self.canonical_keys.clear();
         self.settled_keys.clear();
         // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// The elaboration island changed (a new top-level item): representation-privacy checks are island-relative, so an entry elaborated under one item's island must not answer for another's. Reducts are island-independent and survive.
     pub(crate) fn invalidate_for_island_change(&mut self) {
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 
     /// Universe constraints were discarded at a transaction boundary with actual solver-state change: elaboration entries may have certified purity against constraints that no longer exist.
     pub(crate) fn invalidate_for_universe_transaction(&mut self) {
-        self.elaboration.clear();
+        self.clear_elaborations();
     }
 }
 

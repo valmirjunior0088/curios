@@ -291,3 +291,33 @@ fn a_metavariable_born_ahead_of_the_counter_is_never_minted_again() {
 
     assert!(minted.0 > 3, "minted ?{} at or below a born id", minted.0);
 }
+
+/// Inside an oracle bracket, a term whose elaboration writes is elaborated once and answered from the bracket's table after: the verdict is all an oracle hands back, and a second run would repeat the first one's writes and reach it again. Outside a bracket the cache's purity gate keeps it out, and each ask runs — the control.
+#[test]
+fn an_oracle_elaborates_a_term_that_writes_once() {
+    let mut context = context();
+    let term = Term::intrinsic(Intrinsic::nat_add(nat(), nat()));
+    let elaborate_writing = |context: &mut Context, runs: &mut usize| {
+        context
+            .get_or_init_elaborated(&term, None, |context| {
+                *runs += 1;
+                let hole = context.mint_metavar();
+                context.birth_metavar(hole, Vec::new(), nat());
+                Ok::<_, ()>((term.clone(), Term::type_ground()))
+            })
+            .expect("the run succeeds");
+    };
+
+    let mut outside = 0;
+    elaborate_writing(&mut context, &mut outside);
+    elaborate_writing(&mut context, &mut outside);
+    let inside = context.with_oracle(|context| {
+        let mut inside = 0;
+        elaborate_writing(context, &mut inside);
+        elaborate_writing(context, &mut inside);
+        inside
+    });
+
+    assert_eq!(outside, 2);
+    assert_eq!(inside, 1);
+}
