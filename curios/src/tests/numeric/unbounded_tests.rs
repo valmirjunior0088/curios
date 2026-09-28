@@ -30,6 +30,10 @@ fn folded_and_executed_scalar_ops_agree() {
         "Int/to_str(Int/shr(Int/add(-65, i), 1))",
         // Carrier reinterpretations.
         "Int/to_str(Nat/to_int(1000000000 + n))",
+        // A magnitude by the comparison that decides its sign: negative, zero, and negative past 64 bits.
+        "Nat/to_str(Int/abs(Int/add(-7, i)))",
+        "Nat/to_str(Int/abs(Int/add(+0, i)))",
+        "Nat/to_str(Int/abs(Int/sub(i, 1180591620717411303424)))",
         // Past the i31, where the running program's form changes and its value must not. Each of these used to refuse: a sum and a product past `2³¹`, a left shift whose product an `i32` would have truncated (`2³⁰ << 15`), a count Wasm would have reduced modulo the width (`<< 40`), the signed range one place short of the unsigned one (`+1 << 30`), and a float truncated past `2³¹` on each side of what `i32.trunc_f64_*` holds.
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
