@@ -12,9 +12,6 @@ pub use judge::*;
 mod conversion;
 pub use conversion::*;
 
-mod satisfy;
-pub use satisfy::*;
-
 mod invert;
 pub use invert::*;
 

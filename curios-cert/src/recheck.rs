@@ -42,11 +42,9 @@ mod universes_tests;
 use {
     super::{
         Globals, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
-        check_positions, check_rec_group, check_struct_decl, partial_definitions,
+        check_positions, check_rec_group, check_struct_decl, partial_definitions, satisfiable,
     },
-    curios_analysis::{
-        Coverage, Declarations, Erased, PositivityRefusal, positivity_vectors, satisfiable,
-    },
+    curios_analysis::{Coverage, Declarations, Erased, PositivityRefusal, positivity_vectors},
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module, StructDecl,
         Term, UniverseContext, Zonked, derived_binder_floor_outside,

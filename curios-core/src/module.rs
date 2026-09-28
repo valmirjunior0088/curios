@@ -4,7 +4,7 @@
 //!
 //! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, the binder high-water mark a checker must seed above, and the entrypoint's own type and body.
 //!
-//! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable runs a solver and belongs to `curios-elab`; whether a definition terminates runs the size-change engine and belongs to `curios-cert`. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
+//! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable is decided by each checker for itself, the elaborator's solver and the certifier's loop check; whether a definition terminates runs the size-change engine in `curios-analysis`, which both checkers drive. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
 use {
     super::{

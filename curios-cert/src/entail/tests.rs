@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_core::{UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam},
+    curios_core::{LevelHead, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam},
 };
 
 fn param(index: usize) -> Level {
@@ -249,7 +249,7 @@ fn the_try_lift_s_questions_are_answered_in_one_pass() {
         (&[0, 20, 21, 22, 23, 28][..], 11),
     ] {
         let (lower, upper) = (over(lower), param(upper));
-        let mut model = Model::of(&upper);
+        let mut model = LevelModel::of(&upper);
         assert!(
             !model.bounds(&lower),
             "{lower:?} <= {upper:?} is not structural"

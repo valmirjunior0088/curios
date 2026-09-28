@@ -486,7 +486,7 @@ fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
 
 /// The two checkers decide universe-context validity separately, and this is where that decision is held to account.
 ///
-/// `curios-analysis/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the kernel's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the kernel's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
+/// `curios-cert/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the kernel's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the kernel's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
 ///
 /// The direction that matters is the *kernel* being the more permissive of the two: it assumes an item's constraints while checking it, so a set it wrongly calls satisfiable is a hypothesis set from which every level relation follows, and `check_instance` stops discharging anything. The elaborator being the more permissive one is ordinary incompleteness and surfaces as a refusal. Neither is observable from a program, which is why the assertion is equality rather than an implication.
 ///
@@ -598,7 +598,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
     let mut verdicts = Vec::new();
     for (label, context) in &contexts {
         let elaborator = universe_context_validate(context).is_ok();
-        let kernel = context.is_closed() && curios_analysis::satisfiable(&context.constraints);
+        let kernel = context.is_closed() && curios_cert::satisfiable(&context.constraints);
 
         assert_eq!(
             elaborator,
