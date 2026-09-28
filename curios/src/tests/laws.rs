@@ -138,6 +138,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x <= y, x < y + 1)",
             "Eq(x >= y, y < x + 1)",
             "Eq(x <= 3, x < 4)",
+            // The seam read alike at `Nat` and `Int`: `<=` meets `<` as `<` of its successor with the floor that reading shares cancelled, so a floored `<=` meets the `<` it spells whichever side it stands on, and whatever the fold already cancelled.
+            "Eq(x + 1 <= y, x < y)",
+            "Eq(x < y, x + 1 <= y)",
+            "Eq(x + y + 1 <= y + y, x < y)",
             "Eq(Bool/not(x < y) && Bool/not(y < x), y <= x && x <= y)",
             // A comparison beside its dual computes complementary booleans at every pair.
             "Eq(x < y && y <= x, false)",
@@ -167,6 +171,9 @@ const CARRIERS: &[Carrier] = &[
             // Controls, and neither is a law: floors that agree modulo the gcd meet at `x = y + 1`, and a gcd of `1` divides every floor, so these meet at `x = y = 1`.
             "Eq(x * 2 == y * 2 + 2, false)",
             "Eq(x * 2 + 1 == y * 3, false)",
+            // Controls for the seam, and neither is a law: a floor of two is one step past the successor, and `x + 1 <= y` against `x <= y` differs at `x = y`.
+            "Eq(x + 2 <= y, x < y)",
+            "Eq(x + 1 <= y, x <= y)",
         ],
     },
     Carrier {

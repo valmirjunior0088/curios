@@ -1,7 +1,9 @@
 //! Symbolic `Nat` comparison: shared addends, commuted sums, and the bound an indexed loop walks under.
 
 use {
-    super::{Comparison, compare_int, compare_nat, from_ordering, reduce_intrinsic},
+    super::{
+        Comparison, align_comparisons, compare_int, compare_nat, from_ordering, reduce_intrinsic,
+    },
     crate::{Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };
@@ -249,4 +251,18 @@ fn int_decides_floors_apart_modulo_the_coefficients_gcd_unequal() {
         Comparison::Stuck,
         "constants that agree modulo the gcd decide nothing"
     );
+}
+
+// The `<`/`<=` seam, as conversion aligns it: a `<=` meeting a `<` is read as `<` of its successor with the floor that reading shares cancelled, so `x + 1 <= y` reaches exactly `x < y` — the spelling the `<` side stands in — rather than `x + 1 < y + 1`, which nothing downstream relates to it. On either side of the pair.
+#[test]
+fn a_floored_le_meets_the_lt_it_spells() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let floored = Intrinsic::nat_lte(Nat::rebuild(1u32.into(), x.clone()), y.clone());
+    let strict = Intrinsic::nat_lt(x, y);
+
+    let aligned = align_comparisons(&mut Inert, &floored, &strict).expect("reduces");
+    assert_eq!(aligned, Some((strict.clone(), strict.clone())));
+
+    let mirrored = align_comparisons(&mut Inert, &strict, &floored).expect("reduces");
+    assert_eq!(mirrored, Some((strict.clone(), strict)));
 }

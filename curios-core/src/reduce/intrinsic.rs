@@ -100,7 +100,7 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
     Ok(matches!(&*body, Subterm::Var(var) if var.unwrap() == &binder))
 }
 
-/// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor, since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
+/// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor through [`successor_comparison`], which cancels the floor that step shares with the other operand — `x + 1 <= y` reads `x + 1 < y + 1` and so `x < y` — since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
 ///
 /// Asked for by name in both converters beside [`normalize_bool`], and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
 pub fn align_comparisons(
@@ -114,37 +114,16 @@ pub fn align_comparisons(
     let this = this_dual.unwrap_or_else(|| this.clone());
     let that = that_dual.unwrap_or_else(|| that.clone());
 
-    let one = || Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-    let plus_one = || Term::intrinsic(Intrinsic::Int(Integer::from(1i32)));
+    // The `<=` side is spelled through `successor_comparison`, which cancels the floor the successor shares with the other operand: `x + 1 <= y` reads `x + 1 < y + 1` and then `x < y`, the spelling the fold leaves the `<` side in. Adding the step without cancelling left that floor standing at `Nat`, where nothing downstream takes it off.
     let aligned = match (&this, &that) {
-        (Intrinsic::NatLe(a, b), Intrinsic::NatLt(..)) => Some((
-            Intrinsic::nat_lt(
-                a.clone(),
-                Term::intrinsic(Intrinsic::nat_add(b.clone(), one())),
-            ),
-            that.clone(),
-        )),
-        (Intrinsic::NatLt(..), Intrinsic::NatLe(c, d)) => Some((
-            this.clone(),
-            Intrinsic::nat_lt(
-                c.clone(),
-                Term::intrinsic(Intrinsic::nat_add(d.clone(), one())),
-            ),
-        )),
-        (Intrinsic::IntLe(a, b), Intrinsic::IntLt(..)) => Some((
-            Intrinsic::IntLt(
-                a.clone(),
-                Term::intrinsic(Intrinsic::IntAdd(b.clone(), plus_one())),
-            ),
-            that.clone(),
-        )),
-        (Intrinsic::IntLt(..), Intrinsic::IntLe(c, d)) => Some((
-            this.clone(),
-            Intrinsic::IntLt(
-                c.clone(),
-                Term::intrinsic(Intrinsic::IntAdd(d.clone(), plus_one())),
-            ),
-        )),
+        (Intrinsic::NatLe(..), Intrinsic::NatLt(..))
+        | (Intrinsic::IntLe(..), Intrinsic::IntLt(..)) => {
+            successor_comparison(&this).map(|this| (this, that.clone()))
+        }
+        (Intrinsic::NatLt(..), Intrinsic::NatLe(..))
+        | (Intrinsic::IntLt(..), Intrinsic::IntLe(..)) => {
+            successor_comparison(&that).map(|that| (this.clone(), that))
+        }
         _ => None,
     };
     let (this, that, moved) = match aligned {
@@ -268,9 +247,9 @@ pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     Some(dual)
 }
 
-/// The comparison that is true exactly when `comparison` is, spelled across the `<`/`<=` seam: `a < b` is `a + 1 <= b` on `Nat` and on `Int`, where the successor is exact in both directions. `None` where no such spelling exists — a `Nat` `<=` whose left operand carries no successor floor to peel, which is where truncation would otherwise invent one, and every comparison that is not an ordering on those two carriers.
+/// The comparison that is true exactly when `comparison` is, spelled across the `<`/`<=` seam: `a < b` is `a + 1 <= b` and `a <= b` is `a < b + 1` on `Nat` and on `Int`, where the successor is exact in both directions, with the floor the step shares with the other operand cancelled. `None` for every comparison that is not an ordering on those two carriers.
 ///
-/// Read by both reducers' refinement probes, and by them alone: a guard is recorded on its written spelling, so `match i < len(l)` records `i < len(l)` and an obligation reaching the probe as `i + 1 <= len(l)` misses it over a spelling rather than over a fact. [`align_comparisons`] settles the same seam for *conversion*, by the mirror identity `a <= b` ⟺ `a < b + 1`; the two are separate because a probe must produce the key a guard actually recorded, while a congruence needs only one spelling both sides reach.
+/// Two readers cross the seam by this one identity. Both reducers' refinement probes ask it for the key a guard actually recorded: `match i < len(l)` records `i < len(l)`, and an obligation reaching the probe as `i + 1 <= len(l)` would miss it over a spelling rather than over a fact. [`align_comparisons`] asks it for the spelling a `<=` meets a `<` in, so the judgment reads `x + 1 <= y` as the `x < y` it is at `Nat` as at `Int`.
 ///
 /// **The literal is carried across unchanged**, where [`dual_comparison`]'s is negated: these two comparisons have one truth value rather than opposite ones, so the arm that refined the guard refines this obligation to the same `Bool`.
 pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
@@ -289,7 +268,7 @@ pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
         _ => return None,
     };
 
-    // **The shared floor comes off, because the fold this spelling has to meet has already taken it off.** `compare_nat` cancels what both operands carry in common, so a bound `i + 1 <= len + 64` is stuck as `i <= len + 63` while the guard `i < len + 64` is stuck as itself: adding the step back without cancelling would build a spelling the reducer never produces, and the probe would miss on every comparison whose operands share a floor. The cancellation is the fold's own function and is pure, so it runs here rather than by re-entering reduction — which a probe running inside reduction cannot do.
+    // **The shared floor comes off, because the fold this spelling has to meet has already taken it off.** `compare_nat` cancels what both operands carry in common, so a bound `i + 1 <= len + 64` is stuck as `i <= len + 63` while the guard `i < len + 64` is stuck as itself: adding the step back without cancelling would build a spelling the reducer never produces, the probe would miss on every comparison whose operands share a floor, and the alignment would compare `x + 1 < y + 1` against the `x < y` it is. The cancellation is the fold's own function and is pure, so it runs here rather than by re-entering reduction — which a probe running inside reduction cannot do.
     let (left, right) = match nat {
         true => Nat::cancel_common(&left, &right),
         false => int_cancel_common(&left, &right),
