@@ -6,36 +6,20 @@
 //!
 //! **Agreement everywhere is equality; anything else is nothing.** Treating the atoms as independent *over*-approximates the values they can take together: `x < y` and `x < y + 1` are two atoms that are not independent at all, and the table still visits every combination the real values can reach, so two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing — the assignment it happens at may be one no value reaches — so this never answers a disequality, and inversion is handed no impossibility.
 //!
-//! **The cap is the theory's.** A table doubles with every atom, so past [`BOOL_ATOM_CAP`] the question is declined rather than priced out of the budget by accident, and what is evaluated is charged before the first assignment. The cap is a constant of the language, not of the host: the same two terms are decided, or not, on every target.
+//! **The cap is the theory's.** A table doubles with every atom, so past `curios-algebra`'s `BOOL_ATOM_CAP` the question is declined rather than priced out of the budget by accident, and what is evaluated is charged before the first assignment. The cap is a constant of the language, not of the host: the same two terms are decided, or not, on every target.
 
 use {
     super::dual_comparison,
     crate::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{Formula, Node},
     curios_utilities::recurse,
 };
 
-/// How many distinct atoms two `Bool` terms may hold between them and still be decided by table: `2⁸` assignments, each one walk of both formulas. Past it the decision declines, which costs completeness and never soundness.
-pub const BOOL_ATOM_CAP: usize = 8;
-
-/// One node of a formula in postorder, its operands named by their positions in the same list — flat so that evaluating it is a loop however deep the written tree was, the depth of a `&&` chain being data-shaped.
-enum Node {
-    Literal(bool),
-    /// An atom by its index, read negated where the leaf was the atom's dual: `y <= x` beside `x < y` is one atom at two polarities.
-    Atom {
-        index: usize,
-        negated: bool,
-    },
-    And(usize, usize),
-    Or(usize, usize),
-    Xor(usize, usize),
-    Eql(usize, usize),
-}
-
-/// The two formulas being compared, over one shared list of atoms.
+/// Two formulas being read, over one shared list of atoms: the terms each atom stands for, and the formula `curios-algebra` evaluates.
 #[derive(Default)]
 struct Table {
     atoms: Vec<Term>,
-    nodes: Vec<Node>,
+    formula: Formula,
 }
 
 impl Table {
@@ -75,12 +59,11 @@ impl Table {
                     None => return Ok(None),
                 },
             };
-            self.nodes.push(node);
-            Ok(Some(self.nodes.len() - 1))
+            Ok(Some(self.formula.push(node)))
         })
     }
 
-    /// The atom `leaf` is: one already met, at the polarity it was met at or — where `leaf` is a comparison on a total order — as the negation of its dual, the table `dual_comparison` keeps; otherwise a new one, or `None` past the cap.
+    /// The atom `leaf` is: one already met, at the polarity it was met at or — where `leaf` is a comparison on a total order — as the negation of its dual, the table `dual_comparison` keeps; otherwise a new one, or `None` past the cap. A `Bool` atom is compared as written, universe levels included: two terms are one atom only where they are one term.
     fn atom(&mut self, leaf: &Term) -> Option<Node> {
         let dual = match &**leaf {
             Subterm::Intrinsic(comparison) => dual_comparison(comparison).map(Term::intrinsic),
@@ -100,28 +83,12 @@ impl Table {
                 });
             }
         }
-        if self.atoms.len() == BOOL_ATOM_CAP {
-            return None;
-        }
+        let index = self.formula.new_atom()?;
         self.atoms.push(leaf.clone());
         Some(Node::Atom {
-            index: self.atoms.len() - 1,
+            index,
             negated: false,
         })
-    }
-
-    /// Every node's value at one assignment, bit `index` of which is atom `index`. Postorder, so an operand is always filled before the node that reads it.
-    fn fill(&self, values: &mut [bool], assignment: u32) {
-        for (position, node) in self.nodes.iter().enumerate() {
-            values[position] = match *node {
-                Node::Literal(value) => value,
-                Node::Atom { index, negated } => (assignment >> index & 1 == 1) != negated,
-                Node::And(left, right) => values[left] && values[right],
-                Node::Or(left, right) => values[left] || values[right],
-                Node::Xor(left, right) => values[left] != values[right],
-                Node::Eql(left, right) => values[left] == values[right],
-            };
-        }
     }
 }
 
@@ -159,16 +126,12 @@ pub fn decide_bool(
     };
 
     // What the table costs, before its first assignment: one visit per node per assignment, and the one row of values it is evaluated in.
-    let nodes = table.nodes.len() as u64;
+    let (visits, row) = table.formula.evaluation_size();
     reducer.spend(
         Cost::STEP
-            .saturating_mul(nodes << table.atoms.len())
-            .saturating_add(Cost::buffer(nodes)),
+            .saturating_mul(visits)
+            .saturating_add(Cost::buffer(row)),
     )?;
 
-    let mut values = vec![false; table.nodes.len()];
-    Ok((0..1u32 << table.atoms.len()).all(|assignment| {
-        table.fill(&mut values, assignment);
-        values[left] == values[right]
-    }))
+    Ok(table.formula.agree(left, right))
 }

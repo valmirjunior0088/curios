@@ -216,6 +216,94 @@ Each stage has a bounded production migration and removes the mathematical imple
 
 The first complete arithmetic path determines whether the proposed interfaces actually separate responsibilities. Later families may refine those interfaces while preserving their contracts. Shared orchestration can be migrated incrementally alongside the structures, but stage 6 is complete only when both copies are gone. Stages 7 and 8 follow stage 6, because a law generated at every carrier and an alignment shared by every carrier each assume one strategy in both checkers.
 
+## Decisions settled for stages 5 to 8
+
+Settled with the user before stage 5 began, so each stage opens on its design rather than a choice.
+
+- **Word atoms are compared as written** (stage 5). List elements and opaque word chunks are one atom only where they are one term, universe levels included, as `Bool` atoms are. A number is identified up to universe instances because a level is never part of which number a term is; a list's elements may be types, where levels matter, so projecting them would be unsound as well as a behavior change. Window offsets and lengths are `Nat`s and keep the numeric identity.
+- **The shared strategy returns an outcome** (stage 6). `curios-analysis`'s procedure calls no judgment. It returns equality, inequality, a pair that left intrinsic form, or ordered obligations each at its declared type, behind a comparison of levels. The elaborator enqueues them. The kernel discharges them in order with its active `History`, stopping at the first failure, and the history never leaves the kernel. A narrow `Driver` beside the reducer supplies only what differs by driver: solved-metavariable substitution, and the elaborator's packed-literal view.
+- **A declaration kind is a law family** (stage 7). Unit, absorber, idempotence, commutativity, associativity, complement, self-cancellation, distribution, dual, successor seam, cancellation, free-monoid prefix, homomorphism and inverse pair each state their laws once. Each carrier's operation declares exactly the families it implements, with its constants — `And` at `Bool` has unit `true` and absorber `false`, `And` at `Nat` absorber `0` and no unit — so declaring membership enables only implemented laws.
+- **Alignment decides by the view, else respells** (stage 8). Two comparisons with equal views meet outright. Otherwise both are respelled from their views in one canonical form before congruence: `<=` with the positive part on the left, `<` becoming `<=` with the constant shifted by one, and an equality oriented by atom order. Each is rebuilt at its own carrier, or at `Nat` where every atom is a widened natural. So congruence still meets aligned operands, and `?n < y + 1` against `x <= y` still solves `?n := x`; that one rebuild replaces the successor reading, the sign split and the pull-back to `Nat`.
+
+## Implementation plan for stages 5 to 9
+
+The working plan the settled decisions above shape. Each stage keeps the pattern stages 2 to 4 used: the old bodies run beside the new ones as a debug-build oracle through `cargo x clippy`'s prelude build and the affected suites, a mutation per oracle proves it live, the old bodies are deleted, cost is retaken, and the stage lands as its own commit.
+
+### Stage 5a: word peels
+
+- **The algebra's words.** `curios-algebra` gains a `word` module.
+  - A `Run` is `Packed(Grain, Binary)` — the payload as `curios-num` holds it, never a byte per bit — or `Elements(Vec<Atom>)`.
+  - A `Segment<O>` is a run, a single element, an opaque chunk, or a window whose base is an atom, whose offset and length are `Nat` combinations, and whose origins are the windows it was fused from.
+  - A `Word<O>` normalizes as it is built: empty runs and empty windows dropped, adjacent runs merged, and abutting windows of one base fused where the second's offset is the first's offset plus its length, compared as combinations.
+- **Fusion hands on the second window's proof.** The fused segment keeps every origin it was fused from; Core rebuilds its length as their sum and its proof as the last one's, which is the rule today and needs no derivation.
+- **What moves.** The prefix peel, the verdict against the identity, regrouping, and positions: rooting a position through the windows it is read through is Core's reading; the offsets inside a concatenation and the equality of two positions are combinations the algebra compares.
+  - A packed head that differs is `Impossible`, and an element head that differs is only `Undecided`, since two element terms may convert.
+- **Identity.** Elements and chunks are atoms as written (`Atoms::exact`); window offsets and lengths keep the numeric identity. `peel_symmetric`'s `Bin` case moves with the word declarations.
+- **Oracle.** `peel_bin`, `peel_list`, `peel_position` and the reassembly are pure, so each is compared with its old body directly.
+
+### Stage 5b: the fold's words, measures and morphisms
+
+- **Measures.** A word's length is a `Nat` combination: runs and singles count, windows carry theirs, and a chunk is the atom its `len` is.
+  - `measured_window` locates a literal window over concrete lengths.
+  - `seam_window` consumes a distance by the stage 2 cancellation and answers parts, a window inside one operand, or nothing.
+  - Both become word functions; the pieces a located window cuts are still materialized by Core, with its charges.
+- **Concatenation.** Which operands a concatenation drops and which it fuses under `FUSION_CAP` is the word's decision; building the fused `Binary` or element vector, and charging for it, stays Core's.
+- **Declarations.** `len`, `map`, `fold`, `concat`, `append`, `slice`, `get`, `replicate`, the grain reinterpretation and the carrier conversions are declared.
+  - The byte, integer and float round trips are declared as inverse pairs. The `Flt` byte round trip is what gives stage 7's binary64 pattern grid its row.
+- **What stays Core's.** The cons decode (`FreeMonoid::uncons`, `peel_first_*`), `is_identity`'s binder check, the execution of fold equations, and every reduction and charge.
+- **The packed-literal view.** It measures through the word, while its proposals stay the elaborator's.
+
+### Stage 6: one judgment strategy
+
+- **The procedure.** A new `curios-analysis` module holds the chain both converters run today, in their order: materialize, normalize a stuck product, the truth table, tree normalization, alignment, the peels, the atom-argument retry, the packed view, congruence.
+- **Its result** is an `Outcome` for the driver to act on:
+  - `Equal` or `Unequal`;
+  - a `Residual(this, that)` to compare at `Type` — a peel's residual, and a side that left intrinsic form;
+  - or a `Congruence` of the two result-level vectors and the operands, each at the type `Intrinsic::signature` declares for it.
+- **A narrow `Driver`** beside the reducer supplies `materialize`, which substitutes solved metavariables in the elaborator and is the identity in the kernel, and `packed_view`, which is the elaborator's alone. The elaborator's driver holds its conversion queue and context together.
+- **Each checker's discharge.**
+  - The elaborator enqueues residuals and operands, and compares levels by its own rule, which may solve them.
+  - The kernel grounds a residual, checks levels by `levels_eq`, and compares operands in order with its active `History`, returning at the first failure.
+- **The outer probe.** The truth-table probe is one shared function; each converter keeps its own placement of it — the elaborator's before its dispatch, the kernel's in its fallback arm ahead of the unfolding retry.
+- **Oracle.** The two old chains are transcribed to return an `Outcome` instead of acting, and in debug builds each is compared with the new procedure's on every call; on metavariable-free input the kernel's and the elaborator's transcriptions must also agree with each other.
+- **Records revised.** `an-independent-kernel-re-checks-what-the-elaborator-accepts.md` says the checkers share no strategy; `curios-analysis/src/judge.rs` says conversion stays duplicated; both converters' comments say they keep their strategies apart on purpose. Each is revised with the rationale: the shared algebra is trusted, the checkers' agreement over it is integration evidence, and the algebra carries independent tests.
+- **A new test** sends a peel's residual through the kernel's active `History`, the gap the baseline recorded.
+
+### Stage 7: the generated grid and the audit
+
+- **Law families.** `curios-algebra` gains a `law` module. Each family states its laws once over variables and the family's constants, as expressions over operations: unit, absorber, idempotence, commutativity, associativity, complement, self-cancellation, nested cancellation, distribution, dual, successor seam, cancellation, free-monoid prefix, homomorphism and inverse pair.
+- **The family table.** A table in the algebra says which families each carrier's operation implements, with its constants — `And` at `Bool` has unit `true` and absorber `false`, `And` at `Nat` absorber `0` and no unit.
+- **The generator** lives in `curios`'s tests, with `laws.rs` split into a `laws/` directory by theme.
+  - A spelling table renders each instance as Curios source: an operation's surface form at its carrier, the carrier's literals (`0`, `+0`, `true`), and binders per carrier.
+  - Every generated row joins the existing harness: an `Eq/refl()` compile through both checkers, and the `? ≈ Eq/refl()` goal line with its sentinel.
+  - Every row is also evaluated at closed values through `curios-num`. For `Flt` the evaluation runs over the binary64 pattern grid — both zeros, both infinities, subnormals, and quiet and signaling NaNs with payloads of both signs.
+- **Generator tests.** Removing a carrier from a family removes its rows. Declaring a family at a carrier whose procedure does not decide it fails there, rather than passing with the row absent.
+- **Retiring hand-written rows.** The held rows the generator now states are retired; controls, refused candidates and term-level laws — the binder-sensitive `map` check among them — stay by hand.
+- **Mutations.** One per family, each recorded in the perimeter entry that owns the family, with the instance that caught it.
+- **The audit**, in `curios`'s `tests::algebra`, generated from the same rows:
+  - each held law stated reversed;
+  - chains of two laws sharing a side;
+  - each law instantiated at compound terms that change its atoms (`x := y + 1`, `b := x < y`), and through a solved metavariable;
+  - freeness at every intrinsic case inversion distinguishes — two literals, a successor against zero, a cons against the empty word, two packed heads.
+
+  Its record states that a finite grid is evidence about the implemented fragment and no metatheorem.
+
+### Stage 8: uniform alignment
+
+- **One alignment.** In the shared strategy, two `Nat` or `Int` comparisons are read by one `LinearViews` reader. `<` becomes `<=` with the constant shifted by one, and an equality is oriented by atom order.
+  - Two equal views meet: `Equal`.
+  - Otherwise both are respelled from their views before the peels and congruence: `<=` with the positive part on the left, rebuilt at the comparison's own carrier — or at `Nat` where every atom is a widened natural — through Core's sums and products.
+- **Deleted.** The successor arms, `int_split_comparison`, `int_split_by_sign`'s use in alignment and `nat_comparison_of_int`. The negation-reading of `Bool/not` stays in front of it. The refinement probes keep `dual_comparison` and `successor_comparison`.
+- **The differential.** A temporary instrument writes every pair where the old and the new alignment lead to different outcomes to a scratch log, over the prelude build, the grid and the suites. Every entry must be a newly held equation between two comparisons of one relation; each is listed in this specification with the total-order law that justifies it, and its row moves to the grid's held side. Anything else blocks the stage.
+
+### Stage 9: the record, and the gate
+
+- **Audit and deletion.** Every inventory row is checked; migration-only adapters and aliases are deleted.
+- **New decisions.** "The carriers' algebra stays in conversion", with casts as its rejected alternative, replacing the reconciliation item in verdicts part 7. "One owner for the carriers' algebra", the cross-crate ownership, with this specification's rejected alternatives.
+- **Revised records.** The design and soundness entries listed under documentation above; the `curios-core` and `curios-analysis` READMEs; `CLAUDE.md`'s invariants — `curios-algebra`'s direct dependency and no-`Term` rule, search outside the certifier's closure, declarations in Core, shared judgments in Analysis — and a routing row for a declaration, a family or an operation, naming the generated grid.
+- **The roadmap and links.** A checked summary; parts 2 to 4, the numeric laws, verdicts part 7 and invariants part 3 relinked to the permanent documentation.
+- **Retirement.** This file deleted once nothing references it, then the full gate, once, with every step launched in parallel and each npm package's steps chained.
+
 ## Baseline inventory
 
 Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checked off row by row as the stages move them: a row whose stage column reads **moved** has its mathematics in `curios-algebra`, with what stays in Core named beside it. Line numbers are that tree's.
@@ -257,12 +345,12 @@ Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checke
 
 | Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Local laws: unit, absorber, idempotence, complement, `xor` cancellation, equality against a literal | `then_laws`, `bool_lattice_laws`, `complementary`, `bool_xor_laws`, `bool_eql_laws` (`reduce/intrinsic/laws.rs:11`–`:94`) | F | Syn, a comparison against its dual | a stuck `&&`/`||` keeps its right operand as written | EQ | grid "Bool" | 4 |
-| Leaf-set peel | `peel_bool`, `bool_leaves` (`spine.rs:147`, `:165`) | C, I | Syn | none | AGR | `spine::commutative_tests` | 4 |
+| Local laws: unit, absorber, idempotence, complement, `xor` cancellation, equality against a literal | `then_laws`, `bool_lattice_laws`, `complementary`, `bool_xor_laws`, `bool_eql_laws` (`reduce/intrinsic/laws.rs:11`–`:94`) | F | Syn, a comparison against its dual | a stuck `&&`/`||` keeps its right operand as written | EQ | grid "Bool" | **moved** in 4: `Operation::boolean_identity` over a `BooleanPair`; Core reads literals, identity, negation and nesting, and builds the negation as `xor(·, true)` |
+| Leaf-set peel | `peel_bool`, `bool_leaves` (`spine.rs:147`, `:165`) | C, I | Syn | none | AGR | `spine::commutative_tests` | **moved** in 4: `same_leaves` |
 | Tree normalization | `normalize_bool` (`reduce/intrinsic.rs:39`) | C | — | forces every leaf; a collection | EQ | grid associativity rows | 4; the forcing stays Core's |
-| The truth table | `decide_bool` (`truth.rs:143`), `is_bool_connective` `:129`, `BOOL_ATOM_CAP = 8` | C, O | Syn, a comparison and its dual one atom | declined past eight atoms; charged before the first assignment | AGR | `truth_tests`, `laws_tests::every_truth_table_decision_*`, grid "Bool, at the table's cap" | 4 |
-| Duals | `dual_comparison` `:223`, `dual_of_negated` `:196` | C, F, P, the table | total orders only; `Flt` excluded | none | EQ | grid negation rows | 4; key construction stays with the probes |
-| Symmetric operations | `peel_symmetric` (`spine.rs:62`) | C, I | Syn | none | AGR | `spine::commutative_tests::peel_symmetric_*` | 4, and 3 for `Nat/and`, `or`, `xor` |
+| The truth table | `decide_bool` (`truth.rs:143`), `is_bool_connective` `:129`, `BOOL_ATOM_CAP = 8` | C, O | Syn, a comparison and its dual one atom | declined past eight atoms; charged before the first assignment | AGR | `truth_tests`, `laws_tests::every_truth_table_decision_*`, grid "Bool, at the table's cap" | **moved** in 4: `Formula`, `BOOL_ATOM_CAP`, `evaluation_size`, `agree`; Core reads and forces |
+| Duals | `dual_comparison` `:223`, `dual_of_negated` `:196` | C, F, P, the table | total orders only; `Flt` excluded | none | EQ | grid negation rows | **moved** in 4: `Operation::negation`, read back through `Intrinsic::comparison`; key construction stays with the probes |
+| Symmetric operations | `peel_symmetric` (`spine.rs:62`) | C, I | Syn | none | AGR | `spine::commutative_tests::peel_symmetric_*` | **moved** in 4: `Operation::commutes`; `Flt`'s equalities and `Bin`'s `eql`, which nothing declares yet, stay term-level cases until they are declared |
 
 ### Bitwise operations and shifts
 
@@ -394,6 +482,8 @@ What moved, and why:
 
 - **Recombination is cheaper.** It collects through the algebra without re-reading the sum through `nat::linear`, whose calls fell from 50 521 to 2 615. `nat::sum_over_floor` dropped a third in both checkers as a result.
 - **Cancellation allocates about 5% more.** The atom table now keeps the term each atom stands for.
+
+**After stage 4.** The Boolean laws, the leaf sets, the truth table's evaluation, the dual table and commutativity now come from `curios-algebra`, over the connectives `Intrinsic::algebra` declares at `Bool`. Five oracles, each confirmed live by a mutation it caught, never disagreed. Every call count and allocation total is stage 3's — `truth::decide_bool` still 25 calls and 2.1 MB in elaboration and 41 calls and 1.8 MB in certification — and the durations are within noise.
 
 ## Deletion boundaries
 

@@ -11,6 +11,8 @@ pub enum Carrier {
     Natural,
     /// ℤ.
     Integer,
+    /// The two-element Boolean algebra.
+    Boolean,
 }
 
 /// An operation this crate's reasoning gives a meaning to.
@@ -99,6 +101,37 @@ impl Operation {
             }
             Operation::Sum => Some(bound(0)? + bound(1)?),
             Operation::Product => Some(bound(0)? * bound(1)?),
+            _ => None,
+        }
+    }
+
+    /// Whether this operation denotes one value with its operands in either order, as far as the reasoning that reads it goes: the equalities and inequalities, and `and`, `or` and `xor`. Sum and product commute too, and their cancellation already reads them as combinations, so they are not listed here.
+    pub fn commutes(self) -> bool {
+        matches!(
+            self,
+            Operation::Equal | Operation::Unequal | Operation::And | Operation::Or | Operation::Xor
+        )
+    }
+
+    /// The comparison true exactly when this one is false, and whether its operands are swapped — on a total order `a < b` is false exactly when `b <= a`, and `==` and `!=` negate each other in place; on `Bool`, where `!=` is `xor`, an equality's negation is that `xor` and a `xor`'s is the equality, operands in place. `None` for anything that is no comparison of these carriers: a floating-point comparison is none, since against a NaN both directions of an ordered comparison are false and its negation is not the mirror.
+    pub fn negation(self, carrier: Carrier) -> Option<(Operation, bool)> {
+        match (carrier, self) {
+            (Carrier::Natural | Carrier::Integer, Operation::Less) => {
+                Some((Operation::AtMost, true))
+            }
+            (Carrier::Natural | Carrier::Integer, Operation::AtMost) => {
+                Some((Operation::Less, true))
+            }
+            (Carrier::Natural | Carrier::Integer, Operation::Equal) => {
+                Some((Operation::Unequal, false))
+            }
+            (Carrier::Natural | Carrier::Integer, Operation::Unequal) => {
+                Some((Operation::Equal, false))
+            }
+            (Carrier::Boolean, Operation::Equal) => Some((Operation::Xor, false)),
+            (Carrier::Boolean, Operation::Unequal | Operation::Xor) => {
+                Some((Operation::Equal, false))
+            }
             _ => None,
         }
     }

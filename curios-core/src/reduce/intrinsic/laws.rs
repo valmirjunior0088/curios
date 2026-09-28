@@ -5,7 +5,7 @@
 use {
     super::dual_comparison,
     crate::{Declaration, Intrinsic, Nat, Subterm, Term},
-    curios_algebra::{Carrier, Pair, Reduct},
+    curios_algebra::{BooleanPair, Carrier, Connected, Nested, Operation, Pair, Reduct},
 };
 
 /// A binary fold's laws beside its two-literal case, tried on what that case left neutral: a literal unit on one side yields the other operand, a literal absorbing element yields itself, and two structurally identical operands yield what idempotence or self-cancellation says. Every one is an equation on the carrier's values that holds for every value of its symbolic side, which is what makes it admissible in a fold both checkers share — see `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md`. Run after the fold rather than inside it because every binary helper already rebuilds its neutral from the operands it reduced, so the laws read them back off the neutral and the helpers keep one signature; a fold that produced a literal has no operands to read and passes through. `reduce_bool_binary` leaves a connective's right operand as written under a stuck left — deliberately, see `a_stuck_left_operand_leaves_the_right_as_written` — so a `&&` or `||` law sees that operand unreduced; a literal or a repeated binder is visible either way, and a law missed on an unreduced operand is a neutral the next demand reduces, never a wrong answer. An equality, and the `xor` that `!=` lowers through, reads both, since its laws do.
@@ -26,22 +26,80 @@ pub(super) fn then_laws(
     }
 }
 
-/// `&&` with `unit = true` and `||` with `unit = false`: the other literal absorbs, a repeated operand is itself, and an operand beside its own negation is the absorber — the complement law of the Boolean algebra on the value type, `b && not b = false` and `b || not b = true`, which holds by cases on `b` and says nothing about propositions.
-pub(super) fn bool_lattice_laws(left: &Term, right: &Term, unit: bool) -> Option<Term> {
-    match (left.as_bool(), right.as_bool()) {
-        (Some(l), _) => Some(if l == unit {
-            right.clone()
-        } else {
-            left.clone()
-        }),
-        (_, Some(r)) => Some(if r == unit {
-            left.clone()
-        } else {
-            right.clone()
-        }),
-        _ if left == right => Some(left.clone()),
-        _ if complementary(left, right) => Some(Term::intrinsic(Intrinsic::Bool(!unit))),
-        _ => None,
+/// The Boolean connectives' identities, as `curios-algebra`'s `Operation::boolean_identity` states them: `&&` and `||` with their units and absorbers, idempotence and the complement law; `xor` with its unit, self-cancellation and cancellation through one nesting, which takes `not(not(b))` back to `b`; `==` and `!=` over identical, complementary and literal operands. What is read here is each operand's literal value, whether the two are one term, whether one is the other's negation, and for `xor` which nested operand cancels; a law that answers a negation builds it as `xor(·, true)`, the spelling `not` already has.
+pub(super) fn bool_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+    let Declaration::Operation {
+        carrier: Carrier::Boolean,
+        operation,
+        ..
+    } = op.algebra()
+    else {
+        return None;
+    };
+    let lattice_or_equality = matches!(
+        operation,
+        Operation::And | Operation::Or | Operation::Equal | Operation::Unequal
+    );
+    let pair = BooleanPair {
+        left: left.as_bool(),
+        right: right.as_bool(),
+        same: left == right,
+        complementary: lattice_or_equality && complementary(left, right),
+        nested: match operation {
+            Operation::Xor => nested(left, right),
+            _ => None,
+        },
+    };
+    let negated = |term: &Term| {
+        Term::intrinsic(Intrinsic::BoolXor(
+            term.clone(),
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ))
+    };
+    operation
+        .boolean_identity(pair)
+        .map(|connected| match connected {
+            Connected::Left => left.clone(),
+            Connected::Right => right.clone(),
+            Connected::Literal(value) => Term::intrinsic(Intrinsic::Bool(value)),
+            Connected::NegatedLeft => negated(left),
+            Connected::NegatedRight => negated(right),
+            Connected::Nested(nested) => inner(left, right, nested),
+        })
+}
+
+/// Where one operand is a `xor` one of whose operands is the other operand, which of its operands is left once the pair cancels — the left `xor` asked first, its second operand before its first.
+fn nested(left: &Term, right: &Term) -> Option<Nested> {
+    if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**left {
+        if c == right {
+            return Some(Nested::LeftFirst);
+        }
+        if a == right {
+            return Some(Nested::LeftSecond);
+        }
+    }
+    if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**right {
+        if c == left {
+            return Some(Nested::RightFirst);
+        }
+        if a == left {
+            return Some(Nested::RightSecond);
+        }
+    }
+    None
+}
+
+/// The operand [`nested`] named.
+fn inner(left: &Term, right: &Term, nested: Nested) -> Term {
+    let operands = |term: &Term| match &**term {
+        Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) => (a.clone(), c.clone()),
+        _ => unreachable!("a nested cancellation names a `xor` operand"),
+    };
+    match nested {
+        Nested::LeftFirst => operands(left).0,
+        Nested::LeftSecond => operands(left).1,
+        Nested::RightFirst => operands(right).0,
+        Nested::RightSecond => operands(right).1,
     }
 }
 
@@ -61,62 +119,10 @@ fn complementary(left: &Term, right: &Term) -> bool {
         || negation(right).is_some_and(|negated| negated == *left)
 }
 
-/// `xor`: `false` is the unit, a repeated operand cancels to `false`, and a shared operand cancels through one nesting — `(a ⊕ c) ⊕ c = a` — which is what takes `not(not(b))` back to `b`, `not` being `xor(·, true)`. A literal `true` stays: `xor(b, true)` *is* `not b`, and there is nothing shorter to spell it as.
-pub(super) fn bool_xor_laws(left: &Term, right: &Term) -> Option<Term> {
-    if left.as_bool() == Some(false) {
-        return Some(right.clone());
-    }
-    if right.as_bool() == Some(false) {
-        return Some(left.clone());
-    }
-    if left == right {
-        return Some(Term::intrinsic(Intrinsic::Bool(false)));
-    }
-    if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**left {
-        if c == right {
-            return Some(a.clone());
-        }
-        if a == right {
-            return Some(c.clone());
-        }
-    }
-    if let Subterm::Intrinsic(Intrinsic::BoolXor(a, c)) = &**right {
-        if c == left {
-            return Some(a.clone());
-        }
-        if a == left {
-            return Some(c.clone());
-        }
-    }
-    None
-}
-
-/// `==` with `same = true` and `!=` with `same = false`: identical operands decide, complementary operands decide the other way, a literal equal to `same` yields the other operand, and the opposite literal negates it — as `xor(·, true)`, the spelling `not` already has.
-pub(super) fn bool_eql_laws(left: &Term, right: &Term, same: bool) -> Option<Term> {
-    if left == right {
-        return Some(Term::intrinsic(Intrinsic::Bool(same)));
-    }
-    if complementary(left, right) {
-        return Some(Term::intrinsic(Intrinsic::Bool(!same)));
-    }
-    let (literal, other) = match (left.as_bool(), right.as_bool()) {
-        (Some(l), _) => (l, right),
-        (_, Some(r)) => (r, left),
-        _ => return None,
-    };
-    Some(match literal == same {
-        true => other.clone(),
-        false => Term::intrinsic(Intrinsic::BoolXor(
-            other.clone(),
-            Term::intrinsic(Intrinsic::Bool(true)),
-        )),
-    })
-}
-
 /// The bitwise lattice on ℕ, as `curios-algebra`'s `Operation::bitwise_identity` states it: `and` has `0` absorbing and no unit, `or` and `xor` have `0` as unit; `and` and `or` are idempotent and `xor` self-cancels. What is read here is whether an operand is zero and whether the two are one term.
 pub(super) fn nat_bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
     let reduct = match op.algebra() {
-        Declaration::Numeric {
+        Declaration::Operation {
             carrier: Carrier::Natural,
             operation,
             ..
@@ -136,7 +142,7 @@ pub(super) fn nat_bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Opt
 
 /// A shift by `0` is the value, and a shifted `0` is `0` — the two shift laws that build nothing, which is why they are the two stated here: a law beside a fold takes no reducer to charge. The one that builds, `shl(x, k) = 2ᵏ · x` for a literal `k`, is `then_coefficient`'s, which has the reducer in hand and charges the coefficient before it exists.
 pub(super) fn nat_shift_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
-    let Declaration::Numeric { operation, .. } = op.algebra() else {
+    let Declaration::Operation { operation, .. } = op.algebra() else {
         return None;
     };
     let pair = Pair {

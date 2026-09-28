@@ -82,7 +82,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
             },
         ]),
         _ => match intrinsic.algebra() {
-            Declaration::Numeric {
+            Declaration::Operation {
                 carrier: Carrier::Natural,
                 operation,
                 operands,
@@ -113,7 +113,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
 pub(super) fn nat_dominators(term: &Term) -> Vec<(Term, bool)> {
     match &**term {
         Subterm::Intrinsic(intrinsic) => match intrinsic.algebra() {
-            Declaration::Numeric {
+            Declaration::Operation {
                 carrier: Carrier::Natural,
                 operation,
                 operands,

@@ -4,10 +4,10 @@
 
 use {
     super::{
-        Atoms, Intrinsic, Nat, Subterm, Term, int_cancellation, int_monomial,
-        int_rebuild_cancelled, int_shaped,
+        Atoms, Declaration, Intrinsic, Nat, Operands, Subterm, Term, int_cancellation,
+        int_monomial, int_rebuild_cancelled, int_shaped,
     },
-    curios_algebra::{Conclusion, Deduction, pair_factors},
+    curios_algebra::{Conclusion, Deduction, pair_factors, same_leaves},
     curios_num::{Binary, Grain},
     std::collections::VecDeque,
 };
@@ -47,26 +47,27 @@ pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 ///
 /// Decided here rather than by spelling the operands in one order at the fold, because a comparison is what a `choose` guard refines on, and a refinement is recorded under the guard's *written* spelling: both checkers canonicalize a probe's operands and never its node, so a fold that swapped them would take `rem == 1` past its own refinement inside `Str/step`. The peel changes no spelling, so every key stays where it was written.
 pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
-    let swapped = match (left, right) {
-        (Intrinsic::NatEql(a, b), Intrinsic::NatEql(c, d))
-        | (Intrinsic::NatNeq(a, b), Intrinsic::NatNeq(c, d))
-        | (Intrinsic::IntEql(a, b), Intrinsic::IntEql(c, d))
-        | (Intrinsic::IntNeq(a, b), Intrinsic::IntNeq(c, d))
-        | (Intrinsic::BoolEql(a, b), Intrinsic::BoolEql(c, d))
-        | (Intrinsic::BoolNeq(a, b), Intrinsic::BoolNeq(c, d))
-        | (Intrinsic::BoolXor(a, b), Intrinsic::BoolXor(c, d))
-        | (Intrinsic::FltEql(a, b), Intrinsic::FltEql(c, d))
-        | (Intrinsic::FltNeq(a, b), Intrinsic::FltNeq(c, d))
-        | (Intrinsic::NatAnd(a, b), Intrinsic::NatAnd(c, d))
-        | (Intrinsic::NatOr(a, b), Intrinsic::NatOr(c, d))
-        | (Intrinsic::NatXor(a, b), Intrinsic::NatXor(c, d)) => a == d && b == c,
-        (Intrinsic::BinEql(this, a, b), Intrinsic::BinEql(that, c, d)) if this == that => {
-            a == d && b == c
-        }
-        _ => return None,
+    let commuting = |intrinsic: &Intrinsic| match intrinsic.algebra() {
+        Declaration::Operation {
+            carrier,
+            operation,
+            operands: Operands::Two([a, b]),
+        } if operation.commutes() => Some(((carrier, operation), a.clone(), b.clone())),
+        _ => None,
     };
-
-    Some(match swapped {
+    let swapped = match (commuting(left), commuting(right)) {
+        (Some((this, a, b)), Some((that, c, d))) if this == that => Some(a == d && b == c),
+        _ => match (left, right) {
+            // The equalities of carriers the algebra declares nothing of yet — `Flt`'s, and `Bin`'s at one grain — commute as the declared ones do.
+            (Intrinsic::FltEql(a, b), Intrinsic::FltEql(c, d))
+            | (Intrinsic::FltNeq(a, b), Intrinsic::FltNeq(c, d)) => Some(a == d && b == c),
+            (Intrinsic::BinEql(this, a, b), Intrinsic::BinEql(that, c, d)) if this == that => {
+                Some(a == d && b == c)
+            }
+            _ => None,
+        },
+    };
+    swapped.map(|swapped| match swapped {
         true => Deduction::Equal,
         false => Deduction::Undecided,
     })
@@ -123,7 +124,7 @@ fn decide(equal: bool) -> Verdict {
     }
 }
 
-/// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by syntactic identity: the same set is `Equal`, anything else is `Undecided`, never `Impossible`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
+/// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by `curios-algebra`'s `same_leaves`, over leaves identified as written: the same set is `Equal`, anything else is `Undecided`, never `Impossible`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
 ///
 /// Decided here rather than by a canonical spelling in the fold, on the record `documentation/roadmap.md` keeps of the `&&`/`||` cliff: a fold that normalized a tree whole on every step paid for the whole tree at every leaf, where a comparison flattens each side once. A leaf that is convertible but not identical is the caller's shape congruence's, as before, so declining costs reductions and never correctness.
 pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
@@ -133,14 +134,20 @@ pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
         return None;
     }
 
-    let covers = |these: &[Term], those: &[Term]| these.iter().all(|leaf| those.contains(leaf));
+    let mut atoms = Atoms::default();
+    let mut read = |leaves: &[Term]| {
+        leaves
+            .iter()
+            .map(|leaf| atoms.exact(leaf))
+            .collect::<Vec<_>>()
+    };
+    let (left_atoms, right_atoms) = (read(&left_leaves), read(&right_leaves));
+    let verdict = match same_leaves(&left_atoms, &right_atoms) {
+        true => Deduction::Equal,
+        false => Deduction::Undecided,
+    };
 
-    Some(
-        match covers(&left_leaves, &right_leaves) && covers(&right_leaves, &left_leaves) {
-            true => Deduction::Equal,
-            false => Deduction::Undecided,
-        },
-    )
+    Some(verdict)
 }
 
 /// The leaves of a `&&` tree (`true`) or a `||` tree (`false`), left to right, with an explicit worklist because the tree's depth is data-shaped. `None` for any other intrinsic.

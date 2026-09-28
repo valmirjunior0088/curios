@@ -10,6 +10,9 @@ pub use atom::*;
 mod bitwise;
 pub use bitwise::*;
 
+mod boolean;
+pub use boolean::*;
+
 mod combination;
 pub use combination::*;
 

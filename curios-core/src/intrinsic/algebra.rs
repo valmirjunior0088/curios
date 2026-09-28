@@ -12,8 +12,8 @@ use {
 pub enum Declaration<'a> {
     /// Nothing the algebra reasons about.
     Opaque,
-    /// An operation over a numeric carrier, with the operands its meaning reads, in the operation's order.
-    Numeric {
+    /// An operation over a carrier, with the operands its meaning reads, in the operation's order.
+    Operation {
         carrier: Carrier,
         operation: Operation,
         operands: Operands<'a>,
@@ -39,162 +39,182 @@ impl<'a> Operands<'a> {
 impl Intrinsic {
     /// What this intrinsic is algebraically.
     pub fn algebra(&self) -> Declaration<'_> {
-        let numeric = |carrier, operation, operands| Declaration::Numeric {
+        let declared = |carrier, operation, operands| Declaration::Operation {
             carrier,
             operation,
             operands,
         };
         match self {
-            Intrinsic::NatAdd(left, right) => numeric(
+            Intrinsic::BoolAnd(left, right) => declared(
+                Carrier::Boolean,
+                Operation::And,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::BoolOr(left, right) => declared(
+                Carrier::Boolean,
+                Operation::Or,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::BoolXor(left, right) => declared(
+                Carrier::Boolean,
+                Operation::Xor,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::BoolEql(left, right) => declared(
+                Carrier::Boolean,
+                Operation::Equal,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::BoolNeq(left, right) => declared(
+                Carrier::Boolean,
+                Operation::Unequal,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::NatAdd(left, right) => declared(
                 Carrier::Natural,
                 Operation::Sum,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatSub(left, right) => numeric(
+            Intrinsic::NatSub(left, right) => declared(
                 Carrier::Natural,
                 Operation::Difference,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatMul(left, right) => numeric(
+            Intrinsic::NatMul(left, right) => declared(
                 Carrier::Natural,
                 Operation::Product,
                 Operands::Two([left, right]),
             ),
             Intrinsic::NatDiv {
                 dividend, divisor, ..
-            } => numeric(
+            } => declared(
                 Carrier::Natural,
                 Operation::Quotient,
                 Operands::Two([dividend, divisor]),
             ),
             Intrinsic::NatRem {
                 dividend, divisor, ..
-            } => numeric(
+            } => declared(
                 Carrier::Natural,
                 Operation::Remainder,
                 Operands::Two([dividend, divisor]),
             ),
-            Intrinsic::NatAnd(left, right) => numeric(
+            Intrinsic::NatAnd(left, right) => declared(
                 Carrier::Natural,
                 Operation::And,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatOr(left, right) => numeric(
+            Intrinsic::NatOr(left, right) => declared(
                 Carrier::Natural,
                 Operation::Or,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatXor(left, right) => numeric(
+            Intrinsic::NatXor(left, right) => declared(
                 Carrier::Natural,
                 Operation::Xor,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatShl(left, right) => numeric(
+            Intrinsic::NatShl(left, right) => declared(
                 Carrier::Natural,
                 Operation::ShiftLeft,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatShr(left, right) => numeric(
+            Intrinsic::NatShr(left, right) => declared(
                 Carrier::Natural,
                 Operation::ShiftRight,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatEql(left, right) => numeric(
+            Intrinsic::NatEql(left, right) => declared(
                 Carrier::Natural,
                 Operation::Equal,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatNeq(left, right) => numeric(
+            Intrinsic::NatNeq(left, right) => declared(
                 Carrier::Natural,
                 Operation::Unequal,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatLt(left, right) => numeric(
+            Intrinsic::NatLt(left, right) => declared(
                 Carrier::Natural,
                 Operation::Less,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::NatLe(left, right) => numeric(
+            Intrinsic::NatLe(left, right) => declared(
                 Carrier::Natural,
                 Operation::AtMost,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::ByteToNat(operand) => numeric(
+            Intrinsic::ByteToNat(operand) => declared(
                 Carrier::Natural,
                 Operation::FromByte,
                 Operands::One([operand]),
             ),
-            Intrinsic::NatToInt(operand) => numeric(
+            Intrinsic::NatToInt(operand) => declared(
                 Carrier::Integer,
                 Operation::Widening,
                 Operands::One([operand]),
             ),
-            Intrinsic::IntAdd(left, right) => numeric(
+            Intrinsic::IntAdd(left, right) => declared(
                 Carrier::Integer,
                 Operation::Sum,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntSub(left, right) => numeric(
+            Intrinsic::IntSub(left, right) => declared(
                 Carrier::Integer,
                 Operation::Difference,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntMul(left, right) => numeric(
+            Intrinsic::IntMul(left, right) => declared(
                 Carrier::Integer,
                 Operation::Product,
                 Operands::Two([left, right]),
             ),
             Intrinsic::IntDiv {
                 dividend, divisor, ..
-            } => numeric(
+            } => declared(
                 Carrier::Integer,
                 Operation::Quotient,
                 Operands::Two([dividend, divisor]),
             ),
             Intrinsic::IntRem {
                 dividend, divisor, ..
-            } => numeric(
+            } => declared(
                 Carrier::Integer,
                 Operation::Remainder,
                 Operands::Two([dividend, divisor]),
             ),
-            Intrinsic::IntShl(left, right) => numeric(
+            Intrinsic::IntShl(left, right) => declared(
                 Carrier::Integer,
                 Operation::ShiftLeft,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntShr(left, right) => numeric(
+            Intrinsic::IntShr(left, right) => declared(
                 Carrier::Integer,
                 Operation::ShiftRight,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntEql(left, right) => numeric(
+            Intrinsic::IntEql(left, right) => declared(
                 Carrier::Integer,
                 Operation::Equal,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntNeq(left, right) => numeric(
+            Intrinsic::IntNeq(left, right) => declared(
                 Carrier::Integer,
                 Operation::Unequal,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntLt(left, right) => numeric(
+            Intrinsic::IntLt(left, right) => declared(
                 Carrier::Integer,
                 Operation::Less,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::IntLe(left, right) => numeric(
+            Intrinsic::IntLe(left, right) => declared(
                 Carrier::Integer,
                 Operation::AtMost,
                 Operands::Two([left, right]),
             ),
             Intrinsic::BoolType
             | Intrinsic::Bool { .. }
-            | Intrinsic::BoolAnd { .. }
-            | Intrinsic::BoolOr { .. }
-            | Intrinsic::BoolXor { .. }
-            | Intrinsic::BoolEql { .. }
-            | Intrinsic::BoolNeq { .. }
             | Intrinsic::NatType
             | Intrinsic::Nat { .. }
             | Intrinsic::ByteType
@@ -273,5 +293,28 @@ impl Intrinsic {
             | Intrinsic::IoPure { .. }
             | Intrinsic::IoBind { .. } => Declaration::Opaque,
         }
+    }
+
+    /// The comparison of `carrier` that `operation` names, over `left` and `right` — the way back from a declaration to the intrinsic it declares, for the comparisons the algebra hands back by operation: `<`, `<=`, `==` and `!=` over `Nat` and `Int`, and `==`, `!=` and `xor` over `Bool`. `None` for any other pair.
+    pub fn comparison(
+        carrier: Carrier,
+        operation: Operation,
+        left: Term,
+        right: Term,
+    ) -> Option<Intrinsic> {
+        Some(match (carrier, operation) {
+            (Carrier::Natural, Operation::Less) => Intrinsic::NatLt(left, right),
+            (Carrier::Natural, Operation::AtMost) => Intrinsic::NatLe(left, right),
+            (Carrier::Natural, Operation::Equal) => Intrinsic::NatEql(left, right),
+            (Carrier::Natural, Operation::Unequal) => Intrinsic::NatNeq(left, right),
+            (Carrier::Integer, Operation::Less) => Intrinsic::IntLt(left, right),
+            (Carrier::Integer, Operation::AtMost) => Intrinsic::IntLe(left, right),
+            (Carrier::Integer, Operation::Equal) => Intrinsic::IntEql(left, right),
+            (Carrier::Integer, Operation::Unequal) => Intrinsic::IntNeq(left, right),
+            (Carrier::Boolean, Operation::Equal) => Intrinsic::BoolEql(left, right),
+            (Carrier::Boolean, Operation::Unequal) => Intrinsic::BoolNeq(left, right),
+            (Carrier::Boolean, Operation::Xor) => Intrinsic::BoolXor(left, right),
+            _ => return None,
+        })
     }
 }

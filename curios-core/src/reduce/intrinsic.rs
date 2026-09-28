@@ -25,12 +25,12 @@ pub use truth::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Subterm, Telescope, Term,
-        int_cancel_common, int_negate, int_of_nat, int_preimage, int_product, int_split_by_sign,
-        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
-        project_erased_universes,
+        Cost, Declaration, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Operands, Subterm,
+        Telescope, Term, int_cancel_common, int_negate, int_of_nat, int_preimage, int_product,
+        int_split_by_sign, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
+        peel_first_elem, project_erased_universes,
     },
-    curios_algebra::{Comparison, Deduction, distribution_size},
+    curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
@@ -220,32 +220,27 @@ fn dual_of_negated(
 
 /// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against a NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
 ///
-/// Two readers: [`align_comparisons`], which spells a negated probe as its dual, and both reducers' refinement probes, which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
+/// Its readers: [`align_comparisons`], which spells a negated probe as its dual; the Boolean laws and the truth table, which read a comparison beside its dual as one value and its negation; and both reducers' refinement probes, which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
+///
+/// Read through `curios-algebra`'s `Operation::negation`, the operands swapped where it says so. A `Bool` comparison with a literal operand is left out: a `xor` with a literal is a negation itself and not a comparison, and an equality against a literal the fold has already answered.
 pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
-    let dual = match comparison {
-        Intrinsic::NatLt(a, b) => Intrinsic::NatLe(b.clone(), a.clone()),
-        Intrinsic::NatLe(a, b) => Intrinsic::NatLt(b.clone(), a.clone()),
-        Intrinsic::NatEql(a, b) => Intrinsic::NatNeq(a.clone(), b.clone()),
-        Intrinsic::NatNeq(a, b) => Intrinsic::NatEql(a.clone(), b.clone()),
-        Intrinsic::IntLt(a, b) => Intrinsic::IntLe(b.clone(), a.clone()),
-        Intrinsic::IntLe(a, b) => Intrinsic::IntLt(b.clone(), a.clone()),
-        Intrinsic::IntEql(a, b) => Intrinsic::IntNeq(a.clone(), b.clone()),
-        Intrinsic::IntNeq(a, b) => Intrinsic::IntEql(a.clone(), b.clone()),
-        // `!=` on `Bool` lowers to `xor` at the `/sys` row, so the dual of an equality is the `xor` its inequality is, and a negated `xor` of two operands is their equality; a `xor` with a literal operand is a negation itself and not a comparison.
-        Intrinsic::BoolEql(a, b) | Intrinsic::BoolNeq(a, b)
-            if a.as_bool().is_none() && b.as_bool().is_none() =>
-        {
-            match comparison {
-                Intrinsic::BoolEql(..) => Intrinsic::BoolXor(a.clone(), b.clone()),
-                _ => Intrinsic::BoolEql(a.clone(), b.clone()),
-            }
-        }
-        Intrinsic::BoolXor(a, b) if a.as_bool().is_none() && b.as_bool().is_none() => {
-            Intrinsic::BoolEql(a.clone(), b.clone())
-        }
-        _ => return None,
+    let Declaration::Operation {
+        carrier,
+        operation,
+        operands: Operands::Two([left, right]),
+    } = comparison.algebra()
+    else {
+        return None;
     };
-    Some(dual)
+    if carrier == Carrier::Boolean && (left.as_bool().is_some() || right.as_bool().is_some()) {
+        return None;
+    }
+    let (negation, swapped) = operation.negation(carrier)?;
+    let (left, right) = match swapped {
+        true => (right, left),
+        false => (left, right),
+    };
+    Intrinsic::comparison(carrier, negation, left.clone(), right.clone())
 }
 
 /// The comparison that is true exactly when `comparison` is, spelled across the `<`/`<=` seam: `a < b` is `a + 1 <= b` and `a <= b` is `a < b + 1` on `Nat` and on `Int`, where the successor is exact in both directions, with the floor the step shares with the other operand cancelled. `None` for every comparison that is not an ordering on those two carriers.
@@ -336,7 +331,7 @@ pub fn reduce_intrinsic(
                 |l, r| l && r,
                 Intrinsic::BoolAnd,
             )?,
-            |l, r| bool_lattice_laws(l, r, true),
+            |l, r| bool_laws(l, r, intrinsic),
         )),
         Intrinsic::BoolOr(left, right) => Ok(then_laws(
             reduce_bool_binary(
@@ -347,7 +342,7 @@ pub fn reduce_intrinsic(
                 |l, r| l || r,
                 Intrinsic::BoolOr,
             )?,
-            |l, r| bool_lattice_laws(l, r, false),
+            |l, r| bool_laws(l, r, intrinsic),
         )),
         Intrinsic::BoolXor(left, right) => Ok(then_laws(
             reduce_bool_binary(
@@ -358,7 +353,7 @@ pub fn reduce_intrinsic(
                 |l, r| l != r,
                 Intrinsic::BoolXor,
             )?,
-            bool_xor_laws,
+            |l, r| bool_laws(l, r, intrinsic),
         )),
         Intrinsic::BoolEql(left, right) => Ok(then_laws(
             reduce_bool_binary(
@@ -369,7 +364,7 @@ pub fn reduce_intrinsic(
                 |l, r| l == r,
                 Intrinsic::BoolEql,
             )?,
-            |l, r| bool_eql_laws(l, r, true),
+            |l, r| bool_laws(l, r, intrinsic),
         )),
         Intrinsic::BoolNeq(left, right) => Ok(then_laws(
             reduce_bool_binary(
@@ -380,7 +375,7 @@ pub fn reduce_intrinsic(
                 |l, r| l != r,
                 Intrinsic::BoolNeq,
             )?,
-            |l, r| bool_eql_laws(l, r, false),
+            |l, r| bool_laws(l, r, intrinsic),
         )),
         Intrinsic::NatType => Ok(Subterm::Intrinsic(Intrinsic::NatType)),
         Intrinsic::Nat(Nat::Zero) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))),

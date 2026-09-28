@@ -48,7 +48,7 @@ pub struct LinearViews {
 impl LinearViews {
     /// The view of `comparison`, when it is a `Nat` or `Int` ordering or equality — `<`, `<=`, `==` or `!=`, which is every comparison the roster builds — and `None` for anything else.
     pub fn view(&mut self, comparison: &Intrinsic) -> Option<LinearView> {
-        let Declaration::Numeric {
+        let Declaration::Operation {
             carrier,
             operation,
             operands: Operands::Two([left, right]),
@@ -56,10 +56,12 @@ impl LinearViews {
         else {
             return None;
         };
-        if !matches!(
-            operation,
-            Operation::Less | Operation::AtMost | Operation::Equal | Operation::Unequal
-        ) {
+        if !matches!(carrier, Carrier::Natural | Carrier::Integer)
+            || !matches!(
+                operation,
+                Operation::Less | Operation::AtMost | Operation::Equal | Operation::Unequal
+            )
+        {
             return None;
         }
 
@@ -152,6 +154,7 @@ fn side(
                 .collect::<Vec<_>>();
             Combination::collect(constant, summands).without_zeros()
         }
+        Carrier::Boolean => unreachable!("a view is read only of a `Nat` or `Int` comparison"),
     }
 }
 
