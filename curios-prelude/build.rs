@@ -10,6 +10,14 @@ use {
 };
 
 fn main() {
+    // Under the `profile` feature certification runs under a record stream filed beside this crate, as the archive's build files the elaboration's beside its own, so the two halves of the prelude's build are read by one instrument.
+    #[cfg(feature = "profile")]
+    curios_profile::trace_build_script(certify);
+    #[cfg(not(feature = "profile"))]
+    certify();
+}
+
+fn certify() {
     println!("cargo:rerun-if-changed=build.rs");
 
     // The *restored* images, not the values the producing script held before serializing them. Those differ — hash-consing and the round trip sit between them — and it is the restored ones every compilation actually uses, so they are the ones worth certifying.

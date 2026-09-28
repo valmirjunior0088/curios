@@ -6,7 +6,7 @@ This part needs nothing. Where [the invariants campaign's instruments](../invari
 
 ## What this builds on
 
-- **The profile.** `curios-profile`'s spans, samples and notes, written as each row is made, and the prelude build's own stream at `curios-prelude-archive/.artifacts/profile.tsv`. A `declaration` span names its item in its `group` field, which is what a per-item distribution is read from.
+- **The profile.** `curios-profile`'s spans, samples and notes, written as each row is made, and the prelude build's own streams: the elaboration's at `curios-prelude-archive/.artifacts/profile.tsv`, and the certification's at `curios-prelude/.artifacts/profile.tsv`, whose one kernel span, `recheck_module`, times the whole walk and distinguishes no judgment. A `declaration` span names its item in its `group` field, which is what a per-item distribution is read from.
 - **The certifier's walk.** Typing, conversion, level entailment and the erased positions `kernel/positions.rs` records belong to the kernel ([`curios-cert`'s README](../../../curios-cert/README.md)).
 - **The launcher boundary.** `curios-runtime`'s `cranelift` feature exists for `curios` and never enters `default`; `curios/src/bundle.rs` enforces it on the shipped launcher image.
 

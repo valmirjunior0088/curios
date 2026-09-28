@@ -774,6 +774,7 @@ dependencies = [
  "curios-cert",
  "curios-core",
  "curios-prelude-archive",
+ "curios-profile",
 ]
 
 [[package]]

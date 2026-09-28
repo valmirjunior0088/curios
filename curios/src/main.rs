@@ -53,16 +53,7 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use curios_profile::{Destination, fold_at, install};
-
-// Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
-#[cfg(feature = "profile")]
-#[global_allocator]
-static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
-
-/// The size at which the record stream rotates, keeping the current file and its predecessor. A constant rather than a second flag: it bounds what an endless run may write, which is not a thing a caller has a reason to choose, and the destination is the only part of a measurement that is the caller's.
-#[cfg(feature = "profile")]
-const PROFILE_CAP: u64 = 512 * 1024 * 1024;
+use curios_profile::{Destination, ROTATION_CAP, fold_at, install};
 
 /// File every span and event this invocation makes at `path`.
 ///
@@ -77,7 +68,7 @@ const PROFILE_CAP: u64 = 512 * 1024 * 1024;
 fn install_profiling(path: PathBuf) {
     let destination = Destination::Rotating {
         path,
-        cap: PROFILE_CAP,
+        cap: ROTATION_CAP,
     };
 
     if let Err(error) = install(destination) {

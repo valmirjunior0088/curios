@@ -1,6 +1,6 @@
 //! Allocation accounting for [`trace`](crate::trace()): a `GlobalAlloc` wrapper maintaining process-wide live, cumulative, and high-water byte counters that span timing samples at each boundary.
 //!
-//! A binary opts in by installing [`CountingAllocator`] as its `#[global_allocator]` under its own `profile` feature. Nothing else observes the counters, so a build that installs no allocator reports every memory column as zero while its timings stay exactly as they were — the columns are absent evidence, never a claim that nothing allocated.
+//! This crate installs `CountingAllocator` as the `#[global_allocator]` of every binary it is linked into with `enabled` on, so a profile build counts wherever it measures and no binary has to remember to opt in.
 //!
 //! The counters are process-wide, so a span measures whatever the whole process did while it was entered — precise for the single-threaded stage pipelines the workspace profiles and an overcount anywhere else; `README.md` states why.
 
@@ -14,17 +14,10 @@ static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 
-/// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it.
-///
-/// ```text
-/// #[cfg(feature = "profile")]
-/// #[global_allocator]
-/// static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
-/// ```
-pub struct CountingAllocator;
+/// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it. Installed below, by this crate, wherever `enabled` is on.
+struct CountingAllocator;
 
-// This crate's own test binary installs it, because the accounting tests are otherwise unfalsifiable: nothing but this allocator writes the counters, so under the system allocator every memory column reads zero and an assertion over them holds whatever the accounting does. Inverting the sign of `retained` was observed to pass the suite without this line and to fail `capture_accounts_retained_and_allocated_bytes` with it.
-#[cfg(test)]
+// Installed here rather than by each binary, because a binary that had to opt in could forget: the columns would then read zero, which is absent evidence rather than a failure, and nothing would say so. It is also what keeps the accounting tests falsifiable, since this crate's own test binary is one of the binaries it is linked into — inverting the sign of `retained` was observed to pass the suite under the system allocator and to fail `capture_accounts_retained_and_allocated_bytes` under this one.
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 

@@ -78,7 +78,7 @@ impl SampleSummary {
 
 /// Aggregate statistics for every span with the same target, name and group.
 ///
-/// Every figure counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, so they are all zero unless the binary that wrote the stream installed [`CountingAllocator`](crate::CountingAllocator).
+/// Every figure counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, so they are all zero unless the binary that wrote the stream was built with `enabled`, which is what installs the counting allocator.
 #[derive(Debug)]
 pub struct ProfileSummary {
     /// The tracing target that owns the span.

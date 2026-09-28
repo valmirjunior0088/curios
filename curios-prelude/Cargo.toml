@@ -10,7 +10,7 @@ build = "build.rs"
 workspace = true
 
 [features]
-profile = ["curios-prelude-archive/profile"]
+profile = ["curios-prelude-archive/profile", "curios-cert/profile", "curios-profile/enabled"]
 
 [dependencies]
 curios-prelude-archive = { workspace = true }
@@ -23,4 +23,5 @@ curios-prelude-archive = { workspace = true }
 [build-dependencies]
 curios-cert = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true }
+curios-profile = { workspace = true }
 curios-prelude-archive = { workspace = true }

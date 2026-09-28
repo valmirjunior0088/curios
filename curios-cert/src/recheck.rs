@@ -328,6 +328,7 @@ fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec
 }
 
 fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+    curios_profile::profile!("recheck_module");
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
     let fresh = |name: &Global| !globals.in_scope(name);

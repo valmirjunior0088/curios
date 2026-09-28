@@ -51,6 +51,9 @@ const SEQUENCE_BITS: u32 = u64::BITS - CALLSITE_BITS;
 
 const SEQUENCE_MASK: u64 = (1 << SEQUENCE_BITS) - 1;
 
+/// The size at which a [`Destination::Rotating`] stream is rotated, keeping the current file and its predecessor. One constant for every caller rather than a choice each makes: it bounds what an endless run may write, which is not a thing a caller has a reason to choose, and the destination is the only part of a measurement that is the caller's.
+pub const ROTATION_CAP: u64 = 512 * 1024 * 1024;
+
 /// Where a trace is written.
 pub enum Destination {
     /// One writer that is never rotated: standard output, or a buffer a caller folds back in the same process.
@@ -84,6 +87,36 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
     let result = tracing::subscriber::with_default(recorder, operation);
 
     Ok(result)
+}
+
+/// Run a build script's `operation` under a record stream filed at `.artifacts/profile.tsv` beside the crate being built, then fold the stream and report where it landed, on one `cargo:warning` line.
+///
+/// **The one path this crate names, because a build script has no caller to take one from.** Every other capture is handed its destination; a build script is run by Cargo, whose arguments say nothing about profiling. The path is the repository's rule for a build product that outlives its build — `.artifacts/` beside its owner — applied to the crate `CARGO_MANIFEST_DIR` names, so each build script files beside itself and no two collide. That variable says *where*, never *whether*: the calling crate's `profile` feature is what decides a stream is filed at all.
+///
+/// The fold runs after `operation` returns and reads the file back, so a build that hangs has still filed every row it made; the report is for the build that finished. A stream that cannot be opened fails the build, as it would any build script whose feature asked for it.
+pub fn trace_build_script<T>(operation: impl FnOnce() -> T) -> T {
+    let manifest = std::env::var_os("CARGO_MANIFEST_DIR")
+        .expect("Cargo runs a build script with `CARGO_MANIFEST_DIR` set");
+    let path = PathBuf::from(manifest)
+        .join(".artifacts")
+        .join("profile.tsv");
+
+    let result = trace(
+        Destination::Rotating {
+            path: path.clone(),
+            cap: ROTATION_CAP,
+        },
+        operation,
+    )
+    .expect("the build profile opens");
+
+    let report = crate::fold_at(&path).expect("the build profile folds");
+    println!(
+        "cargo:warning=build profile written to {} (peak {:.1} MiB)",
+        path.display(),
+        report.peak as f64 / (1024.0 * 1024.0),
+    );
+    result
 }
 
 /// Record every span and event of this process, for a binary with no closure to wrap.

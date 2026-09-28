@@ -121,7 +121,7 @@ fn a_field_holding_a_tab_or_a_newline_is_escaped() {
     assert_eq!(rows.lines().count(), 6, "{rows}");
 }
 
-// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count. Falsifiable only because this crate's test binary installs `CountingAllocator`; see `count.rs`.
+// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count. Falsifiable only because this crate installs its counting allocator in every binary it is linked into, its own test binary included; see `count.rs`.
 #[test]
 fn a_boundary_carries_the_allocator_readings() {
     let buffer = Buffer::default();

@@ -25,38 +25,10 @@ use {
     },
 };
 
-// Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
-#[cfg(feature = "profile")]
-#[global_allocator]
-static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
-
 fn main() {
     // Under the `profile` feature the whole build runs under a record stream, filed beside the archive it builds. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
     #[cfg(feature = "profile")]
-    {
-        // Filed here rather than under `OUT_DIR` because it is read after the build that wrote it, which is `.artifacts`'s rule; a hung prelude build is the case it exists for, and that build never reaches the summary below. A build script has no caller to take a destination from — unlike the CLI, whose `--profile` names one — so this is the one place that chooses its own, and the directory is the destination's to make.
-        let out = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap())
-            .join(".artifacts")
-            .join("profile.tsv");
-
-        curios_profile::trace(
-            curios_profile::Destination::Rotating {
-                path: out.clone(),
-                cap: 512 * 1024 * 1024,
-            },
-            build,
-        )
-        .expect("failed to open the build profile");
-
-        let rows = fs::File::open(&out).expect("the build profile reopens");
-        let report =
-            curios_profile::fold(std::io::BufReader::new(rows)).expect("the build profile folds");
-        println!(
-            "cargo:warning=prelude build profile written to {} (peak {:.1} MiB)",
-            out.display(),
-            report.peak as f64 / (1024.0 * 1024.0),
-        );
-    }
+    curios_profile::trace_build_script(build);
     #[cfg(not(feature = "profile"))]
     build();
 }
