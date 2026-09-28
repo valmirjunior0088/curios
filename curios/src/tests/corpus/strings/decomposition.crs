@@ -1,5 +1,5 @@
--- Taking a `Str` apart: splitting, searching, replacing, trimming one end, padding, and the scalar list.
-use /std/{Str, Nat, Bool, List, Option, Eq, Test};
+-- Taking a `Str` apart: splitting, searching, replacing and escaping, trimming one end, padding, and the scalar list.
+use /std/{Str, Char, Nat, Bool, List, Option, Eq, Test};
 
 -- The separator is a two-byte scalar and two of them sit side by side, so the split has to advance by scalar and hand back the empty piece between them; joining the pieces on the separator is the identity.
 test split_advances_by_scalar_and_keeps_empty_pieces =
@@ -81,6 +81,22 @@ test to_list_yields_the_scalars_and_of_char_encodes_one =
             Str/flatten(List/map(chars, Str/of_char)),
             Bool/to_str(Str/of_char('€') == "€")]),
         "3 a€😀 true");
+
+-- An escape replaces only the characters its table answers for and copies the runs between as the pieces they are: a multi-byte character passes untouched, a replacement may open, close or follow another, and a table that answers for nothing gives the text back.
+test escape_replaces_chosen_characters_and_copies_the_runs_between =
+    let marked(c: Char) -> Option(Str) =
+        match Char/to_nat(c)
+        | '"' => Option/some("\\\"")
+        | '€' => Option/some("EUR")
+        | _ => Option/none()
+        end;
+    Test/equal(
+        Str/join("|", [
+            Str/escape("\"a€b😀\"", marked),
+            Str/escape("€€", marked),
+            Str/escape("", marked),
+            Str/escape("héllo", (_) => Option/none())]),
+        "\\\"aEURb😀\\\"|EUREUR||héllo");
 
 -- Every walk here moves between positions through `Str/At/forward` or `backward`, each step handing over the proof that it moved, so every one is total and computes in a type: a claim about what they answer is a proof the kernel discharges, and one that stopped terminating would be refused where it is stated rather than tested.
 let _splits_in_a_type: Eq(Str/split("a€€b€c", "€"), ["a", "", "b", "c"]) =

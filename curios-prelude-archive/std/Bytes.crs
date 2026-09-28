@@ -292,17 +292,16 @@ satisfy Ord(Bytes) {
 --- Hexadecimal, two digits per byte.
 satisfy Show(Bytes) {
     show(b) =
-        Option/unwrap_or(
-            Str/of_bytes(
-                fold(
-                    b,
-                    x[],
-                    (byte, acc) =>
-                        let n = Byte/to_nat(byte);
-                        let hi = Char/to_utf8(Char/hex_digit(n / 0x10));
-                        let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
-                        x[..acc, ..hi, ..lo])),
-            ""),
+        Str/flatten(
+            fold(
+                b,
+                [],
+                (byte, acc) =>
+                    let n = Byte/to_nat(byte);
+                    [
+                        ..acc,
+                        Str/of_char(Char/hex_digit(n / 0x10)),
+                        Str/of_char(Char/hex_digit(n % 0x10))])),
 }
 
 satisfy Spell(Bytes) {

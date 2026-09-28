@@ -869,6 +869,34 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
             At/start(s))
     end;
 
+--- `s` with each character `with` answers for replaced by the answer, and the runs between copied as the pieces of `s` they are, so what comes back is text without being checked again: one walk forward, which is what an encoder escapes through.
+pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
+    At/forward(
+        (at) => (run: At(s), ordered: Nat/Le(run.offset, at.offset)) -> Str,
+        (at, again) =>
+            (run, ordered) =>
+                match At/try_next(s, at)
+                | none() => between(s, run, at, @ordered)
+                | some(n) =>
+                    match with(n.char)
+                    | none() =>
+                        again(n.past, n.progress)(
+                            run,
+                            Nat/Le/trans(
+                                @run.offset,
+                                @at.offset,
+                                @n.past.offset,
+                                ordered,
+                                Nat/Lt/le_of_lt(at.offset, n.past.offset, n.progress)))
+                    | some(replacement) =>
+                        flatten([
+                            between(s, run, at, @ordered),
+                            replacement,
+                            again(n.past, n.progress)(n.past, Nat/Le/refl(n.past.offset))])
+                    end
+                end,
+        At/start(s))(At/start(s), Nat/Le/refl(0));
+
 --- The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =
     let strip(line: Str) -> Str =

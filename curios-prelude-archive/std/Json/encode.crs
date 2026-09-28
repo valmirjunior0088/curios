@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Bool, Char, Flt, Option, List};
+use /std/{Str, Bool, Char, Flt, Option, List};
 use /std/Json/{Json};
 
 let encode_num(n: Flt) -> Str =
@@ -9,29 +9,31 @@ let encode_num(n: Flt) -> Str =
         match Str/strip_prefix(raw, "+") | some(unsigned) => unsigned | none() => raw end
     end;
 
-let escape_byte(byte: Byte) -> Bytes =
-    let n = Byte/to_nat(byte);
+--- What a character is written as inside a string, when it is not written as itself: the quote, the backslash and the control characters, which JSON escapes.
+let escaped(c: Char) -> Option(Str) =
+    let n = Char/to_nat(c);
     match n
-    | 34 => Str/to_bytes("\\\"")
-    | 92 => Str/to_bytes("\\\\")
-    | 10 => Str/to_bytes("\\n")
-    | 13 => Str/to_bytes("\\r")
-    | 9 => Str/to_bytes("\\t")
-    | 8 => Str/to_bytes("\\b")
-    | 12 => Str/to_bytes("\\f")
+    | '"' => Option/some("\\\"")
+    | '\\' => Option/some("\\\\")
+    | '\n' => Option/some("\\n")
+    | '\r' => Option/some("\\r")
+    | '\t' => Option/some("\\t")
+    | '\u{8}' => Option/some("\\b")
+    | '\u{C}' => Option/some("\\f")
     | _ =>
         match n < 0x20
         | true =>
-            let hi = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0);
-            let lo = Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0);
-            x[..Str/to_bytes("\\u00"), hi, lo]
-        | false => x[byte]
+            Option/some(
+                Str/flatten([
+                    "\\u00",
+                    Str/of_char(Char/hex_digit(n / 0x10)),
+                    Str/of_char(Char/hex_digit(n % 0x10))]))
+        | false => Option/none()
         end
     end;
 
 let encode_str(s: Str) -> Str =
-    let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
-    Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
+    Str/flatten(["\"", Str/escape(s, escaped), "\""]);
 
 --- `v` as a document on one line. A non-finite number is written as `null`.
 pub let encode(v: Json) -> Str =

@@ -137,9 +137,9 @@ pub let to_str(u: Url) -> Str =
 pub let segments(u: Url) -> List(Str) =
     List/filter(Str/split(u.path, "/"), (s) => Bool/not(Str/is_empty(s)));
 
+--- The hexadecimal digit of the nibble `n`, uppercase as a percent-encoding is written.
 let hex_digit(n: Nat) -> Str =
-    let code = match n < 10 | true => '0' + n | false => 'A' + (n - 10) end;
-    Str/of_char(Option/unwrap_or(Char/of_nat(code), '0'));
+    Str/of_char(Char/to_ascii_upper(Char/hex_digit(n)));
 
 let unreserved(n: Nat) -> Bool =
     Nat/in_range(n, 'a', 'z') || Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, '0', '9') || n == '-'
@@ -147,20 +147,24 @@ let unreserved(n: Nat) -> Bool =
         || n == '.'
         || n == '~';
 
---- `component` percent-encoded: every byte but the unreserved ones as `%XX`.
+--- What a character is written as in a percent-encoded component, when it is not written as itself: each of its UTF-8 bytes as `%XX`.
+let percent(c: Char) -> Option(Str) =
+    match unreserved(Char/to_nat(c))
+    | true => Option/none()
+    | false =>
+        Option/some(
+            Str/flatten(
+                Bytes/fold(
+                    Char/to_utf8(c),
+                    [],
+                    (byte, acc) =>
+                        let n = Byte/to_nat(byte);
+                        [..acc, "%", hex_digit(n / 16), hex_digit(n % 16)])))
+    end;
+
+--- `component` percent-encoded: every character but the unreserved ones as the `%XX` of each of its bytes.
 pub let encode(component: Str) -> Str =
-    let empty: List(Str) = [];
-    Str/flatten(
-        List/reverse(
-            Bytes/fold(
-                Str/to_bytes(component),
-                empty,
-                (byte, acc) =>
-                    let n = Byte/to_nat(byte);
-                    match unreserved(n)
-                    | true => [Option/unwrap_or(Str/of_bytes(x[byte]), ""), ..acc]
-                    | false => [Str/flatten(["%", hex_digit(n / 16), hex_digit(n % 16)]), ..acc]
-                    end)));
+    Str/escape(component, percent);
 
 -- The digit travels with the evidence that it is one, because the caller combines two of them into a byte and reduction cannot see a bound a guard established. Deciding the range once is what produces both: the ladder yields a value `16` for anything that is not a hex digit, and the single comparison below is at once the refusal and the proof. Masking the digit instead would state a width this encoding does not have — a hex digit is four bits because of what it is, not because of where it is stored.
 let hex_value(byte: Byte) -> Option({v: Nat, ok: Nat/Lt(v, 16)}) =
