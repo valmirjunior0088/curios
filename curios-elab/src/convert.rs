@@ -82,6 +82,7 @@ pub(crate) fn convert_outcome(
     this: &Term,
     that: &Term,
 ) -> Result<Outcome, ReduceError> {
+    curios_profile::profile!("convert::outcome");
     Convert::new(type_.clone(), this.clone(), that.clone()).outcome(context)
 }
 

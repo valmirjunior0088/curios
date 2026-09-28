@@ -321,3 +321,24 @@ fn an_oracle_elaborates_a_term_that_writes_once() {
     assert_eq!(outside, 2);
     assert_eq!(inside, 1);
 }
+
+/// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and each used to throw away the reducts the next node needed — while one that unwound a solution clears them, since a reduct cached since may have read it.
+#[test]
+fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {
+    let mut context = context();
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
+    context.reduce(sum.clone(), &literal(3));
+
+    let mark = context.solution_mark();
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    assert_eq!(context.cached_reduced(&sum), Some(literal(3)));
+
+    let mark = context.solution_mark();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), literal(0));
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    assert_eq!(context.cached_reduced(&sum), None);
+}

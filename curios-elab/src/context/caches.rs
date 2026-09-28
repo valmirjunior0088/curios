@@ -327,6 +327,11 @@ impl Caches {
 
     /// A refinement-suppression boundary is being crossed with refinements registered: refinement-applied and refinement-suppressed reducts must never contaminate each other's cache, so both clear — on both sides of the bracket, unstamped (the flag flip itself writes nothing).
     pub(crate) fn invalidate_suppression_boundary(&mut self) {
+        // How many reducts the clear throws away.
+        curios_profile::sample!(
+            "caches::suppression_dropped",
+            (self.reduction.len() + self.reduction_local.len()) as u64
+        );
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
@@ -343,6 +348,11 @@ impl Caches {
 
     /// Solutions were rolled back — the one *un*-monotonic store transition. Reducts may have been cached through the unwound solutions, so both caches clear and both stamps tick.
     pub(crate) fn invalidate_for_rollback(&mut self) {
+        // How many reducts the clear throws away.
+        curios_profile::sample!(
+            "caches::rollback_dropped",
+            (self.reduction.len() + self.reduction_local.len()) as u64
+        );
         self.note_write();
         self.note_universe_write();
         self.clear_reductions();

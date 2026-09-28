@@ -1509,11 +1509,21 @@ impl Context {
         }
     }
 
-    /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals and clears the reduction cache, which may have cached reducts through them.
+    /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
+    ///
+    /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so every cache clears. A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing. It used to clear every table whatever it undid, and a witness probe rolls back after every trial: re-validating one `Str/split_once` stated in a type rolled back 901 times, none of which unwound a solution, and each threw away the reducts and elaborations the next node needed.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
+        let unwinds_terms = self.solutions.solved_len() > mark.term_solution_log_len;
+        let universes_before = self.universe_solver.state_token();
         self.solutions.unwind_to(mark.term_solution_log_len);
         self.universe_solver.rollback(mark.universe);
-        self.caches.invalidate_for_rollback();
+
+        if unwinds_terms {
+            self.caches.invalidate_for_rollback();
+        } else if self.universe_solver.state_token() != universes_before {
+            self.caches.note_universe_write();
+            self.caches.invalidate_for_universe_transaction();
+        }
     }
 
     pub(crate) fn universes(&self) -> &UniverseSolver {

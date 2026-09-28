@@ -291,6 +291,7 @@ pub(crate) fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
+    curios_profile::profile!("typing::expect");
     let outcome = subsume(context, term, inferred, expected)?;
 
     match outcome {
