@@ -46,6 +46,14 @@ The reduction inside `infer_type` is what makes the two mechanisms interlock: ty
 
 **Rationale.** Six defects arrived through the gap between "the kernel reads a field" and "something established the field". Two produced level capture and a bypassed large-elimination guard; four aborted the walk. Fixing them one guard at a time closed instances, never the class. The split above is what makes each class impossible rather than caught: shapes by typing, counts by the boundary, and neither able to abort.
 
+### Level entailment is forward reasoning to a least model
+
+**Decision.** Whether a declaration's assumed constraints force `lower ≤ upper` is decided forward: from the facts `upper` states, every hypothesis `L ≤ U` whose upper side is bounded fires at the largest shift it is bounded by, raising its lower side, until a pass raises nothing; the answer is whether that least model bounds `lower`. It is Bezem and Coquand's decision procedure for the semilattice with an inflationary successor (*Loop-checking and the uniform word problem for join-semilattices with an inflationary endomorphism*, TCS 913, 2022), with one rule the naturals add — a parameter carries its offset, so `h + k` bounds the constant `k` — and the bound on the least model's values (their Corollary 4.2) is where it refuses a set holding a loop.
+
+**Rationale.** Its predecessor searched backward: one atom of `lower` at a time, through the first hypothesis mentioning it, into every part of that hypothesis's upper side, with a path guard against cycles, fuel against growth, and nothing remembered between branches. That is exponential in the hypotheses' width, and the standard library found the width: `/std/Try`'s lift between two `Try`s assumes 27 constraints whose sides are maxima of up to seventeen parameters, and the certifier spent 9.2 of the prelude's 9.6 seconds of entailment on its 46 level questions — the costliest, five seconds, asking for a bound the hypotheses state verbatim. Forward, the hypothesis stating it fires in the first pass. The procedure also accepts every goal the search accepted, since each of the search's three rules is a step of the forward derivation, and the true chains fuel used to cut: a differential over 30 052 goals found none the search accepted and this refuses, and 360 the other way, each held sound by the brute-force sweep the soundness perimeter names.
+
+**Rejected.** Memoizing the backward search: a proven subgoal can be cached, but a refuted one was refused for the path it was reached on — the cycle guard and the fuel both depend on it — so the cache is either unsound to consult or ad hoc, and the search stays exponential where no subgoal repeats. Normalizing the constraint set before searching, splitting each left maximum into its parts and dropping the parts its right side already bounds: it narrows each branch and leaves the search. Rocq's incremental model, which maintains the least model as constraints arrive: the kernel's hypotheses are fixed for the whole of a declaration, so a model per question costs a pass or two and needs nothing kept between them.
+
 ## Measuring the certifier
 
 **The instrument.** `cargo x clippy` builds `curios-prelude` with `--all-features`, and its build script certifies the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`; the elaboration's stream is `curios-prelude-archive/.artifacts/profile.tsv`. The walk carries three kinds of span:
@@ -100,3 +108,14 @@ The heaviest items in the kernel, beside their elaboration:
 | `/std/Cli/step` | 915 ms | 622 ms |
 
 **What it showed first.** `entails` is almost wholly one witness: 9.2 s of its 9.6 s is `/std/Try`'s lift between two `Try`s, 46 level questions under 27 assumed `max(…) ≤ max(…)` constraints, each answered `true` after a depth-first search whose dead ends it never remembers — the costliest of them asking for a bound the hypotheses state verbatim.
+
+**After entailment went forward** ([the decision above](#level-entailment-is-forward-reasoning-to-a-least-model)), retaken the same way, with the calls unchanged:
+
+| Span | Before | After |
+| --- | --- | --- |
+| `recheck_module` | 52.4 s, 8 139 MB | 38.9 s, 6 058 MB |
+| `entails`, self | 9.6 s, 2 220 MB | 1.9 s, 139 MB |
+| `convert` | 14.3 s, 2 571 MB | 5.8 s, 633 MB |
+| the witnesses in `/std/Try` | 9 504 ms | 229 ms |
+
+A program declaring the same lift between two `Try`s on its own, compiled by `wonder stage core-elab -` under `--profile`, went from 15.0 s to 4.6 s, its kernel walk from 11.0 s to 0.44 s, and its 628 entailments from 10.6 s to 43 ms.

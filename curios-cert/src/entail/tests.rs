@@ -127,7 +127,7 @@ fn levels() -> Vec<Level> {
 
 /// `Kernel::level_leq` is `structurally_leq(..) || entails(..)`, and the fast path runs first on every goal — so where the two diverge, the answer is decided by which one is asked. Only one divergence can admit: the structural test accepting a goal the oracle refuses.
 ///
-/// It cannot happen, and the reason is structural rather than empirical: `atom_entailed` opens with exactly `structurally_leq`'s per-atom test and returns before it spends any fuel, and `level_entailed`'s constant clause is `structurally_leq`'s character for character. So the oracle contains the fast path whatever the hypotheses are, and the disjunction is `entails`. This sweeps the claim over every pair of levels above, under four hypothesis sets including a cyclic one and one that gains an offset.
+/// It cannot happen, and the reason is structural rather than empirical: the oracle's model starts from exactly the facts `structurally_leq` reads — `upper`'s atoms at their offsets, and its floor under the constant — and asks the goal of that model before firing any hypothesis, and firing only raises it. So the oracle contains the fast path whatever the hypotheses are, and the disjunction is `entails`. This sweeps the claim over every pair of levels above, under four hypothesis sets including a cyclic one and one that gains an offset.
 ///
 /// The second assertion is what keeps this from being vacuous: the two predicates really do differ, so the containment is a fact about the pair rather than about them being the same function. That is the same guard `a_binder_forced_twice_survives_only_when_its_forcings_convert` needs for the same reason — a differential over two predicates that never disagree establishes nothing.
 #[test]
@@ -172,4 +172,169 @@ fn cyclic_hypotheses_terminate_and_refuse_the_unrelated() {
 
     assert!(entails(&assumed, &u, &v));
     assert!(!entails(&assumed, &u, &w));
+}
+
+/// A set holding a loop — `u + 1 ≤ v` and `v ≤ u` say `u + 1 ≤ u` — raises its values without end, and a least model does not exist to reach. The walk refuses such a context before assuming it; asked anyway, the oracle stops at the bound past which a value can only be climbing, and refuses.
+#[test]
+fn a_looping_hypothesis_set_is_refused_rather_than_chased() {
+    let (u, v) = (param(0), param(1));
+    let raised = u.succ().expect("level has a successor");
+    let far = u.checked_add(8).expect("level admits the offset");
+
+    assert!(!entails(&[leq(&raised, &v), leq(&v, &u)], &far, &u));
+}
+
+/// The maximum of the parameters at `indices`, or zero when there are none.
+fn over(indices: &[usize]) -> Level {
+    Level::max(indices.iter().map(|&index| param(index)))
+}
+
+/// The hypotheses `/std/Try`'s lift between two `Try`s is checked under, as the certifier's profile recorded them: 27 constraints over 29 parameters, among them two equalities spelled as opposing pairs and six parameters pinned to zero.
+fn try_lift_hypotheses() -> Vec<UniverseConstraint> {
+    let equal_left: &[usize] = &[0, 20, 21, 22, 23, 28];
+    let equal_right: &[usize] = &[1, 20, 24, 25, 26, 28];
+    let mut assumed = vec![
+        leq(
+            &over(&[
+                0, 1, 6, 7, 8, 11, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28,
+            ]),
+            &over(&[1, 6, 7, 8, 11, 17, 18, 19, 20, 24, 25, 26, 28]),
+        ),
+        leq(
+            &over(&[0, 1, 20, 21, 22, 23, 24, 25, 26]),
+            &over(&[0, 20, 21, 22, 23]),
+        ),
+        leq(
+            &over(&[0, 1, 20, 21, 22, 23, 24, 25, 26]),
+            &over(&[1, 20, 24, 25, 26]),
+        ),
+        leq(
+            &over(&[0, 1, 20, 21, 22, 23, 24, 25, 26, 28]),
+            &over(equal_left),
+        ),
+    ];
+    for bound in [3, 4, 5, 11] {
+        assumed.push(leq(&over(equal_left), &param(bound)));
+    }
+    for bound in [6, 7, 8] {
+        assumed.push(leq(&over(equal_right), &param(bound)));
+    }
+    assumed.push(leq(&param(2), &param(9)));
+    for bounded in [3, 4, 5] {
+        assumed.push(leq(&param(bounded), &over(equal_left)));
+    }
+    for bounded in [6, 7, 8] {
+        assumed.push(leq(&param(bounded), &over(equal_right)));
+    }
+    assumed.push(leq(&param(9), &param(12)));
+    assumed.push(leq(&param(10), &param(16)));
+    for pinned in 21..=26 {
+        assumed.push(leq(&param(pinned), &Level::zero()));
+    }
+    assumed.push(leq(&param(27), &param(10)));
+
+    assumed
+}
+
+/// The four questions that cost the backward search nine of its ten seconds on this witness, each a bound one hypothesis states verbatim: forward, that hypothesis fires in the first pass. The model is driven here pass by pass, and the work is the figure held, because a regression to a search would show as work long before it showed as a wrong answer.
+#[test]
+fn the_try_lift_s_questions_are_answered_in_one_pass() {
+    let assumed = try_lift_hypotheses();
+    assert_eq!(assumed.len(), 27);
+
+    for (lower, upper) in [
+        (&[1, 20, 24, 25, 26, 28][..], 8),
+        (&[1, 20, 24, 25, 26, 28][..], 7),
+        (&[1, 20, 24, 25, 26, 28][..], 6),
+        (&[0, 20, 21, 22, 23, 28][..], 11),
+    ] {
+        let (lower, upper) = (over(lower), param(upper));
+        let mut model = Model::of(&upper);
+        assert!(
+            !model.bounds(&lower),
+            "{lower:?} <= {upper:?} is not structural"
+        );
+
+        model.pass(&assumed);
+        assert!(
+            model.bounds(&lower),
+            "{lower:?} <= {upper:?} after one pass"
+        );
+        assert!(entails(&assumed, &lower, &upper));
+    }
+}
+
+/// `level` under `assignment`, with every parameter the assignment does not name at zero.
+fn value(level: &Level, assignment: &[u32]) -> u32 {
+    level
+        .atoms()
+        .map(|(head, offset)| match head {
+            LevelHead::Param(param) => assignment.get(param.0).copied().unwrap_or(0) + offset,
+            LevelHead::Meta(_) => unreachable!("the sweep writes parameters only"),
+        })
+        .chain([level.constant_part()])
+        .max()
+        .unwrap_or(0)
+}
+
+/// Soundness against the naturals themselves, by brute force: every goal the oracle accepts holds under every assignment of the parameters to `0..=3` that satisfies the hypotheses. A finite range cannot prove a goal, but one assignment refutes it, so an unsound rule has nowhere to hide among small levels — and the sets reach every rule the oracle has: a chain, a cycle, a gained offset, a constant floor, a premise carrying atoms, a pinned parameter, a maximum on each side, and a loop.
+///
+/// The count at the end keeps it from being vacuous: the oracle must accept goals the fast path does not, or the sweep would be testing the fast path.
+#[test]
+fn every_goal_the_oracle_accepts_holds_in_every_small_instance() {
+    let (u, v) = (param(0), param(1));
+    let one = Level::constant(1);
+    let two = Level::constant(2);
+    let raised = u.succ().expect("level has a successor");
+    let raised_v = v.succ().expect("level has a successor");
+    let hypotheses = [
+        Vec::new(),
+        vec![leq(&u, &v)],
+        vec![leq(&u, &v), leq(&v, &u)],
+        vec![leq(&raised, &v)],
+        vec![leq(&one, &u)],
+        vec![leq(&one, &u), leq(&u, &v)],
+        vec![leq(&v, &Level::zero())],
+        vec![leq(&Level::max([u.clone(), one.clone()]), &v)],
+        vec![leq(&u, &Level::max([v.clone(), one.clone()]))],
+        vec![leq(&raised, &v), leq(&v, &u)],
+        vec![leq(&two, &Level::max([u.clone(), v.clone()]))],
+        vec![
+            leq(&raised, &raised_v),
+            leq(&v, &Level::max([u.clone(), two.clone()])),
+        ],
+        vec![leq(&Level::max([u.clone(), v.clone()]), &one)],
+    ];
+
+    let mut beyond_the_fast_path = 0usize;
+    for assumed in &hypotheses {
+        for lower in levels() {
+            for upper in levels() {
+                if !entails(assumed, &lower, &upper) {
+                    continue;
+                }
+                if !lower.structurally_leq(&upper) {
+                    beyond_the_fast_path += 1;
+                }
+                for first in 0..=3 {
+                    for second in 0..=3 {
+                        let assignment = [first, second];
+                        let holds = assumed.iter().all(|constraint| {
+                            value(&constraint.lower, &assignment)
+                                <= value(&constraint.upper, &assignment)
+                        });
+                        assert!(
+                            !holds || value(&lower, &assignment) <= value(&upper, &assignment),
+                            "{lower:?} <= {upper:?} was entailed under {assumed:?}, and fails at {assignment:?}",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        beyond_the_fast_path > 0,
+        "the oracle never reached past the fast path, so this swept the fast path alone",
+    );
 }
