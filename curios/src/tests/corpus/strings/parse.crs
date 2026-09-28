@@ -1,0 +1,66 @@
+-- Parsing through `Parse`: a text parser reads characters and pieces of its input by position, a refusal says the byte offset it stopped at, and of two refusals open to an alternative the one that reached further is reported.
+use /std/{Parse, Str, Char, Result, Test};
+
+let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
+    match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
+
+let pair: Parse/Text({Str, Str}) =
+    let word = Parse/Text/take_while((c) => Char/to_nat(c) != 32)!;
+    let _ = Parse/Text/expect(' ')!;
+    let _ = Parse/Text/literal("wö")!;
+    let rest = Parse/Text/rest!;
+    let _ = Parse/Text/eof!;
+    Parse/pure((word, rest));
+
+-- A text parser answers characters and the pieces of its input it read: a run of non-spaces, a separator, a literal of multi-byte characters and what follows it.
+test a_text_parser_reads_characters_and_pieces =
+    Test/equal(
+        shown(Parse/Text/run(pair, "héllo wörld"), ((w, r)) => Str/flatten([w, "|", r])),
+        "héllo|rld");
+
+-- A text refusal is where it stopped as a byte offset into the input: the literal `wö` is wanted after `héllo `, whose `é` is two bytes.
+test a_text_refusal_is_at_a_byte_offset =
+    Test/equal(
+        shown(Parse/Text/run(pair, "héllo world"), ((w, r)) => Str/flatten([w, "|", r])),
+        "expected \"wö\" at byte 7");
+
+let two: Parse/Text({Char, Char}) =
+    let a = Parse/Text/char!;
+    let b = Parse/Text/char!;
+    Parse/pure((a, b));
+
+let peeked: Parse/Text(Str) =
+    let first = Parse/Text/peek!;
+    let taken = Parse/Text/char!;
+    Parse/pure(
+        Str/concat(
+            match first | some(c) => Str/of_char(c) | none() => "none" end,
+            Str/of_char(taken)));
+
+-- The end of the input refuses a character, and `peek` sees one without consuming it.
+test a_character_is_refused_at_the_end =
+    Test/all([
+        Test/equal(
+            shown(Parse/Text/run(two, "€"), ((_, b)) => Str/of_char(b)),
+            "unexpected end of input at byte 3"),
+        Test/equal(shown(Parse/Text/run(peeked, "€"), (s) => s), "€€")]);
+
+-- Of two alternatives that both decline, the refusal reported is the one that reached further into the input, in either order: `ab` then `cd` stops at byte 2, where `x` stopped at the start.
+test or_reports_the_refusal_that_reached_further =
+    let far: Parse/Text({}) = Parse/bind(Parse/Text/literal("ab"), (_) => Parse/Text/literal("cd"));
+    let near: Parse/Text({}) = Parse/Text/literal("x");
+    Test/all([
+        Test/equal(
+            shown(Parse/Text/run(Parse/or(far, near), "abx"), (_) => "ok"),
+            "expected \"cd\" at byte 2"),
+        Test/equal(
+            shown(Parse/Text/run(Parse/or(near, far), "abx"), (_) => "ok"),
+            "expected \"cd\" at byte 2")]);
+
+-- A bytes parser walks its literal byte by byte, and declines where it started when the input is not it.
+test a_bytes_literal_is_read_byte_by_byte =
+    Test/all([
+        Test/equal(shown(Parse/run(Parse/take_literal("ab"), x['a', 'b', 'c']), (_) => "ok"), "ok"),
+        Test/equal(
+            shown(Parse/run(Parse/take_literal("ab"), x['a']), (_) => "ok"),
+            "expected \"ab\" at byte 0")]);

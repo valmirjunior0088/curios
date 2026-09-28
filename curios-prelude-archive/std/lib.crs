@@ -174,7 +174,7 @@ pub mod Tuple;
 
 --- A parser monad over bytes.
 ---
---- A parser declines when the input is not its shape, and `or` tries the alternative; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
+--- One parser type, `Parse/Of(P, A)`, indexed by what its positions know: over bytes, `Parse(A)`, that a position lies within the input; over text, `Parse/Text(A)`, that the input is valid text and a character begins there, so a text primitive reads characters and pieces of the input by position. The combinators are written once for both. A parser declines when the input is not its shape, and `or` tries the alternative, reporting the refusal that reached further when neither fits; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
 pub mod Parse;
 pub use Parse/{let Parse};
 

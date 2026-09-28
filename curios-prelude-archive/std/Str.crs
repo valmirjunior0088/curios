@@ -622,6 +622,43 @@ let meets(
                 end,
         from)(p);
 
+--- Where `piece` follows `from` in `s`: the position past it, which is not before `from`, or `none` when `s` does not hold it there.
+pub let follows(
+    s: Str,
+    from: At(s),
+    piece: Str,
+) -> Option({past: At(s), reach: Nat/Le(from.offset, past.offset)}) =
+    meets(s, from, piece, At/start(piece));
+
+--- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk forward, which stops at the first character refused or at the end.
+pub let span(
+    s: Str,
+    from: At(s),
+    pred: (Char) -> Bool,
+) -> {past: At(s), reach: Nat/Le(from.offset, past.offset)} =
+    At/forward(
+        (at) => {past: At(s), reach: Nat/Le(at.offset, past.offset)},
+        (at, again) =>
+            match At/try_next(s, at)
+            | some(n) =>
+                match pred(n.char)
+                | true =>
+                    let rest = again(n.past, n.progress);
+                    (
+                        past = rest.past,
+                        reach =
+                            Nat/Le/trans(
+                                @at.offset,
+                                @n.past.offset,
+                                @rest.past.offset,
+                                Nat/Lt/le_of_lt(at.offset, n.past.offset, n.progress),
+                                rest.reach))
+                | false => (past = at, reach = Nat/Le/refl(at.offset))
+                end
+            | none() => (past = at, reach = Nat/Le/refl(at.offset))
+            end,
+        from);
+
 --- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
 let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
     At/backward(

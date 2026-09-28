@@ -1,0 +1,101 @@
+use /std/{Str, Char, Bool, Bytes, Result, Option, Parse};
+use /std/Parse/{Of, At, Boundary, Error, end_of, let Text};
+
+--- The string a text parser's input is, read back out of a position in it.
+let text(@input: Bytes, at: At(Boundary, input)) -> Str =
+    Str { bytes = input, valid = at.holds.valid };
+
+--- Where a text parser stands, as a position of that string.
+let position(@input: Bytes, at: At(Boundary, input)) -> Str/At(text(at)) =
+    Str/At { offset = at.offset, within = at.holds.within, boundary = at.holds.boundary };
+
+--- A position of the string, as one a text parser may stand at.
+let back(@input: Bytes, at: At(Boundary, input), p: Str/At(text(at))) -> At(Boundary, input) =
+    At {
+        offset = p.offset,
+        holds = Boundary { valid = at.holds.valid, within = p.within, boundary = p.boundary },
+    };
+
+--- The next character; declines at the end of the input.
+pub let char: Text(Char) =
+    Of {
+        run(_, at) =
+            match Str/At/try_next(text(at), position(at))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(n) => Result/success((back(at, n.past), n.char))
+            end,
+    };
+
+--- The next character when `pred` accepts it; declines otherwise, consuming nothing.
+pub let char_if(pred: (Char) -> Bool) -> Text(Char) =
+    Parse/bind(char, (c) =>
+        match pred(c) | true => Parse/pure(c) | false => Parse/fail("unexpected character") end);
+
+--- The character `expected`; declines on any other.
+pub let expect(expected: Char) -> Text(Char) =
+    let message = Str/flatten(["expected '", Str/of_char(expected), "'"]);
+    Of {
+        run(_, at) =
+            match Str/At/try_next(text(at), position(at))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(n) =>
+                match n.char == expected
+                | true => Result/success((back(at, n.past), n.char))
+                | false => Result/failure(Error/declined(message, at.offset))
+                end
+            end,
+    };
+
+--- The characters of `lit`, exactly; declines on anything else.
+pub let literal(lit: Str) -> Text({}) =
+    let message = Str/flatten(["expected \"", lit, "\""]);
+    Of {
+        run(_, at) =
+            match Str/follows(text(at), position(at), lit)
+            | some(met) => Result/success((back(at, met.past), ()))
+            | none() => Result/failure(Error/declined(message, at.offset))
+            end,
+    };
+
+--- The longest run of characters `pred` accepts, possibly empty, as the piece of the input it is.
+pub let take_while(pred: (Char) -> Bool) -> Text(Str) =
+    Of {
+        run(_, at) =
+            let taken = Str/span(text(at), position(at), pred);
+            Result/success((
+                back(at, taken.past),
+                Str/between(text(at), position(at), taken.past, @taken.reach))),
+    };
+
+--- The next character without consuming it, or `none` at the end of the input.
+pub let peek: Text(Option(Char)) =
+    Of {
+        run(_, at) =
+            Result/success((
+                at,
+                Option/map(Str/At/try_next(text(at), position(at)), (n) => n.char))),
+    };
+
+--- Everything from the current position to the end of the input.
+pub let rest: Text(Str) =
+    Of {
+        run(_, at) =
+            Result/success((back(at, Str/At/finish(text(at))), Str/after(text(at), position(at)))),
+    };
+
+--- The end of the input; declines while anything remains.
+pub let eof: Text({}) =
+    end_of();
+
+--- `p` from the start of `s`: its value, or the refusal that stopped it, at a byte offset into `s`. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof`.
+pub let run(@A: Type, p: Text(A), s: Str) -> Result(Error, A) =
+    let start = Str/At/start(s);
+    let at =
+        At {
+            offset = 0,
+            holds = Boundary { valid = s.valid, within = start.within, boundary = start.boundary },
+        };
+    match p.run(s.bytes, at)
+    | success((_, a)) => Result/success(a)
+    | failure(refusal) => Result/failure(refusal)
+    end;

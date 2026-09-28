@@ -4,80 +4,141 @@ use /std/{Result, Nat, Byte, Bytes, Str, Bool, List, Option, Monad};
 pub mod Error;
 pub use Error/{let Error};
 
---- A parser: from a position in the input to a position and a value, or a refusal.
-pub struct Parse(A: Type): Type {
-    run(input: Bytes, pos: Nat) -> Result(Error, {Nat, A}),
+--- Parsers over text: the primitives that read characters and pieces of the input, and the runner that starts at a string's beginning.
+pub mod Text;
+
+--- A position a parser may stand at in `input`: an offset, and what `P` knows of the input there, erased.
+pub struct At(P: (Bytes, Nat) -> Prop, input: Bytes): Type {
+    offset: Nat,
+    holds: P(input, offset),
 }
+
+--- A parser whose positions know `P`: from a position in the input to a position and a value, or a refusal. Every position it hands on carries `P`, so a primitive reads what its carrier's positions know rather than checking it again, and the combinators below are written once for every carrier.
+pub struct Of(P: (Bytes, Nat) -> Prop, A: Type): Type {
+    run(input: Bytes, at: At(P, input)) -> Result(Error, {At(P, input), A}),
+}
+
+--- What a bytes parser's positions know: that they lie within the input.
+pub let Bound(input: Bytes, offset: Nat) -> Prop =
+    Nat/Le(offset, Bytes/len(input));
+
+--- What a text parser's positions know: that the input is valid text and that a character may begin at the position — a `Str/At`'s own facts, so a text primitive reads its string and its position back out of one.
+pub struct Boundary(input: Bytes, offset: Nat): Prop {
+    valid: Str/Valid(input),
+    within: Nat/Le(offset, Bytes/len(input)),
+    boundary: Bool/Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
+}
+
+--- A parser over bytes.
+pub let Parse(A: Type) -> Type =
+    Of(Bound, A);
+
+--- A parser over text.
+pub let Text(A: Type) -> Type =
+    Of(Boundary, A);
 
 --- `p` from the start of `input`: its value, or the refusal that stopped it. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof`.
 pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Error, A) =
-    match p.run(input, 0)
+    match p.run(input, At { offset = 0, holds = Bool/True/qed() })
     | success((_, a)) => Result/success(a)
     | failure(refusal) => Result/failure(refusal)
     end;
 
 --- `a`, consuming nothing.
-pub let pure(@A: Type, a: A) -> Parse(A) =
-    Parse { run(_, pos) = Result/success((pos, a)) };
+pub let pure(@P: (Bytes, Nat) -> Prop, @A: Type, a: A) -> Of(P, A) =
+    Of { run(_, at) = Result/success((at, a)) };
 
 --- Decline with `msg`, consuming nothing.
-pub let fail(@A: Type, msg: Str) -> Parse(A) =
-    Parse { run(_, pos) = Result/failure(Error/declined(msg, pos)) };
+pub let fail(@P: (Bytes, Nat) -> Prop, @A: Type, msg: Str) -> Of(P, A) =
+    Of { run(_, at) = Result/failure(Error/declined(msg, at.offset)) };
 
 --- `f` on the value.
-pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
+pub let map(@P: (Bytes, Nat) -> Prop, @A: Type, @B: Type, p: Of(P, A), f: (A) -> B) -> Of(P, B) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
             | success((next, a)) => Result/success((next, f(a)))
             | failure(refusal) => Result/failure(refusal)
             end,
     };
 
 --- `p`, then `f` on its value from where it stopped.
-pub let bind(@A: Type, @B: Type, p: Parse(A), f: (A) -> Parse(B)) -> Parse(B) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
+pub let bind(
+    @P: (Bytes, Nat) -> Prop,
+    @A: Type,
+    @B: Type,
+    p: Of(P, A),
+    f: (A) -> Of(P, B),
+) -> Of(P, B) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
             | success((next, a)) => f(a).run(input, next)
             | failure(refusal) => Result/failure(refusal)
             end,
     };
 
---- `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is.
-pub let or(@A: Type, p: Parse(A), q: Parse(A)) -> Parse(A) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
+--- `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the refusal that reached further is reported, since that alternative read more of the input as its shape.
+pub let or(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A), q: Of(P, A)) -> Of(P, A) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(e) =>
-                match e.committed | false => q.run(input, pos) | true => Result/failure(e) end
+                match e.committed
+                | true => Result/failure(e)
+                | false =>
+                    match q.run(input, at)
+                    | success(pair) => Result/success(pair)
+                    | failure(f) =>
+                        match f.committed
+                        | true => Result/failure(f)
+                        | false => Result/failure(Error/further(e, f))
+                        end
+                    end
+                end
             end,
     };
 
 --- `p` as the shape the input has been recognized to have: a refusal inside it is committed, so an enclosing `or` reports it rather than trying an alternative.
-pub let commit(@A: Type, p: Parse(A)) -> Parse(A) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
+pub let commit(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A)) -> Of(P, A) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(refusal) => Result/failure(Error/commit(refusal))
             end,
     };
 
---- `p`, declining with `msg` in place of its own reason.
-pub let label(@A: Type, p: Parse(A), msg: Str) -> Parse(A) =
-    or(p, fail(msg));
+--- `p`, declining with `msg` where it started in place of its own reason. A committed refusal is reported as it is.
+pub let label(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A), msg: Str) -> Of(P, A) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
+            | success(pair) => Result/success(pair)
+            | failure(e) =>
+                match e.committed
+                | true => Result/failure(e)
+                | false => Result/failure(Error/declined(msg, at.offset))
+                end
+            end,
+    };
 
 --- `p`'s value, or `none` when it declines, consuming nothing then.
-pub let optional(@A: Type, p: Parse(A)) -> Parse(Option(A)) =
+pub let optional(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A)) -> Of(P, Option(A)) =
     or(map(p, (a) => Option/some(a)), pure(Option/none()));
 
 --- `p` then `q`, their values paired.
-pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
+pub let and(
+    @P: (Bytes, Nat) -> Prop,
+    @A: Type,
+    @B: Type,
+    p: Of(P, A),
+    q: Of(P, B),
+) -> Of(P, {A, B}) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
             | success((mid, a)) =>
                 match q.run(input, mid)
                 | success((next, b)) => Result/success((next, (a, b)))
@@ -87,13 +148,107 @@ pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
             end,
     };
 
+--- `p` for its value alone: the position is left where `p` started.
+pub let lookahead(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A)) -> Of(P, A) =
+    Of {
+        run(input, at) =
+            match p.run(input, at)
+            | success((_, a)) => Result/success((at, a))
+            | failure(refusal) => Result/failure(refusal)
+            end,
+    };
+
+--- The end of the input, for any carrier; declines while anything remains.
+let end_of(@P: (Bytes, Nat) -> Prop) -> Of(P, {}) =
+    Of {
+        run(input, at) =
+            match at.offset < Bytes/len(input)
+            | true => Result/failure(Error/declined("expected end of input", at.offset))
+            | false => Result/success((at, ()))
+            end,
+    };
+
+--- The end of the input; declines while anything remains.
+pub let eof: Parse({}) =
+    end_of();
+
+--- `p` repeated until it declines or consumes nothing, the values collected.
+pub let many0(@P: (Bytes, Nat) -> Prop, @A: Type, p: Of(P, A)) -> Of(P, List(A)) =
+    Of {
+        run(input, at) =
+            let go(acc: List(A), cur: At(P, input)) -> Result(Error, {At(P, input), List(A)}) =
+                match p.run(input, cur)
+                | failure(e) =>
+                    match e.committed
+                    | false => Result/success((cur, acc))
+                    | true => Result/failure(e)
+                    end
+                | success((next, a)) =>
+                    match next.offset == cur.offset
+                    | true => Result/success((cur, acc))
+                    | false => go([..acc, a], next)
+                    end
+                end;
+            go([], at),
+    };
+
+--- `elem` separated by `sep`, zero or more times, the elements collected. A declined element after a separator gives the separator back.
+pub let sep_by0(
+    @P: (Bytes, Nat) -> Prop,
+    @A: Type,
+    @S: Type,
+    elem: Of(P, A),
+    sep: Of(P, S),
+) -> Of(P, List(A)) =
+    Of {
+        run(input, at) =
+            match elem.run(input, at)
+            | failure(e) =>
+                match e.committed
+                | false => Result/success((at, []))
+                | true => Result/failure(e)
+                end
+            | success((first_end, first)) =>
+                let go(acc: List(A), cur: At(P, input)) -> Result(Error, {At(P, input), List(A)}) =
+                    match sep.run(input, cur)
+                    | failure(e) =>
+                        match e.committed
+                        | false => Result/success((cur, acc))
+                        | true => Result/failure(e)
+                        end
+                    | success((sep_end, _)) =>
+                        match elem.run(input, sep_end)
+                        | failure(e) =>
+                            match e.committed
+                            | false => Result/success((cur, acc))
+                            | true => Result/failure(e)
+                            end
+                        | success((next, x)) =>
+                            match next.offset == cur.offset
+                            | true => Result/success((cur, acc))
+                            | false => go([..acc, x], next)
+                            end
+                        end
+                    end;
+                go([first], first_end)
+            end,
+    };
+
+--- The position past `at`, which holds a byte: still within the input.
+let step(
+    @input: Bytes,
+    at: At(Bound, input),
+    ok: Nat/Lt(at.offset, Bytes/len(input)),
+) -> At(Bound, input) =
+    At { offset = at.offset + 1, holds = Nat/Lt/le_succ_of_lt(at.offset, Bytes/len(input), ok) };
+
 --- The next byte; declines at the end of the input.
 pub let any_byte: Parse(Byte) =
-    Parse {
-        run(input, pos) =
-            match Nat/Lt/try(pos, Bytes/len(input))
-            | none() => Result/failure(Error/declined("unexpected end of input", pos))
-            | some(ok) => Result/success((pos + 1, Bytes/get(input, pos, @ok)))
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(ok) => Result/success((step(at, ok), Bytes/get(input, at.offset, @ok)))
             end,
     };
 
@@ -104,11 +259,11 @@ pub let take_if(pred: (Byte) -> Bool) -> Parse(Byte) =
 
 --- The next byte without consuming it; declines at the end of the input.
 pub let peek_byte: Parse(Byte) =
-    Parse {
-        run(input, pos) =
-            match Nat/Lt/try(pos, Bytes/len(input))
-            | none() => Result/failure(Error/declined("unexpected end of input", pos))
-            | some(ok) => Result/success((pos, Bytes/get(input, pos, @ok)))
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(ok) => Result/success((at, Bytes/get(input, at.offset, @ok)))
             end,
     };
 
@@ -129,181 +284,100 @@ let byte_spelling(byte: Byte) -> Str =
 --- The byte `expected`; declines on any other.
 pub let take_byte(expected: Byte) -> Parse(Byte) =
     let message = Str/concat("expected ", byte_spelling(expected));
-    Parse {
-        run(input, pos) =
-            match Nat/Lt/try(pos, Bytes/len(input))
-            | none() => Result/failure(Error/declined("unexpected end of input", pos))
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) =>
-                let byte = Bytes/get(input, pos, @ok);
+                let byte = Bytes/get(input, at.offset, @ok);
                 match byte == expected
-                | true => Result/success((pos + 1, byte))
-                | false => Result/failure(Error/declined(message, pos))
+                | true => Result/success((step(at, ok), byte))
+                | false => Result/failure(Error/declined(message, at.offset))
                 end
             end,
     };
 
+--- The position past `lit` read from `at`, byte by byte, or `none` where the input is not it.
+let literal_past(@input: Bytes, lit: Bytes, at: At(Bound, input)) -> Option(At(Bound, input)) =
+    match lit
+    | x[] => Option/some(at)
+    | x[h, ..t] =>
+        match Nat/Lt/try(at.offset, Bytes/len(input))
+        | none() => Option/none()
+        | some(ok) =>
+            match Bytes/get(input, at.offset, @ok) == h
+            | true => literal_past(t, step(at, ok))
+            | false => Option/none()
+            end
+        end
+    end;
+
 --- The bytes of `literal`, exactly; declines on anything else.
 pub let take_literal(literal: Str) -> Parse({}) =
     let message = Str/flatten(["expected \"", literal, "\""]);
-    Parse {
-        run(input, pos) =
-            let lit = Str/to_bytes(literal);
-            let (stop, matched) =
-                match Bytes/len(lit): (_) => {Nat, Bool}
-                | 0 => (pos, true)
-                | step + 1; ih =>
-                    let (cur, live) = ih;
-                    match live
-                    | true =>
-                        match Nat/Lt/try(cur, Bytes/len(input))
-                        | none() => (cur, false)
-                        | some(ok) =>
-                            match Option/unwrap_or(Bytes/try_get(lit, step), 0)
-                                == Bytes/get(input, cur, @ok)
-                            | true => (cur + 1, true)
-                            | false => (cur, false)
-                            end
-                        end
-                    | false => ih
-                    end
-                end;
-            match matched
-            | true => Result/success((stop, ()))
-            | false => Result/failure(Error/declined(message, pos))
-            end,
-    };
-
---- The end of the input; declines while anything remains.
-pub let eof: Parse({}) =
-    Parse {
-        run(input, pos) =
-            match pos < Bytes/len(input)
-            | true => Result/failure(Error/declined("expected end of input", pos))
-            | false => Result/success((pos, ()))
+    Of {
+        run(_, at) =
+            match literal_past(Str/to_bytes(literal), at)
+            | some(stop) => Result/success((stop, ()))
+            | none() => Result/failure(Error/declined(message, at.offset))
             end,
     };
 
 --- The longest run of bytes `pred` accepts, possibly empty.
 pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            match Nat/Le/try(pos, Bytes/len(input))
-            | none() => Result/failure(Error/declined("position past the end of input", pos))
-            | some(within) =>
-                let (taken, at_stop, _) =
-                    match Bytes/len(input) - pos: (_) =>
-                        {taken: Nat, within: Nat/Le(pos + taken, Bytes/len(input)), stopped: Bool}
-                    | 0 => (0, within, false)
-                    | _ + 1; ih =>
-                        let (taken, at_cur, stopped) = ih;
-                        match stopped
-                        | true => ih
-                        | false =>
-                            match Nat/Lt/try(pos + taken, Bytes/len(input))
-                            | none() => (taken, at_cur, true)
-                            | some(ok) =>
-                                match pred(Bytes/get(input, pos + taken, @ok))
-                                | true =>
-                                    (
-                                        taken + 1,
-                                        Nat/Lt/le_succ_of_lt(pos + taken, Bytes/len(input), ok),
-                                        false)
-                                | false => (taken, at_cur, true)
-                                end
+    Of {
+        run(input, at) =
+            let (taken, at_stop, _) =
+                match Bytes/len(input) - at.offset: (_) =>
+                    {taken: Nat, within: Nat/Le(at.offset + taken, Bytes/len(input)), stopped: Bool}
+                | 0 => (0, at.holds, false)
+                | _ + 1; ih =>
+                    let (taken, at_cur, stopped) = ih;
+                    match stopped
+                    | true => ih
+                    | false =>
+                        match Nat/Lt/try(at.offset + taken, Bytes/len(input))
+                        | none() => (taken, at_cur, true)
+                        | some(ok) =>
+                            match pred(Bytes/get(input, at.offset + taken, @ok))
+                            | true =>
+                                (
+                                    taken + 1,
+                                    Nat/Lt/le_succ_of_lt(at.offset + taken, Bytes/len(input), ok),
+                                    false)
+                            | false => (taken, at_cur, true)
                             end
                         end
-                    end;
-                Result/success((pos + taken, Bytes/slice(input, pos, taken, @at_stop)))
-            end,
-    };
-
---- `p` for its value alone: the position is left where `p` started.
-pub let lookahead(@A: Type, p: Parse(A)) -> Parse(A) =
-    Parse {
-        run(input, pos) =
-            match p.run(input, pos)
-            | success((_, a)) => Result/success((pos, a))
-            | failure(refusal) => Result/failure(refusal)
-            end,
+                    end
+                end;
+            Result/success((
+                At { offset = at.offset + taken, holds = at_stop },
+                Bytes/slice(input, at.offset, taken, @at_stop))),
     };
 
 --- Everything from the current position to the end of the input.
 pub let rest: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            match Nat/Le/try(pos, Bytes/len(input))
-            | none() => Result/failure(Error/declined("position past the end of input", pos))
-            | some(within) => Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
-            end,
+    Of {
+        run(input, at) =
+            Result/success((
+                At { offset = Bytes/len(input), holds = Nat/Le/refl(Bytes/len(input)) },
+                Bytes/drop(input, at.offset, @at.holds))),
     };
 
 --- The next `n` bytes, or everything that remains when fewer are left.
 pub let take(n: Nat) -> Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            match Nat/Le/try(pos + n, Bytes/len(input))
-            | some(within) => Result/success((pos + n, Bytes/slice(input, pos, n, @within)))
-            | none() => rest.run(input, pos)
+    Of {
+        run(input, at) =
+            match Nat/Le/try(at.offset + n, Bytes/len(input))
+            | some(within) =>
+                Result/success((
+                    At { offset = at.offset + n, holds = within },
+                    Bytes/slice(input, at.offset, n, @within)))
+            | none() => rest.run(input, at)
             end,
     };
 
---- `p` repeated until it declines or consumes nothing, the values collected.
-pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
-    Parse {
-        run(input, pos) =
-            let go(acc: List(A), cur: Nat) -> Result(Error, {Nat, List(A)}) =
-                match p.run(input, cur)
-                | failure(e) =>
-                    match e.committed
-                    | false => Result/success((cur, acc))
-                    | true => Result/failure(e)
-                    end
-                | success((next, a)) =>
-                    match next == cur
-                    | true => Result/success((cur, acc))
-                    | false => go([..acc, a], next)
-                    end
-                end;
-            go([], pos),
-    };
-
---- `elem` separated by `sep`, zero or more times, the elements collected. A declined element after a separator gives the separator back.
-pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(List(A)) =
-    Parse {
-        run(input, pos) =
-            match elem.run(input, pos)
-            | failure(e) =>
-                match e.committed
-                | false => Result/success((pos, []))
-                | true => Result/failure(e)
-                end
-            | success((first_end, first)) =>
-                let go(acc: List(A), cur: Nat) -> Result(Error, {Nat, List(A)}) =
-                    match sep.run(input, cur)
-                    | failure(e) =>
-                        match e.committed
-                        | false => Result/success((cur, acc))
-                        | true => Result/failure(e)
-                        end
-                    | success((sep_end, _)) =>
-                        match elem.run(input, sep_end)
-                        | failure(e) =>
-                            match e.committed
-                            | false => Result/success((cur, acc))
-                            | true => Result/failure(e)
-                            end
-                        | success((next, x)) =>
-                            match next == cur
-                            | true => Result/success((cur, acc))
-                            | false => go([..acc, x], next)
-                            end
-                        end
-                    end;
-                go([first], first_end)
-            end,
-    };
-
-satisfy Monad(Parse) {
-    pure = pure,
-    bind = bind,
+satisfy (@P: (Bytes, Nat) -> Prop) => Monad((A: Type) => Of(P, A)) {
+    pure(a) = pure(a),
+    bind(p, f) = bind(p, f),
 }

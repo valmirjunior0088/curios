@@ -87,9 +87,14 @@ let prefixed: Parse(Nat) =
     | _ => Parse/fail("expected digit")
     end;
 
+--- Refuse a leading zero past the digits it opens. A local time read over the same digits fails past them too, and of two refusals `or` reports the one that reached further, the later on a tie — so reaching as far is what keeps this reason from being displaced by the time's.
+let refuse_leading_zero(@A: Type) -> Parse(A) =
+    let _ = Parse/take_while((b) => is_dec_byte(b) || Byte/to_nat(b) == 0x5F)!;
+    Parse/fail("leading zero");
+
 let decimal: Parse(Nat) =
     let leading = leading_zero!;
-    match leading | true => Parse/fail("leading zero") | false => magnitude(10, dec_digit) end;
+    match leading | true => refuse_leading_zero() | false => magnitude(10, dec_digit) end;
 
 let int_magnitude(signed: Bool) -> Parse(Nat) =
     match signed
@@ -220,7 +225,7 @@ pub let flt_number: Parse(Toml) =
     let (negative, _) = sign!;
     let leading = leading_zero!;
     match leading
-    | true => Parse/fail("leading zero")
+    | true => refuse_leading_zero()
     | false =>
         let (sig1, count1, _) = flt_digits(0, 0, false)!;
         let (sig2, count2, down2, has_frac) = frac_part(sig1, count1)!;
