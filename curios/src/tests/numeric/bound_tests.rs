@@ -444,3 +444,63 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
         b"ok"
     );
 }
+
+// **A bound whose proposition is pinned after its insertion is filled on retry.** `proved`'s `p` has type `P`, an unsolved metavariable when the call inserts it, so it is a bound only because `P`'s own type is `Prop`: the sort is read off the metavariable's type rather than defaulted to `Type`, the bound is parked, and the expectation's `Nat/Le(n, n + 1)` brings it to truth once `P` is solved. The control is a proposition that reduces to `False`, which the retry refuses as it would a bound known at insertion.
+#[test]
+fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat};
+        let proved(@P: Prop, @p: P) -> P = p;
+        let filled(n : Nat) -> Nat/Le(n, n + 1) = proved();
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+
+    let error = typecheck(
+        r#"
+        use /std/{Nat};
+        let proved(@P: Prop, @p: P) -> P = p;
+        let refused(n : Nat) -> Nat/Le(n + 1, n) = proved();
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a proposition that reduces to False is not filled");
+
+    assert!(
+        error.contains("nothing discharged Nat/Le(n + 1, n), which reduces to False"),
+        "expected the undischarged bound, got: {error}"
+    );
+}
+
+// **The retry sees no guard.** A fill made on retry is a metavariable solution, which may travel past the arm it was minted in, so it is decided with the arm's refinements withheld: under `a < b`, a `proved()` whose proposition the annotation pins afterwards is refused. The same call with its proposition written is decided at insertion, inside the arm, and filled there.
+#[test]
+fn a_bound_pinned_later_under_a_guard_is_refused_and_one_known_at_insertion_is_filled() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat};
+        let proved(@P: Prop, @p: P) -> P = p;
+        let guarded(a : Nat, b : Nat) -> Nat =
+            match a < b | true => let q: Nat/Lt(a, b) = proved(); a | false => b end;
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a retry withholds the arm's refinements");
+
+    assert!(
+        error.contains("nothing discharged Nat/Lt(a, b)"),
+        "expected the undischarged bound, got: {error}"
+    );
+
+    assert_eq!(
+        run(r#"
+        use /std/{Nat};
+        let proved(@P: Prop, @p: P) -> P = p;
+        let guarded(a : Nat, b : Nat) -> Nat =
+            match a < b | true => let q: Nat/Lt(a, b) = proved(@Nat/Lt(a, b)); a | false => b end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

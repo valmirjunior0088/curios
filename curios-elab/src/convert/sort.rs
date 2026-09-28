@@ -13,7 +13,7 @@ pub(crate) enum Sort {
 }
 
 impl Sort {
-    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens.
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting read it as an ordinary implicit nothing retried.
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Vec::new(), type_)
     }
@@ -259,7 +259,24 @@ impl Sort {
             }
             Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
             Subterm::Instance(instance) => Sort::of_in(context, opened, &instance.head.to_term())?,
-            // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so it is not a fallback and is not worth reporting. A `Metavar` is the opposite: an unsolved type pinned to level 0 is precisely the collapse under investigation.
+            // An unsolved metavariable whose type is `Prop` is a proposition whatever it is solved to, so the answer is exact rather than conservative: `@P: Prop, @p: P` makes `p` a bound before `P` is known. A solved one never reaches here, since reduction substitutes its solution, and `Prop` is closed, so the spine an occurrence carries changes nothing. At any other type an unsolved one keeps the fallback below, since its level is what the solution will say.
+            Subterm::Metavar(metavar) => {
+                let result = context
+                    .metavar_entry(metavar.id)
+                    .map(|entry| entry.result.clone());
+                let proposition = match result {
+                    Some(result) => matches!(&*reduce(context, result)?, Subterm::Prop),
+                    None => false,
+                };
+                match proposition {
+                    true => Sort::Prop,
+                    false => {
+                        probe_level_fallback("unsolved metavariable", &reduced);
+                        Sort::Type(Level::zero())
+                    }
+                }
+            }
+            // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so it is not a fallback and is not worth reporting.
             _ => {
                 if !matches!(&*reduced, Subterm::Prop) {
                     probe_level_fallback("unclassified shape", &reduced);
