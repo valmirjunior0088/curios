@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord};
+use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, WellFounded};
 use /std/ops/{Eql, Cmp};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
@@ -108,49 +108,66 @@ and run_within(rest: Bytes) -> Nat/Le(run(rest), Bytes/len(rest)) =
     | x[h, ..t] => match Str/continues(h) | true => run_within(t) | false => Bool/True/qed() end
     end;
 
---- The first character of valid bytes that hold one, and how many bytes it takes: its lead and the continuing bytes after it.
-let step_over(
+--- How many bytes the first character of `b` takes — its lead and the bytes continuing it — with the bound and the boundary past them. The character is not decoded: the one-byte rule is all a step needs.
+let hop(
     @b: Bytes,
-    v: Str/Valid(b),
     some: Nat/Lt(0, Bytes/len(b)),
 ) -> {
-    char: Char,
     width: Nat,
+    positive: Nat/Lt(0, width),
     within: Nat/Le(width, Bytes/len(b)),
     boundary: Bool/Holds(starts(Bytes/drop(b, width, @within)))} =
     match b
     | x[] => match some end
-    | x[c, ..t] =>
+    | x[_, ..t] =>
         (
-            char = Str/Valid/decode_head(c, @t, v),
             width = 1 + run(t),
+            positive = Bool/True/qed(),
             within = run_within(t),
             boundary = run_starts(t))
     end;
 
---- The character at `at`, and the position past it.
-pub let next(
+--- The first character of valid bytes that hold one.
+let lead(@b: Bytes, v: Str/Valid(b), some: Nat/Lt(0, Bytes/len(b))) -> Char =
+    match b
+    | x[] => match some end
+    | x[c, ..t] => Str/Valid/decode_head(c, @t, v)
+    end;
+
+--- The position past the character at `at`, found without decoding it, and the proof that it lies past — what a walk forward recurs with, through [`forward`].
+pub let skip(
     s: Str,
     at: At(s),
     @here: Nat/Lt(at.offset, Bytes/len(s.bytes)),
-) -> {char: Char, past: At(s)} =
+) -> {past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
     let rest = Str/after(s, at);
-    let stepped =
-        step_over(rest.valid, Nat/Lt/sub_positive_of_lt(at.offset, Bytes/len(s.bytes), here));
+    let hopped = hop(@rest.bytes, Nat/Lt/sub_positive_of_lt(at.offset, Bytes/len(s.bytes), here));
     (
-        char = stepped.char,
         past =
             of_after(
                 s,
                 at,
-                At {
-                    offset = stepped.width,
-                    within = stepped.within,
-                    boundary = stepped.boundary,
-                }));
+                At { offset = hopped.width, within = hopped.within, boundary = hopped.boundary }),
+        progress = hopped.positive);
 
---- The character at `at` and the position past it, or `none` at the end of `s`.
-pub let try_next(s: Str, at: At(s)) -> Option({char: Char, past: At(s)}) =
+--- The character at `at`, the position past it, and the proof that it lies past.
+pub let next(
+    s: Str,
+    at: At(s),
+    @here: Nat/Lt(at.offset, Bytes/len(s.bytes)),
+) -> {char: Char, past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
+    let rest = Str/after(s, at);
+    let stepped = skip(s, at, @here);
+    (
+        char = lead(rest.valid, Nat/Lt/sub_positive_of_lt(at.offset, Bytes/len(s.bytes), here)),
+        past = stepped.past,
+        progress = stepped.progress);
+
+--- The character at `at`, the position past it and the proof that it lies past, or `none` at the end of `s`.
+pub let try_next(
+    s: Str,
+    at: At(s),
+) -> Option({char: Char, past: At(s), progress: Nat/Lt(at.offset, past.offset)}) =
     match at.offset < Bytes/len(s.bytes)
     | true => Option/some(next(s, at))
     | false => Option/none()
@@ -176,8 +193,12 @@ let floor(
         end
     end;
 
---- The character before `at`, and the position before it.
-pub let prev(s: Str, at: At(s), @here: Nat/Lt(0, at.offset)) -> {char: Char, past: At(s)} =
+--- The character before `at`, the position before it, and the proof that it lies before.
+pub let prev(
+    s: Str,
+    at: At(s),
+    @here: Nat/Lt(0, at.offset),
+) -> {char: Char, past: At(s), progress: Nat/Lt(past.offset, at.offset)} =
     match at.offset
     | 0 => match here end
     | j + 1 =>
@@ -192,12 +213,44 @@ pub let prev(s: Str, at: At(s), @here: Nat/Lt(0, at.offset)) -> {char: Char, pas
                     @Bytes/len(s.bytes),
                     back.below,
                     at.within));
-        (char = next(s, back.at, @inside).char, past = back.at)
+        (
+            char = next(s, back.at, @inside).char,
+            past = back.at,
+            progress = Nat/Lt/lt_of_le_succ(back.at.offset, j + 1, back.below))
     end;
 
---- The character before `at` and the position before it, or `none` at the start of `s`.
-pub let try_prev(s: Str, at: At(s)) -> Option({char: Char, past: At(s)}) =
+--- The character before `at`, the position before it and the proof that it lies before, or `none` at the start of `s`.
+pub let try_prev(
+    s: Str,
+    at: At(s),
+) -> Option({char: Char, past: At(s), progress: Nat/Lt(past.offset, at.offset)}) =
     match 0 < at.offset | true => Option/some(prev(s, at)) | false => Option/none() end;
+
+--- A position past another is well-founded: what is left of `s` past a position shrinks as the position moves on.
+let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Nat/Lt(q.offset, p.offset)) =
+    let left: WellFounded((p: At(s), q: At(s)) =>
+        Nat/Lt(Bytes/len(s.bytes) - p.offset, Bytes/len(s.bytes) - q.offset)) =
+        WellFounded/on((p: At(s)) => Bytes/len(s.bytes) - p.offset, WellFounded/lt);
+    WellFounded/narrow(left, (p, q, ahead) =>
+        Nat/Lt/sub_lt_sub(q.offset, p.offset, Bytes/len(s.bytes), ahead, p.within));
+
+--- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
+pub let forward(
+    @s: Str,
+    P: (At(s)) -> Type,
+    step: (at: At(s), again: (p: At(s), progress: Nat/Lt(at.offset, p.offset)) -> P(p)) -> P(at),
+    at: At(s),
+) -> P(at) =
+    WellFounded/recurse(P, step, at, onward(s)(at));
+
+--- Recursion back through the positions of `s`: `step` may recur at any position before `at`, with the proof that it lies before, which is what [`prev`] answers. [`forward`] read the other way, and well-founded as `<` on offsets is.
+pub let backward(
+    @s: Str,
+    P: (At(s)) -> Type,
+    step: (at: At(s), again: (p: At(s), progress: Nat/Lt(p.offset, at.offset)) -> P(p)) -> P(at),
+    at: At(s),
+) -> P(at) =
+    WellFounded/recurse(P, step, at, WellFounded/on((p: At(s)) => p.offset, WellFounded/lt)(at));
 
 --- A position in `a` stays one with `rest` appended, when a character may begin at the front of `rest`.
 let starts_before(

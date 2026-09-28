@@ -595,39 +595,32 @@ let count_concat(
 pub let is_empty(s: Str) -> Bool =
     Bytes/len(to_bytes(s)) == 0;
 
---- The index of the first character `pred` accepts, or `none`.
-pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
-    let (_, found): {Nat, Option(Nat)} =
-        fold(
-            s,
-            (0, Option/none()),
-            (codepoint, (i, found)) =>
-                match found
-                | some(_) => (i, found)
-                | none() =>
-                    (
-                        i + 1,
-                        match pred(codepoint) | true => Option/some(i) | false => Option/none() end)
-                end);
-    found;
+--- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk forward, which stops there.
+let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
+    At/forward(
+        (_) => Option({at: At(s), char: Char}),
+        (at, again) =>
+            match At/try_next(s, at)
+            | some(n) =>
+                match pred(n.char)
+                | true => Option/some((at = at, char = n.char))
+                | false => again(n.past, n.progress)
+                end
+            | none() => Option/none()
+            end,
+        from);
 
---- The index of the first `target`, or `none`.
-pub let index_of(s: Str, target: Char) -> Option(Nat) =
-    find_index(s, (codepoint) => codepoint == target);
+--- Where the first character `pred` accepts is, or `none`.
+pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(At(s)) =
+    Option/map(seek(s, At/start(s), pred), (found) => found.at);
+
+--- Where the first `target` is, or `none`.
+pub let index_of(s: Str, target: Char) -> Option(At(s)) =
+    find_index(s, (c) => c == target);
 
 --- The first character `pred` accepts, or `none`.
----
---- Folded rather than read back through `try_get`, so the search is one walk and needs nothing declared after it.
 pub let find(s: Str, pred: (Char) -> Bool) -> Option(Char) =
-    fold(
-        s,
-        Option/none(),
-        (codepoint, found) =>
-            match found
-            | some(_) => found
-            | none() =>
-                match pred(codepoint) | true => Option/some(codepoint) | false => Option/none() end
-            end);
+    Option/map(seek(s, At/start(s), pred), (found) => found.char);
 
 --- Whether `target` occurs in `s`.
 pub let contains(s: Str, target: Char) -> Bool =
@@ -682,89 +675,275 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
         (i) => Option/unwrap_or(List/try_get(parts, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
-let trim_bounds(s: Str) -> {Nat, Nat} =
-    let n = len(s);
-    let (_, start, stop): {Nat, Nat, Nat} =
-        fold(
-            s,
-            (0, n, 0),
-            (codepoint, (i, start, stop)) =>
-                match Char/is_whitespace(codepoint)
-                | true => (i + 1, start, stop)
-                | false =>
-                    let begin = match start < n | true => start | false => i end;
-                    (i + 1, begin, i + 1)
-                end);
-    (start, stop);
+--- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
+let meets(
+    s: Str,
+    from: At(s),
+    piece: Str,
+    p: At(piece),
+) -> Option({past: At(s), reach: Nat/Le(from.offset, past.offset)}) =
+    At/forward(
+        (at) => (p: At(piece)) -> Option({past: At(s), reach: Nat/Le(at.offset, past.offset)}),
+        (at, again) =>
+            (p) =>
+                match At/try_next(piece, p)
+                | none() => Option/some((past = at, reach = Nat/Le/refl(at.offset)))
+                | some(want) =>
+                    match At/try_next(s, at)
+                    | some(have) =>
+                        match have.char == want.char
+                        | true =>
+                            match again(have.past, have.progress)(want.past)
+                            | some(met) =>
+                                Option/some((
+                                    past = met.past,
+                                    reach =
+                                        Nat/Le/trans(
+                                            @at.offset,
+                                            @have.past.offset,
+                                            @met.past.offset,
+                                            Nat/Lt/le_of_lt(
+                                                at.offset,
+                                                have.past.offset,
+                                                have.progress),
+                                            met.reach)))
+                            | none() => Option/none()
+                            end
+                        | false => Option/none()
+                        end
+                    | none() => Option/none()
+                    end
+                end,
+        from)(p);
+
+--- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
+let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
+    At/backward(
+        (_) => (p: At(piece)) -> Option(At(s)),
+        (at, again) =>
+            (p) =>
+                match At/try_prev(piece, p)
+                | none() => Option/some(at)
+                | some(want) =>
+                    match At/try_prev(s, at)
+                    | some(have) =>
+                        match have.char == want.char
+                        | true => again(have.past, have.progress)(want.past)
+                        | false => Option/none()
+                        end
+                    | none() => Option/none()
+                    end
+                end,
+        from)(p);
+
+--- An occurrence of a needle at or after `from`: where it starts, which is not before `from`, and the position past it, which is past the start — the needle holds a character.
+let Found(s: Str, from: At(s)) -> Type =
+    {
+        start: At(s),
+        past: At(s),
+        ordered: Nat/Le(from.offset, start.offset),
+        progress: Nat/Lt(start.offset, past.offset)};
+
+--- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
+---
+--- A candidate is a position whose byte is the needle's first — cheap to test, and a position because the walk steps only from one character to the next — confirmed by stepping both from there. Every other character is skipped without being decoded.
+let occurrence(
+    s: Str,
+    from: At(s),
+    needle: Str,
+    first: {char: Char, past: At(needle), progress: Nat/Lt(0, past.offset)},
+) -> Option(Found(s, from)) =
+    let lead_byte =
+        Bytes/get(
+            needle.bytes,
+            0,
+            @Nat/Lt/lt_of_lt_le(
+                0,
+                first.past.offset,
+                Bytes/len(needle.bytes),
+                first.progress,
+                first.past.within));
+    At/forward(
+        (at) => Option(Found(s, at)),
+        (at, again) =>
+            match at.offset < Bytes/len(s.bytes)
+            | false => Option/none()
+            | true =>
+                let onward = At/skip(s, at);
+                let later() -> Option(Found(s, at)) =
+                    match again(onward.past, onward.progress)
+                    | some(found) =>
+                        Option/some((
+                            start = found.start,
+                            past = found.past,
+                            ordered =
+                                Nat/Le/trans(
+                                    @at.offset,
+                                    @onward.past.offset,
+                                    @found.start.offset,
+                                    Nat/Lt/le_of_lt(at.offset, onward.past.offset, onward.progress),
+                                    found.ordered),
+                            progress = found.progress))
+                    | none() => Option/none()
+                    end;
+                match Bytes/get(s.bytes, at.offset) == lead_byte
+                | false => later()
+                | true =>
+                    let have = At/next(s, at);
+                    match have.char == first.char
+                    | false => later()
+                    | true =>
+                        match meets(s, have.past, needle, first.past)
+                        | some(met) =>
+                            Option/some((
+                                start = at,
+                                past = met.past,
+                                ordered = Nat/Le/refl(at.offset),
+                                progress =
+                                    Nat/Lt/lt_of_lt_le(
+                                        at.offset,
+                                        have.past.offset,
+                                        met.past.offset,
+                                        have.progress,
+                                        met.reach)))
+                        | none() => later()
+                        end
+                    end
+                end
+            end,
+        from);
+
+--- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
+let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =
+    match At/try_next(needle, At/start(needle))
+    | none() => Option/some((start = At/start(s), past = At/start(s)))
+    | some(first) =>
+        match occurrence(s, At/start(s), needle, first)
+        | some(found) => Option/some((start = found.start, past = found.past))
+        | none() => Option/none()
+        end
+    end;
+
+--- The position past an occurrence found from `from` lies past `from`: what a walk that cuts at each occurrence recurs with.
+let passed(@s: Str, from: At(s), found: Found(s, from)) -> Nat/Lt(from.offset, found.past.offset) =
+    Nat/Lt/lt_of_le_lt(
+        from.offset,
+        found.start.offset,
+        found.past.offset,
+        found.ordered,
+        found.progress);
+
+--- Where `needle` first occurs in `s`, or `none`; an empty needle occurs at the start.
+pub let index_of_substr(s: Str, needle: Str) -> Option(At(s)) =
+    Option/map(first_occurrence(s, needle), (found) => found.start);
+
+--- The last position at or before `from` past which `s` holds only characters `pred` accepts: one walk back.
+let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =
+    At/backward(
+        (_) => At(s),
+        (at, again) =>
+            match At/try_prev(s, at)
+            | some(p) => match pred(p.char) | true => again(p.past, p.progress) | false => at end
+            | none() => at
+            end,
+        from);
 
 --- Without leading and trailing whitespace.
 pub let trim(s: Str) -> Str =
-    let (lo, hi) = trim_bounds(s);
-    match lo < hi | true => slice(s, lo, hi - lo) | false => "" end;
+    trim_end(trim_start(s));
 
 --- Without leading whitespace.
 pub let trim_start(s: Str) -> Str =
-    drop_n(trim_bounds(s).0, s);
+    match find_index(s, (c) => Bool/not(Char/is_whitespace(c)))
+    | some(at) => after(s, at)
+    | none() => ""
+    end;
 
 --- Without trailing whitespace.
 pub let trim_end(s: Str) -> Str =
-    take_n(trim_bounds(s).1, s);
+    before(s, back_over(s, At/finish(s), Char/is_whitespace));
+
+--- `s` without `prefix` at its front, or `none` when it does not begin with it.
+pub let strip_prefix(s: Str, prefix: Str) -> Option(Str) =
+    Option/map(meets(s, At/start(s), prefix, At/start(prefix)), (met) => after(s, met.past));
+
+--- `s` without `suffix` at its end, or `none` when it does not end with it.
+pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
+    Option/map(meets_back(s, At/finish(s), suffix, At/finish(suffix)), (start) => before(s, start));
 
 --- Whether `s` begins with `prefix`.
 pub let starts_with(s: Str, prefix: Str) -> Bool =
-    eql(take_n(len(prefix), s), prefix);
+    Option/is_some(strip_prefix(s, prefix));
 
 --- Whether `s` ends with `suffix`.
 pub let ends_with(s: Str, suffix: Str) -> Bool =
-    eql(drop_n(len(s) - len(suffix), s), suffix);
+    Option/is_some(strip_suffix(s, suffix));
 
 --- The text before the first `sep` and the text after it, or `none` when `sep` does not occur.
 pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
-    let m = len(sep);
-    let go(i: Nat, rest: Str) -> Option({Str, Str}) =
-        choose
-        | starts_with(rest, sep) => Option/some((take_n(i, s), drop_n(m, rest)))
-        | is_empty(rest) => Option/none()
-        | _ => go(i + 1, drop_n(1, rest))
-        end;
-    go(0, s);
+    Option/map(first_occurrence(s, sep), (found) => (before(s, found.start), after(s, found.past)));
 
 --- Whether `needle` occurs in `s` as a run of characters.
 ---
---- Named apart from [`contains`], which is the element reading `/std/List`, `/std/Bytes` and `/std/Bits` all give that word. The substring family beside it — `starts_with`, `ends_with`, `split_once`, `split` and `replace` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
+--- Named apart from [`contains`], which is the element reading `/std/List`, `/std/Bytes` and `/std/Bits` all give that word. The substring family beside it — `starts_with`, `ends_with`, `strip_prefix`, `strip_suffix`, `split_once`, `split`, `replace` and `index_of_substr` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
 pub let has_substr(s: Str, needle: Str) -> Bool =
-    Option/is_some(split_once(s, needle));
+    Option/is_some(first_occurrence(s, needle));
 
 --- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into characters.
 pub let split(s: Str, sep: Str) -> List(Str) =
-    match is_empty(sep)
-    | true => List/map(to_list(s), of_char)
-    | false =>
-        match split_once(s, sep)
-        | some((before, after)) => [before, ..split(after, sep)]
-        | none() => [s]
-        end
+    match At/try_next(sep, At/start(sep))
+    | none() => List/map(to_list(s), of_char)
+    | some(first) =>
+        At/forward(
+            (_) => List(Str),
+            (at, again) =>
+                match occurrence(s, at, sep, first)
+                | some(found) =>
+                    [
+                        between(s, at, found.start, @found.ordered),
+                        ..again(found.past, passed(at, found))]
+                | none() => [after(s, at)]
+                end,
+            At/start(s))
     end;
 
 --- Every occurrence of `from` replaced by `to`, left to right; an empty `from` changes nothing.
 pub let replace(s: Str, from: Str, to: Str) -> Str =
-    match is_empty(from)
-    | true => s
-    | false =>
-        match split_once(s, from)
-        | some((before, after)) => concat(concat(before, to), replace(after, from, to))
-        | none() => s
-        end
+    match At/try_next(from, At/start(from))
+    | none() => s
+    | some(first) =>
+        At/forward(
+            (_) => Str,
+            (at, again) =>
+                match occurrence(s, at, from, first)
+                | some(found) =>
+                    flatten([
+                        between(s, at, found.start, @found.ordered),
+                        to,
+                        again(found.past, passed(at, found))])
+                | none() => after(s, at)
+                end,
+            At/start(s))
     end;
 
 --- The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =
     let strip(line: Str) -> Str =
-        match ends_with(line, "\r") | true => take_n(len(line) - 1, line) | false => line end;
-    match split_once(s, "\n")
-    | some((line, rest)) => [strip(line), ..lines(rest)]
-    | none() => match is_empty(s) | true => [] | false => [strip(s)] end
-    end;
+        match strip_suffix(line, "\r") | some(bare) => bare | none() => line end;
+    let newline = At/next("\n", At/start("\n"));
+    At/forward(
+        (_) => List(Str),
+        (at, again) =>
+            match occurrence(s, at, "\n", newline)
+            | some(found) =>
+                [
+                    strip(between(s, at, found.start, @found.ordered)),
+                    ..again(found.past, passed(at, found))]
+            | none() =>
+                let rest = after(s, at);
+                match is_empty(rest) | true => [] | false => [strip(rest)] end
+            end,
+        At/start(s));
 
 --- `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
 pub let pad_start(s: Str, n: Nat, c: Char) -> Str =

@@ -592,11 +592,33 @@ let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> F
         exact/round(r, negative, q, +0 - sh2, rest != 0)
     end;
 
-let exponent_of(s: Str, e_pos: Nat, len: Nat) -> Option(Int) =
-    match e_pos < len
-    | true => Int/of_str(Str/slice(s, e_pos + 1, len - (e_pos + 1)))
-    | false => Option/some(+0)
+--- `s` read as an optional sign and what follows it: whether the sign was `-`, and the rest.
+let signed(s: Str) -> {negative: Bool, body: Str} =
+    match Str/strip_prefix(s, "-")
+    | some(body) => (negative = true, body = body)
+    | none() =>
+        match Str/strip_prefix(s, "+")
+        | some(body) => (negative = false, body = body)
+        | none() => (negative = false, body = s)
+        end
     end;
+
+--- `text` cut at its first marker, spelled `lower` or `upper`: what precedes it and what follows it, or all of `text` and `none` when it holds neither.
+---
+--- Cut at `lower` first, and at `upper` only where there is no `lower`, rather than at whichever comes first. The two part where both occur, and a number reader refuses such text either way: a later marker in the rest is no digit, and an earlier one in what precedes is none either.
+let marked(text: Str, lower: Str, upper: Str) -> {Str, Option(Str)} =
+    match Str/split_once(text, lower)
+    | some((head, rest)) => (head, Option/some(rest))
+    | none() =>
+        match Str/split_once(text, upper)
+        | some((head, rest)) => (head, Option/some(rest))
+        | none() => (text, Option/none())
+        end
+    end;
+
+--- `mantissa` cut at its point: the digits before it and the digits after it, the latter empty with no point.
+let pointed(mantissa: Str) -> {Str, Str} =
+    match Str/split_once(mantissa, ".") | some(parts) => parts | none() => (mantissa, "") end;
 
 --- The float a decimal or hex text spells, correctly rounded: an optional sign, then digits with an optional point and an optional `e` exponent, or `0x` and hex digits with an optional point and an optional `p` exponent. An optional sign before `inf`, `infinity`, `nan` or `snan`, in any case, reads as that value of that sign, and a NaN may carry a payload as `nan(0x5)`: every spelling `to_str` and `to_hex_str` write, and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
 pub let of_str(s: Str) -> Option(Flt) =
@@ -604,19 +626,11 @@ pub let of_str(s: Str) -> Option(Flt) =
 
 --- `of_str` in the direction `r`.
 let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
-    match Str/is_empty(s)
-    | true => Option/none()
-    | false =>
-        let first = Str/try_get(s, 0)!;
-        let is_neg = first == '-';
-        let start = choose | first == '+' => 1 | first == '-' => 1 | _ => 0 end;
-        let len = Str/len(s);
-        let body = Str/slice(s, start, len - start);
-        choose
-        | some(f) = special_of_str(is_neg, body) => Option/some(f)
-        | is_hex(body) => of_hex_body(r, is_neg, Str/slice(body, 2, Str/len(body) - 2))
-        | _ => of_decimal_str(r, s, is_neg, start, len)
-        end
+    let (negative, body) = signed(s);
+    choose
+    | some(f) = special_of_str(negative, body) => Option/some(f)
+    | some(digits) = hex_digits(body) => of_hex_body(r, negative, digits)
+    | _ => of_decimal_str(r, negative, body)
     end;
 
 --- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and a NaN as `nan_of_str` reads one. `none` for anything else. The decimal and hex readers share it, since both write these values the same way.
@@ -630,8 +644,11 @@ let special_of_str(negative: Bool, body: Str) -> Option(Flt) =
 
 --- The NaN `nan`, `snan`, `nan(0x…)` or `snan(0x…)` spells, in any case and positive, or `none` for any other text. A payload the kind cannot carry is `none` rather than `+0`: text that spells no NaN is not a number here.
 let nan_of_str(body: Str) -> Option(Flt) =
-    let open = Str/index_of(body, '(');
-    let kind = Str/slice(body, 0, Option/unwrap_or(open, Str/len(body)));
+    let (kind, open): {Str, Option(Str)} =
+        match Str/split_once(body, "(")
+        | some((kind, inner)) => (kind, Option/some(inner))
+        | none() => (body, Option/none())
+        end;
     let signaling =
         choose
         | Str/eql_ascii_ci(kind, "nan") => Option/some(false)
@@ -641,12 +658,7 @@ let nan_of_str(body: Str) -> Option(Flt) =
     let payload =
         match open
         | none() => Option/some(match signaling | true => 1 | false => 0 end)
-        | some(at) =>
-            let inner = Str/slice(body, at + 1, Str/len(body) - (at + 1));
-            match Str/ends_with(inner, ")") && is_hex(inner)
-            | true => hex_value(Str/slice(inner, 2, Str/len(inner) - 3))
-            | false => Option/none()
-            end
+        | some(inner) => hex_value(hex_digits(Str/strip_suffix(inner, ")")!)!)
         end!;
     match signaling
     | true =>
@@ -661,9 +673,12 @@ let nan_of_str(body: Str) -> Option(Flt) =
         end
     end;
 
---- Whether `s` opens with `0x` in either case.
-let is_hex(s: Str) -> Bool =
-    Str/len(s) >= 2 && Str/eql_ascii_ci(Str/slice(s, 0, 2), "0x");
+--- What follows `0x` at the front of `s`, in either case, or `none` when `s` does not open with it.
+let hex_digits(s: Str) -> Option(Str) =
+    match Str/strip_prefix(s, "0x")
+    | some(digits) => Option/some(digits)
+    | none() => Str/strip_prefix(s, "0X")
+    end;
 
 --- The number a nonempty run of hex digits spells, in either case, or `none`.
 let hex_value(s: Str) -> Option(Nat) =
@@ -728,36 +743,18 @@ pub let of_hex_str(s: Str) -> Option(Flt) =
 
 --- `of_hex_str` in the direction `r`.
 let of_hex_str_in(r: Rounding, s: Str) -> Option(Flt) =
-    let first = Str/try_get(s, 0)!;
-    let is_neg = first == '-';
-    let start = choose | first == '+' => 1 | first == '-' => 1 | _ => 0 end;
-    let body = Str/slice(s, start, Str/len(s) - start);
+    let (negative, body) = signed(s);
     choose
-    | some(f) = special_of_str(is_neg, body) => Option/some(f)
-    | is_hex(body) => of_hex_body(r, is_neg, Str/slice(body, 2, Str/len(body) - 2))
+    | some(f) = special_of_str(negative, body) => Option/some(f)
+    | some(digits) = hex_digits(body) => of_hex_body(r, negative, digits)
     | _ => Option/none()
     end;
 
 --- The float the hex text after `0x` spells in the direction `r`, of `negative`'s sign.
 let of_hex_body(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
-    let length = Str/len(body);
-    let p =
-        Nat/min(
-            Option/unwrap_or(Str/index_of(body, 'p'), length),
-            Option/unwrap_or(Str/index_of(body, 'P'), length));
-    let mantissa = Str/slice(body, 0, p);
-    let exponent =
-        match p < length
-        | true => Int/of_str(Str/slice(body, p + 1, length - (p + 1)))
-        | false => Option/some(+0)
-        end!;
-    let dot = Option/unwrap_or(Str/index_of(mantissa, '.'), Str/len(mantissa));
-    let whole = Str/slice(mantissa, 0, dot);
-    let fraction =
-        match dot < Str/len(mantissa)
-        | true => Str/slice(mantissa, dot + 1, Str/len(mantissa) - (dot + 1))
-        | false => ""
-        end;
+    let (mantissa, scaled) = marked(body, "p", "P");
+    let exponent = match scaled | some(text) => Int/of_str(text) | none() => Option/some(+0) end!;
+    let (whole, fraction) = pointed(mantissa);
     let h = hex_value(Str/concat(whole, fraction))!;
     let e = exponent - Nat/to_int(4 * Str/len(fraction));
     let top = e + Nat/to_int(exact/bit_len(h));
@@ -829,26 +826,17 @@ let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
     Str/concat(sign, layout(Nat/to_str(digits), k + Nat/to_int(n)));
 
 --- The finite half of `of_str`: `s` read as a decimal whose digits begin at `start`.
-let of_decimal_str(r: Rounding, s: Str, is_neg: Bool, start: Nat, len: Nat) -> Option(Flt) =
-    let dot_pos = Option/unwrap_or(Str/index_of(s, '.'), len);
-    let e_pos =
-        Nat/min(
-            Option/unwrap_or(Str/index_of(s, 'e'), len),
-            Option/unwrap_or(Str/index_of(s, 'E'), len));
-    let int_end = Nat/min(dot_pos, e_pos);
-    let int_slice = Str/slice(s, start, int_end - start);
-    let frac_slice =
-        match dot_pos < e_pos
-        | true => Str/slice(s, dot_pos + 1, e_pos - (dot_pos + 1))
-        | false => ""
-        end;
-    match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
+let of_decimal_str(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
+    let (mantissa, scaled) = marked(body, "e", "E");
+    let (whole, fraction) = pointed(mantissa);
+    match Bool/not(Str/is_empty(whole)) || Bool/not(Str/is_empty(fraction))
     | true =>
-        let spelled = Str/concat(int_slice, frac_slice);
+        let spelled = Str/concat(whole, fraction);
         let digits = decimal_value(spelled)!;
-        let exponent = exponent_of(s, e_pos, len)!;
-        let scale = exponent - Nat/to_int(Str/len(frac_slice));
-        Option/some(of_decimal_in(r, is_neg, digits, scale, Str/len(spelled)))
+        let exponent =
+            match scaled | some(text) => Int/of_str(text) | none() => Option/some(+0) end!;
+        let scale = exponent - Nat/to_int(Str/len(fraction));
+        Option/some(of_decimal_in(r, negative, digits, scale, Str/len(spelled)))
     | false => Option/none()
     end;
 
@@ -919,18 +907,11 @@ satisfy Spell(Flt) {
         | _ =>
             let raw = to_str(f);
             let unsigned =
-                match Str/try_get(raw, 0)
-                | some(head) =>
-                    match head == '+'
-                    | true => Str/slice(raw, 1, Str/len(raw) - 1)
-                    | false => raw
-                    end
-                | none() => raw
-                end;
-            let pointed = match Str/index_of(unsigned, '.') | some(_) => true | none() => false end;
-            let exponented =
-                match Str/index_of(unsigned, 'e') | some(_) => true | none() => false end;
-            match pointed || exponented | true => unsigned | false => Str/concat(unsigned, ".0") end
+                match Str/strip_prefix(raw, "+") | some(bare) => bare | none() => raw end;
+            match Str/contains(unsigned, '.') || Str/contains(unsigned, 'e')
+            | true => unsigned
+            | false => Str/concat(unsigned, ".0")
+            end
         end,
 }
 

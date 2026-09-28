@@ -1,5 +1,5 @@
 -- Taking a `Str` apart: splitting, searching, replacing, trimming one end, padding, and the scalar list.
-use /std/{Str, Nat, Bool, List, Test};
+use /std/{Str, Nat, Bool, List, Option, Eq, Test};
 
 -- The separator is a two-byte scalar and two of them sit side by side, so the split has to advance by scalar and hand back the empty piece between them; joining the pieces on the separator is the identity.
 test split_advances_by_scalar_and_keeps_empty_pieces =
@@ -81,3 +81,24 @@ test to_list_yields_the_scalars_and_of_char_encodes_one =
             Str/flatten(List/map(chars, Str/of_char)),
             Bool/to_str(Str/of_char('€') == "€")]),
         "3 a€😀 true");
+
+-- Every walk here moves between positions through `Str/At/forward` or `backward`, each step handing over the proof that it moved, so every one is total and computes in a type: a claim about what they answer is a proof the kernel discharges, and one that stopped terminating would be refused where it is stated rather than tested.
+let _splits_in_a_type: Eq(Str/split("a€€b€c", "€"), ["a", "", "b", "c"]) =
+    Eq/refl();
+
+let _splits_once_in_a_type: Eq(
+    Str/split_once("key=value=x", "="),
+    Option/some(("key", "value=x"))) =
+    Eq/refl();
+
+let _reads_lines_in_a_type: Eq(Str/lines("a\r\nb\n"), ["a", "b"]) =
+    Eq/refl();
+
+let _replaces_in_a_type: Eq(Str/replace("a€b€", "€", "-"), "a-b-") =
+    Eq/refl();
+
+let _trims_in_a_type: Eq(Str/trim(" \té \n"), "é") =
+    Eq/refl();
+
+let _strips_in_a_type: Eq(Str/strip_suffix("héllo", "llo"), Option/some("hé")) =
+    Eq/refl();

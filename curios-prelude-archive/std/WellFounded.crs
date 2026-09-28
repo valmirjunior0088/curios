@@ -1,4 +1,4 @@
-use /std/{Nat};
+use /std/{Nat, Eq};
 use /std/Nat/{Le};
 
 --- `x` is accessible under `R`: everything below it is.
@@ -27,6 +27,56 @@ pub let recurse(
     let go(x: A, acc: Accessible(R, x)) -> P(x) =
         match acc | intro(@w, below) => step(w, (y, r) => go(y, below(y, r))) end;
     go(x, acc);
+
+let lifted(
+    @A: Type,
+    @B: Type,
+    @R: (B, B) -> Prop,
+    f: (A) -> B,
+    b: B,
+    acc: Accessible(R, b),
+    x: A,
+    same: Eq(f(x), b),
+) -> Accessible((u: A, v: A) => R(f(u), f(v)), x) =
+    match acc
+    | intro(@_, below) =>
+        Accessible/intro((y, r) =>
+            lifted(f, f(y), below(f(y), Eq/subst((v: B) => R(f(y), v), same, r)), y, Eq/refl()))
+    end;
+
+--- A relation read through a measure is well-founded when the relation is: `x` is below `y` when `f(x)` is below `f(y)`.
+---
+--- What a recursion on a size rather than on a value takes — a walk that moves through positions, say, whose measure is how much is left past each.
+pub let on(
+    @A: Type,
+    @B: Type,
+    @R: (B, B) -> Prop,
+    f: (A) -> B,
+    wf: WellFounded(R),
+) -> WellFounded((u: A, v: A) => R(f(u), f(v))) =
+    (x) => lifted(f, f(x), wf(f(x)), x, Eq/refl());
+
+let narrowed(
+    @A: Type,
+    @R: (A, A) -> Prop,
+    @S: (A, A) -> Prop,
+    inside: (x: A, y: A, s: S(x, y)) -> R(x, y),
+    x: A,
+    acc: Accessible(R, x),
+) -> Accessible(S, x) =
+    match acc
+    | intro(@w, below) => Accessible/intro((y, s) => narrowed(inside, y, below(y, inside(y, w, s))))
+    end;
+
+--- A relation inside a well-founded one is well-founded: every descent it takes, the wider relation takes too.
+pub let narrow(
+    @A: Type,
+    @R: (A, A) -> Prop,
+    @S: (A, A) -> Prop,
+    wf: WellFounded(R),
+    inside: (x: A, y: A, s: S(x, y)) -> R(x, y),
+) -> WellFounded(S) =
+    (x) => narrowed(inside, x, wf(x));
 
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k

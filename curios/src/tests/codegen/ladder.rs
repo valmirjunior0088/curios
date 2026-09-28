@@ -377,7 +377,9 @@ fn walk_mirror_family_isolates_each_obligation() {
 ///
 /// The fold calls `step` no longer. Since it carries the string's validity, each arm names the state it moves to — `cont(rem, lo, hi)` after a lead byte, `lead` or `cont(rem - 1, 0x80, 0xBF)` after a continuation — and the validity it passes on is what holds that state to the one `step` computes, so the call and its four-result return are gone from the loop — the obligation the `inline_step` rung of [`walk_mirror_attribution_measurements`] bounds at roughly a fifth of the walk.
 ///
-/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `step` takes four field parameters beside its byte and hands back four results, constructing no scan at either end, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is the strongest form this probe can take and is deliberately about *every* allocation rather than the tuple shapes the campaign named, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
+/// Nor does anything else on this program's path. `step`'s last caller here was `Str/trim`, which counted scalars through `drop_width` and called `step` once per byte; it now moves by position through `Str/At/next`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
+///
+/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is the strongest form this probe can take and is deliberately about *every* allocation rather than the tuple shapes the campaign named, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
 #[test]
 fn the_per_character_walk_carries_its_scan_without_allocating() {
     let wat = wat(PARSE_MULTIBYTE);
@@ -389,19 +391,20 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
             .count()
     };
 
-    let step = split
-        .iter()
-        .find(|function| function.name.contains("/std/Str/step"))
-        .expect("step survives as a function in this module");
     assert!(
-        step.body.contains("(type $func/5/4)"),
-        "step takes the scan as four field parameters beside its byte and hands back four results — both halves of the protocol live on its component: {}",
-        step.body.lines().next().unwrap_or_default(),
+        split
+            .iter()
+            .all(|function| !function.name.contains("/std/Str/step")),
+        "nothing on this program's path calls `step`, so the module holds no copy of it",
     );
+    let next = split
+        .iter()
+        .find(|function| function.name.contains("/std/Str/At/next"))
+        .expect("`trim` steps its positions through `Str/At/next`");
     assert_eq!(
-        count_in(step.body, "struct.new"),
+        count_in(next.body, "struct.new"),
         0,
-        "and step constructs no scan at either end",
+        "and a step from one position to the next constructs nothing",
     );
 
     // The fold's per-character shape. The accumulator travels as fields, the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum — and the scan travels as a discriminant and three payload slots through the loop *and* through the call that consumes it.

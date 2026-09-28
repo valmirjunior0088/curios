@@ -52,22 +52,30 @@ test slice_spans_every_codepoint_width =
 test trim_keeps_interior_multibyte =
     Test/equal(Str/trim("  café  "), "café");
 
--- An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`, and the `Nat/min` guard collapses the slice to nothing rather than trapping.
+-- An all-whitespace string trims to empty: `trim_start` finds no character to keep, and what it answers then is the empty text.
 test trim_all_whitespace_is_empty =
     Test/equal(Str/concat(Str/trim(" \t "), "!"), "!");
 
--- Folding, searching and case-folding all travel in certified `Char`s: the fold rebuilds the string scalar by scalar, `find` answers in codepoint indices, and ASCII case folding leaves a non-ASCII scalar alone.
+-- Folding, searching and case-folding all travel in certified `Char`s: the fold rebuilds the string scalar by scalar, a search answers the position a scalar begins at — read here as its byte offset — and ASCII case folding leaves a non-ASCII scalar alone.
 test logical_operations_use_certified_chars =
     let s = "a€😀";
     Test/equal(
         Str/join("|", [
             Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c))),
             Show/show(Option/unwrap_or(Str/try_get(s, 1), '?')),
-            Nat/to_str(Option/unwrap_or(Str/index_of(s, '€'), 99)),
-            Nat/to_str(Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99)),
+            Nat/to_str(
+                Option/unwrap_or(
+                    Option/map(Str/index_of(s, '€'), (at) => Str/At/to_offset(at)),
+                    99)),
+            Nat/to_str(
+                Option/unwrap_or(
+                    Option/map(
+                        Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF),
+                        (at) => Str/At/to_offset(at)),
+                    99)),
             Show/show('😀'),
             Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),
             Bool/to_str(Str/eql_ascii_ci("É", "é")),
             Nat/to_str(Str/len(s)),
             Str/slice(s, 1, 1)]),
-        "a€😀|€|1|2|😀|true|false|3|€");
+        "a€😀|€|1|4|😀|true|false|3|€");

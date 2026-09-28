@@ -74,6 +74,13 @@ pub let sub_mono_r(@a: Nat, @b: Nat, k: Nat, p: Le(a, b)) -> Le(a - k, b - k) =
         end
     end;
 
+--- `n - k <= n`: `Nat` subtraction never grows what it takes from.
+pub let sub_le(n: Nat, k: Nat) -> Le(n - k, n) =
+    match k
+    | 0 => refl(n)
+    | kp + 1 => match n | 0 => Bool/True/qed() | np + 1 => succ_r(np - kp, np, sub_le(np, kp)) end
+    end;
+
 --- A decided range check as its two bounds: `in_range(c, lo, hi)` gives `lo <= c` and `c <= hi`.
 pub let of_in_range(
     c: Nat,

@@ -51,6 +51,29 @@ pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
         end
     end;
 
+--- `a < b <= n` gives `n - b < n - a`: what is left of a bound shrinks as the value under it grows. The measure a walk up to a bound descends on.
+pub let sub_lt_sub(a: Nat, b: Nat, n: Nat, lt: Lt(a, b), le: Nat/Le(b, n)) -> Lt(n - b, n - a) =
+    match a
+    | 0 =>
+        match b
+        | 0 => match lt end
+        | bp + 1 =>
+            match n
+            | 0 => match le end
+            | np + 1 => Le/sub_le(np, bp)
+            end
+        end
+    | ap + 1 =>
+        match b
+        | 0 => match lt end
+        | bp + 1 =>
+            match n
+            | 0 => match le end
+            | np + 1 => sub_lt_sub(ap, bp, np, lt, le)
+            end
+        end
+    end;
+
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 ---
 --- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
