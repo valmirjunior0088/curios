@@ -203,7 +203,7 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
     ])
 }
 
-/// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form.
+/// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
 fn print_block_string(value: &str) -> Printer {
     let mut body = Vec::new();
     for line in value.split('\n') {
@@ -232,6 +232,7 @@ fn spell_block_line(line: &str) -> String {
             '\t' => spelled.push_str("\\t"),
             '\r' => spelled.push_str("\\r"),
             ' ' if offset >= kept => spelled.push_str("\\u{20}"),
+            control if control.is_control() => spelled.push_str(&braced_escape(control)),
             _ => spelled.push(character),
         }
         if character == '"' {
@@ -1257,6 +1258,7 @@ fn print_term_inner(term: Term) -> Printer {
                     '\n' => "\\n".to_string(),
                     '\t' => "\\t".to_string(),
                     '\r' => "\\r".to_string(),
+                    control if control.is_control() => braced_escape(control),
                     _ => character.to_string(),
                 })
                 .collect::<String>()
@@ -1474,7 +1476,7 @@ fn print_term_inner(term: Term) -> Printer {
     }
 }
 
-/// A character literal as written: the five escapes by their spellings, anything else verbatim — shared by the expression and match-pattern positions.
+/// A character literal as written: the five escapes by their spellings, any other control character by its braced escape, anything else verbatim — shared by the expression and match-pattern positions.
 fn print_char_literal(character: char) -> Printer {
     let escaped = match character {
         '\'' => "\\'".to_string(),
@@ -1482,9 +1484,15 @@ fn print_char_literal(character: char) -> Printer {
         '\n' => "\\n".to_string(),
         '\t' => "\\t".to_string(),
         '\r' => "\\r".to_string(),
+        control if control.is_control() => braced_escape(control),
         _ => character.to_string(),
     };
     pure(format!("'{escaped}'"))
+}
+
+/// A scalar as `\u{…}`, for a control character a literal cannot show: written verbatim it is a byte no reader sees, and the escape is the only spelling of it that survives a reading.
+fn braced_escape(character: char) -> String {
+    format!("\\u{{{:X}}}", u32::from(character))
 }
 
 /// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.

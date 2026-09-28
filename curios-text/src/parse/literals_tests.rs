@@ -206,9 +206,31 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_character() {
         "'\\u{301}'".parse::<Term>().unwrap(),
         Term::from(Subterm::Syn(Syn::Char('\u{301}')))
     );
-    // The printer writes the scalar itself, so the escape has no round trip of its own: one scalar, one spelling.
+    // The printer writes a visible scalar itself, so its escape has no round trip of its own: one scalar, one spelling.
     assert_eq!("'\\u{65}'".parse::<Term>().unwrap().to_string(), "'e'");
     assert_eq!("\"\\u{65}\"".parse::<Term>().unwrap().to_string(), "\"e\"");
+}
+
+/// A control character's one spelling is its braced escape, in a character literal, a string and a match pattern alike: written verbatim it would be a byte no reader sees, which is what `curios format` made of `'\u{8}'` before.
+#[test]
+fn a_control_character_prints_as_its_braced_escape() {
+    for source in [
+        "'\\u{0}'",
+        "'\\u{8}'",
+        "'\\u{C}'",
+        "'\\u{1B}'",
+        "'\\u{7F}'",
+        "'\\u{9F}'",
+        "\"a\\u{8}b\\u{C}\"",
+        "match 8 | '\\u{8}' => 0 | _ => 1 end",
+    ] {
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+    // The digits print in the numerals' case, however the escape was written.
+    assert_eq!(
+        "'\\u{1b}'".parse::<Term>().unwrap().to_string(),
+        "'\\u{1B}'"
+    );
 }
 
 #[test]
@@ -655,6 +677,8 @@ fn a_block_string_prints_as_a_block_that_reads_back() {
             "a\n\n \nb",
             "\"\"\"\n    a\n\n    \\u{20}\n    b\n    \"\"\"",
         ),
+        // A control character prints as its braced escape, as in the one-line form.
+        ("a\u{8}b", "\"\"\"\n    a\\u{8}b\n    \"\"\""),
     ] {
         assert_eq!(block(value).to_string(), printed, "{value:?}");
         assert_eq!(printed.parse::<Term>().unwrap(), block(value), "{printed}");
