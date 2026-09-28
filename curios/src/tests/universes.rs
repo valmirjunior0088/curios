@@ -205,7 +205,7 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
     assert_eq!(run(source), b"2");
 }
 
-// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter it had, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one.
+// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter its constraints leave free, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Three more of its levels are bounded by zero and are solved to the constant when the scheme is generalized, which is why the count is nineteen and not the twenty-two it was before generalization solved such levels; the context is otherwise the same, bound for bound.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
     super::typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
@@ -214,7 +214,7 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
-        Some(&22),
+        Some(&19),
         "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
     );
 }
