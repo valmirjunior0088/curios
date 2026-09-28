@@ -512,22 +512,23 @@ impl Kernel {
         Some(self.spend.charge_nothing(replay))
     }
 
-    /// The remembered type of a local-free `term`, with the identities its inference minted replayed and its steps not spent.
+    /// The remembered type of a local-free `term`, with nothing spent and nothing minted.
+    ///
+    /// **Nothing minted, unlike a reduct's hit.** A reduct's hit mints the identities its computation did, so that every later identity lands where a recomputation would have put it. For this table that recomputation is what it exists to avoid: it types a graph once per node where recomputing types it once per path, so the identities a recomputation would mint are counted over the tree, and on the graphs the table is for they outgrow the identity space — replayed, a `Str/split_once` claim stated in a type passed `2^32` in under two seconds. What the replay protected holds without it: the counter never falls, so every identity minted after a hit is above those the remembered inference opened, and it closed them before it returned. [`Spend`]'s module documentation states what is given up.
     ///
     /// **Never while a case equation is in force.** Inside an arm a closed scrutinee *is* the arm's case value, so typing under one may reduce a type to something it does not reduce to outside, and the key cannot say which equations stood. The machine stands aside under the same condition for the same reason. Declining there costs the inference and nothing else.
-    pub(crate) fn infer_hit(&mut self, term: &Term) -> Option<Term> {
+    pub(crate) fn infer_hit(&self, term: &Term) -> Option<Term> {
         if self.has_refinements() {
             return None;
         }
-        let replay = self.memos.infer(term)?;
 
-        Some(self.spend.charge_nothing(replay))
+        self.memos.infer(term)
     }
 
-    /// Remember a local-free `term`'s type and what inferring it consumed, unless a case equation is in force — see [`Kernel::infer_hit`].
-    pub(crate) fn infer_store(&mut self, term: Term, replay: Replay) {
+    /// Remember a local-free `term`'s type, unless a case equation is in force — see [`Kernel::infer_hit`].
+    pub(crate) fn infer_store(&mut self, term: Term, type_: Term) {
         if !self.has_refinements() {
-            self.memos.store_infer(term, replay);
+            self.memos.store_infer(term, type_);
         }
     }
 

@@ -58,10 +58,8 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         let inferred = match kernel.infer_hit(term) {
             Some(inferred) => inferred,
             None => {
-                let before = kernel.consumption();
                 let inferred = infer_within(kernel, term)?;
-                let replay = kernel.replay_since(inferred.clone(), before);
-                kernel.infer_store(term.clone(), replay);
+                kernel.infer_store(term.clone(), inferred.clone());
 
                 inferred
             }

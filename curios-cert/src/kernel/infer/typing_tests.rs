@@ -253,3 +253,23 @@ fn a_shared_closed_term_is_typed_once_per_node() {
         infer(&mut uncached, &doubled(8))
     );
 }
+
+/// Nor does a hit replay the identities the inference it remembers minted. Each level here applies a lambda, whose binder typing opens, to a sum sharing the level below twice; replayed per hit, those identities double with every level as a memo-free kernel's would, and forty levels are past the identity space. A hit opens nothing, so the graph mints what typing each of its nodes once does.
+#[test]
+fn a_shared_closed_term_mints_once_per_node() {
+    let x = binder(0, "x");
+    let identity = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let mut term = nat(1);
+    for _ in 0..40 {
+        term = Term::apply(
+            identity.clone(),
+            [Term::intrinsic(Intrinsic::nat_add(term.clone(), term))],
+        );
+    }
+
+    let mut kernel = kernel();
+    let (_, before) = kernel.consumption();
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    let (_, after) = kernel.consumption();
+    assert!(after - before <= 40, "minted {}", after - before);
+}

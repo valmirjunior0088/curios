@@ -10,7 +10,7 @@
 //!
 //! **The two term-keyed tables live exactly as long as a budget does.** [`Memos::begin_declaration`] clears them wherever `Spend::restore_budget` fires, and that alignment is what lets a hit on them be free. The paragraph above argues an entry's *content* is semantically determined — "the reduct is a function of the definition store alone" — but its *presence* was historical, because the budget is restored at every declaration boundary and these tables were not. A free hit under that asymmetry would make what one declaration spends depend on which declarations were walked before it, which is the property the per-declaration budget exists to hold. Clearing removes the dependence rather than asking anyone to trust a cache policy, and it measured free on every probe. The name-keyed `unfold` table is deliberately *not* cleared: it is what makes certifying a whole module affordable, and a hit on it is charged, so cross-declaration sharing of definition unfolds concedes nothing new. That lifetime is also what decides which table the retention allowance prices: an entry that dies with the budget that built it is bounded by that budget already, so the two term-keyed tables are stored for nothing, and only the `unfold` table — the one whose entries outlive a declaration — pays. See `curios-core`'s `retention` module for the rule stated once.
 //!
-//! **A store cannot charge.** [`Memos`] hands back a [`Replay`] and nothing else; applying one to the budget and the entropy counter is [`Spend`](super::Spend)'s job — [`Spend::charge`](super::Spend::charge) for the table that pays, [`Spend::charge_nothing`](super::Spend::charge_nothing) for the two that do not. A component that could both remember and charge is one that could charge twice.
+//! **A store cannot charge.** [`Memos`] hands back a [`Replay`] and nothing else; applying one to the budget and the entropy counter is [`Spend`](super::Spend)'s job — [`Spend::charge`](super::Spend::charge) for the table that pays, [`Spend::charge_nothing`](super::Spend::charge_nothing) for the two that do not. A component that could both remember and charge is one that could charge twice. The table of inferred types hands back a type alone, because a hit on it has nothing to apply: it spends nothing and mints nothing, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives.
 
 use {
     super::Replay,
@@ -29,8 +29,8 @@ pub(super) struct Memos {
     /// The same two tables for *local-bearing* terms, whose reducts are a function of the definition store **and the case equations in force**. The key cannot carry the second, so the tables live only as long as that set does: [`Memos::begin_equations`] clears them wherever an equation is assumed, retracted, withheld or restored, and [`Memos::begin_declaration`] with the rest. Within one such span a term's reduct is as fixed as a closed term's is within a declaration, and the web of definitions the index inversion forces at `Eq(top(n), 0)` — each naming the one before it twice, a local in every one — was re-derived `2^n` times for want of exactly this.
     local: HashMap<Term, Replay>,
     local_forced: HashMap<Term, Replay>,
-    /// The types inferred for local-free terms, for the declaration in progress: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and typing walks what it meets; remembered by term, a subterm shared across that tree is typed once. Free on a hit and cleared with the whnf tables, and for their reason — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for the equations it may not outlive.
-    types: HashMap<Term, Replay>,
+    /// The types inferred for local-free terms, for the declaration in progress: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and typing walks what it meets; remembered by term, a subterm shared across that tree is typed once. Free on a hit and cleared with the whnf tables, and for their reason. A type alone is kept, not a [`Replay`], because a hit replays nothing — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for why, and for the equations it may not outlive.
+    types: HashMap<Term, Term>,
 }
 
 impl Memos {
@@ -87,8 +87,8 @@ impl Memos {
         };
     }
 
-    /// The remembered type of a local-free `term`, still to be applied.
-    pub(super) fn infer(&self, term: &Term) -> Option<Replay> {
+    /// The remembered type of a local-free `term`.
+    pub(super) fn infer(&self, term: &Term) -> Option<Term> {
         if !self.enabled || !Self::typeable_alone(term) {
             return None;
         }
@@ -96,10 +96,10 @@ impl Memos {
         self.types.get(term).cloned()
     }
 
-    /// Remember a local-free `term`'s type, and what inferring it consumed.
-    pub(super) fn store_infer(&mut self, term: Term, replay: Replay) {
+    /// Remember a local-free `term`'s type.
+    pub(super) fn store_infer(&mut self, term: Term, type_: Term) {
         if self.enabled && Self::typeable_alone(&term) {
-            self.types.insert(term, replay);
+            self.types.insert(term, type_);
         }
     }
 
