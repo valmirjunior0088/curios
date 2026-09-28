@@ -216,3 +216,23 @@ fn two_items_with_unsolved_holes_are_both_reported() {
 
     assert_eq!(error.each().count(), 2, "{error}");
 }
+
+/// Materializing a solved metavariable at the base of a graph costs the graph, not its tree: each level sums the one below with itself, so the tree doubles per level, and sixty levels are past anything a tree walk finishes. The result stays a graph — both operands of its root are one node.
+#[test]
+fn materializes_a_shared_graph_once_per_node() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), nat_lit(1));
+
+    let mut term = Term::hole(0);
+    for _ in 0..60 {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
+    let zonked = zonk_solved_term_metas(&context, &term);
+
+    assert!(zonked.metavars().is_empty());
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*zonked else {
+        panic!("zonking kept the root: {zonked}");
+    };
+    assert!(std::ptr::eq::<Subterm>(&**left, &**right));
+}
