@@ -14,7 +14,7 @@
 
 use {
     super::Replay,
-    curios_core::{Free, Term},
+    curios_core::{Bound, Free, Term},
     std::collections::HashMap,
 };
 
@@ -29,6 +29,8 @@ pub(super) struct Memos {
     /// The same two tables for *local-bearing* terms, whose reducts are a function of the definition store **and the case equations in force**. The key cannot carry the second, so the tables live only as long as that set does: [`Memos::begin_equations`] clears them wherever an equation is assumed, retracted, withheld or restored, and [`Memos::begin_declaration`] with the rest. Within one such span a term's reduct is as fixed as a closed term's is within a declaration, and the web of definitions the index inversion forces at `Eq(top(n), 0)` — each naming the one before it twice, a local in every one — was re-derived `2^n` times for want of exactly this.
     local: HashMap<Term, Replay>,
     local_forced: HashMap<Term, Replay>,
+    /// The types inferred for local-free terms, for the declaration in progress: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and typing walks what it meets; remembered by term, a subterm shared across that tree is typed once. Free on a hit and cleared with the whnf tables, and for their reason — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for the equations it may not outlive.
+    types: HashMap<Term, Replay>,
 }
 
 impl Memos {
@@ -40,6 +42,7 @@ impl Memos {
             forced: HashMap::new(),
             local: HashMap::new(),
             local_forced: HashMap::new(),
+            types: HashMap::new(),
         }
     }
 
@@ -84,10 +87,32 @@ impl Memos {
         };
     }
 
-    /// Discard the term-keyed reducts, leaving the name-keyed ones. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
+    /// The remembered type of a local-free `term`, still to be applied.
+    pub(super) fn infer(&self, term: &Term) -> Option<Replay> {
+        if !self.enabled || !Self::typeable_alone(term) {
+            return None;
+        }
+
+        self.types.get(term).cloned()
+    }
+
+    /// Remember a local-free `term`'s type, and what inferring it consumed.
+    pub(super) fn store_infer(&mut self, term: Term, replay: Replay) {
+        if self.enabled && Self::typeable_alone(&term) {
+            self.types.insert(term, replay);
+        }
+    }
+
+    /// Whether a term's type is a function of the term and the declaration alone: no local it would read a type off, and no loose index a binder outside it would give meaning to.
+    fn typeable_alone(term: &Term) -> bool {
+        !term.has_local_free() && term.reach() == 0
+    }
+
+    /// Discard the term-keyed reducts and types, leaving the name-keyed ones. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
     pub(super) fn begin_declaration(&mut self) {
         self.whnf.clear();
         self.forced.clear();
+        self.types.clear();
         self.begin_equations();
     }
 

@@ -51,9 +51,21 @@ use {
 /// A child position is checked by descending into it. `check` is `infer` followed by `subsumes`, so `infer → check → infer` costs two native frames per link of a right-nested chain, and a `Str` literal's UTF-8 derivation is one such link per byte — depth as a function of the *data* rather than of what anyone wrote, measured at 21.5KiB per level in a debug build. [`recurse`] is what makes that affordable; a budget cannot, since a budget bounds steps and depth is not steps.
 ///
 /// This once drove an explicit worklist instead, and the worklist quietly changed the *rule*: a deferred child was inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction. Since the deferred positions are exactly arguments, constructor payloads and record fields, that made a lambda or a dependent tuple in argument position take the inferred route and manufacture the non-dependent type those rules exist to avoid. Nothing in the prelude or corpus reached the shape, so it never surfaced. See `documentation/soundness/per-term-rules/checked-rules-at-deferred-child-positions.md`.
+///
+/// A local-free term's type is remembered for the rest of the declaration, as its reduct is ([`Kernel::infer_hit`]): a type is checked by reducing it and typing the reduct, and a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the one before it four times — so typing it per path made a three-character claim in a type cost 677,246 inferences. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     recurse(|| {
-        let inferred = infer_within(kernel, term)?;
+        let inferred = match kernel.infer_hit(term) {
+            Some(inferred) => inferred,
+            None => {
+                let before = kernel.consumption();
+                let inferred = infer_within(kernel, term)?;
+                let replay = kernel.replay_since(inferred.clone(), before);
+                kernel.infer_store(term.clone(), replay);
+
+                inferred
+            }
+        };
         // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
         kernel.record_checked(term, &inferred);
 

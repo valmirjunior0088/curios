@@ -1,8 +1,9 @@
 //! One typing rule each: universes, literals, variables, lambdas, applications, tuples, lets and recursive groups.
 
 use {
-    crate::{Counted, KernelError, infer},
-    curios_core::{Intrinsic, Subterm, Term},
+    crate::{Counted, Kernel, KernelError, infer},
+    curios_analysis::fixture::SYNTAX,
+    curios_core::{Intrinsic, Nat, Subterm, Term},
 };
 
 use super::test_support::*;
@@ -230,4 +231,25 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
         infer(&mut kernel, &term),
         Err(KernelError::Mismatch { .. }),
     ));
+}
+
+/// A local-free term's type is remembered for the declaration, so a term whose tree is exponential in its depth — a sum adding a shared subterm to itself sixty times over, the shape a reduct takes when each step mentions the one before it more than once — is typed in the size of its graph. At a depth the uncached kernel can afford, both give the same type.
+#[test]
+fn a_shared_closed_term_is_typed_once_per_node() {
+    let doubled = |depth: usize| {
+        let mut term = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        for _ in 0..depth {
+            term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+        }
+        term
+    };
+
+    assert!(infer(&mut kernel(), &doubled(60)).is_ok());
+
+    let mut uncached = Kernel::uncached(100_000, SYNTAX);
+    uncached.set_local_floor(1_000);
+    assert_eq!(
+        infer(&mut kernel(), &doubled(8)),
+        infer(&mut uncached, &doubled(8))
+    );
 }

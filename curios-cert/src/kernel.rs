@@ -512,6 +512,25 @@ impl Kernel {
         Some(self.spend.charge_nothing(replay))
     }
 
+    /// The remembered type of a local-free `term`, with the identities its inference minted replayed and its steps not spent.
+    ///
+    /// **Never while a case equation is in force.** Inside an arm a closed scrutinee *is* the arm's case value, so typing under one may reduce a type to something it does not reduce to outside, and the key cannot say which equations stood. The machine stands aside under the same condition for the same reason. Declining there costs the inference and nothing else.
+    pub(crate) fn infer_hit(&mut self, term: &Term) -> Option<Term> {
+        if self.has_refinements() {
+            return None;
+        }
+        let replay = self.memos.infer(term)?;
+
+        Some(self.spend.charge_nothing(replay))
+    }
+
+    /// Remember a local-free `term`'s type and what inferring it consumed, unless a case equation is in force — see [`Kernel::infer_hit`].
+    pub(crate) fn infer_store(&mut self, term: Term, replay: Replay) {
+        if !self.has_refinements() {
+            self.memos.store_infer(term, replay);
+        }
+    }
+
     /// Remember a local-free `term`'s weak-head reduct and its consumption.
     ///
     /// **Not charged to the retention allowance, and deliberately.** That allowance exists for storage that outlives the budget that built it — [`Retention`] names the composition it bounds, a cache surviving item boundaries times a budget restored at each — and this table does not: [`Memos::begin_declaration`] clears it exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds. It was charged anyway, key and reduct, at the tree footprint of each — and a thirteen-definition proof whose reducts were graphs with `2^n`-node trees spent a third of the whole compilation's allowance on entries that died with the declaration. The name-keyed table beside this one does outlive a declaration, and [`Kernel::unfold_store`] still pays for it.
