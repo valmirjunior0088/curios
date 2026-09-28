@@ -48,3 +48,18 @@ fn cancellation_is_stable_when_nothing_is_shared() {
         "and so does the side it was compared against"
     );
 }
+
+// The read-then-rebuild identity the sum normal form promises: a sum already merged, read back through `Nat::sum` beside nothing, is the very term it was — like terms merged, first-appearance order kept, the floor outermost — which is what lets the fold hand a reduced sum back through itself without changing it.
+#[test]
+fn a_sum_in_normal_form_reads_back_as_itself() {
+    let (a, b) = (sym(0, "a"), sym(1, "b"));
+    let merged = Nat::sum(
+        &add(Nat::scaled(2u32.into(), a), b),
+        &Term::intrinsic(Intrinsic::Nat(Nat::new(3u32))),
+    );
+
+    assert_eq!(
+        Nat::sum(&merged, &Term::intrinsic(Intrinsic::Nat(Nat::Zero))),
+        merged
+    );
+}

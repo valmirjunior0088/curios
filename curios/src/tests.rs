@@ -1,4 +1,5 @@
 mod aggregates;
+mod algebra;
 mod big_num;
 mod binders;
 mod characters;

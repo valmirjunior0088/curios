@@ -93,3 +93,17 @@ fn peel_monomial_declines_where_no_pairing_is_forced() {
     ));
     assert!(peel_monomial(&doubled, &tripled).is_none());
 }
+
+// The restriction inversion rests on, stated where it is enforced today: `x · f` against `x · g` gives conversion `f` against `g`, which is sufficient for the equation and not implied by it — at `x = 0` any `f` and `g` agree — so the entry inversion reads, `peel_intrinsic`, has no answer for the pair at all, and the residual is the converters' alone.
+#[test]
+fn a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing() {
+    let (x, f, g) = (sym(0, "x"), sym(1, "f"), sym(2, "g"));
+    let this = as_monomial(mul(x.clone(), f.clone()));
+    let that = as_monomial(mul(x.clone(), g.clone()));
+
+    assert!(matches!(
+        peel_monomial(&this, &that),
+        Some(Peel::Continue(left, right)) if left == f && right == g
+    ));
+    assert!(peel_intrinsic(&this, &that).is_none());
+}

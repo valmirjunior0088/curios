@@ -130,3 +130,12 @@ fn cancellation_is_stable_when_nothing_is_shared() {
     assert_eq!(settled_left, left, "the left is handed back as written");
     assert_eq!(settled_right, k, "and so is the right");
 }
+
+// The read-then-rebuild identity, as `Nat`'s form keeps it: a merged sum read back beside nothing is the very term it was.
+#[test]
+fn a_sum_in_normal_form_reads_back_as_itself() {
+    let (i, j) = (sym(0, "i"), sym(1, "j"));
+    let merged = int_sum(&add(mul(int(2), i), j), &int(3));
+
+    assert_eq!(int_sum(&merged, &int(0)), merged);
+}

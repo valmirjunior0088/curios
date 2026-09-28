@@ -9,7 +9,7 @@ The campaign's other parts build on this one. [Part 2](02-bounds-from-facts-spec
 - **The implementation.** The numeric algebra lives in `curios-core/src/nat.rs` and `int.rs`; spine comparison in `spine.rs`; sequence decomposition and normalization in `free_monoid.rs`; and symbolic folds, comparison facts, Boolean laws, and the truth table under `reduce::intrinsic`. These files combine mathematics with term reading, reduction demands, and reconstruction.
 - **The consumers.** `curios-elab/src/convert/intrinsic.rs` and `curios-cert/src/kernel/convert/intrinsic.rs` repeat the comparison strategy. Their outer converters also ask the Boolean decision procedure about a connective opposite another kind of term. `curios-analysis/src/invert.rs` consumes a restricted set of peel results.
 - **The evidence.** `curios/src/tests/laws.rs` records held laws and refusal controls through both checkers, one carrier at a time, each row stated by hand under the grid's own rule to state a row at every carrier and state it first. Core's numeric, spine, truth-table, and intrinsic-law tests check individual operations and verdicts. The current soundness accounts are [Open fold laws and the sum normal form](../../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md) and [Intrinsic fold laws and the free-monoid peel](../../soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md).
-- **The seam, read alike.** `align_comparisons` reads a `<=` meeting a `<` through `successor_comparison`, the identity the refinement probes key by, which cancels the floor that reading creates, so `x + 1 <= y` meets `x < y` at `Nat` as `Int`'s difference split lets it meet at `Int` (their rustdoc, and [A comparison is spelled one way when it is stuck](../../design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)); the grid holds the row at both carriers. It leaves twenty `/std` calls of `Nat/Lt/le_succ_of_lt` and `lt_of_le_succ` that conversion now makes redundant by shape — sixteen checked against a fixed expected type, where the lemma's argument alone serves, and four feeding a lemma whose implicit arguments are inferred from them (`WellFounded`, `Nat/div_mod` and two in `Nat/Lt`), which still need the lemma or written `@` arguments; they were classified by shape rather than removed one by one. The baseline below is taken on that tree.
+- **The seam, read alike.** `align_comparisons` reads a `<=` meeting a `<` through `successor_comparison`, the identity the refinement probes key by, which cancels the floor that reading creates, so `x + 1 <= y` meets `x < y` at `Nat` as `Int`'s difference split lets it meet at `Int` (their rustdoc, and [A comparison is spelled one way when it is stuck](../../design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)); the grid holds the row at both carriers. The `/std` call sites it makes redundant are counted in the baseline inventory below, which is taken on that tree.
 - **The standard library as it stands.** `/std` states its invariants rather than answering made-up values, so its proofs — `Str/Valid`, `Str/At`, `Char`, `Bytes` — are the heaviest users of what conversion decides, and the corpus this consolidation is measured against.
 - **The ownership already established.** [Core](../../../curios-core/README.md) owns terms and their representation; [Analysis](../../../curios-analysis/README.md) owns shared judgments; the elaborator owns solving; the kernel rechecks its output. Shared algebra becomes part of the trusted implementation used by both checkers. Their agreement is therefore integration evidence, and independent algebra tests remain necessary.
 - **The operational decisions.** [A sum is merged when it is forced, not when it is built](../../design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md), [A comparison is spelled one way when it is stuck](../../design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md), and [A law is decided where it neither respells nor invents](../../design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md) explain constraints the extraction must preserve.
@@ -215,6 +215,148 @@ Each stage has a bounded production migration and removes the mathematical imple
 9. **Deletion and the durable record.** Audit every baseline inventory entry and caller. Remove obsolete exports, adapters whose only purpose was migration, duplicate algorithms, and temporary differential machinery. Record the implemented contracts in the appropriate crate documentation, design decisions, and soundness entries, the decision that the carriers' algebra stays in conversion among them; add the dependency and ownership invariants to `CLAUDE.md`; update the roadmap to distinguish the completed foundation from the campaign's remaining parts. Close the verification and cost record, then retire this specification as required by its final section.
 
 The first complete arithmetic path determines whether the proposed interfaces actually separate responsibilities. Later families may refine those interfaces while preserving their contracts. Shared orchestration can be migrated incrementally alongside the structures, but stage 6 is complete only when both copies are gone. Stages 7 and 8 follow stage 6, because a law generated at every carrier and an alignment shared by every carrier each assume one strategy in both checkers.
+
+## Baseline inventory
+
+Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checked off row by row as the stages move them. Line numbers are that tree's.
+
+**Callers.** F — the fold, `reduce_intrinsic` (`curios-core/src/reduce/intrinsic.rs`), which both reducers run. C — both intrinsic converters (`curios-elab/src/convert/intrinsic.rs`, `curios-cert/src/kernel/convert/intrinsic.rs`). O — both outer Boolean probes (`curios-elab/src/convert.rs:1667`, `curios-cert/src/kernel/convert.rs:501`). I — inversion, through `peel_intrinsic` (`curios-analysis/src/invert.rs:245`). P — both refinement probes (`curios-elab/src/reduce.rs`, `curios-cert/src/kernel/whnf.rs`). V — the elaborator's packed-literal view. W — `spine`'s own window and position reasoning.
+
+**Strength.** EQ — an equation: a rewrite, or a verdict of equality. DEC — a comparison folded to a `Bool` either way, each an established fact. IMP — impossibility: a clash conversion refuses on and inversion excuses an arm on. EQV — an equivalent residual. SUF — a sufficient residual. AGR — agreement only: equality or nothing, never a clash.
+
+**Atoms.** Proj — keyed up to universe instances, through `project_erased_universes`. Syn — syntactic identity, universe levels included. Proof-insensitive — a quotient or remainder matched on its dividend and divisor alone.
+
+### `Nat` and `Int` combinations
+
+| Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Successor-floor form | `Nat::decompose`, `rebuild` (`nat.rs:114`, `:124`); the `Nat(Succ)` arm | F, W | — | none | EQ; the representation, staying Core's | every `Nat` test | Core |
+| Sum normal form: like terms merged, first-appearance order | `Nat::summands` `:149`, `literal_factor` `:169`, `linear` `:286`, `from_linear` `:447`, `sum_over_floor` `:311`, `sum` `:599`; the `NatAdd` arm | F, W | Proj on the monomial spine | every sum; uncharged | EQ; read-then-rebuild is the identity | grid "Nat under +" and "under \*"; `nat::tests::a_sum_in_normal_form_reads_back_as_itself` | 2 |
+| Common-addend cancellation, as a multiset | `Nat::cancel_common` `:619`; the `NatSub` arm; `classify_nat` (`spine.rs:217`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (a surviving floor against zero); cancelling nothing returns the inners untouched, less the shared floor | `nat::tests::cancellation_*`, `spine::nat_tests::peel_nat_*`, `laws_tests::every_nat_peel_verdict_*` | 2 |
+| Signed sum normal form | `int_terms`, `int_monomial`, `int_linear`, `int_from_linear`, `int_sum`, `int_merged`, `int_negate` (`int.rs:37`–`:318`); the `IntAdd`, `IntSub` arms | F | Proj on the sorted factor vector | operand width, two literals only | EQ; a subtraction is a negative coefficient | `int::tests`, grid "Int" | 2 |
+| Signed cancellation | `int_cancel_common` `:437`; `peel_int_pair` (`spine.rs:44`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (two unequal constants); untouched when nothing is shared | `int::tests::cancellation_*`, `laws_tests::every_int_peel_verdict_*` | 2 |
+| Multiplication and the distribution gate | `Nat::multiply` `:210`, `scaled`, `spine`; `int_multiply` `:338`, `int_product` `:360`; the `NatMul`, `IntMul` arms | F | factors sorted by structural hash, interned | stuck when both sides hold two symbolic summands; operand width, and at `Int` a collection | EQ | grid "Nat under \*", `int::tests::a_product_*` | 3 |
+| Distribution on demand | `Nat::normalize` `:530`, `has_stuck_product` `:578`; `int_normalize` `:391`, `int_has_stuck_product` `:369` | C (first step), F (the comparisons) | as above | neither side a literal and a stuck product present; a collection and two nodes per product; memo by node identity | EQ | grid `(x + 1) * (y + 2)` rows | 3; the demand stays Core's |
+| The atom-argument retry | `Nat::normalize_atoms` `:489`, `force_arguments` `:506`, `ordered_sums` `:465` | C, on `peel_nat_pair`'s `Stuck` | sums reordered by structural hash | once, probe-side, falling back to the original spelling | EQ | grid `Eq(f(x + y) + g(y + z), …)` | 6; the forcing stays Core's |
+| Product-factor peel | `peel_monomial` (`spine.rs:93`) | C only | Proj, as a multiset | none | EQ on one multiset; SUF on one factor left each side; not in I | `spine::nat_tests::peel_monomial_*`, `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` | 2 (the type), 3 |
+| Euclid recombination | `Nat::recombine` `:324`, `euclid_pair` `:354`, `same_monomial` `:403`, `same_factor` `:424`; `int_recombine` `:149`, `int_euclid_pair` `:179`, `int_same_factors` `:239` | F, in every merged sum | proof-insensitive quotient; at `Int` a copy counts only where every sign agrees | uncharged | EQ, shrinking only | grid "Nat under / and %", `Int` Euclid rows | 3 |
+
+### Comparisons and defined operations
+
+| Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Nat` comparison: floors, a shared inner, non-strict bounds | `compare_nat` (`reduce/intrinsic/compare.rs:63`), `reduce_nat_compare` `:165` | F | Proj on the inners | distributes a stuck product first | DEC; an undecided comparison is rebuilt from the cancelled operands | `compare_tests`, grid "Nat comparisons" | 3 |
+| The bounds oracle | `nat_bound` (`reduce/intrinsic/nat.rs:60`) | F (comparison, Euclid split) | — | none; `NatShl` absent because it cannot charge | DEC; an under-report is a false equation | `nat_tests::bound_upper_bounds_every_closed_instantiation` | 3 |
+| Domination | `nat_dominators` `:114`, `dominated` (`compare.rs:132`) | F | — | one strict subterm down | DEC | `nat_tests::dominators_upper_bound_every_closed_instantiation` | 3 |
+| Divisibility | `apart_modulo` (`compare.rs:39`) | F (both comparisons) | coefficients | last, where equality is open | DEC, unequal only | `compare_tests::*_floors_apart_*`, grid controls | 3 |
+| `Int` comparison and preimages | `compare_int` (`reduce/intrinsic/int.rs:15`), `compare_preimages` `:55`; `int_preimage` (`int.rs:299`), `int_split_by_sign` `:469` | F | Proj | distributes a stuck product first | DEC | grid "Int", "Int against Nat" | 3 |
+| Literal divisors: zero, unit, self, floor law, Euclid split | `reduce_nat_division` `:177`, `nat_euclid_split` `:141` | F | — | a literal divisor | EQ; the proof is carried unreduced | `nat_tests::euclid_split_*`, `a_bounded_digit_*` | 3 |
+| Comparison alignment | `align_comparisons` (`reduce/intrinsic.rs:106`) through `successor_comparison` `:255`, `int_split_comparison` `:173`, `nat_comparison_of_int` `:160` | C | Proj | probe-side | EQ | grid seam, dual and split rows; `compare_tests::a_floored_le_meets_the_lt_it_spells` | 8 |
+
+### `Bool`
+
+| Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Local laws: unit, absorber, idempotence, complement, `xor` cancellation, equality against a literal | `then_laws`, `bool_lattice_laws`, `complementary`, `bool_xor_laws`, `bool_eql_laws` (`reduce/intrinsic/laws.rs:11`–`:94`) | F | Syn, a comparison against its dual | a stuck `&&`/`||` keeps its right operand as written | EQ | grid "Bool" | 4 |
+| Leaf-set peel | `peel_bool`, `bool_leaves` (`spine.rs:147`, `:165`) | C, I | Syn | none | AGR | `spine::commutative_tests` | 4 |
+| Tree normalization | `normalize_bool` (`reduce/intrinsic.rs:39`) | C | — | forces every leaf; a collection | EQ | grid associativity rows | 4; the forcing stays Core's |
+| The truth table | `decide_bool` (`truth.rs:143`), `is_bool_connective` `:129`, `BOOL_ATOM_CAP = 8` | C, O | Syn, a comparison and its dual one atom | declined past eight atoms; charged before the first assignment | AGR | `truth_tests`, `laws_tests::every_truth_table_decision_*`, grid "Bool, at the table's cap" | 4 |
+| Duals | `dual_comparison` `:223`, `dual_of_negated` `:196` | C, F, P, the table | total orders only; `Flt` excluded | none | EQ | grid negation rows | 4; key construction stays with the probes |
+| Symmetric operations | `peel_symmetric` (`spine.rs:62`) | C, I | Syn | none | AGR | `spine::commutative_tests::peel_symmetric_*` | 4, and 3 for `Nat/and`, `or`, `xor` |
+
+### Bitwise operations and shifts
+
+| Rule | Where | Callers | Atoms | Gate and charge | Strength | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Nat/and`, `or`, `xor`: zero, idempotence, self-cancellation | `nat_bitwise_laws` (`laws.rs:116`) | F | Syn | none | EQ | grid "Nat bitwise and shifts" | 3 |
+| Shift by zero, of zero | `nat_shift_laws` `:149` | F | — | none | EQ | the same | 3 |
+| Left shift as a coefficient and as a power; right shift in two steps | `then_coefficient`, `then_power`, `then_split_shift` (`reduce/intrinsic/nat.rs:308`–`:375`), `reduce_nat_shl`, `reduce_int_shift` | F, both carriers | — | `shift_bound`, charged before the coefficient exists | EQ | `shift_tests`, grid shift rows | 3 |
+
+### Words and positions
+
+| Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Prefix cancellation, runs merged, windows fused, regrouping | `peel_prefix`, `push`, `against_identity`, `peel_bin`, `peel_list`, `regroup`, the segment readers and `reassemble_*` (`spine.rs:405`–`:844`); the `BinEql` arm | C, I, F | chunks Syn; windows by length and position | fusion takes the second window's proof unchanged | EQ, EQV, IMP (a packed head or a positive residual against the identity); a list head never clashes | `spine::monoid_tests`, `aggregates::monoid_tests`, `laws_tests::every_bin_*`, `every_list_*` | 5 |
+| Positions through windows and concatenations | `peel_position`, `rooted`, `same_position`, `operand_offsets`, `offsets_in`, `nat_equal` (`spine.rs:253`–`:363`) | C, I, W | roots Syn | no bound read | AGR | `spine::position_tests`, `laws_tests::every_position_*` | 5 |
+| Concatenation normalization | `normalize_concat` (`free_monoid.rs:703`), `FUSION_CAP = 64` | F | — | fusion past the cap declined; two payloads charged | EQ | `free_monoid_tests`, `cost_tests` | 5 |
+| Measures and windows | `FreeMonoid::segments`, `measure`, `measured_window`, `window`, `bin_measure`, `concatenated` (`free_monoid.rs:513`–`:626`) | F (`len`, `get`, `slice`) | — | lazy; stops where the seam stops | EQ | `aggregates::monoid_tests` | 5 |
+| Homomorphism folds and the seam window | `reduce_homomorphism`, `bin_shape`, `list_shape`, `nat_sum`, `bin_piece`, `list_piece`, `element_of_run`, `seam_window` (`reduce/intrinsic/free_monoid.rs`) | F | — | charged per piece | EQ | `free_monoid_tests` | 5 |
+| `len` and `get` through `map`, `map` distributing, the identity `map` | the `ListLen`, `ListGet`, `ListMap` arms; `is_identity` (`reduce/intrinsic.rs:78`) | F | the binder check is term-level | the eta probe charged | EQ | grid "List" | 5; `is_identity` and fold execution stay term-level |
+| The packed-literal solving view | `packed_literal_view`, `known_len`, `split_against` (`curios-elab/src/convert/intrinsic.rs:200`–`:329`) | V | — | a literal against a spine of known segment lengths | EQV; IMP on a length clash | `tests::algebra::a_metavariable_is_solved_through_the_packed_literal_view` | 5; the proposals stay the elaborator's |
+
+### Carrier conversions
+
+| Rule | Where | Callers | Strength | Evidence | Stage |
+| --- | --- | --- | --- | --- | --- |
+| `Byte` and `Nat` invert each other | the `ByteToNat`, `NatToByte` arms | F | EQ | grid "Byte against Nat" | 5 |
+| `Nat/to_int` as a semiring embedding, and its preimage | `int_of_nat` (`int.rs:280`), `int_preimage`; the `NatToInt`, `IntToNat` arms | F | EQ | grid "Int against Nat" | 3 |
+| Packed regrouping at the other grain and back | the `BinReinterp` arm | F | EQ | `aggregates::monoid_tests` grouping rows | 5 |
+| `Flt/of_le_bytes` of `Flt/to_le_bytes` | the `FltOfLeBytes` arm | F | EQ | `numeric::flt_tests` | 5 |
+
+Every other `Flt` fold, and `Int`'s bitwise operations and division, evaluate closed values only; that is `curios-num`'s and stays so.
+
+### Atom identity as the call sites use it
+
+- `Nat`: a summand is keyed on its monomial spine projected, and a monomial's factors are ordered by the structural hash of the unprojected term. `Int`: a monomial is keyed on its projected factor vector, sorted the same way. A quotient or remainder in Euclid's recombination is matched proof-insensitively. From reading, and not yet confirmed by a test: two monomials that differ only in the universe instance of a factor can sort differently and then fail to merge. That is incompleteness, in the declining direction.
+- `Bool` leaves, truth-table atoms, word chunks and symmetric operands are compared syntactically, universe levels included. A comparison and its dual are one truth-table atom.
+- The refinement stores key on the written spelling, with the dual and successor probes.
+
+### Relations two carriers decide by different procedures
+
+- The `<`/`<=` seam: since part 0 both carriers read it through `successor_comparison`, but `Int` alone then splits both sides by sign (`int_split_comparison`) and pulls widened naturals back to `Nat` (`nat_comparison_of_int`). Stage 8 replaces all three.
+- Divisibility is one argument coded twice: `compare_nat` compares the two floors, `compare_int` the difference of the constants.
+- Euclid's recombination at `Int` requires every sign to agree; at `Nat` there is nothing to check.
+- A literal divisor's unit, self, floor and split laws exist at `Nat` only; `Int` division folds closed values alone.
+- `Nat/and`, `or` and `xor` carry local laws and `peel_symmetric`'s commutativity; their `Int` twins carry neither, and the grid states no `Int` bitwise row. This is a law true at both carriers and decided at one, the gap the generated grid exists to expose; closing it is outside behavior preservation.
+- The bounds oracle and domination exist for `Nat` alone, so an `Int` comparison reaches them only through the preimage pull-back.
+
+### Seam call sites the part 0 change makes redundant
+
+There are twenty calls of `Nat/Lt/le_succ_of_lt` and `lt_of_le_succ` in `/std`, not counting the two lemmas' own recursion, classified by shape:
+
+- **Sixteen** are checked against a fixed expected type, so the lemma's argument alone now serves.
+- **Four** feed a lemma whose implicit arguments are inferred from them — `WellFounded.crs:90`, `Nat/div_mod.crs:51`, `Nat/Lt.crs:92` and `:109` — and still need the lemma, or `@` arguments written.
+
+A probe confirmed both shapes. The twenty sites were not verified one by one, and none has been removed.
+
+### Evidence gaps and findings
+
+- **Inversion.** Nothing at the analysis level puts the peel's outcomes to inversion. Its evidence is `tests::perimeter::index_tests` and the kernel's elimination tests. `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` now pins the restriction where it is enforced today.
+- **Kernel history.** No test routes a peel residual through the kernel's active `History`: `kernel/convert/recursion_tests` exercises history on recursive groups only. Stage 6 closes this when residuals return to the active judgment.
+- **A lint allow.** `dominated` (`compare.rs:132`) carries `#[allow(clippy::too_many_arguments)]`, because its seven arguments are two (floor, inner, whole) triples. The comparison view removes the need for it in stage 3.
+- **Pinned by stage 1.** `tests::algebra` covers a law at an instance whose substitution changes its atoms, a metavariable solved through the cancellation, and one solved through the packed-literal view. `nat::tests` and `int::tests` cover read-back identity.
+
+### Cost
+
+**The instrument.** Two profile streams are written by the build scripts `cargo x clippy` runs with `--all-features`:
+
+- `curios-prelude-archive/.artifacts/profile.tsv` for elaboration and erasure;
+- `curios-prelude/.artifacts/profile.tsv` for certification. Its `recheck_module` span times the kernel's whole walk and distinguishes no judgment; that is [the certifier measured](../verdicts/01-measured-spec.md)'s.
+
+**To retake.** Run `cargo x clippy` after the stage's change, then fold each stream with `cargo run --all-features --package curios -- profile <stream>`. The streams are instrumented debug build scripts, so read them this way:
+
+- a duration is noisy and inflated;
+- call counts and allocated megabytes are the stable figures;
+- a stage's report names the span and the resource it compares.
+
+**The baseline**, at `8a182528`:
+
+| Stream | Span | Total | Calls | Allocated | Peak |
+| --- | --- | --- | --- | --- | --- |
+| elaboration | `elaborate_and_zonk_with_prelude` | 110.9 s | 2 | 36 724 MB | 447.3 MiB |
+| elaboration | `erase_unit` | 13.1 s | 2 | 1 235 MB | |
+| elaboration | `nat::cancel_common` | 5.08 s | 50 088 | 1 271 MB | |
+| elaboration | `nat::sum_over_floor` | 2.94 s | 47 836 | 107 MB | |
+| elaboration | `nat::multiply` | 1.28 s | 6 604 | 51 MB | |
+| elaboration | `nat::linear` | 1.25 s | 150 697 | 89 MB | |
+| certification | `recheck_module` | 42.1 s | 2 | 8 034 MB | 140.0 MiB |
+| certification | `nat::cancel_common` | 2.53 s | 33 320 | 110 MB | |
+| certification | `nat::sum_over_floor` | 1.13 s | 27 949 | 50 MB | |
+| certification | `nat::linear` | 0.59 s | 95 056 | 52 MB | |
+| certification | `nat::multiply` | 0.34 s | 2 472 | 16 MB | |
+| certification | `truth::decide_bool` | 0.03 s | 41 | 2 MB | |
+
+Nested spans overlap, so the rows do not add up.
 
 ## Deletion boundaries
 
