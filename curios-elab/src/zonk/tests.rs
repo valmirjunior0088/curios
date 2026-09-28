@@ -1,4 +1,10 @@
-use {crate::*, curios_analysis::fixture::SYNTAX, curios_core::*, curios_utilities::Qualifier};
+use {
+    crate::*,
+    curios_analysis::fixture::SYNTAX,
+    curios_core::*,
+    curios_utilities::{Qualifier, Source, Span},
+    std::rc::Rc,
+};
 
 fn context() -> Context {
     Context::with_default_budget(SYNTAX)
@@ -262,4 +268,44 @@ fn universes_are_validated_once_per_node() {
 
     assert!(validate_bound_universes(&value, 1, "doubled").is_ok());
     assert!(validate_bound_universes(&value, 0, "doubled").is_err());
+}
+
+/// The strict zonk splices a solution once per node of a graph, not once per path: a solved hole at the base of sixty levels that each sum the one below with itself is zonked in the graph's size, and the result stays a graph.
+#[test]
+fn a_shared_graph_is_zonked_once_per_node() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), nat_lit(1));
+
+    let mut term = Term::hole(0);
+    for _ in 0..60 {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
+    let zonked = zonk(&context, &term).expect("the hole is solved");
+
+    assert!(zonked.metavars().is_empty());
+    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*zonked else {
+        panic!("zonking kept the root: {zonked}");
+    };
+    assert!(std::ptr::eq::<Subterm>(&**left, &**right));
+}
+
+/// A hole zonked once still lands at each of its occurrences under that occurrence's span, so a refusal downstream of the zonk points at the occurrence it is about.
+#[test]
+fn a_hole_zonked_once_keeps_each_occurrence_s_span() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), nat_lit(1));
+    let source = Source::inline("a b");
+    let span = |start| Span::new(Rc::clone(&source), start, start + 1);
+    let hole = Term::hole(0);
+    let term = Term::tuple([hole.clone().with_span(span(0)), hole.with_span(span(2))]);
+
+    let zonked = zonk(&context, &term).expect("the hole is solved");
+
+    let Subterm::Tuple(tuple) = &*zonked else {
+        panic!("zonking changed the shape: {zonked}");
+    };
+    assert_eq!(tuple.fields[0].span(), Some(span(0)));
+    assert_eq!(tuple.fields[1].span(), Some(span(2)));
 }

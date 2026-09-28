@@ -7,10 +7,11 @@ use {
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
         InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
-        MetavarId, MetavarOrigin, Module, Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct,
-        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext,
-        UniverseError, UniverseMetaId, Var, Variant, Visit, project_erased_universes,
-        rewrite_universe_levels_scoped_shared, shift_universe_params, universe_metas,
+        MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec, RecGroup, RecItem, RecMemberScopes,
+        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
+        project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
+        universe_metas,
     },
     curios_utilities::Span,
     std::{
@@ -25,7 +26,34 @@ use {
 ///
 /// Substitution replaces a metavariable node by its solution. A solution is spelled with the birth telescope's names and is *not* in general a closed term; the occurrence's spine (its delayed substitution) records what each birth binder corresponds to at the splice site, so `zonk_term` resolves by rewriting the solution through it. Every solved occurrence carries its spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no bare copy of a birthed hole survives to be spliced.
 pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
-    zonk_term(context, term)
+    zonk_term(&Zonk::new(context), term)
+}
+
+/// One strict zonk: the context it reads, and every node it has zonked.
+///
+/// **A node is zonked once per pass.** What a node zonks to is a function of the node and of the context's solutions and universe solver, which the pass holds immutably, so a second occurrence of a node may take the first one's answer. A solution is spliced at every occurrence of its metavariable, and a solution stored as a reduct is a graph whose tree can be exponential in its depth: remembered by node, each is zonked in its own size and once per module rather than once per occurrence. The memo is a [`NodeMemo`], whose span rule hands each occurrence its own span; a refusal is not remembered, and propagates as it did.
+///
+/// It derefs to the [`Context`], so the walk below reads the context as it did before there was a pass, and hands it to anything that takes one.
+struct Zonk<'a> {
+    context: &'a Context,
+    zonked: RefCell<NodeMemo>,
+}
+
+impl<'a> Zonk<'a> {
+    fn new(context: &'a Context) -> Self {
+        Self {
+            context,
+            zonked: RefCell::new(NodeMemo::default()),
+        }
+    }
+}
+
+impl std::ops::Deref for Zonk<'_> {
+    type Target = Context;
+
+    fn deref(&self) -> &Context {
+        self.context
+    }
 }
 
 /// Materialize the solutions already committed for term metavariables without rejecting holes that remain legitimately deferred. Universe levels are preserved verbatim: declaration finalization rewrites them only after this pass has exposed the levels hidden in solved term-meta solutions.
@@ -156,6 +184,8 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
 /// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the entry and the registries are zonked only once every item has, since a refusal among the items stands on its own.
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
     curios_profile::profile!("zonk_module");
+    // One pass for the whole module, so a solution its items share is zonked once.
+    let context = &Zonk::new(context);
     let mut items = Vec::with_capacity(module.items.len());
     let mut refusals = Vec::new();
     for item in &module.items {
@@ -192,7 +222,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 InductDecl {
                     universe_context: induct_decl.universe_context.clone(),
-                    arity: zonk_arity(context, &induct_decl.arity)?,
+                    arity: zonk_arity_within(context, &induct_decl.arity)?,
                     constructors: induct_decl
                         .constructors
                         .iter()
@@ -224,7 +254,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 StructDecl {
                     universe_context: struct_decl.universe_context.clone(),
-                    arity: zonk_arity(context, &struct_decl.arity)?,
+                    arity: zonk_arity_within(context, &struct_decl.arity)?,
                     result_sort: zonk_term(context, &struct_decl.result_sort)?,
                     module: struct_decl.module.clone(),
                     rep_public: struct_decl.rep_public,
@@ -721,7 +751,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     Ok(())
 }
 
-fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
+fn zonk_item(context: &Zonk, item: &Item) -> Result<Item, Error> {
     match item {
         Item::Let(def) => Ok(Item::Let(zonk_definition(context, def)?)),
         Item::Rec(rec) => Ok(Item::Rec(RecItem::try_new(
@@ -733,7 +763,7 @@ fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
     }
 }
 
-fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Error> {
+fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error> {
     let type_ = zonk_term(context, &def.type_)?;
     let body = zonk_term(context, &def.body)?;
     Ok(Definition {
@@ -946,7 +976,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
 }
 
 /// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).
-fn goal_report(context: &Context, id: MetavarId) -> Error {
+fn goal_report(context: &Zonk, id: MetavarId) -> Error {
     let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
     match context.metavar_entry(id) {
         Some(entry) => Error::goal(
@@ -963,7 +993,15 @@ fn goal_report(context: &Context, id: MetavarId) -> Error {
     }
 }
 
-fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
+fn zonk_term(context: &Zonk, term: &Term) -> Result<Term, Error> {
+    // A subtree with neither term nor universe metavariables is already fully zonked — `zonk_level`'s fast path, read before the memo so that the memo holds only what took work.
+    if !term.has_metavar() && !term.has_universe_meta() {
+        return Ok(term.clone());
+    }
+    if let Some(zonked) = context.zonked.borrow().get(term) {
+        return Ok(zonked);
+    }
+
     // The level itself, charged when it is a new peak, exactly as `reduce` charges its own bracket — see [`Context::enter_level`] and [`Cost::FRAME`], whose documentation states why the row exists: `recurse` grows the native stack rather than aborting, and nothing else bounds total depth.
     //
     // Substitution is a route into unbounded computation like any other, and it was the one route the budget did not price. A metavariable whose solution reaches the metavariable again sends this walk down forever, and every level it takes is memory `recurse` asks the allocator for; uncharged, the compilation died by exhausting the machine instead of refusing the program. Charged, the declaration's own budget decides, and the answer is a fact about the program rather than about how much memory the host had.
@@ -973,11 +1011,14 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     let zonked = zonk_level(context, term);
     context.leave_level();
 
+    if let Ok(zonked) = &zonked {
+        context.zonked.borrow_mut().put(term, zonked.clone());
+    }
     zonked
 }
 
 /// The one choke point of the zonk walk's mutual recursion, guarded so a deeply nested term — a long sequencing chain's elaborated tail — buys depth with stack instead of overflowing the default test thread.
-fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
+fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
     curios_utilities::recurse(|| {
         // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
         if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
@@ -1101,18 +1142,18 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
     })
 }
 
-fn zonk_terms(context: &Context, terms: &[Term]) -> Result<Vec<Term>, Error> {
+fn zonk_terms(context: &Zonk, terms: &[Term]) -> Result<Vec<Term>, Error> {
     terms.iter().map(|t| zonk_term(context, t)).collect()
 }
 
-fn zonk_levels(context: &Context, levels: &[Level]) -> Result<Vec<Level>, Error> {
+fn zonk_levels(context: &Zonk, levels: &[Level]) -> Result<Vec<Level>, Error> {
     levels
         .iter()
         .map(|level| context.universes().zonk(level).map_err(Error::from))
         .collect()
 }
 
-fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
+fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
     Ok(match &**term {
         Subterm::Type(level) => {
             Subterm::Type(context.universes().zonk(level).map_err(Error::from)?)
@@ -1335,7 +1376,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 }
 
 /// Zonk an intrinsic's term operands: collect them through the masking [`Visit`], substitute fallibly, and rebuild the node through the rewriting one. Both passes are [`Intrinsic::traverse`], the single definition of an intrinsic's operands — so the collection and the rebuild agree positionally by construction, and a new operation (or a new operand on an existing one) is covered the moment it is representable, with no per-operation arm to forget. Non-term payload (a grain, a literal, `Nat`'s spine floor) is preserved by the traversal's shape rebuild.
-fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic, Error> {
+fn zonk_intrinsic(context: &Zonk, intrinsic: &Intrinsic) -> Result<Intrinsic, Error> {
     let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
     intrinsic.traverse(&mut masking);
 
@@ -1353,8 +1394,8 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
 }
 
 /// Like [`zonk_telescope`], for a constructor signature: the payload domains, and the index targets it terminates in.
-pub(crate) fn zonk_signature(
-    context: &Context,
+fn zonk_signature(
+    context: &Zonk,
     telescope: &Telescope<Vec<Term>>,
 ) -> Result<Telescope<Vec<Term>>, Error> {
     match telescope {
@@ -1374,10 +1415,7 @@ pub(crate) fn zonk_signature(
 /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its trailing body/return type, which is a real term to recurse into.
 ///
 /// A free function rather than an inherent method on [`Telescope`]: the telescope is representation, this is the elaborator's metavariable machinery, and only the latter may name [`Context`].
-pub(crate) fn zonk_telescope(
-    context: &Context,
-    telescope: &Telescope<Term>,
-) -> Result<Telescope<Term>, Error> {
+fn zonk_telescope(context: &Zonk, telescope: &Telescope<Term>) -> Result<Telescope<Term>, Error> {
     match telescope {
         Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
         Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
@@ -1392,22 +1430,26 @@ pub(crate) fn zonk_arity(
     context: &Context,
     arity: &Telescope<Telescope<()>>,
 ) -> Result<Telescope<Telescope<()>>, Error> {
+    zonk_arity_within(&Zonk::new(context), arity)
+}
+
+fn zonk_arity_within(
+    context: &Zonk,
+    arity: &Telescope<Telescope<()>>,
+) -> Result<Telescope<Telescope<()>>, Error> {
     match arity {
         Telescope::Done(indices) => Ok(Telescope::Done(Box::new(zonk_field_telescope(
             context, indices,
         )?))),
         Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
             zonk_term(context, ty)?,
-            rest.try_map_body(|inner| zonk_arity(context, inner))?,
+            rest.try_map_body(|inner| zonk_arity_within(context, inner))?,
         )),
     }
 }
 
 /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is `()`, which carries no metavariables and is rebuilt as-is. The companion of [`zonk_telescope`], and a free function for the same reason.
-pub(crate) fn zonk_field_telescope(
-    context: &Context,
-    telescope: &Telescope<()>,
-) -> Result<Telescope<()>, Error> {
+fn zonk_field_telescope(context: &Zonk, telescope: &Telescope<()>) -> Result<Telescope<()>, Error> {
     match telescope {
         Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
         Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
