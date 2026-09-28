@@ -6,7 +6,7 @@ use {
     super::*,
     curios_core::{
         Argument, Free, FuncType, Instance, InstanceHead, Proj, StructType, Subterm, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, strip_universe_levels,
+        UniverseConstraintKind, UniverseConstraintOrigin,
     },
 };
 
@@ -59,7 +59,7 @@ pub(crate) fn levels_clash_on_a_decided_instance(
 
 /// Align two spellings' levels positionally and classify the first pair that decides the question, committing nothing.
 ///
-/// One traversal per side, shared with the kernel: every level collected with its universe-binder depth, a ground `Type 0` included, and replaced by a sentinel — the skeletons then compare equal exactly when the sides differ in nothing but levels, and that equality is what aligns the two collections positionally. A universes-only walk skipped the `Type 0`, which once aligned `(Type 0, Type u)` with `(Type u, Type 0)` on one level paired with itself.
+/// One walk over the pair, shared with the kernel: [`Term::level_differences`] answers whether the sides differ in nothing but levels and which level pairs they differ in, a ground `Type 0` counted as a level, and it walks the graph rather than the tree, so identifying two spellings costs what the spellings are and not what they unfold to.
 ///
 /// Every pair is checked before any verdict that would insert, because a decline that had already inserted would not be a fall-through — which is why the commitment lives in [`identify_universe_levels`] and the walk here hands back what it *would* commit.
 fn align_universe_levels(
@@ -67,30 +67,23 @@ fn align_universe_levels(
     this: &Term,
     that: &Term,
 ) -> Result<Alignment, ReduceError> {
-    let (this_stripped, this_levels) = strip_universe_levels(this);
-    let (that_stripped, that_levels) = strip_universe_levels(that);
-
-    if this_stripped != that_stripped || this_levels.len() != that_levels.len() {
+    let Some(differences) = this.level_differences(that, |_| false) else {
         return Ok(Alignment::Distinct);
-    }
+    };
 
     let mut pending = Vec::new();
-    for ((this_depth, this_level), (that_depth, that_level)) in this_levels.iter().zip(&that_levels)
-    {
-        if this_level == that_level {
-            continue;
-        }
-        if *this_depth > 0 || *that_depth > 0 {
+    for (depth, this_level, that_level) in differences {
+        if depth > 0 {
             return Ok(Alignment::UnderBinder);
         }
 
         let this_level = context
             .universes()
-            .zonk(this_level)
+            .zonk(&this_level)
             .map_err(ReduceError::Universe)?;
         let that_level = context
             .universes()
-            .zonk(that_level)
+            .zonk(&that_level)
             .map_err(ReduceError::Universe)?;
         if this_level == that_level {
             continue;

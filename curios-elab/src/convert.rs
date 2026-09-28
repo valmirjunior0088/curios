@@ -34,7 +34,6 @@ use {
         Metavar, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         Variant, Visit, decide_bool, instantiate_universe_levels_scoped, is_bool_connective,
-        strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
@@ -2002,14 +2001,12 @@ fn level_question(
         return Ok(LevelQuestion::Distinct);
     }
 
-    // After zonking, every metavariable still standing is unsolved, so a skeleton match with those as wildcards is exactly "these could become one term modulo levels".
-    let (this_skeleton, _) = strip_universe_levels(&this);
-    let (that_skeleton, _) = strip_universe_levels(&that);
+    // After zonking, every metavariable still standing is unsolved, so agreement modulo levels with those as wildcards is exactly "these could become one term modulo levels".
     let wildcard = |term: &Term| matches!(&**term, Subterm::Metavar(_));
 
-    Ok(match this_skeleton.equal_up_to(&that_skeleton, wildcard) {
-        true => LevelQuestion::Blocked,
-        false => LevelQuestion::Distinct,
+    Ok(match this.level_differences(&that, wildcard) {
+        Some(_) => LevelQuestion::Blocked,
+        None => LevelQuestion::Distinct,
     })
 }
 

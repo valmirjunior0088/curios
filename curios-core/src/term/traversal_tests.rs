@@ -285,34 +285,81 @@ fn reach_telescope_absorbs_arity() {
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
 }
 
-/// Every `Type` is a position the stripped skeleton records, a ground `Type 0` included: `(Type 0, Type u)` and `(Type u, Type 0)` strip to one skeleton over two two-entry vectors that pair zero with `u` and `u` with zero, where a universes-only walk would have skipped the `Type 0` and paired `u` with itself. Two terms differing only in levels strip to one skeleton with their vectors aligned.
+/// Every `Type` is a level position, a ground `Type 0` included: `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs, zero against `u` and then `u` against zero, where a walk over universe data alone would have skipped the `Type 0` and paired `u` with itself. Terms that differ only in levels report the pairs they differ in; terms that differ in anything else report none at all.
 #[test]
-fn stripping_levels_records_a_ground_sort_as_a_position() {
-    let u = Term::type_at(Level::param(UniverseParam(0)));
+fn level_differences_count_a_ground_sort_as_a_position() {
+    let u_level = Level::param(UniverseParam(0));
+    let u = Term::type_at(u_level.clone());
     let v = Term::type_at(Level::param(UniverseParam(1)));
     let ground = Term::type_at(Level::zero());
 
-    let (ground_first, ground_first_levels) =
-        strip_universe_levels(&Term::tuple([ground.clone(), u.clone()]));
-    let (ground_second, ground_second_levels) =
-        strip_universe_levels(&Term::tuple([u.clone(), ground]));
-    assert_eq!(ground_first, ground_second);
     assert_eq!(
-        ground_first_levels,
-        vec![(0, Level::zero()), (0, Level::param(UniverseParam(0)))]
+        Term::tuple([ground.clone(), u.clone()])
+            .level_differences(&Term::tuple([u.clone(), ground]), |_| false),
+        Some(vec![
+            (0, Level::zero(), u_level.clone()),
+            (0, u_level.clone(), Level::zero())
+        ])
     );
     assert_eq!(
-        ground_second_levels,
-        vec![(0, Level::param(UniverseParam(0))), (0, Level::zero())]
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
+            &Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]),
+            |_| false
+        ),
+        Some(vec![(0, u_level, Level::param(UniverseParam(1)))])
     );
+    assert_eq!(
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
+            &Term::tuple([u, Term::intrinsic(Intrinsic::BoolType)]),
+            |_| false
+        ),
+        None
+    );
+}
 
-    let (at_u, u_levels) =
-        strip_universe_levels(&Term::tuple([u, Term::intrinsic(Intrinsic::NatType)]));
-    let (at_v, v_levels) =
-        strip_universe_levels(&Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]));
-    assert_eq!(at_u, at_v);
-    assert_eq!(u_levels, vec![(0, Level::param(UniverseParam(0)))]);
-    assert_eq!(v_levels, vec![(0, Level::param(UniverseParam(1)))]);
+/// The walk costs the graph, not the tree it unfolds to. Each side pairs a shared node with itself sixty times over, so it has sixty-one nodes and two to the sixtieth paths — the shape a reduct takes when a position built a character at a time mentions the one before it more than once. A walk per path never answers; this one reports the single differing pair once.
+#[test]
+fn level_differences_walk_the_graph_not_the_tree() {
+    let mut this = Term::type_at(Level::param(UniverseParam(0)));
+    let mut that = Term::type_at(Level::param(UniverseParam(1)));
+    for _ in 0..60 {
+        this = Term::tuple([this.clone(), this]);
+        that = Term::tuple([that.clone(), that]);
+    }
+
+    assert_eq!(
+        this.level_differences(&that, |_| false),
+        Some(vec![(
+            0,
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1))
+        )])
+    );
+}
+
+/// A wildcard stands for anything, levels included: the positions it covers contribute no pair and cannot make the sides differ.
+#[test]
+fn level_differences_skip_what_a_wildcard_covers() {
+    let u = Term::type_at(Level::param(UniverseParam(0)));
+    let v = Term::type_at(Level::param(UniverseParam(1)));
+    let is_hole = |term: &Term| matches!(&**term, Subterm::Metavar(_));
+
+    assert_eq!(
+        Term::tuple([Term::hole(0), u.clone()]).level_differences(
+            &Term::tuple([Term::intrinsic(Intrinsic::BoolType), v]),
+            is_hole
+        ),
+        Some(vec![(
+            0,
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1))
+        )])
+    );
+    assert_eq!(
+        Term::tuple([Term::hole(0), u.clone()])
+            .level_differences(&Term::tuple([u.clone(), u]), is_hole),
+        Some(Vec::new())
+    );
 }
 
 /// Equality up to a wildcard ignores exactly the wildcard positions: a hole against anything is a match, and everything else still has to agree.

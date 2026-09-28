@@ -24,10 +24,10 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, CalleeId, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, Nat, Scope,
-        SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
-        project_erased_universes,
+        Atom, Bound, CalleeId, Enter, Free, Global, Intrinsic, Level, LevelHead, Many,
+        MaskedLevels, Nat, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
+        instantiate_universe_levels_scoped, print_term, project_erased_universes,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Grain, Integer, Natural},
@@ -1468,6 +1468,67 @@ impl Term {
         }
 
         true
+    }
+
+    /// Where `self` and `other` differ in nothing but universe levels — at every position where neither side is a wildcard — the level pairs they differ in, each with its universe-binder depth, in traversal order; `None` where they differ in anything else.
+    ///
+    /// **A walk over the pair, not a strip of each side.** The predecessor rebuilt each side with every level replaced by a sentinel, collected the levels in traversal order, compared the two skeletons and zipped the two vectors. That is a walk per *path*: a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the position before it four times — and stripping it rebuilt and recorded every path. Six characters of a position walk cost 3.7 seconds of a 3.8-second elaboration there, and eight never finished. This walks the two sides together, one node at a time as [`equal_up_to`](Self::equal_up_to) does, skips a pair that is one allocation, and enters a pair of shared nodes once per binder depth, so the cost is the graph's.
+    ///
+    /// **Aligned by correspondence, not by position in two vectors.** Each pair of levels is taken from one pair of corresponding nodes, so the alignment holds whatever sharing either side has. The vectors the predecessor zipped agreed only because both sides were walked as trees; a walk that skipped repeated nodes would have recorded a side's shared subterm once and the other's unshared copies twice, and zipped unrelated levels together.
+    ///
+    /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
+    pub fn level_differences(
+        &self,
+        other: &Term,
+        mut is_wildcard: impl FnMut(&Term) -> bool,
+    ) -> Option<Vec<(usize, Level, Level)>> {
+        let mut visit = Visit::masking_levels(|_, _| None, Term::from(Subterm::Prop));
+        let mut mask = |subterm: &Subterm| {
+            let masked = subterm.traverse(&mut visit);
+            let MaskedLevels { children, levels } = visit.take_masked_levels();
+            (masked, children, levels)
+        };
+
+        let mut differences = Vec::new();
+        let mut work = vec![(0, self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node, usize)> = HashSet::new();
+
+        while let Some((depth, this, that)) = work.pop() {
+            if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
+                continue;
+            }
+            if Rc::strong_count(&this.inner) > 1
+                && Rc::strong_count(&that.inner) > 1
+                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner), depth))
+            {
+                continue;
+            }
+
+            let (this_masked, this_children, this_levels) = mask(&this.inner.subterm);
+            let (that_masked, that_children, that_levels) = mask(&that.inner.subterm);
+            if this_masked != that_masked
+                || this_children.len() != that_children.len()
+                || this_levels.len() != that_levels.len()
+            {
+                return None;
+            }
+
+            for ((below, this_level), (_, that_level)) in this_levels.into_iter().zip(that_levels) {
+                if this_level != that_level {
+                    differences.push((depth + below, this_level, that_level));
+                }
+            }
+            // Reversed onto the stack, so the first child is the next node taken: pre-order, the order the stripped vectors recorded, which keeps "the first decisive pair" meaning what it meant.
+            work.extend(
+                this_children
+                    .into_iter()
+                    .zip(that_children)
+                    .rev()
+                    .map(|((below, this), (_, that))| (depth + below, this, that)),
+            );
+        }
+
+        Some(differences)
     }
 }
 

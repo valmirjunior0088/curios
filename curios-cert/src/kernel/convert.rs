@@ -38,7 +38,7 @@ use {
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
         InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step, Struct,
         StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, decide_bool,
-        instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
+        instantiate_universe_levels_scoped, is_bool_connective,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -698,7 +698,7 @@ fn unfolded_retry(
 
 /// `Some(verdict)` when `this` and `that` are projections of one recursive group at the same member, differing in nothing but universe levels — the verdict is whether those levels are equal under the item's hypotheses. `None` for any other pair, which the structural rules judge as before.
 ///
-/// This is the equation the `InductType`, `StructType`, `Variant`, `Struct` and `Instance` arms already apply to their heads, reaching one more head kind. Equal skeletons mean the same positions carry a level on both sides — `strip_universe_levels`'s sentinel is what makes an unvisited `Type 0` and a stripped level distinguishable — so the two terms are one skeleton over two aligned level vectors, and a vector pair that is syntactically equal or, at depth zero, mutually entailed under the assumed constraints denotes one term in every instance satisfying them. Nothing is erased: `wrap(Type 1)` against `wrap(Type 2)` refuses on the levels, `wrap(Type 0)` against `wrap(Type 1)` on the skeletons. What it does not decide is refused, the safe direction: `Type 0` against a `Type u` the hypotheses force to zero has two skeletons.
+/// This is the equation the `InductType`, `StructType`, `Variant`, `Struct` and `Instance` arms already apply to their heads, reaching one more head kind. Terms that differ in nothing but levels — [`Term::level_differences`], which counts a ground `Type 0` as a level and walks the pair's graph rather than its tree — denote one term in every instance satisfying the assumed constraints when each differing pair sits at depth zero and is mutually entailed under them. Nothing is erased: `wrap(Type 1)` against `wrap(Type 2)` refuses on the levels, `wrap(Type 0)` against `wrap(Type 1)` on the skeletons. What it does not decide is refused, the safe direction: `Type 0` against a `Type u` the hypotheses force to zero has two skeletons.
 fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
     let (Some((_, left)), Some((_, right))) = (this.as_rec_proj(), that.as_rec_proj()) else {
         return None;
@@ -712,10 +712,11 @@ fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
         return Some(true);
     }
 
-    let (this_skeleton, this_levels) = strip_universe_levels(this);
-    let (that_skeleton, that_levels) = strip_universe_levels(that);
-
-    (this_skeleton == that_skeleton).then(|| kernel.level_pairs_eq(&this_levels, &that_levels))
+    this.level_differences(that, |_| false).map(|differences| {
+        differences.iter().all(|(depth, this_level, that_level)| {
+            *depth == 0 && kernel.level_eq(this_level, that_level)
+        })
+    })
 }
 
 /// The head of an application spine, or the term itself: what `rec_instances` is asked about when a folded recursive call arrives applied — past its own parameters too, where the call is the head of an application of its own.

@@ -365,27 +365,6 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
-/// Every universe level of `value` in traversal order, each with its universe-binder depth, beside the skeleton left when every one is replaced by a sentinel.
-///
-/// Two values with equal skeletons differ in nothing but levels, and their vectors are positionally aligned: the walk visits every node, unlike the universes-only walks, because a ground `Type 0` carries no universe data and would otherwise be a level the vector never records — `(Type 0, Type u)` and `(Type u, Type 0)` then stripped to one skeleton over one-entry vectors that aligned `u` with itself across two positions. A `RecGroup`'s own context is kept, so a generalized group and an instance of it have different skeletons; the groups conversion meets are instantiated, with empty contexts.
-pub fn strip_universe_levels<B: Bound>(value: &B) -> (B, Vec<(usize, Level)>) {
-    let levels = Rc::new(RefCell::new(Vec::new()));
-    let found = Rc::clone(&levels);
-    let mut visit = Visit::stripping_levels(
-        |_, _| None,
-        Box::new(move |depth, level: &Level| {
-            found.borrow_mut().push((depth, level.clone()));
-            Level::constant(1)
-        }),
-    );
-    let skeleton = value.traverse(&mut visit);
-    drop(visit);
-    let levels = Rc::try_unwrap(levels)
-        .expect("the level collector releases its traversal closure")
-        .into_inner();
-    (skeleton, levels)
-}
-
 /// How a declaration's own name reaches the value being stamped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfReference {
@@ -654,6 +633,13 @@ pub struct Visit<F> {
     memo: Memo,
 }
 
+/// What one node of [`Term::level_differences`]'s walk stood down: its children and its own levels, each with the universe-binder depth it sits at below the node, in traversal order.
+#[derive(Default)]
+pub(crate) struct MaskedLevels {
+    pub(crate) children: Vec<(usize, Term)>,
+    pub(crate) levels: Vec<(usize, Level)>,
+}
+
 /// Whether a traversal remembers what it rebuilt, and under what key.
 ///
 /// **Orthogonal to [`Mode`], and stated separately because it is.** It used to be encoded by doubling variants — `Plain` beside `PlainSharedAtDepth`, `Rewriting` beside `RewritingShared` — which made a walk's memo a property of *which mode it picked* rather than a decision its author made. Three modes then had no memoized twin at all, and two of those three were `2^n` waiting to be found: the machine's forced recursive call and the universe-erased projection a `Nat` comparison takes.
@@ -688,8 +674,12 @@ enum Mode {
     RewritingUniverses(Rewrite),
     /// A level-level hook, visiting only nodes that carry universe data.
     RewritingLevels(LevelRewrite),
-    /// [`Mode::RewritingLevels`] over *every* node: a ground `Type 0` carries no universe data and is invisible to the universes-only walks, but a key that aligns levels by position has to see it — see [`strip_universe_levels`].
-    StrippingLevels(LevelRewrite),
+    /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children each with the universe-binder depth it sits at below the node, and the levels each with theirs. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
+    MaskingLevels {
+        placeholder: Term,
+        children: Vec<(usize, Term)>,
+        levels: Vec<(usize, Level)>,
+    },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
     /// Hash-consing: replace each rebuilt node with the canonical node of its structure. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
@@ -802,12 +792,18 @@ where
         }
     }
 
-    pub(crate) fn stripping_levels(visit: F, rewrite: LevelRewrite) -> Self {
+    /// Like [`masking`](Self::masking), additionally standing the node's own levels down — see [`Mode::MaskingLevels`] — for [`Visit::take_masked_levels`].
+    pub(crate) fn masking_levels(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::StrippingLevels(rewrite),
+            mode: Mode::MaskingLevels {
+                placeholder,
+                children: Vec::new(),
+                levels: Vec::new(),
+            },
+            // Masking never descends past one level, so there is nothing to revisit.
             memo: Memo::None,
         }
     }
@@ -876,9 +872,12 @@ where
             // Every other level-bearing container is removed structurally in `Subterm::traverse`; this is the unavoidable payload of Core's still-level-indexed `Type` variant, not an erasure sentinel.
             return Level::zero();
         }
+        let universe_depth = self.universe_depth;
         match &mut self.mode {
-            Mode::RewritingLevels(rewrite) | Mode::StrippingLevels(rewrite) => {
-                rewrite(self.universe_depth, level)
+            Mode::RewritingLevels(rewrite) => rewrite(universe_depth, level),
+            Mode::MaskingLevels { levels, .. } => {
+                levels.push((universe_depth, level.clone()));
+                Level::constant(1)
             }
             _ => level.clone(),
         }
@@ -886,6 +885,7 @@ where
 
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
         let term_depth = self.term_depth;
+        let universe_depth = self.universe_depth;
         match &mut self.mode {
             Mode::Rewriting(rewrite) | Mode::RewritingUniverses(rewrite) => {
                 rewrite(term_depth, term)
@@ -897,10 +897,17 @@ where
                 children.push(term.clone());
                 Some(placeholder.clone())
             }
+            Mode::MaskingLevels {
+                placeholder,
+                children,
+                ..
+            } => {
+                children.push((universe_depth, term.clone()));
+                Some(placeholder.clone())
+            }
             Mode::Plain
             | Mode::Pruning
             | Mode::RewritingLevels(_)
-            | Mode::StrippingLevels(_)
             | Mode::ErasingUniverses
             | Mode::Sharing(_) => None,
         }
@@ -911,6 +918,19 @@ where
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),
             _ => Vec::new(),
+        }
+    }
+
+    /// What `Mode::MaskingLevels` stood down, leaving the visit ready for another node.
+    pub(crate) fn take_masked_levels(&mut self) -> MaskedLevels {
+        match &mut self.mode {
+            Mode::MaskingLevels {
+                children, levels, ..
+            } => MaskedLevels {
+                children: mem::take(children),
+                levels: mem::take(levels),
+            },
+            _ => MaskedLevels::default(),
         }
     }
 
