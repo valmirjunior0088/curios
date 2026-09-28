@@ -588,10 +588,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-algebra"
+version = "0.15.3"
+dependencies = [
+ "curios-num",
+]
+
+[[package]]
 name = "curios-analysis"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
+ "curios-algebra",
  "curios-analysis",
  "curios-cert",
  "curios-core",
@@ -628,6 +636,7 @@ name = "curios-cert"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
+ "curios-algebra",
  "curios-analysis",
  "curios-archive",
  "curios-core",
@@ -651,6 +660,7 @@ name = "curios-core"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
+ "curios-algebra",
  "curios-archive",
  "curios-num",
  "curios-print",
@@ -672,6 +682,7 @@ name = "curios-elab"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
+ "curios-algebra",
  "curios-analysis",
  "curios-archive",
  "curios-cert",

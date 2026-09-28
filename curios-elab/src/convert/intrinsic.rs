@@ -7,8 +7,9 @@
 use {
     super::Convert,
     crate::Context,
+    curios_algebra::{Conclusion, Deduction},
     curios_core::{
-        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, align_comparisons,
+        Intrinsic, Nat, Operand, ReduceError, Subterm, Term, Var, Visit, align_comparisons,
         decide_bool, int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool,
         peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
@@ -33,7 +34,7 @@ pub(crate) fn convert_intrinsic(
     };
     let this = materialized(context, this);
     let that = materialized(context, that);
-    // **A pair of `Nat`s decides how much of itself to build** — the kernel's rule, stated once more here because the two checkers keep their strategies apart on purpose. Both sides arrived at weak-head form. A literal against a sum with nothing left to force clashes from the head; anything else is forced to its linear combination first, and the peel below reads that pair. A `Stuck` verdict then falls into the operand congruence on the normalized operands rather than re-enqueueing the pair, which would come back here.
+    // **A pair of `Nat`s decides how much of itself to build** — the kernel's rule, stated once more here because the two checkers keep their strategies apart on purpose. Both sides arrived at weak-head form. A literal against a sum with nothing left to force clashes from the head; anything else is forced to its linear combination first, and the peel below reads that pair. An `Undecided` verdict then falls into the operand congruence on the normalized operands rather than re-enqueueing the pair, which would come back here.
     // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them, and it is asked for here by name. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so the peel decides those as it always did.
     let as_intrinsic = |term: &Term| match &**term {
         Subterm::Intrinsic(intrinsic) => Some(intrinsic.clone()),
@@ -113,25 +114,27 @@ pub(crate) fn convert_intrinsic(
         Some(pair) => pair,
         None => (this, that),
     };
-    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`), `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves, and two stuck `get`s are one element when they read one position of one root, however many windows either reads it through. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
-    if let Some(peel) = peel_monomial(&this, &that)
-        .or_else(|| peel_nat_pair(&this, &that))
-        .or_else(|| peel_int_pair(&this, &that))
-        .or_else(|| peel_bin(&this, &that))
-        .or_else(|| peel_list(&this, &that))
-        .or_else(|| peel_bool(&this, &that))
-        .or_else(|| peel_symmetric(&this, &that))
-        .or_else(|| peel_position(&this, &that))
-    {
-        match peel {
-            Peel::Equal => return Ok(true),
-            Peel::Clash => return Ok(false),
-            Peel::Continue(left, right) => {
+    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`), `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves, and two stuck `get`s are one element when they read one position of one root, however many windows either reads it through. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Undecided` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
+    if let Some(conclusion) = peel_monomial(&this, &that).or_else(|| {
+        peel_nat_pair(&this, &that)
+            .or_else(|| peel_int_pair(&this, &that))
+            .or_else(|| peel_bin(&this, &that))
+            .or_else(|| peel_list(&this, &that))
+            .or_else(|| peel_bool(&this, &that))
+            .or_else(|| peel_symmetric(&this, &that))
+            .or_else(|| peel_position(&this, &that))
+            .map(Conclusion::from)
+    }) {
+        match conclusion {
+            Conclusion::Equal => return Ok(true),
+            Conclusion::Impossible => return Ok(false),
+            // A sufficient residual is checked exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
+            Conclusion::Equivalent((left, right)) | Conclusion::Sufficient((left, right)) => {
                 cmp.enqueue(Term::type_ground(), left, right);
                 return Ok(true);
             }
             // **The `Nat` peel's one unforced shape**, retried once with each summand's own arguments forced. The fold leaves a stuck application's arguments as written, so two summands that differ only inside their heads never pair; forcing them here is `normalize_bool`'s demand for the other carrier, and it costs nothing on any pair that already decided — this arm is reached only when the peel found nothing to cancel. A retry that still finds nothing falls through to the congruence below on the *original* spelling, so nothing downstream meets a respelled sum.
-            Peel::Stuck => {
+            Conclusion::Undecided => {
                 if peel_nat_pair(&this, &that).is_some() {
                     let forced_this = Nat::normalize_atoms(context, Term::intrinsic(this.clone()))?;
                     let forced_that = Nat::normalize_atoms(context, Term::intrinsic(that.clone()))?;
@@ -142,13 +145,13 @@ pub(crate) fn convert_intrinsic(
                         && let Some(peel) = peel_nat_pair(&forced_this, &forced_that)
                     {
                         match peel {
-                            Peel::Equal => return Ok(true),
-                            Peel::Clash => return Ok(false),
-                            Peel::Continue(left, right) => {
+                            Deduction::Equal => return Ok(true),
+                            Deduction::Impossible => return Ok(false),
+                            Deduction::Equivalent((left, right)) => {
                                 cmp.enqueue(Term::type_ground(), left, right);
                                 return Ok(true);
                             }
-                            Peel::Stuck => {}
+                            Deduction::Undecided => {}
                         }
                     }
                 }

@@ -17,6 +17,9 @@ pub use concept::*;
 mod module;
 pub use module::*;
 
+mod atoms;
+use atoms::*;
+
 mod nat;
 pub use nat::*;
 

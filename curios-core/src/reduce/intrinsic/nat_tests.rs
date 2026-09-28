@@ -2,7 +2,8 @@
 
 use {
     super::{Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split},
-    crate::{Free, Intrinsic, Peel, Subterm, Term, peel_nat},
+    crate::{Free, Intrinsic, Subterm, Term, peel_nat},
+    curios_algebra::Deduction,
     curios_num::Natural,
 };
 
@@ -267,7 +268,7 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
     );
 
     assert!(
-        matches!(peel, Peel::Equal),
+        matches!(peel, Deduction::Equal),
         "`g<0> + 1` and `g<1> + 1` differ only in a level, which is not part of a number",
     );
 
@@ -279,7 +280,7 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
     );
 
     assert!(
-        matches!(peel, Peel::Continue(..)),
+        matches!(peel, Deduction::Equivalent(_)),
         "`g<0>(x) + 1` and `g<0>(y) + 1` are undecided, not one number",
     );
 }

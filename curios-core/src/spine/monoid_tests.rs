@@ -52,7 +52,7 @@ fn peel_bin_decides_a_split_literal_run_against_a_whole_one() {
         };
 
         assert!(
-            matches!(peel_bin(&split, &whole), Some(Peel::Equal)),
+            matches!(peel_bin(&split, &whole), Some(Deduction::Equal)),
             "{grain:?}: a run split across operands is the run"
         );
     }
@@ -85,7 +85,7 @@ fn peel_bin_decides_a_left_nested_concat_against_a_flat_one() {
     };
 
     assert!(
-        matches!(peel_bin(&nested, &flat), Some(Peel::Equal)),
+        matches!(peel_bin(&nested, &flat), Some(Deduction::Equal)),
         "nesting is associativity, and the peel is flat"
     );
 }
@@ -105,7 +105,7 @@ fn peel_list_decides_a_split_literal_run_against_a_whole_one() {
     };
 
     assert!(
-        matches!(peel_list(&split, &whole), Some(Peel::Equal)),
+        matches!(peel_list(&split, &whole), Some(Deduction::Equal)),
         "a run split across segments is the run"
     );
 }
@@ -120,12 +120,15 @@ fn peel_bin_still_clashes_a_reordered_run() {
     let swapped = bytes([0x31, 0x30]);
 
     assert!(
-        matches!(peel_bin(&split, as_intrinsic(&swapped)), Some(Peel::Clash)),
+        matches!(
+            peel_bin(&split, as_intrinsic(&swapped)),
+            Some(Deduction::Impossible)
+        ),
         "`0x30 ++ 0x31` is not `0x31 0x30`"
     );
 }
 
-// **A nesting the prefix step cannot enter still comes back flat.** Two sides whose leading chunks are unlike — convertible or not, the peel cannot tell — used to decline as `Stuck` with the nesting intact, and the caller's shape congruence then refused a two-operand concatenation against a three-operand one before comparing a single chunk. Regrouping is the identity on values, so both segment lists ride back on `Continue` and the caller's next round compares one operand list against another.
+// **A nesting the prefix step cannot enter still comes back flat.** Two sides whose leading chunks are unlike — convertible or not, the peel cannot tell — used to decline as `Undecided` with the nesting intact, and the caller's shape congruence then refused a two-operand concatenation against a three-operand one before comparing a single chunk. Regrouping is the identity on values, so both segment lists ride back on `Equivalent` and the caller's next round compares one operand list against another.
 #[test]
 fn peel_bin_regroups_a_nested_concat_whose_leading_chunks_differ() {
     let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
@@ -140,7 +143,7 @@ fn peel_bin_regroups_a_nested_concat_whose_leading_chunks_differ() {
     ]);
     let flat = cat(vec![z, bytes([0x30]), y.clone()]);
 
-    let Some(Peel::Continue(left, right)) = peel_bin(&nested, &flat) else {
+    let Some(Deduction::Equivalent((left, right))) = peel_bin(&nested, &flat) else {
         panic!("a nesting against a flat spelling regroups")
     };
     assert_eq!(left, Term::intrinsic(cat(vec![x, bytes([0x30]), y])));
@@ -164,14 +167,14 @@ fn peel_list_regroups_an_append_whose_leading_chunk_differs() {
     let appended = Intrinsic::list_append(elem.clone(), xs.clone(), e);
     let flat = cat(vec![ys, single.clone()]);
 
-    let Some(Peel::Continue(left, right)) = peel_list(&appended, &flat) else {
+    let Some(Deduction::Equivalent((left, right))) = peel_list(&appended, &flat) else {
         panic!("an append against a flat spelling regroups")
     };
     assert_eq!(left, Term::intrinsic(cat(vec![xs, single])));
     assert_eq!(right, Term::intrinsic(flat));
 }
 
-// The termination witness for the two above: a `Continue` hands back flat spellings, so the round after it is this pair, and it must decline rather than regroup again. Both sides are already their own segment lists, so nothing peels and nothing regroups.
+// The termination witness for the two above: an `Equivalent` hands back flat spellings, so the round after it is this pair, and it must decline rather than regroup again. Both sides are already their own segment lists, so nothing peels and nothing regroups.
 #[test]
 fn peel_bin_declines_a_flat_pair_whose_leading_chunks_differ() {
     let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
@@ -184,7 +187,7 @@ fn peel_bin_declines_a_flat_pair_whose_leading_chunks_differ() {
     let that = cat(vec![z, bytes([0x30]), y]);
 
     assert!(
-        matches!(peel_bin(&this, &that), Some(Peel::Stuck)),
+        matches!(peel_bin(&this, &that), Some(Deduction::Undecided)),
         "a flat pair with unlike heads is the caller's"
     );
 }
@@ -206,7 +209,7 @@ fn peel_list_declines_a_flat_pair_whose_leading_chunks_differ() {
     let that = cat(vec![ys, single]);
 
     assert!(
-        matches!(peel_list(&this, &that), Some(Peel::Stuck)),
+        matches!(peel_list(&this, &that), Some(Deduction::Undecided)),
         "a flat pair with unlike heads is the caller's"
     );
 }
@@ -223,7 +226,7 @@ fn peel_bin_clashes_a_positive_run_behind_a_symbolic_chunk_against_the_identity(
     assert!(
         matches!(
             peel_bin(&suffixed, as_intrinsic(&bytes([]))),
-            Some(Peel::Clash)
+            Some(Deduction::Impossible)
         ),
         "`x ++ x[05]` is never empty"
     );
@@ -240,7 +243,7 @@ fn peel_bin_clashes_a_symbolic_byte_against_the_identity() {
     };
 
     assert!(
-        matches!(peel_bin(&appended, &base), Some(Peel::Clash)),
+        matches!(peel_bin(&appended, &base), Some(Deduction::Impossible)),
         "`append(x, c)` is one byte longer than `x`"
     );
 }
@@ -285,7 +288,7 @@ fn peel_bin_decides_a_fill_of_a_successor_against_the_cons_it_equals() {
         };
 
         assert!(
-            matches!(peel_bin(&filled, &consed), Some(Peel::Equal)),
+            matches!(peel_bin(&filled, &consed), Some(Deduction::Equal)),
             "{grain:?}: a fill of a successor is its atom over a shorter fill"
         );
     }
@@ -315,7 +318,7 @@ fn peel_bin_declines_a_fill_whose_count_is_not_a_successor() {
     };
 
     assert!(
-        !matches!(peel_bin(&fill, &consed), Some(Peel::Clash)),
+        !matches!(peel_bin(&fill, &consed), Some(Deduction::Impossible)),
         "a fill that might be empty exposes no generator to clash on"
     );
 }

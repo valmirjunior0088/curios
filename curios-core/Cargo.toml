@@ -21,3 +21,4 @@ curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
 curios-print = { workspace = true }
 curios-num = { workspace = true }
+curios-algebra = { workspace = true }

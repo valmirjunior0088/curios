@@ -25,11 +25,12 @@ pub use truth::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Peel, Subterm, Telescope, Term,
+        Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Subterm, Telescope, Term,
         int_cancel_common, int_negate, int_of_nat, int_preimage, int_product, int_split_by_sign,
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         project_erased_universes,
     },
+    curios_algebra::Deduction,
     curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
@@ -1108,9 +1109,11 @@ pub fn reduce_intrinsic(
 
             // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
             match peel_bin(&spine(&left), &spine(&right)) {
-                Some(Peel::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
-                Some(Peel::Clash) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(false))),
-                Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
+                Some(Deduction::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
+                Some(Deduction::Impossible) => {
+                    return Ok(Subterm::Intrinsic(Intrinsic::Bool(false)));
+                }
+                Some(Deduction::Equivalent(_)) | Some(Deduction::Undecided) | None => {}
             }
 
             Ok(Subterm::Intrinsic(Intrinsic::BinEql(grain, left, right)))

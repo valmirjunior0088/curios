@@ -45,14 +45,14 @@ fn peel_position_decides_a_position_through_a_window_equal() {
     let inside = list_get(window.clone(), i.clone());
     let named = list_get(xs.clone(), add(i.clone(), s.clone()));
     assert!(
-        matches!(peel_position(&inside, &named), Some(Peel::Equal)),
+        matches!(peel_position(&inside, &named), Some(Deduction::Equal)),
         "`get(slice(xs, s, l), i)` is `get(xs, i + s)`"
     );
 
     let nested = list_get(list_window(window, t.clone(), i.clone()), i.clone());
     let deep = list_get(xs.clone(), add(add(s.clone(), t.clone()), i.clone()));
     assert!(
-        matches!(peel_position(&nested, &deep), Some(Peel::Equal)),
+        matches!(peel_position(&nested, &deep), Some(Deduction::Equal)),
         "a window of a window adds both starts"
     );
 
@@ -69,7 +69,7 @@ fn peel_position_decides_a_position_through_a_window_equal() {
                 &bin_get(Grain::X, bytes_window, i.clone()),
                 &bin_get(Grain::X, xs, add(s, i)),
             ),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "the packed carrier reads a position the same way"
     );
@@ -86,14 +86,14 @@ fn peel_position_declines_an_unlike_position_or_base_without_clashing() {
     assert!(
         matches!(
             peel_position(&inside, &list_get(xs.clone(), past)),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "position `s + 1` is not the window's first"
     );
     assert!(
         matches!(
             peel_position(&inside, &list_get(ys, s.clone())),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "another base is not this one"
     );
@@ -122,7 +122,7 @@ fn peel_list_decides_a_window_of_a_window_against_the_window_it_names() {
     assert!(
         matches!(
             peel_list(as_intrinsic(&nested), as_intrinsic(&named)),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "`slice(slice(xs, s, l), t, m)` is `slice(xs, s + t, m)`"
     );
@@ -131,7 +131,7 @@ fn peel_list_decides_a_window_of_a_window_against_the_window_it_names() {
     assert!(
         matches!(
             peel_list(as_intrinsic(&nested), as_intrinsic(&shifted)),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "a start one past the named one is another window"
     );
@@ -160,7 +160,7 @@ fn peel_position_decides_a_position_inside_an_operand_of_a_concatenation_equal()
     assert!(
         matches!(
             peel_position(&left, &list_get(xs.clone(), i.clone())),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "`get(xs ++ ys, i)` is `get(xs, i)`"
     );
@@ -172,7 +172,7 @@ fn peel_position_decides_a_position_inside_an_operand_of_a_concatenation_equal()
     assert!(
         matches!(
             peel_position(&list_get(ys, i.clone()), &middle),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "`get(ys, i)` is `get(xs ++ ys ++ zs, i + len(xs))`, whichever side the concatenation is on"
     );
@@ -187,7 +187,7 @@ fn peel_position_decides_a_position_inside_an_operand_of_a_concatenation_equal()
                 &bin_get(Grain::X, packed, i.clone()),
                 &bin_get(Grain::X, xs.clone(), i.clone())
             ),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "the packed carrier reads an operand the same way"
     );
@@ -202,7 +202,7 @@ fn peel_position_decides_a_position_inside_an_operand_of_a_concatenation_equal()
     assert!(
         matches!(
             peel_list(as_intrinsic(&through), as_intrinsic(&within)),
-            Some(Peel::Equal)
+            Some(Deduction::Equal)
         ),
         "`slice(xs ++ ys, s, n)` is `slice(xs, s, n)`"
     );
@@ -220,7 +220,7 @@ fn peel_position_declines_an_operand_read_at_another_offset() {
                 &list_get(joined.clone(), i.clone()),
                 &list_get(ys, i.clone())
             ),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "`ys` begins at `len(xs)`, not at `0`"
     );
@@ -229,14 +229,14 @@ fn peel_position_declines_an_operand_read_at_another_offset() {
     assert!(
         matches!(
             peel_position(&list_get(joined.clone(), past), &list_get(xs, i.clone())),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "position `i + 1` is not `i`"
     );
     assert!(
         matches!(
             peel_position(&list_get(joined, i.clone()), &list_get(zs, i)),
-            Some(Peel::Stuck)
+            Some(Deduction::Undecided)
         ),
         "a base the concatenation does not hold is not one of its operands"
     );

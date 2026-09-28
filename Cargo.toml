@@ -6,6 +6,7 @@ members = [
     "curios-archive-derive",
     "curios-utilities",
     "curios-num",
+    "curios-algebra",
     "curios-parse",
     "curios-print",
     "curios-wasm",
@@ -56,6 +57,7 @@ curios-archive-derive = { path = "curios-archive-derive" }
 curios-profile = { path = "curios-profile" }
 curios-utilities = { path = "curios-utilities" }
 curios-num = { path = "curios-num" }
+curios-algebra = { path = "curios-algebra" }
 curios-parse = { path = "curios-parse" }
 curios-print = { path = "curios-print" }
 curios-wasm = { path = "curios-wasm" }

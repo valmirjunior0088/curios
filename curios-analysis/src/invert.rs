@@ -9,7 +9,8 @@ mod tests;
 
 use {
     crate::{Judge, locals_beneath},
-    curios_core::{Free, Peel, Subterm, Telescope, Term, peel_intrinsic},
+    curios_algebra::Deduction,
+    curios_core::{Free, Subterm, Telescope, Term, peel_intrinsic},
     std::collections::BTreeSet,
 };
 
@@ -163,7 +164,7 @@ fn invert_with<J: Judge>(
 
 /// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, restored here as a *semantic* test in place of the old syntactic non-linearity refusal. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution.
 ///
-/// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Clash`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
+/// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Impossible`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
 ///
 /// Anything short of either answer — forcings that neither convert nor clash, a `Blocked`, or a binder whose type is out of scope, where there is nothing to have compared at — drops that binder's solutions, conservatively.
 fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<Invert, J::Error> {
@@ -243,10 +244,10 @@ fn unify_index<J: Judge>(
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
 
         (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => match peel_intrinsic(this, that) {
-            Some(Peel::Equal) => Ok(Step::Ok),
-            Some(Peel::Clash) => Ok(Step::Clash),
-            Some(Peel::Stuck) => Ok(Step::Refuse),
-            Some(Peel::Continue(left, right)) => {
+            Some(Deduction::Equal) => Ok(Step::Ok),
+            Some(Deduction::Impossible) => Ok(Step::Clash),
+            Some(Deduction::Undecided) => Ok(Step::Refuse),
+            Some(Deduction::Equivalent((left, right))) => {
                 unify_index(judge, &left, &right, flex, false, solve_keys, solutions)
             }
             None => Ok(Step::Refuse),

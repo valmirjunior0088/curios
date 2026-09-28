@@ -7,7 +7,8 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Cost, Intrinsic, Nat, Recombination, ReduceError, Reducer, Subterm, Term},
+    super::{Atoms, Cost, Intrinsic, Nat, Recombination, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{Cancelled, Combination, Progress, Summand},
     curios_num::{Integer, Natural},
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -74,29 +75,51 @@ pub(crate) fn int_monomial(summand: &Term) -> Monomial {
     (coefficient, factors)
 }
 
-/// `summands` as a linear combination: like monomials merged by adding their coefficients, in first-appearance order, keyed up to universe instances as `Nat::linear` keys, and a monomial whose coefficient cancelled to zero dropped.
+/// `summands` as a linear combination: like monomials merged by adding their coefficients, in first-appearance order, each factor an atom under the carrier's identity (`crate::atoms`) and a monomial its factors in canonical order, and a monomial whose coefficient cancelled to zero dropped. The collection is `curios-algebra`'s; a merged monomial keeps its first appearance's factors.
 pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomial> {
-    let mut combination: Vec<Monomial> = Vec::new();
-    let mut index_of: HashMap<Vec<Term>, usize> = HashMap::new();
-    for summand in summands {
-        let (coefficient, factors) = int_monomial(&summand);
-        if coefficient.is_zero() {
-            continue;
-        }
-        let key = factors
-            .iter()
-            .map(crate::project_erased_universes)
-            .collect::<Vec<_>>();
-        match index_of.get(&key) {
-            Some(&index) => combination[index].0 = combination[index].0.clone() + coefficient,
-            None => {
-                index_of.insert(key, combination.len());
-                combination.push((coefficient, factors));
-            }
-        }
-    }
-    combination.retain(|(coefficient, _)| !coefficient.is_zero());
+    let summands: Vec<Term> = summands.into_iter().collect();
+    let mut atoms = Atoms::default();
+    int_monomials_of(int_combination(&mut atoms, zero(), &summands))
+}
+
+/// A reduced summand as `curios-algebra` reads it: its coefficient, its factors as atoms in canonical order, and those factors as the origin a rebuild restores. `None` for a summand whose coefficient is zero, which is no summand.
+fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec<Term>>> {
+    let (coefficient, factors) = int_monomial(summand);
+    (!coefficient.is_zero()).then(|| Summand {
+        coefficient,
+        monomial: curios_algebra::Monomial::new(
+            factors.iter().map(|factor| atoms.numeric(factor)).collect(),
+        ),
+        origin: factors,
+    })
+}
+
+/// `constant` beside the combination of `summands`, like monomials merged and zeros dropped.
+fn int_combination(
+    atoms: &mut Atoms,
+    constant: Integer,
+    summands: &[Term],
+) -> Combination<Integer, Vec<Term>> {
+    let read = summands
+        .iter()
+        .filter_map(|summand| int_summand(atoms, summand))
+        .collect::<Vec<_>>();
+    Combination::collect(constant, read).without_zeros()
+}
+
+/// A combination's summands as the coefficients and factors they were read from.
+fn int_monomials_of(combination: Combination<Integer, Vec<Term>>) -> Vec<Monomial> {
     combination
+        .summands
+        .into_iter()
+        .map(|summand| (summand.coefficient, summand.origin))
+        .collect()
+}
+
+/// A combination written back into the normal form.
+fn int_from_combination(combination: Combination<Integer, Vec<Term>>) -> Term {
+    let constant = combination.constant.clone();
+    int_from_linear(constant, int_monomials_of(combination))
 }
 
 /// The bare monomial over `factors`, nested to the left in the order given.
@@ -433,85 +456,49 @@ fn int_normalize_within(
 
 /// Strip what two reduced terms carry in common, so residuals decide where the originals could not — `Nat::cancel_common` over a group, where every term moves to whichever side keeps its coefficient positive: `i + 2 · j - k` against `j` becomes `i + j` against `k`, and a pair that differs in nothing becomes `0` against `0`. A pair sharing no monomial and at most one nonzero constant is handed back untouched, for the stability `Nat::cancel_common` records: a rebuilt sum is a different term, and a stuck comparison rebuilt from one would never be found again.
 ///
-/// Sound for every reader because ℤ under `+` is a group: every order relation and equality reads through `a ⋈ b` iff `a - b ⋈ 0`, and splitting the difference by sign is only adding one term to both sides of that.
+/// Sound for every reader because ℤ under `+` is a group: every order relation and equality reads through `a ⋈ b` iff `a - b ⋈ 0`, and splitting the difference by sign is only adding one term to both sides of that. The mathematics is `curios-algebra`'s `Combination::cancel_common`; what is decided here is which terms are one atom, and which terms the residuals are rebuilt from.
 pub fn int_cancel_common(left: &Term, right: &Term) -> (Term, Term) {
+    int_rebuild_cancelled(int_cancellation(left, right), left, right)
+}
+
+/// `left` against `right` read over one table of atoms, with what they share split off by sign.
+pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, Vec<Term>> {
+    let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);
     let (constant_right, summands_right) = int_terms(right);
-    let combination_left = int_linear(summands_left);
-    let combination_right = int_linear(summands_right);
+    let left = int_combination(&mut atoms, constant_left, &summands_left);
+    let right = int_combination(&mut atoms, constant_right, &summands_right);
+    left.cancel_common(right)
+}
 
-    let key = |factors: &[Term]| {
-        factors
-            .iter()
-            .map(crate::project_erased_universes)
-            .collect::<Vec<_>>()
-    };
-    let shared_monomial = combination_left.iter().any(|(_, factors)| {
-        let wanted = key(factors);
-        combination_right
-            .iter()
-            .any(|(_, candidate)| key(candidate) == wanted)
-    });
-    if !shared_monomial && (constant_left.is_zero() || constant_right.is_zero()) {
-        return (left.clone(), right.clone());
+/// The terms a cancellation of `left` against `right` leaves: the two operands themselves where it took nothing off.
+pub(crate) fn int_rebuild_cancelled(
+    cancelled: Cancelled<Integer, Vec<Term>>,
+    left: &Term,
+    right: &Term,
+) -> (Term, Term) {
+    match cancelled.progress {
+        Progress::Nothing => (left.clone(), right.clone()),
+        Progress::Constant | Progress::Summands => (
+            int_from_combination(cancelled.left),
+            int_from_combination(cancelled.right),
+        ),
     }
-
-    int_split(
-        constant_left - constant_right,
-        combination_left,
-        combination_right,
-    )
 }
 
 /// The difference of two reduced terms split by sign for every pair, where [`int_cancel_common`] splits it only once something cancels: every monomial on the side that keeps its coefficient positive, the constant likewise, so two pairs with one difference are one pair — `0 < j - i` and `i < j`, `-i < -j` and `j < i`.
 ///
 /// **Conversion's spelling, never the fold's.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` records for swapped operands. So the one reader is `align_comparisons`, probe-side, where respelling records nothing.
 pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
+    let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);
     let (constant_right, summands_right) = int_terms(right);
-    int_split(
-        constant_left - constant_right,
-        int_linear(summands_left),
-        int_linear(summands_right),
+    let (split_left, split_right) = int_combination(&mut atoms, constant_left, &summands_left)
+        .split_by_sign(int_combination(&mut atoms, constant_right, &summands_right));
+    (
+        int_from_combination(split_left),
+        int_from_combination(split_right),
     )
-}
-
-/// `left - right` over a constant, split by sign into the two sides it is spelled as.
-fn int_split(
-    constant: Integer,
-    combination_left: Vec<Monomial>,
-    combination_right: Vec<Monomial>,
-) -> (Term, Term) {
-    let mut difference = combination_left;
-    difference.extend(
-        combination_right
-            .into_iter()
-            .map(|(coefficient, factors)| (-coefficient, factors)),
-    );
-    let difference = int_linear(
-        difference
-            .into_iter()
-            .map(|(coefficient, factors)| int_scaled(coefficient, &factors)),
-    );
-
-    let mut kept_left = Vec::new();
-    let mut kept_right = Vec::new();
-    for (coefficient, factors) in difference {
-        match coefficient > zero() {
-            true => kept_left.push((coefficient, factors)),
-            false => kept_right.push((-coefficient, factors)),
-        }
-    }
-    match constant > zero() {
-        true => (
-            int_from_linear(constant, kept_left),
-            int_from_linear(zero(), kept_right),
-        ),
-        false => (
-            int_from_linear(zero(), kept_left),
-            int_from_linear(-constant, kept_right),
-        ),
-    }
 }
 
 /// Whether a reduced term is one of the shapes the cancellation reads: a literal, a sum spine, or a product.

@@ -14,14 +14,14 @@ fn peel_bool_decides_a_commuted_and_reassociated_conjunction_equal() {
     let nested = and(Term::intrinsic(and(x.clone(), y.clone())), z.clone());
     let commuted = and(z, Term::intrinsic(and(y.clone(), x.clone())));
     assert!(
-        matches!(peel_bool(&nested, &commuted), Some(Peel::Equal)),
+        matches!(peel_bool(&nested, &commuted), Some(Deduction::Equal)),
         "`(x && y) && z` and `z && (y && x)` are one value"
     );
 
     let repeated = and(Term::intrinsic(and(x.clone(), y.clone())), x.clone());
     let once = and(y, x);
     assert!(
-        matches!(peel_bool(&repeated, &once), Some(Peel::Equal)),
+        matches!(peel_bool(&repeated, &once), Some(Deduction::Equal)),
         "a repeated leaf is the leaf"
     );
 }
@@ -34,7 +34,7 @@ fn peel_bool_declines_unlike_leaf_sets_without_clashing() {
     let this = and(x.clone(), y);
     let that = and(x.clone(), z);
     assert!(
-        matches!(peel_bool(&this, &that), Some(Peel::Stuck)),
+        matches!(peel_bool(&this, &that), Some(Deduction::Undecided)),
         "`x && y` against `x && z` is the congruence's"
     );
 
@@ -53,13 +53,13 @@ fn peel_symmetric_decides_a_swapped_comparison_equal() {
     let this = Intrinsic::nat_eql(x.clone(), y.clone());
     let that = Intrinsic::nat_eql(y.clone(), x.clone());
     assert!(
-        matches!(peel_symmetric(&this, &that), Some(Peel::Equal)),
+        matches!(peel_symmetric(&this, &that), Some(Deduction::Equal)),
         "`x == y` and `y == x` are one value"
     );
 
     let unlike = Intrinsic::nat_eql(x.clone(), z);
     assert!(
-        matches!(peel_symmetric(&this, &unlike), Some(Peel::Stuck)),
+        matches!(peel_symmetric(&this, &unlike), Some(Deduction::Undecided)),
         "`x == y` against `x == z` is the congruence's"
     );
 
@@ -91,7 +91,7 @@ fn peel_symmetric_decides_a_swapped_bitwise_operation_equal() {
         ),
     ] {
         assert!(
-            matches!(peel_symmetric(&this, &that), Some(Peel::Equal)),
+            matches!(peel_symmetric(&this, &that), Some(Deduction::Equal)),
             "a bitwise operation is one value with its operands swapped"
         );
     }

@@ -218,7 +218,7 @@ The first complete arithmetic path determines whether the proposed interfaces ac
 
 ## Baseline inventory
 
-Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checked off row by row as the stages move them. Line numbers are that tree's.
+Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checked off row by row as the stages move them: a row whose stage column reads **moved** has its mathematics in `curios-algebra`, with what stays in Core named beside it. Line numbers are that tree's.
 
 **Callers.** F — the fold, `reduce_intrinsic` (`curios-core/src/reduce/intrinsic.rs`), which both reducers run. C — both intrinsic converters (`curios-elab/src/convert/intrinsic.rs`, `curios-cert/src/kernel/convert/intrinsic.rs`). O — both outer Boolean probes (`curios-elab/src/convert.rs:1667`, `curios-cert/src/kernel/convert.rs:501`). I — inversion, through `peel_intrinsic` (`curios-analysis/src/invert.rs:245`). P — both refinement probes (`curios-elab/src/reduce.rs`, `curios-cert/src/kernel/whnf.rs`). V — the elaborator's packed-literal view. W — `spine`'s own window and position reasoning.
 
@@ -231,14 +231,14 @@ Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checke
 | Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Successor-floor form | `Nat::decompose`, `rebuild` (`nat.rs:114`, `:124`); the `Nat(Succ)` arm | F, W | — | none | EQ; the representation, staying Core's | every `Nat` test | Core |
-| Sum normal form: like terms merged, first-appearance order | `Nat::summands` `:149`, `literal_factor` `:169`, `linear` `:286`, `from_linear` `:447`, `sum_over_floor` `:311`, `sum` `:599`; the `NatAdd` arm | F, W | Proj on the monomial spine | every sum; uncharged | EQ; read-then-rebuild is the identity | grid "Nat under +" and "under \*"; `nat::tests::a_sum_in_normal_form_reads_back_as_itself` | 2 |
-| Common-addend cancellation, as a multiset | `Nat::cancel_common` `:619`; the `NatSub` arm; `classify_nat` (`spine.rs:217`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (a surviving floor against zero); cancelling nothing returns the inners untouched, less the shared floor | `nat::tests::cancellation_*`, `spine::nat_tests::peel_nat_*`, `laws_tests::every_nat_peel_verdict_*` | 2 |
-| Signed sum normal form | `int_terms`, `int_monomial`, `int_linear`, `int_from_linear`, `int_sum`, `int_merged`, `int_negate` (`int.rs:37`–`:318`); the `IntAdd`, `IntSub` arms | F | Proj on the sorted factor vector | operand width, two literals only | EQ; a subtraction is a negative coefficient | `int::tests`, grid "Int" | 2 |
-| Signed cancellation | `int_cancel_common` `:437`; `peel_int_pair` (`spine.rs:44`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (two unequal constants); untouched when nothing is shared | `int::tests::cancellation_*`, `laws_tests::every_int_peel_verdict_*` | 2 |
+| Sum normal form: like terms merged, first-appearance order | `Nat::summands` `:149`, `literal_factor` `:169`, `linear` `:286`, `from_linear` `:447`, `sum_over_floor` `:311`, `sum` `:599`; the `NatAdd` arm | F, W | Proj on the monomial spine | every sum; uncharged | EQ; read-then-rebuild is the identity | grid "Nat under +" and "under \*"; `nat::tests::a_sum_in_normal_form_reads_back_as_itself` | **moved** in 2: `Combination::collect`; Core keeps `summands`, `from_linear` and the floor |
+| Common-addend cancellation, as a multiset | `Nat::cancel_common` `:619`; the `NatSub` arm; `classify_nat` (`spine.rs:217`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (a surviving floor against zero); cancelling nothing returns the inners untouched, less the shared floor | `nat::tests::cancellation_*`, `spine::nat_tests::peel_nat_*`, `laws_tests::every_nat_peel_verdict_*` | **moved** in 2: `Combination::cancel_common` and its `Deduction`; Core keeps the atoms and the rebuild |
+| Signed sum normal form | `int_terms`, `int_monomial`, `int_linear`, `int_from_linear`, `int_sum`, `int_merged`, `int_negate` (`int.rs:37`–`:318`); the `IntAdd`, `IntSub` arms | F | Proj on the sorted factor vector | operand width, two literals only | EQ; a subtraction is a negative coefficient | `int::tests`, grid "Int" | **moved** in 2: collection as `Nat`'s; Core keeps the reading and `int_from_linear` |
+| Signed cancellation | `int_cancel_common` `:437`; `peel_int_pair` (`spine.rs:44`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (two unequal constants); untouched when nothing is shared | `int::tests::cancellation_*`, `laws_tests::every_int_peel_verdict_*` | **moved** in 2: `Combination::cancel_common` and `split_by_sign` over `Integer`, and their `Deduction` |
 | Multiplication and the distribution gate | `Nat::multiply` `:210`, `scaled`, `spine`; `int_multiply` `:338`, `int_product` `:360`; the `NatMul`, `IntMul` arms | F | factors sorted by structural hash, interned | stuck when both sides hold two symbolic summands; operand width, and at `Int` a collection | EQ | grid "Nat under \*", `int::tests::a_product_*` | 3 |
 | Distribution on demand | `Nat::normalize` `:530`, `has_stuck_product` `:578`; `int_normalize` `:391`, `int_has_stuck_product` `:369` | C (first step), F (the comparisons) | as above | neither side a literal and a stuck product present; a collection and two nodes per product; memo by node identity | EQ | grid `(x + 1) * (y + 2)` rows | 3; the demand stays Core's |
 | The atom-argument retry | `Nat::normalize_atoms` `:489`, `force_arguments` `:506`, `ordered_sums` `:465` | C, on `peel_nat_pair`'s `Stuck` | sums reordered by structural hash | once, probe-side, falling back to the original spelling | EQ | grid `Eq(f(x + y) + g(y + z), …)` | 6; the forcing stays Core's |
-| Product-factor peel | `peel_monomial` (`spine.rs:93`) | C only | Proj, as a multiset | none | EQ on one multiset; SUF on one factor left each side; not in I | `spine::nat_tests::peel_monomial_*`, `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` | 2 (the type), 3 |
+| Product-factor peel | `peel_monomial` (`spine.rs:93`) | C only | Proj, as a multiset | none | EQ on one multiset; SUF on one factor left each side; not in I | `spine::nat_tests::peel_monomial_*`, `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` | the type **moved** in 2 (`Conclusion::Sufficient`, which `peel_intrinsic`'s `Deduction` cannot carry); the pairing, 3 |
 | Euclid recombination | `Nat::recombine` `:324`, `euclid_pair` `:354`, `same_monomial` `:403`, `same_factor` `:424`; `int_recombine` `:149`, `int_euclid_pair` `:179`, `int_same_factors` `:239` | F, in every merged sum | proof-insensitive quotient; at `Int` a copy counts only where every sign agrees | uncharged | EQ, shrinking only | grid "Nat under / and %", `Int` Euclid rows | 3 |
 
 ### Comparisons and defined operations
@@ -357,6 +357,26 @@ A probe confirmed both shapes. The twenty sites were not verified one by one, an
 | certification | `truth::decide_bool` | 0.03 s | 41 | 2 MB | |
 
 Nested spans overlap, so the rows do not add up.
+
+**After stage 2.** Collection and cancellation now come from `curios-algebra`. Every call count other than `nat::linear`'s is unchanged, and so is every verdict: the old implementations were kept as a debug-build oracle through the prelude's elaboration and certification and the affected suites, and never disagreed.
+
+| Stream | Span | Total | Calls | Allocated |
+| --- | --- | --- | --- | --- |
+| elaboration | `elaborate_and_zonk_with_prelude` | 111.0 s | 2 | 36 687 MB |
+| elaboration | `nat::cancel_common` | 3.17 s | 50 088 | 128 MB |
+| elaboration | `nat::sum_over_floor` | 3.15 s | 47 836 | 116 MB |
+| elaboration | `nat::linear` | 0.52 s | 50 521 | 32 MB |
+| certification | `recheck_module` | 42.1 s | 2 | 8 011 MB |
+| certification | `nat::cancel_common` | 1.61 s | 33 320 | 81 MB |
+| certification | `nat::sum_over_floor` | 1.24 s | 27 949 | 54 MB |
+
+What moved, and why:
+
+- **Cancellation allocates a tenth of what it did.** A summand is keyed once, as a handle, instead of being looked up by a linear scan over projected terms.
+- **`nat::linear` has fewer calls.** Cancellation collects through the algebra directly rather than through it.
+- **Collection allocates about a tenth more.** Each summand now carries a monomial vector, which is why `nat::sum_over_floor` rose from 107 MB to 116 MB.
+
+Totals are within noise.
 
 ## Deletion boundaries
 

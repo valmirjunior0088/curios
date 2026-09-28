@@ -13,7 +13,7 @@ fn peel_nat_decides_a_commuted_sum_equal() {
     );
 
     assert!(
-        matches!(peel, Peel::Equal),
+        matches!(peel, Deduction::Equal),
         "`x + y + 1` and `y + x + 1` are one number"
     );
 }
@@ -25,7 +25,10 @@ fn peel_nat_clashes_a_surviving_floor_against_the_identity() {
 
     let peel = peel_nat(&nat_of(2, x.clone()), &nat_of(1, x.clone()));
 
-    assert!(matches!(peel, Peel::Clash), "`x + 2` never equals `x + 1`");
+    assert!(
+        matches!(peel, Deduction::Impossible),
+        "`x + 2` never equals `x + 1`"
+    );
 }
 
 // The control against closing the clash above by clashing everything: a shared floor over *distinct* symbols cancels to a pair that may still be equal, so peeling must hand it on rather than decide it.
@@ -36,7 +39,7 @@ fn peel_nat_continues_where_the_residuals_may_still_agree() {
     let peel = peel_nat(&nat_of(1, x.clone()), &nat_of(1, y.clone()));
 
     assert!(
-        matches!(peel, Peel::Continue(..)),
+        matches!(peel, Deduction::Equivalent(_)),
         "`x` and `y` are undecided, not unequal"
     );
 }
@@ -61,7 +64,7 @@ fn peel_monomial_pairs_factors_by_identity_not_by_position() {
 
     assert!(matches!(
         peel_monomial(&expected, &actual),
-        Some(Peel::Continue(left, right)) if left == m && right == d
+        Some(Conclusion::Sufficient((left, right))) if left == m && right == d
     ));
 }
 
@@ -72,7 +75,10 @@ fn peel_monomial_decides_a_reordered_product_equal() {
     let one = as_monomial(mul(mul(c.clone(), d.clone()), k.clone()));
     let other = as_monomial(mul(k.clone(), mul(d.clone(), c.clone())));
 
-    assert!(matches!(peel_monomial(&one, &other), Some(Peel::Equal)));
+    assert!(matches!(
+        peel_monomial(&one, &other),
+        Some(Conclusion::Equal)
+    ));
 }
 
 // The controls: two factors left on each side have no forced pairing, and two coefficients are two monomials unless a factor is zero — so both decline to the caller's congruence rather than deciding anything, and neither ever clashes.
@@ -103,7 +109,7 @@ fn a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing() {
 
     assert!(matches!(
         peel_monomial(&this, &that),
-        Some(Peel::Continue(left, right)) if left == f && right == g
+        Some(Conclusion::Sufficient((left, right))) if left == f && right == g
     ));
     assert!(peel_intrinsic(&this, &that).is_none());
 }

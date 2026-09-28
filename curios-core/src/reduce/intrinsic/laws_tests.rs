@@ -2,9 +2,10 @@
 
 use {
     crate::{
-        Free, Intrinsic, Nat, Peel, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
+        Free, Intrinsic, Nat, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
         peel_nat_terms, peel_position,
     },
+    curios_algebra::Deduction,
     curios_num::Grain,
     curios_num::Integer,
 };
@@ -13,11 +14,11 @@ use super::test_support::*;
 
 // Soundness gate for the peel's own verdicts over values, which nothing stated before this: `Nat::cancel_common` decides all three, and the perimeter grades the law behind them argued in code comments only.
 //
-// Each verdict is believed by a different consumer, so each has its own obligation. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Peel::Continue` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
+// Each verdict is believed by a different consumer, so each has its own obligation. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Deduction::Equivalent` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
 //
 // So each verdict is checked against ground truth at every closed instantiation of its symbols, which is the only thing that can distinguish a valid equation from a plausible one. The grid reaches what cancelling *summands* newly decides rather than the successor spine alone: a commuted sum, a summand carried at multiplicity two, a floor surviving over shared summands, and two spellings of one number that share no summand syntactically.
 //
-// It reaches the **floorless** pairs too, which is the coverage widening the peel's gate to a sum spine added. Those are the pairs no `Intrinsic::Nat` carrier can express — `(x + y) + z` reduces to a bare `NatAdd`, not to a successor floor — and the reassociation among them is the equation the window-fusion bound rests on. `Peel::Stuck` is now *reachable* and carries its own case: a floorless pair sharing no summand comes back from `cancel_common` untouched, and returning it as `Continue` would re-enter the same congruence on the same terms forever.
+// It reaches the **floorless** pairs too, which is the coverage widening the peel's gate to a sum spine added. Those are the pairs no `Intrinsic::Nat` carrier can express — `(x + y) + z` reduces to a bare `NatAdd`, not to a successor floor — and the reassociation among them is the equation the window-fusion bound rests on. `Deduction::Undecided` is now *reachable* and carries its own case: a floorless pair sharing no summand comes back from `cancel_common` untouched, and returning it as `Equivalent` would re-enter the same congruence on the same terms forever.
 #[test]
 fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     let (first, second, third) = (
@@ -109,10 +110,10 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
         let peel = peel_nat_terms(&left, &right).expect("a `Nat`-shaped pair");
 
         match &peel {
-            Peel::Equal => equal += 1,
-            Peel::Clash => clash += 1,
-            Peel::Continue(..) => carried += 1,
-            Peel::Stuck => stuck += 1,
+            Deduction::Equal => equal += 1,
+            Deduction::Impossible => clash += 1,
+            Deduction::Equivalent(_) => carried += 1,
+            Deduction::Undecided => stuck += 1,
         }
 
         for a in [0u32, 1, 2, 5] {
@@ -121,29 +122,29 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
                     let agree = value_at(&left, a, b, c) == value_at(&right, a, b, c);
 
                     match &peel {
-                        Peel::Equal => assert!(
+                        Deduction::Equal => assert!(
                             agree,
                             "`{label}` was decided equal but differs at x = {a}, y = {b}, z = {c}"
                         ),
-                        Peel::Clash => assert!(
+                        Deduction::Impossible => assert!(
                             !agree,
                             "`{label}` was decided impossible but holds at x = {a}, y = {b}, z = {c}"
                         ),
-                        Peel::Continue(residual_left, residual_right) => assert_eq!(
+                        Deduction::Equivalent((residual_left, residual_right)) => assert_eq!(
                             value_at(residual_left, a, b, c) == value_at(residual_right, a, b, c),
                             agree,
                             "`{label}`'s residuals disagree with the pair they replaced at x = {a}, y = {b}, z = {c}",
                         ),
                         // A declined pair claims nothing about its values, so there is nothing to check against ground truth — the obligation it carries is termination, and the count below is what holds the case in the grid.
-                        Peel::Stuck => {}
+                        Deduction::Undecided => {}
                     }
                 }
             }
         }
     }
 
-    // Every verdict above holds vacuously of a grid that reaches only one of them, and `Continue` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
-    // `2·x + 1 ~ x + x + 1` moved from `Continue` to `Equal` when the sum normal form began merging like terms: both sides now *reduce* to `2·x + 1`, so the peel has nothing left to carry.
+    // Every verdict above holds vacuously of a grid that reaches only one of them, and `Equivalent` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
+    // `2·x + 1 ~ x + x + 1` moved from `Equivalent` to `Equal` when the sum normal form began merging like terms: both sides now *reduce* to `2·x + 1`, so the peel has nothing left to carry.
     assert_eq!(
         (equal, clash, carried, stuck),
         (4, 4, 4, 1),
@@ -151,11 +152,11 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Peel::Continue`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Peel::Stuck` promises nothing and is only tallied.
+// Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
 //
 // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
 //
-// Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Stuck` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
+// Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Undecided` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
 #[test]
 fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
     let bin_left = Free::local(0, Some("x"));
@@ -282,7 +283,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![x.clone(), run_bytes(&[5])]),
             run_bytes(&[]),
         ),
-        // A nesting whose leading chunks the prefix step cannot match regroups: the residuals are both flat spellings, and regrouping is the identity on values, so they hold the same obligation as any `Continue`.
+        // A nesting whose leading chunks the prefix step cannot match regroups: the residuals are both flat spellings, and regrouping is the identity on values, so they hold the same obligation as any `Equivalent`.
         (
             "(x ++ x[05]) ++ y ~ y ++ x[05] ++ x",
             cat(vec![cat(vec![x.clone(), run_bytes(&[5])]), y.clone()]),
@@ -321,10 +322,10 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             peel_bin(&as_intrinsic(left), &as_intrinsic(right)).expect("two Bin values peel");
 
         match &peel {
-            Peel::Equal => equal += 1,
-            Peel::Clash => clash += 1,
-            Peel::Continue(..) => carried += 1,
-            Peel::Stuck => stuck += 1,
+            Deduction::Equal => equal += 1,
+            Deduction::Impossible => clash += 1,
+            Deduction::Equivalent(_) => carried += 1,
+            Deduction::Undecided => stuck += 1,
         }
 
         for left_run in runs {
@@ -347,20 +348,22 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
                             let agree = close(left) == close(right);
 
                             match &peel {
-                                Peel::Equal => assert!(
+                                Deduction::Equal => assert!(
                                     agree,
                                     "`{label}` was decided equal but differs at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
                                 ),
-                                Peel::Clash => assert!(
+                                Deduction::Impossible => assert!(
                                     !agree,
                                     "`{label}` was decided impossible but holds at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
                                 ),
-                                Peel::Continue(residual_left, residual_right) => assert_eq!(
-                                    close(residual_left) == close(residual_right),
-                                    agree,
-                                    "`{label}`'s residuals disagree with the pair they replaced at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
-                                ),
-                                Peel::Stuck => {}
+                                Deduction::Equivalent((residual_left, residual_right)) => {
+                                    assert_eq!(
+                                        close(residual_left) == close(residual_right),
+                                        agree,
+                                        "`{label}`'s residuals disagree with the pair they replaced at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                    )
+                                }
+                                Deduction::Undecided => {}
                             }
                         }
                     }
@@ -444,10 +447,10 @@ fn every_int_peel_verdict_holds_at_every_closed_instantiation() {
             .expect("an `Int`-shaped pair");
 
         match &peel {
-            Peel::Equal => equal += 1,
-            Peel::Clash => clash += 1,
-            Peel::Continue(..) => carried += 1,
-            Peel::Stuck => stuck += 1,
+            Deduction::Equal => equal += 1,
+            Deduction::Impossible => clash += 1,
+            Deduction::Equivalent(_) => carried += 1,
+            Deduction::Undecided => stuck += 1,
         }
 
         for a in [-3i32, 0, 1, 5] {
@@ -456,20 +459,20 @@ fn every_int_peel_verdict_holds_at_every_closed_instantiation() {
                     let agree = value_at(&left, a, b, c) == value_at(&right, a, b, c);
 
                     match &peel {
-                        Peel::Equal => assert!(
+                        Deduction::Equal => assert!(
                             agree,
                             "`{label}` was decided equal but differs at i = {a}, j = {b}, k = {c}"
                         ),
-                        Peel::Clash => assert!(
+                        Deduction::Impossible => assert!(
                             !agree,
                             "`{label}` was decided impossible but holds at i = {a}, j = {b}, k = {c}"
                         ),
-                        Peel::Continue(residual_left, residual_right) => assert_eq!(
+                        Deduction::Equivalent((residual_left, residual_right)) => assert_eq!(
                             value_at(residual_left, a, b, c) == value_at(residual_right, a, b, c),
                             agree,
                             "`{label}`'s residuals disagree with the pair they replaced at i = {a}, j = {b}, k = {c}",
                         ),
-                        Peel::Stuck => {}
+                        Deduction::Undecided => {}
                     }
                 }
             }
@@ -628,10 +631,10 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
             peel_list(&as_intrinsic(left), &as_intrinsic(right)).expect("two List values peel");
 
         match &peel {
-            Peel::Equal => equal += 1,
-            Peel::Clash => clash += 1,
-            Peel::Continue(..) => carried += 1,
-            Peel::Stuck => stuck += 1,
+            Deduction::Equal => equal += 1,
+            Deduction::Impossible => clash += 1,
+            Deduction::Equivalent(_) => carried += 1,
+            Deduction::Undecided => stuck += 1,
         }
 
         for left_run in runs {
@@ -650,20 +653,22 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
                             let agree = close(left) == close(right);
 
                             match &peel {
-                                Peel::Equal => assert!(
+                                Deduction::Equal => assert!(
                                     agree,
                                     "`{label}` was decided equal but differs at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
                                 ),
-                                Peel::Clash => assert!(
+                                Deduction::Impossible => assert!(
                                     !agree,
                                     "`{label}` was decided impossible but holds at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
                                 ),
-                                Peel::Continue(residual_left, residual_right) => assert_eq!(
-                                    close(residual_left) == close(residual_right),
-                                    agree,
-                                    "`{label}`'s residuals disagree with the pair they replaced at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
-                                ),
-                                Peel::Stuck => {}
+                                Deduction::Equivalent((residual_left, residual_right)) => {
+                                    assert_eq!(
+                                        close(residual_left) == close(residual_right),
+                                        agree,
+                                        "`{label}`'s residuals disagree with the pair they replaced at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
+                                    )
+                                }
+                                Deduction::Undecided => {}
                             }
                         }
                     }
@@ -802,8 +807,8 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
     for (label, left, right, packed) in cases {
         let peel = peel_position(&left, &right).expect("two gets of one carrier");
         match &peel {
-            Peel::Equal => equal += 1,
-            Peel::Stuck => stuck += 1,
+            Deduction::Equal => equal += 1,
+            Deduction::Undecided => stuck += 1,
             _ => unreachable!("`{label}`: a position is decided equal or declined, never more"),
         }
 
@@ -823,7 +828,7 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
                 fold(at(side, &anchor_free, anchor))
             };
 
-            if matches!(peel, Peel::Equal) {
+            if matches!(peel, Deduction::Equal) {
                 assert_eq!(
                     close(&left),
                     close(&right),

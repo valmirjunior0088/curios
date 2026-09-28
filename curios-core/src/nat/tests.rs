@@ -63,3 +63,29 @@ fn a_sum_in_normal_form_reads_back_as_itself() {
         merged
     );
 }
+
+// A residual is rebuilt from the terms it was read from, never from a copy: `curios-algebra` hands each summand's origin back untouched, so the `b` left over from `a + b` against `a + c` is the very allocation the caller wrote, and a shared term graph stays shared through the cancellation.
+#[test]
+fn a_residual_keeps_the_terms_it_was_read_from() {
+    let (a, b, c) = (sym(0, "a"), sym(1, "b"), sym(2, "c"));
+    let application = |head: &Term, argument: &Term| {
+        Term::intrinsic(Intrinsic::nat_mul(head.clone(), argument.clone()))
+    };
+    let (kept, other) = (application(&b, &c), application(&c, &c));
+
+    let (left, right) = Nat::cancel_common(
+        &add(a.clone(), kept.clone()),
+        &add(a.clone(), other.clone()),
+    );
+
+    assert_eq!(
+        left.identity(),
+        kept.identity(),
+        "the left residual is `b · c` as written"
+    );
+    assert_eq!(
+        right.identity(),
+        other.identity(),
+        "and the right one is `c · c` as written"
+    );
+}

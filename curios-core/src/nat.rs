@@ -1,7 +1,9 @@
 use {
     super::{
-        Apply, Argument, Bound, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, Var, Visit,
+        Apply, Argument, Atoms, Bound, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, Var,
+        Visit,
     },
+    curios_algebra::{Cancelled, Combination, Deduction, Monomial, Progress, Summand},
     curios_num::Natural,
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -282,29 +284,45 @@ impl Nat {
         }
     }
 
-    /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, keyed up to universe instances exactly as [`Nat::cancel_common`] keys them. This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other.
+    /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, each factor one atom under the carrier's identity (`crate::atoms`). This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other. The collection is `curios-algebra`'s; what is read here is which term each summand's factor is, and the factor a merged summand keeps is its first appearance's.
     pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
         curios_profile::profile!("nat::linear");
-        let mut combination: Vec<(Natural, Term)> = Vec::new();
-        // **The index is a map, and the combination stays a vector.** Those are two separate obligations that a single `Vec<Term>` of keys used to serve at once, badly: finding a like factor was a scan comparing whole terms, one `Term::eq` per candidate, while first-appearance order — which the sum normal form above promises and which a caller relies on to reach a fixed point — only ever needed `combination` to be pushed to in order. Keeping them apart makes the lookup a hash and leaves the order exactly where it was.
-        //
-        // A key is a *projected* term rather than the factor, so two instances of one polymorphic name merge; `Term`'s hash is memoized per node, and `clippy.toml` names `Term` for `ignore-interior-mutability` on the same grounds the map relies on — a cache fill moves neither hash nor equality.
-        let mut index_of: HashMap<Term, usize> = HashMap::new();
-        for summand in summands {
-            if Self::is_zero(&summand) {
-                continue;
-            }
-            let (coefficient, factor) = Self::literal_factor(&summand);
-            let key = crate::project_erased_universes(&factor);
-            match index_of.get(&key) {
-                Some(&index) => combination[index].0 += coefficient,
-                None => {
-                    index_of.insert(key, combination.len());
-                    combination.push((coefficient, factor));
-                }
-            }
+        let mut atoms = Atoms::default();
+        let read = summands
+            .into_iter()
+            .filter(|summand| !Self::is_zero(summand))
+            .map(|summand| Self::summand(&mut atoms, &summand))
+            .collect::<Vec<_>>();
+        Self::terms_of(Combination::collect(Natural::zero(), read))
+    }
+
+    /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor as one atom. A `Nat` monomial is compared as the one term its product spine is — the product fold builds that spine in one factor order — so the whole factor is the atom, and the factor is the origin a rebuild restores.
+    fn summand(atoms: &mut Atoms, summand: &Term) -> Summand<Natural, Term> {
+        let (coefficient, factor) = Self::literal_factor(summand);
+        Summand {
+            coefficient,
+            monomial: Monomial::new(vec![atoms.numeric(&factor)]),
+            origin: factor,
         }
+    }
+
+    /// A reduced `Nat` read as its floor beside the combination of its summands.
+    fn combination(atoms: &mut Atoms, term: &Term) -> Combination<Natural, Term> {
+        let (floor, inner) = Self::decompose(term);
+        let summands = Self::summands(&inner)
+            .iter()
+            .map(|summand| Self::summand(atoms, summand))
+            .collect::<Vec<_>>();
+        Combination::collect(floor, summands)
+    }
+
+    /// A combination's summands as the coefficients and factors they were read from.
+    fn terms_of(combination: Combination<Natural, Term>) -> Vec<(Natural, Term)> {
         combination
+            .summands
+            .into_iter()
+            .map(|summand| (summand.coefficient, summand.origin))
+            .collect()
     }
 
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`], folded left-to-right.
@@ -616,55 +634,48 @@ impl Nat {
     /// **Summands pair by equality up to universe instances.** A definitionally equal pair spelled two ways still does not cancel — the match does not reduce candidates against each other, so incompleteness in that direction costs reductions and never correctness. What it *does* see through is an instance, because two occurrences of a polymorphic name are independently instantiated and would otherwise be two terms: `len(xs)` written twice never cancels against itself, and every bound mentioning one stays stuck. Erasing before the comparison is [`crate::project_erased_universes`], and what licenses it here is the carrier rather than erasure: Core offers no elimination from a type or a level into a `Nat`, so two summands differing only in their instances denote one number. That is not true of terms in general — `Type u` is a value that differs by its level — which is why the same projection is unsound as a refinement key, as `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records.
     ///
     /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
+    ///
+    /// The mathematics is `curios-algebra`'s `Combination::cancel_common`; what is decided here is which terms are one atom, and which terms the residuals are rebuilt from.
     pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
         curios_profile::profile!("nat::cancel_common");
-        let (floor_left, inner_left) = Nat::decompose(left);
-        let (floor_right, inner_right) = Nat::decompose(right);
+        Self::rebuild_cancelled(Self::cancellation(left, right), left, right)
+    }
 
-        // Over the linear combination, so a like term cancels by coefficient: `2 · x + a` against `x + b` leaves `x + a` against `b` — the multiset rule below, with the multiplicity read off the coefficient rather than counted.
-        let mut held = Self::linear(Self::summands(&inner_left));
-        let mut keys = held
-            .iter()
-            .map(|(_, factor)| crate::project_erased_universes(factor))
-            .collect::<Vec<_>>();
-        let mut residual_right = Vec::new();
-        let mut cancelled = false;
-        for (coefficient, factor) in Self::linear(Self::summands(&inner_right)) {
-            let key = crate::project_erased_universes(&factor);
-            match keys.iter().position(|candidate| *candidate == key) {
-                Some(index) => {
-                    let shared = held[index].0.clone().min(coefficient.clone());
-                    let remaining = held[index].0.clone() - &shared;
-                    if remaining.is_zero() {
-                        held.remove(index);
-                        keys.remove(index);
-                    } else {
-                        held[index].0 = remaining;
-                    }
-                    let rest = coefficient - &shared;
-                    if !rest.is_zero() {
-                        residual_right.push((rest, factor));
-                    }
-                    cancelled = true;
-                }
-                None => residual_right.push((coefficient, factor)),
-            }
+    /// What `left = right` concludes over `Nat`, with its residuals rebuilt as terms: the cancellation as the peel reads it, timed under the one span every cancellation passes through.
+    pub(crate) fn cancellation_deduced(left: &Term, right: &Term) -> Deduction<(Term, Term)> {
+        curios_profile::profile!("nat::cancel_common");
+        Self::cancellation(left, right)
+            .deduction()
+            .map(|cancelled| Self::rebuild_cancelled(cancelled, left, right))
+    }
+
+    /// `left` against `right` read over one table of atoms, with what they share taken off both.
+    fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, Term> {
+        let mut atoms = Atoms::default();
+        let left = Self::combination(&mut atoms, left);
+        let right = Self::combination(&mut atoms, right);
+        left.cancel_common(right)
+    }
+
+    /// The terms a cancellation of `left` against `right` leaves.
+    ///
+    /// **A pass that cancels no summand hands its inners back untouched.** Rebuilding through [`Nat::from_linear`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
+    fn rebuild_cancelled(
+        cancelled: Cancelled<Natural, Term>,
+        left: &Term,
+        right: &Term,
+    ) -> (Term, Term) {
+        let rebuild = |combination: Combination<Natural, Term>| {
+            let floor = combination.constant.clone();
+            Self::from_linear(Self::terms_of(combination), floor)
+        };
+        match cancelled.progress {
+            Progress::Summands => (rebuild(cancelled.left), rebuild(cancelled.right)),
+            Progress::Nothing | Progress::Constant => (
+                Self::rebuild(cancelled.left.constant, Self::decompose(left).1),
+                Self::rebuild(cancelled.right.constant, Self::decompose(right).1),
+            ),
         }
-
-        let shared = floor_left.clone().min(floor_right.clone());
-
-        // **A pass that cancels no summand must hand its inners back untouched.** Rebuilding through [`Nat::sum_over_floor`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
-        if !cancelled {
-            return (
-                Self::rebuild(floor_left - &shared, inner_left),
-                Self::rebuild(floor_right - &shared, inner_right),
-            );
-        }
-
-        (
-            Self::from_linear(held, floor_left - &shared),
-            Self::from_linear(residual_right, floor_right - &shared),
-        )
     }
 }
 

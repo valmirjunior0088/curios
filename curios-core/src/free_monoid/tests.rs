@@ -1,4 +1,4 @@
-use {super::*, crate::Peel};
+use {super::*, curios_algebra::Deduction};
 
 /// The shape [`FUSION_CAP`] makes reachable: a left-nested concatenation as deep as an accumulation loop is long, since an accumulator past the cap keeps one node per step instead of fusing into one run.
 fn deep_bin(grain: Grain, depth: usize) -> Term {
@@ -80,7 +80,10 @@ fn a_deep_concatenation_flattens_for_conversion() {
     };
 
     assert!(
-        matches!(crate::peel_bin(intrinsic, intrinsic), Some(Peel::Equal)),
+        matches!(
+            crate::peel_bin(intrinsic, intrinsic),
+            Some(Deduction::Equal)
+        ),
         "a value is itself, however deeply it is nested"
     );
 
@@ -90,7 +93,10 @@ fn a_deep_concatenation_flattens_for_conversion() {
     };
 
     assert!(
-        matches!(crate::peel_list(intrinsic, intrinsic), Some(Peel::Equal)),
+        matches!(
+            crate::peel_list(intrinsic, intrinsic),
+            Some(Deduction::Equal)
+        ),
         "the `List` twin"
     );
 }

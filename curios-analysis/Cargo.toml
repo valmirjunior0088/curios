@@ -16,6 +16,7 @@ test-support = []
 [dependencies]
 curios-profile = { workspace = true }
 curios-utilities = { workspace = true }
+curios-algebra = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
 
