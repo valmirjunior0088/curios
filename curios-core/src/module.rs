@@ -39,6 +39,53 @@ impl Totality {
     }
 }
 
+/// What the certifier concluded about the definitions one of its walks judged: each one's totality, closed over everything it mentions.
+///
+/// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, where it used to read the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. A definition it does not name is one the reading walk classifies for itself, never one it takes elaboration's word for.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Certification {
+    totality: BTreeMap<Global, Totality>,
+}
+
+impl Certification {
+    /// A record classifying each of `definitions`.
+    pub fn of(definitions: impl IntoIterator<Item = (Global, Totality)>) -> Self {
+        Self {
+            totality: definitions.into_iter().collect(),
+        }
+    }
+
+    /// The certifier's classification of `name`, when this record covers it.
+    pub fn totality(&self, name: &Global) -> Option<Totality> {
+        self.totality.get(name).copied()
+    }
+
+    /// Whether this record classifies every definition `module` holds.
+    pub fn covers(&self, module: &Module) -> bool {
+        module
+            .items
+            .iter()
+            .flat_map(Item::definitions)
+            .all(|definition| self.totality.contains_key(&definition.name))
+    }
+
+    /// Every classification this record holds.
+    pub fn iter(&self) -> impl Iterator<Item = (&Global, Totality)> {
+        self.totality
+            .iter()
+            .map(|(name, totality)| (name, *totality))
+    }
+
+    /// This record with `other`'s classifications beside its own, its own winning where both classify a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's.
+    pub fn extended(mut self, other: &Certification) -> Self {
+        for (name, totality) in other.iter() {
+            self.totality.entry(name.clone()).or_insert(totality);
+        }
+        self
+    }
+}
+
 /// How a lowered definition was introduced.
 ///
 /// This is elaboration metadata, not a fact inferred from the flattened qualified name. In particular, a module and a nominal type may share a qualifier without turning ordinary module members into generated nominal members.

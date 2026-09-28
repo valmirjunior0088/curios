@@ -195,7 +195,8 @@ fn archive(
     // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
     let binder_floor = derived_binder_floor(&core);
 
-    Unit::new(prepared, core, ersd, binder_floor)
+    // No certifier has walked this unit yet, and none can from here: `curios-prelude`'s build files its record and attaches it at restore.
+    Unit::new(prepared, core, ersd, binder_floor, None)
 }
 
 /// Serialize one unit to `<root>.rkyv` as a stored unit — its record, of `reads` and `predecessors`, framed ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.

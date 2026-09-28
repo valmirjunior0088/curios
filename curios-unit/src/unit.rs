@@ -1,8 +1,11 @@
 //! What one unit provides to its successors.
 
 use {
-    curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedArena,
-    curios_text::PreparedText, curios_utilities::Mount,
+    curios_abi::ForeignStore,
+    curios_core::{Certification, Module},
+    curios_elab::ErasedArena,
+    curios_text::PreparedText,
+    curios_utilities::Mount,
 };
 
 /// One compiled unit: everything a later unit needs in order to be compiled against it.
@@ -24,17 +27,39 @@ pub struct Unit {
     ///
     /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later one. A floor is a bound rather than a verdict, so a consumer combines it with its own by maximum and can only ever widen.
     binder_floor: usize,
+    /// What the certifier concluded about `core`'s definitions, filed with them — `None` for a unit no certifier has walked yet.
+    ///
+    /// Only one producer builds a unit before the kernel has seen it: the prelude archive's build script, which sits below the certifier by design, so its images carry none and `curios-prelude` attaches the record its own build filed. A later walk reads this for the unit's verdicts, and one reading a unit without it classifies the unit's definitions for itself.
+    certification: Option<Certification>,
 }
 
 impl Unit {
-    /// Assemble a unit from what each stage produced for it.
-    pub fn new(text: PreparedText, core: Module, arena: ErasedArena, binder_floor: usize) -> Self {
+    /// Assemble a unit from what each stage produced for it, `certification` included where the certifier has walked it.
+    pub fn new(
+        text: PreparedText,
+        core: Module,
+        arena: ErasedArena,
+        binder_floor: usize,
+        certification: Option<Certification>,
+    ) -> Self {
         Self {
             text,
             core,
             arena,
             binder_floor,
+            certification,
         }
+    }
+
+    /// What the certifier concluded about this unit's definitions, where it has walked them. See the field.
+    pub fn certification(&self) -> Option<&Certification> {
+        self.certification.as_ref()
+    }
+
+    /// This unit with `certification` filed beside it — for a unit built before any certifier walked it, whose record arrives afterwards.
+    pub fn certified(mut self, certification: Certification) -> Self {
+        self.certification = Some(certification);
+        self
     }
 
     /// The floor below which every binder identity in this unit was minted. See the field.

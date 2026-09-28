@@ -3,8 +3,10 @@
 use {
     super::{Stage, compile_unit_over},
     curios_abi::ForeignStore,
-    curios_cert::{Globals, Kernel, Verdict, recheck_module_measured, recheck_module_verdicts},
-    curios_core::{Consumption, Intrinsic, Term, derived_binder_floor},
+    curios_cert::{
+        Globals, Kernel, Verdict, certify_module, recheck_module_measured, recheck_module_verdicts,
+    },
+    curios_core::{Certification, Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
         Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
@@ -170,6 +172,16 @@ pub fn recheck(
     syntax: &SyntaxRegistry,
 ) -> Vec<Verdict> {
     recheck_module_verdicts(module, budget, &globals(scope), *syntax)
+}
+
+/// [`recheck`], with the record the walk leaves of what it concluded — what a unit files beside its definitions for a later walk to read. See `curios_cert::certify_module`.
+pub(crate) fn certify(
+    module: &curios_core::Zonked<curios_core::Module>,
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+) -> (Vec<Verdict>, Certification) {
+    certify_module(module, budget, &globals(scope), *syntax)
 }
 
 /// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_module_measured`.
@@ -691,7 +703,8 @@ pub fn compile_unit(
     let core = curios_core::Zonked::project(&core)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
+    let (verdicts, certification) = certify(&core, budget, scope, syntax);
+    if let Some(verdict) = verdicts.into_iter().next() {
         return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
     }
 
@@ -706,7 +719,13 @@ pub fn compile_unit(
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
-    Ok(Unit::new(lowered, core, ersd, binder_floor))
+    Ok(Unit::new(
+        lowered,
+        core,
+        ersd,
+        binder_floor,
+        Some(certification),
+    ))
 }
 
 /// Where a judged unit is kept between compilations.

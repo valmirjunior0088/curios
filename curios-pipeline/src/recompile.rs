@@ -6,10 +6,10 @@
 
 use {
     crate::{CompileError, globals, kernel_refusal, with_broken},
-    curios_cert::{Verdict, recheck_module_verdicts},
+    curios_cert::{Verdict, certify_module},
     curios_core::{
-        Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
-        Term, Zonked, derived_binder_floor,
+        Bound, Certification, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module,
+        StructDecl, Telescope, Term, Zonked, derived_binder_floor,
     },
     curios_elab::{
         Context, Established, Mode, Recompile, Resumed, Tail, elaborate_and_zonk_unit_over,
@@ -81,19 +81,22 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    if let Some(verdict) = recheck_over(
+    let (verdicts, certification) = recheck_over(
         &core,
         budget,
         scope,
         &reused,
         baseline.binder_floor(),
         syntax,
-    )
-    .into_iter()
-    .next()
-    {
+    );
+    if let Some(verdict) = verdicts.into_iter().next() {
         return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
     }
+    // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach.
+    let certification = match baseline.certification() {
+        Some(baseline) => certification.extended(baseline),
+        None => certification,
+    };
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
@@ -106,7 +109,13 @@ pub fn compile_unit_over(
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
-    Ok(Unit::new(lowered, core, ersd, binder_floor))
+    Ok(Unit::new(
+        lowered,
+        core,
+        ersd,
+        binder_floor,
+        Some(certification),
+    ))
 }
 
 /// [`recheck`](crate::recheck) with `reused` in scope beside the units: an earlier compilation's items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. `reused_floor` is the baseline's, a bound over every binder the reused terms mention.
@@ -119,11 +128,11 @@ pub(crate) fn recheck_over(
     reused: &Module,
     reused_floor: usize,
     syntax: &SyntaxRegistry,
-) -> Vec<Verdict> {
+) -> (Vec<Verdict>, Certification) {
     let mut globals = globals(scope);
     globals.mount(reused, reused_floor);
 
-    recheck_module_verdicts(module, budget, &globals, *syntax)
+    certify_module(module, budget, &globals, *syntax)
 }
 
 /// The names the new text invalidates: every declared name whose lowered item differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.

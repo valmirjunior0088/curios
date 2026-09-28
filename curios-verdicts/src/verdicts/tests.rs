@@ -137,6 +137,43 @@ fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
+/// The store read through, noting for each unit it hands back whether the certifier's record of its definitions came back with it.
+struct Recorded<'a> {
+    store: &'a Verdicts,
+    certified: std::cell::RefCell<Vec<bool>>,
+}
+
+impl Cache for Recorded<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        let unit = Cache::get(self.store, source)?;
+        self.certified.borrow_mut().push(
+            unit.certification()
+                .is_some_and(|certification| certification.covers(unit.core())),
+        );
+        Some(unit)
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
+        Cache::put(self.store, source, unit, followed);
+    }
+}
+
+/// A unit taken back from a slot carries the record the certifier filed beside it, so a later walk reads the verdicts on its definitions from the store rather than from the stamps elaboration wrote.
+#[test]
+fn a_reused_unit_brings_its_certification_back() {
+    let root = project("certified");
+    assert!(!reused(&root), "nothing is stored for the first compile");
+
+    let store = Verdicts::at(root.to_path_buf());
+    let recorded = Recorded {
+        store: &store,
+        certified: Default::default(),
+    };
+    assert!(reused_through(&root, &root.join("shape"), &recorded));
+
+    assert_eq!(recorded.certified.into_inner(), vec![true]);
+}
+
 /// The point of the thing: source that has not changed is not compiled again.
 #[test]
 fn an_unchanged_unit_is_reused() {

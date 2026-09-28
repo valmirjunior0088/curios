@@ -46,8 +46,8 @@ use {
     },
     curios_analysis::{Coverage, Declarations, Erased, PositivityRefusal, positivity_vectors},
     curios_core::{
-        Bound, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module, StructDecl,
-        Term, UniverseContext, Zonked, derived_binder_floor_outside,
+        Bound, Certification, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module,
+        StructDecl, Term, Totality, UniverseContext, Zonked, derived_binder_floor_outside,
         rewrite_universe_levels_scoped_shared, universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
@@ -178,6 +178,18 @@ pub fn recheck_module_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
+    certify_module(module, budget, globals, syntax).0
+}
+
+/// [`recheck_module_verdicts`], with the record the walk leaves of what it concluded: each judged definition's totality, closed over everything it mentions — what a later walk reads as that definition's verdict once the unit is in its scope.
+///
+/// A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
+pub fn certify_module(
+    module: &Zonked<Module>,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> (Vec<Verdict>, Certification) {
     verdicts_from(Kernel::new(budget, syntax), module.as_module(), globals)
 }
 
@@ -195,6 +207,7 @@ pub fn recheck_module_verdicts_uncached(
         module.as_module(),
         globals,
     )
+    .0
 }
 
 /// What a whole-module walk consumed, beside the verdicts it reached — the walk's own kernel, handed back for a measurement to read.
@@ -209,7 +222,7 @@ pub fn recheck_module_measured(
     syntax: SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
     let mut kernel = Kernel::new(budget, syntax);
-    let verdicts = verdicts_into(&mut kernel, module.as_module(), globals);
+    let (verdicts, _) = verdicts_into(&mut kernel, module.as_module(), globals);
 
     (verdicts, kernel)
 }
@@ -317,15 +330,27 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
         })
 }
 
-fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+fn verdicts_from(
+    mut kernel: Kernel,
+    module: &Module,
+    globals: &Globals,
+) -> (Vec<Verdict>, Certification) {
     verdicts_into(&mut kernel, module, globals)
 }
 
-fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+fn verdicts_into(
+    kernel: &mut Kernel,
+    module: &Module,
+    globals: &Globals,
+) -> (Vec<Verdict>, Certification) {
     grown(|| verdicts_within(kernel, module, globals))
 }
 
-fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+fn verdicts_within(
+    kernel: &mut Kernel,
+    module: &Module,
+    globals: &Globals,
+) -> (Vec<Verdict>, Certification) {
     curios_profile::profile!("recheck_module");
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
@@ -525,6 +550,19 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
     let (partial, disagreements) = partial_definitions(kernel, module, globals);
+    // The record of what this walk concluded, taken from the closed set the obligations read — every judged definition, so a later walk reading it needs nothing of this one's.
+    let certification = Certification::of(judged.iter().flat_map(|&index| {
+        module.items[index]
+            .definitions()
+            .into_iter()
+            .map(|definition| {
+                let totality = match partial.contains(&definition.name) {
+                    true => Totality::Partial,
+                    false => Totality::Total,
+                };
+                (definition.name, totality)
+            })
+    }));
     for (name, error) in disagreements {
         verdicts.push(Verdict {
             name: Some(name),
@@ -587,7 +625,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
         }
     }
 
-    verdicts
+    (verdicts, certification)
 }
 
 /// What is wrong with a universe context the walk is about to assume, if anything.

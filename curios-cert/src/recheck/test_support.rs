@@ -2631,5 +2631,5 @@ pub(super) fn fixture_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    super::verdicts_from(Kernel::new(budget, syntax), module, globals)
+    super::verdicts_from(Kernel::new(budget, syntax), module, globals).0
 }
