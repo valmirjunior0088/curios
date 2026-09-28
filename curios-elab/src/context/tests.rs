@@ -280,3 +280,14 @@ fn a_nested_retry_restores_the_floor_around_it() {
         assert!(context.assumption(&live).is_some());
     });
 }
+
+/// A metavariable born at an id the counter has not reached is never minted again: the next fresh id lies past it. A fixture states its metavariables that way, and a mint landing on one births a second metavariable over its record — which is how a candidate's re-validation, minting while it checked, replaced a test's solved hole with its own.
+#[test]
+fn a_metavariable_born_ahead_of_the_counter_is_never_minted_again() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(3), Vec::new(), Term::type_ground());
+
+    let minted = context.mint_metavar();
+
+    assert!(minted.0 > 3, "minted ?{} at or below a born id", minted.0);
+}

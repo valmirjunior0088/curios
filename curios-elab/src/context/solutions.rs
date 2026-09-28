@@ -138,6 +138,8 @@ impl Solutions {
         if id.0 >= self.entries.len() {
             self.entries.resize_with(id.0 + 1, || None);
         }
+        // An id with a birth record is never minted again: minting it would birth a second metavariable over this one's record. Elaboration keeps this without help, since lowering's written ids sit below the floor `seed_floor` raised before any minting — but a birth at an id the counter has not reached yet, which is how a fixture states its metavariables, left the counter free to mint it, and re-validation minting one while checking a candidate replaced a test's solved hole with its own.
+        self.next_metavar.seed(id.0 + 1);
         self.entries[id.0] = Some(MetaEntry {
             telescope,
             result,

@@ -1240,7 +1240,7 @@ pub(crate) fn applied_head(term: &Term) -> &Term {
     }
 }
 
-/// Whether reducing `written` to `reduced` only unfolded a name into one of the binder-heavy stuck forms — a folded recursive call or recursive group, a stuck `match`, a lambda or a `let`, bare or at the head of an application. `double(n)` over a `rec` is the paradigm: the name unfolds to the folded call's canonical neutral, which spells as the whole group and says nothing the name did not. [`normalize`] keeps the name for display, and `convert`'s solver commits it as a solution's spelling.
+/// Whether reducing `written` to `reduced` only unfolded a name into one of the binder-heavy stuck forms — a folded recursive call or recursive group, a stuck `match`, a lambda or a `let`, bare or at the head of an application. `double(n)` over a `rec` is the paradigm: the name unfolds to the folded call's canonical neutral, which spells as the whole group and says nothing the name did not. [`normalize`] keeps the name for display.
 pub(crate) fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
     matches!(
         &**applied_head(written),
