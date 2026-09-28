@@ -16,7 +16,7 @@ The flag is not a mode, so it measures whatever the invocation was going to do a
 
 The prelude's own elaboration is the one exception, and it has to be: a build script has no caller to take a destination from, so `curios-prelude-archive`'s chooses its own, at `.artifacts/profile.tsv` beside itself.
 
-**Nothing waits for the end.** That is the point: a compilation that hangs is exactly the one worth profiling, and its rows are on disk a second after it made them. A run that returned is summarized by the recipe; for one that had to be killed, fold the file — the summary names the spans that were still open, which is the stack the compiler was inside when it stopped. The first column is the kind, so a question the summaries do not answer is a one-liner:
+**Nothing waits for the end.** That is the point: a compilation that hangs or dies is exactly the one worth profiling, and each of its rows is on disk before the step after it runs — a stack overflow or an abort, which end the process without unwinding, lose nothing a buffer was holding, because nothing is held. A run that returned is summarized by the recipe; for one that had to be killed, fold the file — the summary names the spans that were still open, which is the stack the compiler was inside when it stopped. The first column is the kind, so a question the summaries do not answer is a one-liner:
 
 ```sh
 awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
@@ -56,7 +56,7 @@ awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
 
 **Decision.** `trace` writes one row per span and event as it happens; nothing is summed in the process being measured. `fold` recomputes the aggregate from the rows, and every consumer that wants a summary — the CLI, the prelude build script, a measurement test — calls it.
 
-**Rationale.** A capture that returns its report can only return it once the operation ends, so the runs most worth profiling — the ones that hang — produced nothing at all. Streaming inverts that: what a compile did is on disk a second after it did it, and a run that has to be killed leaves a file whose last rows name the span it was inside. The aggregate lost nothing in the move — every column it had is a difference of two rows — and it gained what no aggregate could hold: the order events happened in, the spans still open at the end, and any question thought of after the run rather than before it.
+**Rationale.** A capture that returns its report can only return it once the operation ends, so the runs most worth profiling — the ones that hang — produced nothing at all. Streaming inverts that: what a compile did is on disk as soon as it did it, and a run that has to be killed, or that crashes, leaves a file whose last rows name the span it was inside. The aggregate lost nothing in the move — every column it had is a difference of two rows — and it gained what no aggregate could hold: the order events happened in, the spans still open at the end, and any question thought of after the run rather than before it.
 
 The rows are tab-separated because the analysis should not need this crate: `awk '$1 == "V"'` is a whole query, and one file is readable by anything. A rotating pair bounds what an endless run can write, keeping the tail rather than the head, and each file restates the callsite table at its head so the survivor stands alone.
 

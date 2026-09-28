@@ -1,4 +1,4 @@
-//! The record stream: [`trace`] runs a closure under a subscriber that writes one tab-separated row per span and event as it happens, so a run that never returns still leaves everything it did on disk.
+//! The record stream: [`trace`] runs a closure under a subscriber that writes one tab-separated row per span and event as it happens, so a run that never returns, or dies, still leaves everything it did on disk.
 //!
 //! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic the old collector computed is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
 //!
@@ -25,13 +25,13 @@ use {
         collections::HashMap,
         fmt,
         fs::{self, File},
-        io::{self, BufWriter, Write},
+        io::{self, Write},
         path::{Path, PathBuf},
         sync::{
             Mutex,
             atomic::{AtomicU64, Ordering},
         },
-        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+        time::{Instant, SystemTime, UNIX_EPOCH},
     },
     tracing::{
         Event, Metadata, Subscriber,
@@ -43,11 +43,6 @@ use {
 
 /// The row shapes this module writes, so a reader can refuse a file it does not understand.
 const VERSION: u32 = 1;
-
-/// How long a row may sit in the buffer before it reaches the file.
-///
-/// The deadline is compared against the timestamp the row already took, so the cadence costs no clock read of its own. It bounds what a `SIGKILL` loses, which is the only thing standing between a hung compile and an empty file.
-const FLUSH_EVERY: Duration = Duration::from_secs(1);
 
 /// Bits of a span id reserved for the callsite index, leaving the rest a sequence number.
 const CALLSITE_BITS: u32 = 24;
@@ -263,8 +258,6 @@ struct Sink {
     /// Every callsite named so far, indexed by the number it was named with, so a rotation can state them again.
     defined: Vec<(String, String)>,
     written: u64,
-    /// When the buffer last reached the file, as nanoseconds since the capture opened — the same clock the rows carry, so the deadline needs no reading of its own.
-    flushed: u128,
 }
 
 impl Sink {
@@ -277,7 +270,7 @@ impl Sink {
                     fs::create_dir_all(parent)?;
                 }
 
-                let file = BufWriter::new(File::create(&path)?);
+                let file = File::create(&path)?;
 
                 (Box::new(file), Some((path, cap)))
             }
@@ -288,7 +281,6 @@ impl Sink {
             rotate,
             defined: Vec::new(),
             written: 0,
-            flushed: 0,
         };
         sink.header();
 
@@ -296,10 +288,13 @@ impl Sink {
     }
 
     /// Bytes handed to the writer, which is what a rotation is measured in. A failed write is counted as nothing and dropped; the module documentation says why it is not raised.
+    ///
+    /// Every row is flushed as it is written. A buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last rows are worth the most, so a row reaches the file before the step after it runs.
     fn put(&mut self, row: &str) {
         if self.writer.write_all(row.as_bytes()).is_ok() {
             self.written += row.len() as u64;
         }
+        let _ = self.writer.flush();
     }
 
     fn header(&mut self) {
@@ -324,13 +319,13 @@ impl Sink {
     fn span(&mut self, kind: u8, id: u64, callsite: Callsite, at: u128, fields: &str) {
         let row = format!("{}\t{id}\t{callsite}\t{at}{fields}\n", kind as char);
         self.put(&row);
-        self.settle(at);
+        self.settle();
     }
 
     fn event(&mut self, callsite: Callsite, at: u128, fields: &str) {
         let row = format!("V\t{callsite}\t{at}{fields}\n");
         self.put(&row);
-        self.settle(at);
+        self.settle();
     }
 
     /// An entry or an exit, with the four readings a fold differences into what the span retained, took and reached.
@@ -344,29 +339,24 @@ impl Sink {
             peak_bytes(),
         );
         self.put(&row);
-        self.settle(at);
+        self.settle();
     }
 
     /// A close, which carries no readings: nothing happens between a span's last exit and its close.
     fn closed(&mut self, id: u64, callsite: Callsite, at: u128) {
         let row = format!("C\t{id}\t{callsite}\t{at}\n");
         self.put(&row);
-        self.settle(at);
+        self.settle();
     }
 
-    /// Rotate if the file has grown past its cap, then flush if the deadline has passed. Both decisions ride on the timestamp the row already took, so neither reads a clock of its own.
-    fn settle(&mut self, at: u128) {
+    /// Rotate if the file has grown past its cap.
+    fn settle(&mut self) {
         if self
             .rotate
             .as_ref()
             .is_some_and(|&(_, cap)| self.written >= cap)
         {
             self.turn();
-        }
-
-        if at.saturating_sub(self.flushed) >= FLUSH_EVERY.as_nanos() {
-            let _ = self.writer.flush();
-            self.flushed = at;
         }
     }
 
@@ -384,7 +374,7 @@ impl Sink {
         let Ok(file) = File::create(&path) else {
             return;
         };
-        self.writer = Box::new(BufWriter::new(file));
+        self.writer = Box::new(file);
         self.written = 0;
         self.header();
 
