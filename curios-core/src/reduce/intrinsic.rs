@@ -30,7 +30,7 @@ use {
         int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
         project_erased_universes,
     },
-    curios_algebra::Deduction,
+    curios_algebra::{Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
@@ -574,7 +574,9 @@ pub fn reduce_intrinsic(
             |l, r| nat_bitwise_laws(l, r, intrinsic),
         )),
         Intrinsic::NatShl(left, right) => {
-            let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, nat_shift_laws);
+            let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, |l, r| {
+                nat_shift_laws(l, r, intrinsic)
+            });
             let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
                 Term::intrinsic(Intrinsic::nat_mul(
                     Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
@@ -606,7 +608,7 @@ pub fn reduce_intrinsic(
                     |l, r| l.checked_shr(r).map(Intrinsic::Nat),
                     Intrinsic::NatShr,
                 )?,
-                nat_shift_laws,
+                |l, r| nat_shift_laws(l, r, intrinsic),
             );
             then_split_shift(reducer, shifted, Intrinsic::NatShr)
         }
@@ -661,9 +663,10 @@ pub fn reduce_intrinsic(
             }
             let (_, summands_left) = int_terms(&left);
             let (_, summands_right) = int_terms(&right);
-            reducer.spend(Cost::collection(
-                (summands_left.len() as u64 + 1).saturating_mul(summands_right.len() as u64 + 1),
-            ))?;
+            reducer.spend(Cost::collection(distribution_size(
+                summands_left.len() + 1,
+                summands_right.len() + 1,
+            )))?;
             Ok(Term::unwrap_or_clone(int_product(&left, &right)))
         }
         Intrinsic::IntDiv {

@@ -25,3 +25,15 @@ The consolidation that is moving the rest of the carriers' reasoning here — co
 **Decision.** Two handles are two atoms. What makes two terms one atom — up to universe instances for `Nat` and `Int` — is decided by the caller, and stated once where it is decided (`curios-core`'s `atoms` module).
 
 **Rationale.** Identity is a fact about a carrier's terms, not about arithmetic, and the carriers do not agree on it: numeric atoms project universe instances, while a Boolean leaf and a word chunk are compared as written. Keeping identity out of this crate is what lets one algorithm serve both, and what makes a hash collision in the caller's keys cost a probe rather than a false equation here.
+
+### An operation's meaning is stated once, and its mapping is Core's
+
+**Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, a byte's value, the widening of ℕ into ℤ — and what that meaning says is stated here, once per operation: which operands bound its result (`bound_reads`, `upper_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match.
+
+**Rationale.** The bound criterion — an operand is read where the result is not antitone in it — used to live in one function's arms, beside the terms it read, so an arm could not be checked against the criterion without reading the term plumbing too. Stated per operation, each arm is a fact about the operation, and an intrinsic joins a law by being declared an operation of that kind rather than by gaining an arm. An intrinsic is declared only where some implemented rule reads it at its carrier — `Int`'s bitwise operations stay opaque, since no identity of theirs is implemented — so declaring membership never enables an identity nothing implements.
+
+### A comparison has one linear form, in one total order
+
+**Decision.** `LinearForm` is a comparison read as the difference of its sides over ℤ: each monomial once, its atoms in rank order, the monomials ordered lexicographically, the constant separated, and the atoms known non-negative recorded beside it. Atoms of equal rank are ordered by the order their caller handed them out in.
+
+**Rationale.** A relation stated two ways — commuted, reassociated, a term moved across — is one form, so a reader outside the converters can ask what conversion decides of a comparison without reading the folds. The second key is the one place a form can depend on how its sums were written, and it is reached only when ranks collide, where it orders two atoms and never merges them.

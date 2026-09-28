@@ -3,7 +3,10 @@ use {
         Apply, Argument, Atoms, Bound, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, Var,
         Visit,
     },
-    curios_algebra::{Cancelled, Combination, Deduction, Monomial, Progress, Summand},
+    curios_algebra::{
+        Cancelled, Combination, Deduction, Monomial, Progress, Recombination, Summand, Wanted,
+        distribute, distribution_size,
+    },
     curios_num::Natural,
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -15,13 +18,6 @@ use {
 pub enum Nat {
     Zero,
     Succ(Natural, Term),
-}
-
-/// One application of Euclid's identity to a linear combination: the dividend the pair recombines to, the copies of the pair taken, and what each entry of the combination gives up. `C` is the carrier's coefficient — a count on `Nat`, a signed count on `Int`.
-pub(crate) struct Recombination<C> {
-    pub(crate) dividend: Term,
-    pub(crate) copies: C,
-    pub(crate) spent: Vec<(usize, C)>,
 }
 
 impl Nat {
@@ -211,54 +207,30 @@ impl Nat {
     /// The product of two reduced `Nat` terms, in the sum normal form: every summand of one — its floor counted as a constant summand — times every summand of the other, each product a monomial in canonical factor order, and the results summed through [`Nat::sum_over_floor`] so like monomials merge. This is distribution in full — `x · (y + z) = x · y + x · z` for a symbolic `x` — of which the literal-factor floor law, the unit and annihilation laws and the nested-factor fold are the special cases, each of which the value grid still states on its own.
     pub(crate) fn multiply(left: &Term, right: &Term) -> Term {
         curios_profile::profile!("nat::multiply");
-        let terms = |term: &Term| {
-            let (floor, inner) = Self::decompose(term);
-            let mut terms = Self::summands(&inner)
-                .iter()
-                .map(Self::monomial)
-                .collect::<Vec<_>>();
-            if !floor.is_zero() {
-                terms.push((floor, Vec::new()));
-            }
-            terms
-        };
+        let mut atoms = Atoms::default();
+        let left_terms = Self::distributable(&mut atoms, left);
+        let right_terms = Self::distributable(&mut atoms, right);
+        let (floor, products) = distribute(&left_terms, &right_terms);
 
-        let mut floor = Natural::zero();
-        let mut summands = Vec::new();
-        let left_terms = terms(left);
-        let right_terms = terms(right);
-        // **One node per distinct monomial, not one per product.** A cross product builds the same monomial many times over — every pair of summands whose factors multiply to it — and each fresh spine had to be cache-warmed on construction and then compared structurally when the sum merged it, because an equal spine built a moment earlier was a different allocation and `Rc::ptr_eq` could not see it. On a nine-definition web of definitions each naming the one before it twice that was 198 793 spines, 204 113 structural comparisons every one of which concluded equal, and 2.4 s of a 6.1 s compile. Keyed on the sorted factor list, whose hash is one cached word per factor, so a lookup walks nothing; scoped to this product, which is where every duplicate the sum will merge is born.
-        let mut canonical: HashMap<Vec<Term>, Term> = HashMap::new();
-        // The factors are interned too, because the table above compares its keys element-wise and a leaf reached through `left` is a different allocation from the same leaf reached through `right`: each operand is its own reduct. Measured before this, a lookup that should allocate nothing spent 28 allocations walking factor structure — 548 ms of an 827 ms product. One canonical `Rc` per distinct leaf makes every element comparison a pointer test.
-        let mut interned: HashMap<Term, Term> = HashMap::new();
-        let mut intern = |factor: Term| match interned.get(&factor) {
-            Some(canonical) => canonical.clone(),
-            None => {
-                interned.insert(factor.clone(), factor.clone());
-                factor
-            }
-        };
-        for (ca, fa) in left_terms {
-            for (cb, fb) in right_terms.iter().cloned() {
-                let coefficient = ca.clone() * cb;
-                let mut factors = fa.iter().cloned().map(&mut intern).collect::<Vec<_>>();
-                factors.extend(fb.iter().cloned().map(&mut intern));
-                if factors.is_empty() {
-                    floor += coefficient;
-                    continue;
-                }
-                factors.sort_by_key(Term::structural_hash);
-                let spine = match canonical.get(&factors) {
-                    Some(spine) => spine.clone(),
-                    None => {
-                        let spine = Self::spine(&factors).expect("a monomial with a factor");
-                        canonical.insert(factors, spine.clone());
-                        spine
-                    }
-                };
-                summands.push(Self::scaled(coefficient, spine));
-            }
-        }
+        // **One node per distinct monomial, not one per product.** A cross product builds the same monomial many times over — every pair of summands whose factors multiply to it — and each fresh spine had to be cache-warmed on construction and then compared structurally when the sum merged it, because an equal spine built a moment earlier was a different allocation and `Rc::ptr_eq` could not see it. On a nine-definition web of definitions each naming the one before it twice that was 198 793 spines, 204 113 structural comparisons every one of which concluded equal, and 2.4 s of a 6.1 s compile. A monomial is a list of handles, so a lookup walks nothing, and each handle stands for the one allocation its factor was first read as — which is what makes every element comparison inside the sum a pointer test.
+        let mut canonical: HashMap<Monomial, Term> = HashMap::new();
+        let summands = products
+            .into_iter()
+            .map(|(coefficient, monomial)| {
+                let spine = canonical
+                    .entry(monomial)
+                    .or_insert_with_key(|monomial| {
+                        let factors = monomial
+                            .atoms()
+                            .iter()
+                            .map(|atom| atoms.term(*atom).clone())
+                            .collect::<Vec<_>>();
+                        Self::spine(&factors).expect("a monomial with a factor")
+                    })
+                    .clone();
+                Self::scaled(coefficient, spine)
+            })
+            .collect::<Vec<_>>();
         // The two magnitudes that say what distribution in full costs: monomials built against summands kept. On a web of definitions each naming the one before it twice they read 198 793 against 9 083 at nine definitions and 1 222 222 against 25 412 at ten — products grow as the square of what survives, which is what an eager cross product is.
         curios_profile::sample!("multiply::products", summands.len() as u64);
         let merged = Self::sum_over_floor(summands, floor);
@@ -268,6 +240,29 @@ impl Nat {
             Self::summands(&Self::decompose(&merged).1).len() as u64
         );
         merged
+    }
+
+    /// A reduced `Nat` as the summands a product distributes over: each summand's literal coefficient and its factors as written, and its floor last, a summand over no factor.
+    fn distributable(atoms: &mut Atoms, term: &Term) -> Vec<(Natural, Monomial)> {
+        let (floor, inner) = Self::decompose(term);
+        let mut terms = Self::summands(&inner)
+            .iter()
+            .map(|summand| {
+                let (coefficient, factors) = Self::monomial(summand);
+                let factors = factors.iter().map(|factor| atoms.exact(factor)).collect();
+                (coefficient, Monomial::new(factors))
+            })
+            .collect::<Vec<_>>();
+        if !floor.is_zero() {
+            terms.push((floor, Monomial::new(Vec::new())));
+        }
+        terms
+    }
+
+    /// How many summands a product distributes, its floor counted as one — what a distribution of it against another costs, through `distribution_size`.
+    pub(crate) fn distributed_count(term: &Term) -> usize {
+        let (floor, inner) = Self::decompose(term);
+        Self::summands(&inner).len() + usize::from(!floor.is_zero())
     }
 
     /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
@@ -328,57 +323,45 @@ impl Nat {
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`], folded left-to-right.
     pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
         curios_profile::profile!("nat::sum_over_floor");
-        let (combination, floor) = Self::recombine(Self::linear(summands), floor);
-        Self::from_linear(combination, floor)
+        let mut atoms = Atoms::default();
+        let read = summands
+            .iter()
+            .filter(|summand| !Self::is_zero(summand))
+            .map(|summand| Self::summand(&mut atoms, summand))
+            .collect::<Vec<_>>();
+        let combination = Self::recombine(&mut atoms, Combination::collect(floor, read));
+        let floor = combination.constant.clone();
+        Self::from_linear(Self::terms_of(combination), floor)
     }
 
-    /// Euclid's identity read in the direction that shrinks a sum: `k` remainders `x % d` beside `k` copies of the divisor times the matching quotient, `d · (x / d)`, are `k · x`.
-    ///
-    /// **Unconditional, which is what admits it.** `d · (x / d) + x % d = x` holds for every `x` and every nonzero `d`, and a division node exists only over its proof that the divisor is nonzero, so no value of a symbolic part can falsify a recombination. It is the recombining twin of the split `reduce_nat_division` takes: the split reads a quotient and a remainder *off* a sum, and this reads the sum back.
+    /// `combination` with Euclid's identity applied until no remainder beside its multiple is left: the arithmetic is `curios-algebra`'s, and what is read here is which summand is a remainder and where the combination holds each monomial of its multiple.
+    fn recombine(
+        atoms: &mut Atoms,
+        mut combination: Combination<Natural, Term>,
+    ) -> Combination<Natural, Term> {
+        while let Some((recombination, dividend)) = Self::euclid_pair(atoms, &combination) {
+            combination = combination.recombined(recombination, dividend);
+        }
+        combination
+    }
+
+    /// The first remainder in `combination` held beside at least one copy of its multiple: the recombination the algebra computes for it, and its dividend, read over the combination's atoms.
     ///
     /// **The multiple is matched in the form the fold leaves it in.** A quotient is one symbolic summand, so `d · (x / d)` is always distributed by the product fold — `(x / (y + 1)) · (y + 1)` is `y · (x / (y + 1)) + x / (y + 1)` — and the wanted monomials are computed the same way, through [`Nat::multiply`], so the two spellings meet. A quotient and a remainder pair on their dividend and divisor and never on their proofs, which each division carries as written and which proof irrelevance makes unobservable; a monomial is compared as a multiset of factors, because the factor order is a structural hash that sees the proof.
-    ///
-    /// Each recombination removes a remainder and adds the summands of its dividend, a strict subterm, so the loop terminates; a combination with nothing to recombine comes back untouched, which keeps read-then-rebuild the identity on a sum already in normal form.
-    fn recombine(
-        mut combination: Vec<(Natural, Term)>,
-        mut floor: Natural,
-    ) -> (Vec<(Natural, Term)>, Natural) {
-        while let Some(Recombination {
-            dividend,
-            copies,
-            spent,
-        }) = Self::euclid_pair(&combination)
-        {
-            for (index, amount) in spent {
-                combination[index].0 = &combination[index].0 - amount;
-            }
-            let (dividend_floor, dividend_inner) = Self::decompose(&dividend);
-            floor += &copies * dividend_floor;
-            let mut summands = combination
-                .into_iter()
-                .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
-                .collect::<Vec<_>>();
-            summands.extend(
-                Self::linear(Self::summands(&dividend_inner))
-                    .into_iter()
-                    .map(|(coefficient, factor)| Self::scaled(&copies * coefficient, factor)),
-            );
-            combination = Self::linear(summands);
-        }
-        (combination, floor)
-    }
-
-    /// The first remainder in `combination` held beside at least one copy of its multiple: the dividend it recombines to, how many copies of the pair the combination holds, and what each entry gives up.
-    fn euclid_pair(combination: &[(Natural, Term)]) -> Option<Recombination<Natural>> {
+    fn euclid_pair(
+        atoms: &mut Atoms,
+        combination: &Combination<Natural, Term>,
+    ) -> Option<(Recombination<Natural>, Combination<Natural, Term>)> {
         combination
+            .summands
             .iter()
             .enumerate()
-            .find_map(|(index, (held, factor))| {
+            .find_map(|(index, summand)| {
                 let Subterm::Intrinsic(Intrinsic::NatRem {
                     dividend,
                     divisor,
                     non_zero,
-                }) = &**factor
+                }) = &*summand.origin
                 else {
                     return None;
                 };
@@ -389,31 +372,24 @@ impl Nat {
                 });
                 let (_, multiple) = Self::decompose(&Self::multiply(divisor, &quotient));
 
-                let mut copies = held.clone();
-                let mut matched = Vec::new();
-                for (per_copy, monomial) in Self::linear(Self::summands(&multiple)) {
-                    let (at, (available, _)) = combination
-                        .iter()
-                        .enumerate()
-                        .find(|(_, (_, factor))| Self::same_monomial(factor, &monomial))?;
-                    copies = copies.min(available / &per_copy);
-                    matched.push((at, per_copy));
-                }
-                if copies.is_zero() {
-                    return None;
-                }
-
-                let mut spent = vec![(index, copies.clone())];
-                spent.extend(
-                    matched
-                        .into_iter()
-                        .map(|(at, per_copy)| (at, per_copy * &copies)),
-                );
-                Some(Recombination {
-                    dividend: dividend.clone(),
-                    copies,
-                    spent,
-                })
+                let wanted = Self::linear(Self::summands(&multiple))
+                    .into_iter()
+                    .map(|(per_copy, monomial)| {
+                        let holding =
+                            combination
+                                .summands
+                                .iter()
+                                .enumerate()
+                                .find(|(_, candidate)| {
+                                    Self::same_monomial(&candidate.origin, &monomial)
+                                });
+                        let holding =
+                            holding.map(|(at, candidate)| (at, candidate.coefficient.clone()));
+                        (per_copy, holding)
+                    })
+                    .collect::<Vec<Wanted<Natural>>>();
+                let recombination = Recombination::natural(index, &summand.coefficient, &wanted)?;
+                Some((recombination, Self::combination(atoms, dividend)))
             })
     }
 
@@ -565,11 +541,10 @@ impl Nat {
                 Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
                     let left = Self::normalize_within(reducer, left.clone(), memo)?;
                     let right = Self::normalize_within(reducer, right.clone(), memo)?;
-                    let count = |term: &Term| {
-                        let (floor, inner) = Self::decompose(term);
-                        Self::summands(&inner).len() as u64 + u64::from(!floor.is_zero())
-                    };
-                    let products = count(&left).saturating_mul(count(&right));
+                    let products = distribution_size(
+                        Self::distributed_count(&left),
+                        Self::distributed_count(&right),
+                    );
                     reducer.spend(
                         Cost::collection(products)
                             .saturating_add(Cost::term(2).saturating_mul(products)),

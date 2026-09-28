@@ -7,8 +7,29 @@
 mod atom;
 pub use atom::*;
 
+mod bitwise;
+pub use bitwise::*;
+
 mod combination;
 pub use combination::*;
 
+mod declaration;
+pub use declaration::*;
+
+mod division;
+pub use division::*;
+
+mod euclid;
+pub use euclid::*;
+
+mod order;
+pub use order::*;
+
 mod outcome;
 pub use outcome::*;
+
+mod product;
+pub use product::*;
+
+mod view;
+pub use view::*;

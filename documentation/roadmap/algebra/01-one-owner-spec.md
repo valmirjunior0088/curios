@@ -186,7 +186,7 @@ This delivery introduces no arithmetic search, certificate payload, or module-ev
 
 ## What conversion decides, published
 
-Conversion decides a `Nat` or `Int` comparison whose canonical view reduces to a constant — every atom cancelled, the constant's sign the answer — at every carrier the comparison is declared at, in both checkers, with the context's hypotheses out of it; it also decides the comparisons the bounds oracle and domination decide, which [The bounds oracle and the division family](../../soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md) states. It decides nothing about a comparison whose view keeps an atom those rules do not bound.
+Conversion decides a `Nat` or `Int` comparison whose canonical view reduces to a constant — every atom cancelled, the constant's sign the answer — at every carrier the comparison is declared at, in both checkers, with the context's hypotheses out of it. Stage 3 found the fold decides three more shapes of view, and the published contract states all four. A view whose monomials all have one sign over non-negative atoms is decided when its constant does not oppose them: a sum of naturals is at least its constant, and `compare_nat`'s floor rule is this. The comparisons the bounds oracle and domination decide are decided, as [The bounds oracle and the division family](../../soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md) states. So is an equality whose constant the coefficients' gcd does not divide. It decides nothing about a comparison whose view keeps an atom those rules do not bound.
 
 That statement, each carrier's atom identity and the view's interface are published in Core's adapter documentation for procedures outside the converters, so a consumer relies on the stated contract rather than on reading the folds. [Part 2](02-bounds-from-facts-spec.md) is the first: it writes proofs whose last step is exactly such a comparison. The interface is read-only — it prepares views and reports their constants, and it neither searches nor commits anything. Every clause of the contract is a held row of the grid, and its complement, a view that keeps an unbounded atom, has controls.
 
@@ -235,22 +235,22 @@ Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checke
 | Common-addend cancellation, as a multiset | `Nat::cancel_common` `:619`; the `NatSub` arm; `classify_nat` (`spine.rs:217`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (a surviving floor against zero); cancelling nothing returns the inners untouched, less the shared floor | `nat::tests::cancellation_*`, `spine::nat_tests::peel_nat_*`, `laws_tests::every_nat_peel_verdict_*` | **moved** in 2: `Combination::cancel_common` and its `Deduction`; Core keeps the atoms and the rebuild |
 | Signed sum normal form | `int_terms`, `int_monomial`, `int_linear`, `int_from_linear`, `int_sum`, `int_merged`, `int_negate` (`int.rs:37`–`:318`); the `IntAdd`, `IntSub` arms | F | Proj on the sorted factor vector | operand width, two literals only | EQ; a subtraction is a negative coefficient | `int::tests`, grid "Int" | **moved** in 2: collection as `Nat`'s; Core keeps the reading and `int_from_linear` |
 | Signed cancellation | `int_cancel_common` `:437`; `peel_int_pair` (`spine.rs:44`) | F, C, I, P | Proj | uncharged | EQ, EQV, IMP (two unequal constants); untouched when nothing is shared | `int::tests::cancellation_*`, `laws_tests::every_int_peel_verdict_*` | **moved** in 2: `Combination::cancel_common` and `split_by_sign` over `Integer`, and their `Deduction` |
-| Multiplication and the distribution gate | `Nat::multiply` `:210`, `scaled`, `spine`; `int_multiply` `:338`, `int_product` `:360`; the `NatMul`, `IntMul` arms | F | factors sorted by structural hash, interned | stuck when both sides hold two symbolic summands; operand width, and at `Int` a collection | EQ | grid "Nat under \*", `int::tests::a_product_*` | 3 |
-| Distribution on demand | `Nat::normalize` `:530`, `has_stuck_product` `:578`; `int_normalize` `:391`, `int_has_stuck_product` `:369` | C (first step), F (the comparisons) | as above | neither side a literal and a stuck product present; a collection and two nodes per product; memo by node identity | EQ | grid `(x + 1) * (y + 2)` rows | 3; the demand stays Core's |
+| Multiplication and the distribution gate | `Nat::multiply` `:210`, `scaled`, `spine`; `int_multiply` `:338`, `int_product` `:360`; the `NatMul`, `IntMul` arms | F | factors sorted by structural hash, interned | stuck when both sides hold two symbolic summands; operand width, and at `Int` a collection | EQ | grid "Nat under \*", `int::tests::a_product_*` | **moved** in 3: `distribute`, over factors ranked by their structural hash; Core keeps the reading, the spines and the gate |
+| Distribution on demand | `Nat::normalize` `:530`, `has_stuck_product` `:578`; `int_normalize` `:391`, `int_has_stuck_product` `:369` | C (first step), F (the comparisons) | as above | neither side a literal and a stuck product present; a collection and two nodes per product; memo by node identity | EQ | grid `(x + 1) * (y + 2)` rows | **moved** in 3: `distribution_size` is the charge; the demand stays Core's |
 | The atom-argument retry | `Nat::normalize_atoms` `:489`, `force_arguments` `:506`, `ordered_sums` `:465` | C, on `peel_nat_pair`'s `Stuck` | sums reordered by structural hash | once, probe-side, falling back to the original spelling | EQ | grid `Eq(f(x + y) + g(y + z), …)` | 6; the forcing stays Core's |
-| Product-factor peel | `peel_monomial` (`spine.rs:93`) | C only | Proj, as a multiset | none | EQ on one multiset; SUF on one factor left each side; not in I | `spine::nat_tests::peel_monomial_*`, `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` | the type **moved** in 2 (`Conclusion::Sufficient`, which `peel_intrinsic`'s `Deduction` cannot carry); the pairing, 3 |
-| Euclid recombination | `Nat::recombine` `:324`, `euclid_pair` `:354`, `same_monomial` `:403`, `same_factor` `:424`; `int_recombine` `:149`, `int_euclid_pair` `:179`, `int_same_factors` `:239` | F, in every merged sum | proof-insensitive quotient; at `Int` a copy counts only where every sign agrees | uncharged | EQ, shrinking only | grid "Nat under / and %", `Int` Euclid rows | 3 |
+| Product-factor peel | `peel_monomial` (`spine.rs:93`) | C only | Proj, as a multiset | none | EQ on one multiset; SUF on one factor left each side; not in I | `spine::nat_tests::peel_monomial_*`, `a_shared_factor_leaves_conversion_a_residual_and_inversion_nothing` | the type **moved** in 2 (`Conclusion::Sufficient`, which `peel_intrinsic`'s `Deduction` cannot carry); the pairing **moved** in 3: `pair_factors`, over positions so Core rebuilds from the factors as written |
+| Euclid recombination | `Nat::recombine` `:324`, `euclid_pair` `:354`, `same_monomial` `:403`, `same_factor` `:424`; `int_recombine` `:149`, `int_euclid_pair` `:179`, `int_same_factors` `:239` | F, in every merged sum | proof-insensitive quotient; at `Int` a copy counts only where every sign agrees | uncharged | EQ, shrinking only | grid "Nat under / and %", `Int` Euclid rows | **moved** in 3: `Recombination::natural`, `::integer` and `Combination::recombined`; Core keeps recognizing a remainder and matching its multiple proof-insensitively |
 
 ### Comparisons and defined operations
 
 | Rule | Where | Callers | Atoms | Gate and charge | Strength and reconstruction | Evidence | Stage |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `Nat` comparison: floors, a shared inner, non-strict bounds | `compare_nat` (`reduce/intrinsic/compare.rs:63`), `reduce_nat_compare` `:165` | F | Proj on the inners | distributes a stuck product first | DEC; an undecided comparison is rebuilt from the cancelled operands | `compare_tests`, grid "Nat comparisons" | 3 |
-| The bounds oracle | `nat_bound` (`reduce/intrinsic/nat.rs:60`) | F (comparison, Euclid split) | — | none; `NatShl` absent because it cannot charge | DEC; an under-report is a false equation | `nat_tests::bound_upper_bounds_every_closed_instantiation` | 3 |
-| Domination | `nat_dominators` `:114`, `dominated` (`compare.rs:132`) | F | — | one strict subterm down | DEC | `nat_tests::dominators_upper_bound_every_closed_instantiation` | 3 |
-| Divisibility | `apart_modulo` (`compare.rs:39`) | F (both comparisons) | coefficients | last, where equality is open | DEC, unequal only | `compare_tests::*_floors_apart_*`, grid controls | 3 |
-| `Int` comparison and preimages | `compare_int` (`reduce/intrinsic/int.rs:15`), `compare_preimages` `:55`; `int_preimage` (`int.rs:299`), `int_split_by_sign` `:469` | F | Proj | distributes a stuck product first | DEC | grid "Int", "Int against Nat" | 3 |
-| Literal divisors: zero, unit, self, floor law, Euclid split | `reduce_nat_division` `:177`, `nat_euclid_split` `:141` | F | — | a literal divisor | EQ; the proof is carried unreduced | `nat_tests::euclid_split_*`, `a_bounded_digit_*` | 3 |
+| `Nat` comparison: floors, a shared inner, non-strict bounds | `compare_nat` (`reduce/intrinsic/compare.rs:63`), `reduce_nat_compare` `:165` | F | Proj on the inners | distributes a stuck product first | DEC; an undecided comparison is rebuilt from the cancelled operands | `compare_tests`, grid "Nat comparisons" | **moved** in 3: `Comparison`, `of_floors`, `below`; Core keeps the order of observations |
+| The bounds oracle | `nat_bound` (`reduce/intrinsic/nat.rs:60`) | F (comparison, Euclid split) | — | none; `NatShl` absent because it cannot charge | DEC; an under-report is a false equation | `nat_tests::bound_upper_bounds_every_closed_instantiation` | **moved** in 3: `Operation::upper_bound` and `bound_reads`, reached through `Intrinsic::algebra` |
+| Domination | `nat_dominators` `:114`, `dominated` (`compare.rs:132`) | F | — | one strict subterm down | DEC | `nat_tests::dominators_upper_bound_every_closed_instantiation` | **moved** in 3: `Operation::dominators`, `Comparison::through_dominator`; the lint allow is gone |
+| Divisibility | `apart_modulo` (`compare.rs:39`) | F (both comparisons) | coefficients | last, where equality is open | DEC, unequal only | `compare_tests::*_floors_apart_*`, grid controls | **moved** in 3: `apart_modulo` |
+| `Int` comparison and preimages | `compare_int` (`reduce/intrinsic/int.rs:15`), `compare_preimages` `:55`; `int_preimage` (`int.rs:299`), `int_split_by_sign` `:469` | F | Proj | distributes a stuck product first | DEC | grid "Int", "Int against Nat" | **moved** in 3: the verdicts, and `Combination::natural` for the preimage |
+| Literal divisors: zero, unit, self, floor law, Euclid split | `reduce_nat_division` `:177`, `nat_euclid_split` `:141` | F | — | a literal divisor | EQ; the proof is carried unreduced | `nat_tests::euclid_split_*`, `a_bounded_digit_*` | **moved** in 3: `Half`, `floor_law`, `cofactor`, `euclid_split` |
 | Comparison alignment | `align_comparisons` (`reduce/intrinsic.rs:106`) through `successor_comparison` `:255`, `int_split_comparison` `:173`, `nat_comparison_of_int` `:160` | C | Proj | probe-side | EQ | grid seam, dual and split rows; `compare_tests::a_floored_le_meets_the_lt_it_spells` | 8 |
 
 ### `Bool`
@@ -268,9 +268,9 @@ Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checke
 
 | Rule | Where | Callers | Atoms | Gate and charge | Strength | Evidence | Stage |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `Nat/and`, `or`, `xor`: zero, idempotence, self-cancellation | `nat_bitwise_laws` (`laws.rs:116`) | F | Syn | none | EQ | grid "Nat bitwise and shifts" | 3 |
-| Shift by zero, of zero | `nat_shift_laws` `:149` | F | — | none | EQ | the same | 3 |
-| Left shift as a coefficient and as a power; right shift in two steps | `then_coefficient`, `then_power`, `then_split_shift` (`reduce/intrinsic/nat.rs:308`–`:375`), `reduce_nat_shl`, `reduce_int_shift` | F, both carriers | — | `shift_bound`, charged before the coefficient exists | EQ | `shift_tests`, grid shift rows | 3 |
+| `Nat/and`, `or`, `xor`: zero, idempotence, self-cancellation | `nat_bitwise_laws` (`laws.rs:116`) | F | Syn | none | EQ | grid "Nat bitwise and shifts" | **moved** in 3: `Operation::bitwise_identity` |
+| Shift by zero, of zero | `nat_shift_laws` `:149` | F | — | none | EQ | the same | **moved** in 3: `Operation::shift_identity` |
+| Left shift as a coefficient and as a power; right shift in two steps | `then_coefficient`, `then_power`, `then_split_shift` (`reduce/intrinsic/nat.rs:308`–`:375`), `reduce_nat_shl`, `reduce_int_shift` | F, both carriers | — | `shift_bound`, charged before the coefficient exists | EQ | `shift_tests`, grid shift rows | **moved** in 3: `power_of_two`; the rewrites are term construction and stay Core's |
 
 ### Words and positions
 
@@ -289,7 +289,7 @@ Stage 1's record, taken on the tree after part 0 landed (`1219f9f0`), and checke
 | Rule | Where | Callers | Strength | Evidence | Stage |
 | --- | --- | --- | --- | --- | --- |
 | `Byte` and `Nat` invert each other | the `ByteToNat`, `NatToByte` arms | F | EQ | grid "Byte against Nat" | 5 |
-| `Nat/to_int` as a semiring embedding, and its preimage | `int_of_nat` (`int.rs:280`), `int_preimage`; the `NatToInt`, `IntToNat` arms | F | EQ | grid "Int against Nat" | 3 |
+| `Nat/to_int` as a semiring embedding, and its preimage | `int_of_nat` (`int.rs:280`), `int_preimage`; the `NatToInt`, `IntToNat` arms | F | EQ | grid "Int against Nat" | **moved** in 3: sums and products through the algebra, `Combination::natural`; the traversal stays Core's |
 | Packed regrouping at the other grain and back | the `BinReinterp` arm | F | EQ | `aggregates::monoid_tests` grouping rows | 5 |
 | `Flt/of_le_bytes` of `Flt/to_le_bytes` | the `FltOfLeBytes` arm | F | EQ | `numeric::flt_tests` | 5 |
 
@@ -377,6 +377,23 @@ What moved, and why:
 - **Collection allocates about a tenth more.** Each summand now carries a monomial vector, which is why `nat::sum_over_floor` rose from 107 MB to 116 MB.
 
 Totals are within noise.
+
+**After stage 3.** Distribution, Euclid's recombination, the comparison facts, the bounds, the literal-divisor split, the bitwise and shift identities and the embedding's arithmetic now come from `curios-algebra`, over operations `Intrinsic::algebra` declares. Every call count other than `nat::linear`'s is still the baseline's, and the eleven oracles — each confirmed live by a mutation it caught — never disagreed.
+
+| Stream | Span | Total | Calls | Allocated |
+| --- | --- | --- | --- | --- |
+| elaboration | `elaborate_and_zonk_with_prelude` | 110.7 s | 2 | 36 685 MB |
+| elaboration | `nat::cancel_common` | 3.13 s | 50 088 | 135 MB |
+| elaboration | `nat::sum_over_floor` | 2.13 s | 47 836 | 103 MB |
+| elaboration | `nat::multiply` | 1.23 s | 6 604 | 54 MB |
+| certification | `recheck_module` | 41.4 s | 2 | 8 009 MB |
+| certification | `nat::cancel_common` | 1.58 s | 33 320 | 86 MB |
+| certification | `nat::sum_over_floor` | 0.78 s | 27 949 | 47 MB |
+
+What moved, and why:
+
+- **Recombination is cheaper.** It collects through the algebra without re-reading the sum through `nat::linear`, whose calls fell from 50 521 to 2 615. `nat::sum_over_floor` dropped a third in both checkers as a result.
+- **Cancellation allocates about 5% more.** The atom table now keeps the term each atom stands for.
 
 ## Deletion boundaries
 

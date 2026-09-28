@@ -4,7 +4,11 @@
 
 use {
     super::*,
-    crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    crate::{Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{
+        Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
+        power_of_two,
+    },
 };
 
 /// Which half of a Euclidean division a fold computes. One enum rather than the pair of closures the other families take: the symbolic laws below build the quotient and the remainder out of the *same* split, so the two halves cannot be parameterized independently.
@@ -15,6 +19,14 @@ pub(super) enum Euclid {
 }
 
 impl Euclid {
+    /// The half of Euclid's division this is, as `curios-algebra` names it.
+    pub(super) fn half(self) -> Half {
+        match self {
+            Euclid::Quotient => Half::Quotient,
+            Euclid::Remainder => Half::Remainder,
+        }
+    }
+
     pub(super) fn kind(self) -> &'static str {
         match self {
             Euclid::Quotient => "Nat/div",
@@ -46,84 +58,72 @@ impl Euclid {
     }
 }
 
-/// A statically known upper bound on every value a reduced term can take, or `None` where it has none.
+/// A statically known upper bound on every value a reduced term can take, or `None` where it has none: a floor over a bounded part, or an operation whose declared meaning bounds it from what its operands are observed to be.
 ///
-/// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation.
+/// What bounds what is `curios-algebra`'s `Operation::upper_bound`, stated once per operation with the criterion that admits it; what is decided here is which intrinsic is which operation (`Intrinsic::algebra`), and the observations the bound reads — an operand's own bound, or its literal value — each taken only where the operation reads it. Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation.
 ///
-/// **An arm exists where the result is bounded in every operand the value is not *antitone* in.** That is the criterion, and stating it is the point: what a bound was computed for used to be whatever somebody needed, which is not a property anything could check. It is strictly narrower than monotonicity — a product is monotone in each factor separately and still needs *both* bounded, since either one left free makes it unbounded — and it is what licenses the one-sided arms: a value that only shrinks as an operand grows needs no bound on that operand at all, which is why a subtrahend, a divisor and a shift amount are all read past.
+/// **`NatShl` has no bound**, for the reason `Operation::upper_bound` records: what reaches here as a `NatShl` is a shift by a *symbolic* count, which no operand bounds, since a literal count is [`then_coefficient`]'s and arrives as a `NatMul` with its coefficient already charged.
 ///
-/// A `Byte` is `0..=255` **by its carrier**, a fact about the type rather than about how the value was produced. Every producer establishes it, and no case analysis over them is performed or wanted: the operand under a stuck `ByteToNat` is normally a bare binder or a projection, which is exactly the seam this bound exists to serve. `Byte` is not a wire type either, so no embedder can supply one outside the range. `x % n < n` holds by definition, a zero divisor having already been reported.
-///
-/// **`NatShl` is deliberately absent, and the reason is resources rather than arithmetic.** A left shift is the one fold whose result size is not bounded by its operands' — `Nat/shl(1, 400000000)` is fifty megabytes of magnitude out of three lines of surface Curios — and this function takes no [`crate::Reducer`], so it cannot `spend` against the budget that exists to price exactly that. An arm would perform, uncharged, the allocation the reduction arm is careful to charge for. What reaches here as a `NatShl` is a shift by a *symbolic* count, which no operand bounds: a literal count is [`then_coefficient`]'s, so it arrives as a `NatMul` with its coefficient already charged and takes that arm.
-///
-/// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so an arm added here owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md`.
+/// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so a bound added to the algebra owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md`.
 pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
-
     match intrinsic {
         Intrinsic::Nat(Nat::Zero) => Some(Natural::zero()),
-        Intrinsic::Nat(Nat::Succ(floor, inner)) => Some(floor + nat_bound(inner)?),
-        Intrinsic::ByteToNat(_) => Some(Natural::from(u8::MAX)),
-        Intrinsic::NatRem { divisor, .. } => {
-            let divisor = divisor.as_nat()?.to_natural()?;
-            (!divisor.is_zero()).then(|| divisor - Natural::one())
-        }
-        // Truncation only shrinks, so the left bound carries alone: the difference is antitone in the subtrahend, whatever it is.
-        Intrinsic::NatSub(left, _) => nat_bound(left),
-        // Antitone in the divisor, which `non_zero` holds at one or more — so the quotient is at most the dividend however the divisor is spelled, and a literal one tightens that to the quotient of the bounds.
-        Intrinsic::NatDiv {
-            dividend, divisor, ..
-        } => {
-            let bound = nat_bound(dividend)?;
-            match divisor.as_nat().and_then(|divisor| divisor.to_natural()) {
-                Some(divisor) => bound.div(&divisor).ok(),
-                None => Some(bound),
+        Intrinsic::Nat(Nat::Succ(floor, inner)) => Operation::Sum.upper_bound(&[
+            Observed {
+                bound: Some(floor.clone()),
+                literal: None,
+            },
+            Observed {
+                bound: nat_bound(inner),
+                literal: None,
+            },
+        ]),
+        _ => match intrinsic.algebra() {
+            Declaration::Numeric {
+                carrier: Carrier::Natural,
+                operation,
+                operands,
+            } => {
+                let (bounds, literals) = operation.bound_reads();
+                let observed = operands
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .map(|(at, operand)| Observed {
+                        bound: bounds.contains(&at).then(|| nat_bound(operand)).flatten(),
+                        literal: literals
+                            .contains(&at)
+                            .then(|| operand.as_nat().and_then(|value| value.to_natural()))
+                            .flatten(),
+                    })
+                    .collect::<Vec<_>>();
+                operation.upper_bound(&observed)
             }
-        }
-        // The division arm's shift twin, antitone for the same reason: a right shift discards bits and adds none.
-        Intrinsic::NatShr(operand, amount) => {
-            let bound = nat_bound(operand)?;
-            match amount.as_nat().and_then(|amount| amount.to_natural()) {
-                Some(amount) => Some(&bound >> &amount),
-                None => Some(bound),
-            }
-        }
-        // Either bound alone is an upper bound, so one suffices; with both, the smaller wins.
-        Intrinsic::NatAnd(left, right) => match (nat_bound(left), nat_bound(right)) {
-            (Some(left), Some(right)) => Some(left.min(right)),
-            (Some(bound), None) | (None, Some(bound)) => Some(bound),
-            (None, None) => None,
+            _ => None,
         },
-        // A join or a difference of bits reaches no bit neither side can, so the bound is the widest value of that many bits — taken over the *bounds*' bit lengths, the operands themselves being symbolic. Both operands are needed, neither being antitone. This is at most twice the larger bound, so unlike a left shift it cannot outgrow what it was handed.
-        Intrinsic::NatOr(left, right) | Intrinsic::NatXor(left, right) => {
-            let width = nat_bound(left)?.bits().max(nat_bound(right)?.bits());
-            let width = u32::try_from(width).ok()?;
-            Some(Natural::from(2u32).pow(width) - Natural::one())
-        }
-        Intrinsic::NatAdd(left, right) => Some(nat_bound(left)? + nat_bound(right)?),
-        Intrinsic::NatMul(left, right) => Some(nat_bound(left)? * nat_bound(right)?),
-        _ => None,
     }
 }
 
-/// The operands a reduced term never exceeds, as terms, each with whether the bound is strict — [`nat_bound`]'s criterion read at the operands instead of at a literal: a result antitone in one operand is at most its other operand, so the minuend, the dividend, either operand of `and` and the shifted value each bound their result, and a remainder is below its divisor outright, `non_zero` having placed the divisor at one or more. Only a shape whose operand *is* the bound is listed: a sum or a product of bounded parts stays under no operand of its own, and `nat_bound` is where those go.
+/// The operands a reduced term never exceeds, as terms, each with whether the bound is strict — [`nat_bound`]'s criterion read at the operands instead of at a literal, as `curios-algebra`'s `Operation::dominators` states it per operation.
 ///
 /// Every pair is unconditional, as the literal oracle's arms are, and for the same reason it may be turned into a verdict: an under-report here is a false definitional equation. `dominators_upper_bound_every_closed_instantiation` holds each listed pair over values, block per shape.
 pub(super) fn nat_dominators(term: &Term) -> Vec<(Term, bool)> {
-    let Subterm::Intrinsic(intrinsic) = &**term else {
-        return Vec::new();
-    };
-
-    match intrinsic {
-        Intrinsic::NatSub(left, _) => vec![(left.clone(), false)],
-        Intrinsic::NatDiv { dividend, .. } => vec![(dividend.clone(), false)],
-        Intrinsic::NatRem {
-            dividend, divisor, ..
-        } => vec![(dividend.clone(), false), (divisor.clone(), true)],
-        Intrinsic::NatAnd(left, right) => vec![(left.clone(), false), (right.clone(), false)],
-        Intrinsic::NatShr(operand, _) => vec![(operand.clone(), false)],
+    match &**term {
+        Subterm::Intrinsic(intrinsic) => match intrinsic.algebra() {
+            Declaration::Numeric {
+                carrier: Carrier::Natural,
+                operation,
+                operands,
+            } => operation
+                .dominators()
+                .iter()
+                .map(|&(at, strict)| (operands.as_slice()[at].clone(), strict))
+                .collect(),
+            _ => Vec::new(),
+        },
         _ => Vec::new(),
     }
 }
@@ -135,34 +135,30 @@ fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
         .filter(|(_, factor)| factor != summand)
 }
 
-/// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
-///
-/// Every summand must be either a literal multiple of `n` — contributing its cofactor to the quotient — or statically bounded. When the bounded summands together with the residual floor stay below `n`, none of them can carry into the next multiple, so the split is exact for every value the symbolic parts take. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
+/// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced: `curios-algebra`'s `euclid_split`, over each summand's literal coefficient and, where the divisor does not divide it, its bound. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
 pub(super) fn nat_euclid_split(dividend: &Term, divisor: &Natural) -> Option<(Term, Term)> {
     let (floor, inner) = Nat::decompose(dividend);
     let mut quotient = Vec::new();
     let mut residual = Vec::new();
-    let mut ceiling = &floor % divisor;
-
+    let mut bounds = Vec::new();
     for summand in Nat::summands(&inner) {
-        match nat_literal_factor(&summand) {
-            Some((coefficient, factor)) if (&coefficient % divisor).is_zero() => {
-                quotient.push(Nat::scaled(coefficient / divisor, factor));
-            }
-            _ => {
-                ceiling += nat_bound(&summand)?;
+        let multiple = nat_literal_factor(&summand).and_then(|(coefficient, factor)| {
+            cofactor(&coefficient, divisor).map(|cofactor| (cofactor, factor))
+        });
+        match multiple {
+            Some((cofactor, factor)) => quotient.push(Nat::scaled(cofactor, factor)),
+            None => {
+                bounds.push(nat_bound(&summand)?);
                 residual.push(summand);
             }
         }
     }
 
-    match ceiling < *divisor {
-        true => Some((
-            Nat::sum_over_floor(quotient, &floor / divisor),
-            Nat::sum_over_floor(residual, &floor % divisor),
-        )),
-        false => None,
-    }
+    let FloorSplit { whole, rest } = euclid_split(&floor, divisor, bounds)?;
+    Some((
+        Nat::sum_over_floor(quotient, whole),
+        Nat::sum_over_floor(residual, rest),
+    ))
 }
 
 /// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BinGet`'s pattern), never a Rust panic.
@@ -200,20 +196,18 @@ pub(super) fn reduce_nat_division(
     }
 
     // The unconditional laws a symbolic part cannot falsify: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend divides by itself to `1` with remainder `0` — the last on the operation's own precondition that the divisor is nonzero, which its proof operand states for every value.
-    let zero = || Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero));
-    if Nat::is_zero(&left) {
-        return Ok(zero());
-    }
-    if divisor.as_ref().is_some_and(Natural::is_one) {
-        return Ok(match euclid {
-            Euclid::Quotient => Term::unwrap_or_clone(left),
-            Euclid::Remainder => zero(),
-        });
-    }
-    if left == right {
-        return Ok(match euclid {
-            Euclid::Quotient => Subterm::Intrinsic(Intrinsic::Nat(Nat::new(Natural::one()))),
-            Euclid::Remainder => zero(),
+    let half = euclid.half();
+    let divided = match () {
+        _ if Nat::is_zero(&left) => Some(half.of_zero()),
+        _ if divisor.as_ref().is_some_and(Natural::is_one) => Some(half.by_one()),
+        _ if left == right => Some(half.by_itself()),
+        _ => None,
+    };
+    if let Some(divided) = divided {
+        return Ok(match divided {
+            Divided::Zero => Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)),
+            Divided::Dividend => Term::unwrap_or_clone(left),
+            Divided::One => Subterm::Intrinsic(Intrinsic::Nat(Nat::new(Natural::one()))),
         });
     }
 
@@ -227,16 +221,16 @@ pub(super) fn reduce_nat_division(
 
         // The floor law alone, for a dividend the split could not close: peel the whole divisors the floor certainly carries and leave the rest neutral.
         let (floor, inner) = Nat::decompose(&left);
-        if floor >= *divisor {
+        if let Some(FloorSplit { whole, rest }) = floor_law(&floor, divisor) {
             let peeled = Term::intrinsic(euclid.rebuild(
-                Nat::rebuild(&floor % divisor, inner),
+                Nat::rebuild(rest, inner),
                 right.clone(),
                 non_zero.clone(),
             ));
 
-            return Ok(Term::unwrap_or_clone(match euclid {
-                Euclid::Quotient => Nat::rebuild(&floor / divisor, peeled),
-                Euclid::Remainder => peeled,
+            return Ok(Term::unwrap_or_clone(match half {
+                Half::Quotient => Nat::rebuild(whole, peeled),
+                Half::Remainder => peeled,
             }));
         }
     }
@@ -326,7 +320,7 @@ pub(super) fn then_coefficient(
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
 
-    match Natural::one().shl_within(exponent, u64::MAX) {
+    match power_of_two(exponent) {
         Some(coefficient) => Ok(Term::unwrap_or_clone(
             reducer.reduce_forced(product(coefficient, value.clone()))?,
         )),
@@ -358,7 +352,7 @@ pub(super) fn then_power(
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
 
-    match Natural::one().shl_within(&floor, u64::MAX) {
+    match power_of_two(&floor) {
         Some(coefficient) => {
             let power = Term::intrinsic(rebuild(one, inner));
             Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(

@@ -1,3 +1,6 @@
+mod algebra;
+pub use algebra::*;
+
 mod signature;
 pub use signature::*;
 

@@ -4,7 +4,7 @@ use {
 };
 
 fn atom(index: u32) -> Atom {
-    Atom::new(index)
+    Atom::new(index, u64::from(index))
 }
 
 fn nat(coefficient: u32, atoms: &[u32]) -> Summand<Natural, u32> {

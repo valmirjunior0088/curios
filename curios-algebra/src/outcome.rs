@@ -42,6 +42,19 @@ impl<R> Deduction<R> {
     }
 }
 
+impl<R> Conclusion<R> {
+    /// The same verdict over a residual `rebuild` makes of this one's.
+    pub fn map<S>(self, rebuild: impl FnOnce(R) -> S) -> Conclusion<S> {
+        match self {
+            Conclusion::Equal => Conclusion::Equal,
+            Conclusion::Impossible => Conclusion::Impossible,
+            Conclusion::Equivalent(residual) => Conclusion::Equivalent(rebuild(residual)),
+            Conclusion::Sufficient(residual) => Conclusion::Sufficient(rebuild(residual)),
+            Conclusion::Undecided => Conclusion::Undecided,
+        }
+    }
+}
+
 /// A deduction is a conclusion at the same strength: everything inversion may read, conversion may too.
 impl<R> From<Deduction<R>> for Conclusion<R> {
     fn from(deduction: Deduction<R>) -> Self {

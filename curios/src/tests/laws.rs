@@ -177,6 +177,36 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
+        // The contract `curios-core`'s `linear` module publishes, clause by clause, each with the complement that keeps it honest: a view that keeps an atom no clause bounds decides nothing.
+        name: "What conversion decides about a comparison",
+        binders: "x: Nat, y: Nat, i: Int, j: Int, m: Nat",
+        held: &[
+            // Every atom cancelled, and the constant's sign the answer — at `Nat`, at `Int`, and through the embedding.
+            "Eq(x + y + 2 <= y + x + 3, true)",
+            "Eq(2 * x + y == y + x + x, true)",
+            "Eq(i + j - i < j + 1, true)",
+            "Eq(Nat/to_int(m) + i <= i + Nat/to_int(m), true)",
+            // Every monomial of one sign over non-negative atoms, and a constant that does not oppose it: a sum of naturals is at least its constant.
+            "Eq(0 < x + y + 1, true)",
+            "Eq(x < 0, false)",
+            "Eq(Nat/to_int(m) + 1 > +0, true)",
+            // A side bounded by a literal, and a side through an operand it never exceeds.
+            "Eq(x % 7 < 7, true)",
+            "Eq(x - y <= x, true)",
+            // An equality whose constant the coefficients' gcd does not divide.
+            "Eq(2 * x + 1 == 2 * y, false)",
+        ],
+        refused: &[
+            // Controls, and none is a law: an atom of each sign is left (`x = 0, y = 0`, `i = 0, j = 0`); a natural atom with nothing above it may be zero; an `Int` atom may be negative; an operand an `x - y` falls short of only where `y` is positive; constants the gcd divides.
+            "Eq(x + 1 <= y, true)",
+            "Eq(i < j + 1, true)",
+            "Eq(0 < x, true)",
+            "Eq(i + 1 > +0, true)",
+            "Eq(x - y < x, true)",
+            "Eq(2 * x == 2 * y + 2, false)",
+        ],
+    },
+    Carrier {
         name: "Nat bitwise and shifts",
         binders: "x: Nat, y: Nat",
         held: &[

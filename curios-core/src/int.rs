@@ -7,15 +7,21 @@
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
 use {
-    super::{Atoms, Cost, Intrinsic, Nat, Recombination, ReduceError, Reducer, Subterm, Term},
-    curios_algebra::{Cancelled, Combination, Progress, Summand},
-    curios_num::{Integer, Natural},
+    super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{
+        Cancelled, Combination, Progress, Recombination, Summand, Wanted, distribute,
+        distribution_size,
+    },
+    curios_num::Integer,
     curios_utilities::recurse,
     std::collections::HashMap,
 };
 
 /// One monomial with its coefficient: the factors are already in canonical order, which is what lets two monomials be compared as vectors.
 type Monomial = (Integer, Vec<Term>);
+
+/// A signed combination as this module reads one: each summand's origin is its factors, in canonical order, which a rebuild restores.
+type Signed = Combination<Integer, Vec<Term>>;
 
 fn zero() -> Integer {
     Integer::from(0)
@@ -95,11 +101,7 @@ fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec
 }
 
 /// `constant` beside the combination of `summands`, like monomials merged and zeros dropped.
-fn int_combination(
-    atoms: &mut Atoms,
-    constant: Integer,
-    summands: &[Term],
-) -> Combination<Integer, Vec<Term>> {
+fn int_combination(atoms: &mut Atoms, constant: Integer, summands: &[Term]) -> Signed {
     let read = summands
         .iter()
         .filter_map(|summand| int_summand(atoms, summand))
@@ -108,7 +110,7 @@ fn int_combination(
 }
 
 /// A combination's summands as the coefficients and factors they were read from.
-fn int_monomials_of(combination: Combination<Integer, Vec<Term>>) -> Vec<Monomial> {
+fn int_monomials_of(combination: Signed) -> Vec<Monomial> {
     combination
         .summands
         .into_iter()
@@ -117,7 +119,7 @@ fn int_monomials_of(combination: Combination<Integer, Vec<Term>>) -> Vec<Monomia
 }
 
 /// A combination written back into the normal form.
-fn int_from_combination(combination: Combination<Integer, Vec<Term>>) -> Term {
+fn int_from_combination(combination: Signed) -> Term {
     let constant = combination.constant.clone();
     int_from_linear(constant, int_monomials_of(combination))
 }
@@ -162,49 +164,30 @@ pub fn int_sum(left: &Term, right: &Term) -> Term {
 
 /// A constant and its summands merged into the normal form, a remainder beside its multiple recombined on the way — what every sum this module builds goes through, as `Nat::sum_over_floor` is for `Nat`.
 fn int_merged(constant: Integer, summands: Vec<Term>) -> Term {
-    let (constant, combination) = int_recombine(constant, int_linear(summands));
-    int_from_linear(constant, combination)
+    let mut atoms = Atoms::default();
+    let combination = int_combination(&mut atoms, constant, &summands);
+    int_from_combination(int_recombine(&mut atoms, combination))
 }
 
-/// Euclid's identity over ℤ, `Nat::recombine`'s twin: `k` remainders `x % d` beside `k` copies of `d · (x / d)` are `k · x`. Truncated division satisfies the identity exactly as flooring does, for every `x` and every nonzero `d`, so it is unconditional here too.
-///
-/// **A copy counts only where every coefficient agrees in sign with it.** A group lets any combination be rewritten around `x`, but a recombination that left a negative remainder of a multiple behind would trade one spelling for a longer one; taking only the copies the combination actually holds is what keeps the rewrite a shrinking one, and keeps `x - d · (x / d)` and `x % d` the two terms they were — an incompleteness, never a false equation.
-fn int_recombine(
-    mut constant: Integer,
-    mut combination: Vec<Monomial>,
-) -> (Integer, Vec<Monomial>) {
-    while let Some(Recombination {
-        dividend,
-        copies,
-        spent,
-    }) = int_euclid_pair(&combination)
-    {
-        for (index, amount) in spent {
-            combination[index].0 = combination[index].0.clone() - amount;
-        }
-        let (dividend_constant, dividend_summands) = int_terms(&dividend);
-        constant = constant + copies.clone() * dividend_constant;
-        let mut summands = combination
-            .iter()
-            .map(|(coefficient, factors)| int_scaled(coefficient.clone(), factors))
-            .collect::<Vec<_>>();
-        summands.extend(
-            int_linear(dividend_summands)
-                .into_iter()
-                .map(|(coefficient, factors)| int_scaled(copies.clone() * coefficient, &factors)),
-        );
-        combination = int_linear(summands);
+/// `combination` with Euclid's identity applied until no remainder beside its multiple is left — `Nat::recombine`'s twin, the arithmetic `curios-algebra`'s, including the rule that a copy counts only where every sign agrees.
+fn int_recombine(atoms: &mut Atoms, mut combination: Signed) -> Signed {
+    while let Some((recombination, dividend)) = int_euclid_pair(atoms, &combination) {
+        combination = combination.recombined(recombination, dividend);
     }
-    (constant, combination)
+    combination
 }
 
-/// The first remainder in `combination` held beside at least one copy of its multiple, signs agreeing: the dividend it recombines to, the signed number of copies, and what each monomial gives up.
-fn int_euclid_pair(combination: &[Monomial]) -> Option<Recombination<Integer>> {
+/// The first remainder in `combination` held beside at least one copy of its multiple: the recombination the algebra computes for it, and its dividend, read over the combination's atoms. The multiple is matched as `Nat::euclid_pair` matches it, proof-insensitively and as a multiset of factors.
+fn int_euclid_pair(
+    atoms: &mut Atoms,
+    combination: &Signed,
+) -> Option<(Recombination<Integer>, Signed)> {
     combination
+        .summands
         .iter()
         .enumerate()
-        .find_map(|(index, (held, factors))| {
-            let [factor] = factors.as_slice() else {
+        .find_map(|(index, summand)| {
+            let [factor] = summand.origin.as_slice() else {
                 return None;
             };
             let Subterm::Intrinsic(Intrinsic::IntRem {
@@ -222,39 +205,22 @@ fn int_euclid_pair(combination: &[Monomial]) -> Option<Recombination<Integer>> {
             });
             let (_, multiple) = int_terms(&int_multiply(divisor, &quotient));
 
-            let positive = *held > zero();
-            let mut copies = held.magnitude();
-            let mut matched = Vec::new();
-            for (per_copy, monomial) in int_linear(multiple) {
-                let (at, (available, _)) = combination
-                    .iter()
-                    .enumerate()
-                    .find(|(_, (_, factors))| int_same_factors(factors, &monomial))?;
-                if (*available > zero()) != (positive == (per_copy > zero())) {
-                    return None;
-                }
-                copies = copies.min(available.magnitude() / per_copy.magnitude());
-                matched.push((at, per_copy));
-            }
-            if copies.is_zero() {
-                return None;
-            }
-
-            let copies = match positive {
-                true => Integer::from(copies),
-                false => -Integer::from(copies),
-            };
-            let mut spent = vec![(index, copies.clone())];
-            spent.extend(
-                matched
-                    .into_iter()
-                    .map(|(at, per_copy)| (at, per_copy * copies.clone())),
-            );
-            Some(Recombination {
-                dividend: dividend.clone(),
-                copies,
-                spent,
-            })
+            let wanted = int_linear(multiple)
+                .into_iter()
+                .map(|(per_copy, monomial)| {
+                    let holding = combination
+                        .summands
+                        .iter()
+                        .enumerate()
+                        .find(|(_, candidate)| int_same_factors(&candidate.origin, &monomial));
+                    let holding =
+                        holding.map(|(at, candidate)| (at, candidate.coefficient.clone()));
+                    (per_copy, holding)
+                })
+                .collect::<Vec<Wanted<Integer>>>();
+            let recombination = Recombination::integer(index, &summand.coefficient, &wanted)?;
+            let (constant, summands) = int_terms(dividend);
+            Some((recombination, int_combination(atoms, constant, &summands)))
         })
 }
 
@@ -320,31 +286,30 @@ pub fn int_of_nat(nat: &Term) -> Term {
 ///
 /// The inverse of [`int_of_nat`] on its image, rebuilt in `Nat`'s normal form. Two readers: `Int/to_nat`, whose inversion arm is the one-atom case of this, and the comparison, which decides a pair of such terms by comparing their preimages — ℕ → ℤ preserves and reflects order.
 pub fn int_preimage(term: &Term) -> Option<Term> {
+    let mut atoms = Atoms::default();
     let (constant, summands) = int_terms(term);
-    let floor = Natural::try_from(&constant).ok()?;
-    let mut preimages = Vec::new();
-    for (coefficient, factors) in int_linear(summands) {
-        let coefficient = Natural::try_from(&coefficient).ok()?;
-        let mut product = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-        for factor in &factors {
-            let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &**factor else {
-                return None;
-            };
-            product = Nat::multiply(&product, nat);
+    let natural = int_combination(&mut atoms, constant, &summands).natural();
+    natural.and_then(|natural| {
+        let mut preimages = Vec::with_capacity(natural.summands.len());
+        for summand in natural.summands {
+            let mut product = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+            for factor in &summand.origin {
+                let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &**factor else {
+                    return None;
+                };
+                product = Nat::multiply(&product, nat);
+            }
+            preimages.push(Nat::scaled(summand.coefficient, product));
         }
-        preimages.push(Nat::scaled(coefficient, product));
-    }
-    Some(Nat::sum_over_floor(preimages, floor))
+        Some(Nat::sum_over_floor(preimages, natural.constant))
+    })
 }
 
 /// `-term`, in normal form: every coefficient and the constant negated. What `IntSub` folds through, so no subtraction node survives reduction.
 pub fn int_negate(term: &Term) -> Term {
+    let mut atoms = Atoms::default();
     let (constant, summands) = int_terms(term);
-    let combination = int_linear(summands)
-        .into_iter()
-        .map(|(coefficient, factors)| (-coefficient, factors))
-        .collect();
-    int_from_linear(-constant, combination)
+    int_from_combination(int_combination(&mut atoms, constant, &summands).negated())
 }
 
 /// The monomials of a reduced term with its constant counted as one, which is what a product distributes over.
@@ -359,24 +324,36 @@ fn int_monomials(term: &Term) -> Vec<Monomial> {
 
 /// The product of two reduced terms, distributed in full: every monomial of one times every monomial of the other, each product's factors re-sorted, and the results merged. Asked for by [`int_product`] only where one side is a single monomial, and by [`int_normalize`] for the rest.
 pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
-    let left_monomials = int_monomials(left);
-    let right_monomials = int_monomials(right);
-    let mut constant = zero();
-    let mut summands = Vec::new();
-    for (coefficient_left, factors_left) in &left_monomials {
-        for (coefficient_right, factors_right) in &right_monomials {
-            let coefficient = coefficient_left.clone() * coefficient_right.clone();
-            let mut factors = factors_left.clone();
-            factors.extend(factors_right.iter().cloned());
-            if factors.is_empty() {
-                constant = constant + coefficient;
-                continue;
-            }
-            factors.sort_by_key(Term::structural_hash);
-            summands.push(int_scaled(coefficient, &factors));
-        }
-    }
+    let mut atoms = Atoms::default();
+    let distributable = |atoms: &mut Atoms, term: &Term| {
+        int_monomials(term)
+            .into_iter()
+            .map(|(coefficient, factors)| {
+                let factors = factors.iter().map(|factor| atoms.exact(factor)).collect();
+                (coefficient, curios_algebra::Monomial::new(factors))
+            })
+            .collect::<Vec<_>>()
+    };
+    let left_terms = distributable(&mut atoms, left);
+    let right_terms = distributable(&mut atoms, right);
+    let (constant, products) = distribute(&left_terms, &right_terms);
+    let summands = products
+        .into_iter()
+        .map(|(coefficient, monomial)| {
+            let factors = monomial
+                .atoms()
+                .iter()
+                .map(|atom| atoms.term(*atom).clone())
+                .collect::<Vec<_>>();
+            int_scaled(coefficient, &factors)
+        })
+        .collect();
     int_merged(constant, summands)
+}
+
+/// How many monomials a product distributes, its constant counted as one — what a distribution of it against another costs, through `distribution_size`.
+pub(crate) fn int_distributed_count(term: &Term) -> usize {
+    int_monomials(term).len()
 }
 
 /// The product as the fold takes it: distributed when either operand is a constant or a single monomial, and left as a stuck `IntMul` of the two reduced operands otherwise — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
@@ -431,8 +408,8 @@ fn int_normalize_within(
             Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
                 let left = int_normalize_within(reducer, left.clone(), memo)?;
                 let right = int_normalize_within(reducer, right.clone(), memo)?;
-                let products = (int_monomials(&left).len() as u64)
-                    .saturating_mul(int_monomials(&right).len() as u64);
+                let products =
+                    distribution_size(int_distributed_count(&left), int_distributed_count(&right));
                 reducer.spend(
                     Cost::collection(products)
                         .saturating_add(Cost::term(2).saturating_mul(products)),

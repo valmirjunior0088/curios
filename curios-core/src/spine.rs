@@ -4,10 +4,10 @@
 
 use {
     super::{
-        Intrinsic, Nat, Subterm, Term, int_cancellation, int_monomial, int_rebuild_cancelled,
-        int_shaped, project_erased_universes,
+        Atoms, Intrinsic, Nat, Subterm, Term, int_cancellation, int_monomial,
+        int_rebuild_cancelled, int_shaped,
     },
-    curios_algebra::{Conclusion, Deduction},
+    curios_algebra::{Conclusion, Deduction, pair_factors},
     curios_num::{Binary, Grain},
     std::collections::VecDeque,
 };
@@ -78,47 +78,42 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 ///
 /// **Conversion's alone, never inversion's.** The residual is a sufficient condition — equal residuals make equal monomials — and `x · f = x · g` does not give `f = g` at `x = 0`, so this is a [`Conclusion`], which inversion's entry cannot hand on: it is not in [`peel_intrinsic`], and both converters ask for it by name.
 pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(Term, Term)>> {
-    let (left_factors, right_factors) = match (left, right) {
+    match (left, right) {
         (Intrinsic::NatMul(..), Intrinsic::NatMul(..)) => {
             let (left_coefficient, left_factors) = Nat::monomial(&Term::intrinsic(left.clone()));
             let (right_coefficient, right_factors) = Nat::monomial(&Term::intrinsic(right.clone()));
-            if left_coefficient != right_coefficient {
-                return None;
-            }
-            (left_factors, right_factors)
+            paired(
+                (&left_coefficient, &left_factors),
+                (&right_coefficient, &right_factors),
+            )
         }
         (Intrinsic::IntMul(..), Intrinsic::IntMul(..)) => {
             let (left_coefficient, left_factors) = int_monomial(&Term::intrinsic(left.clone()));
             let (right_coefficient, right_factors) = int_monomial(&Term::intrinsic(right.clone()));
-            if left_coefficient != right_coefficient {
-                return None;
-            }
-            (left_factors, right_factors)
+            paired(
+                (&left_coefficient, &left_factors),
+                (&right_coefficient, &right_factors),
+            )
         }
-        _ => return None,
-    };
-
-    let key = project_erased_universes::<Term>;
-    let mut unmatched = right_factors;
-    let mut residual = Vec::new();
-    for factor in left_factors {
-        let wanted = key(&factor);
-        match unmatched
-            .iter()
-            .position(|candidate| key(candidate) == wanted)
-        {
-            Some(position) => {
-                unmatched.swap_remove(position);
-            }
-            None => residual.push(factor),
-        }
-    }
-
-    match (residual.as_slice(), unmatched.as_slice()) {
-        ([], []) => Some(Conclusion::Equal),
-        ([left], [right]) => Some(Conclusion::Sufficient((left.clone(), right.clone()))),
         _ => None,
     }
+}
+
+/// Two monomials' factors paired by `curios-algebra`'s `pair_factors` over numeric atoms, each leftover read back as the factor it was on its own side.
+fn paired<C: PartialEq>(
+    left: (&C, &[Term]),
+    right: (&C, &[Term]),
+) -> Option<Conclusion<(Term, Term)>> {
+    let mut atoms = Atoms::default();
+    let mut read = |factors: &[Term]| {
+        factors
+            .iter()
+            .map(|factor| atoms.numeric(factor))
+            .collect::<Vec<_>>()
+    };
+    let (left_atoms, right_atoms) = (read(left.1), read(right.1));
+    let conclusion = pair_factors((left.0, &left_atoms), (right.0, &right_atoms))?;
+    Some(conclusion.map(|(at, other)| (left.1[at].clone(), right.1[other].clone())))
 }
 
 fn decide(equal: bool) -> Verdict {

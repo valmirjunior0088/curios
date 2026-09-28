@@ -1,59 +1,37 @@
 //! Deciding a `Nat` comparison, including under symbols.
 //!
-//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. [`Comparison`] is the verdict: which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed.
+//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
     super::*,
     crate::{Nat, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{Side, apart_modulo},
     curios_num::Natural,
-    std::cmp::Ordering,
 };
 
-/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`le`/`gt`/`ge`) reads this one result; each op differs only in how it maps the outcome to a `bool`.
-///
-/// A verdict is the set of orderings the operands may still take, and the variants are that set's seven non-empty values: `Lt`, `Eq` and `Gt` pin one, `Le` and `Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`ge` decide where `eql` still cannot, `Ne` is forced unequal with the order undecided — what divisibility proves, which `eql` and `neq` read and the order relations cannot — and `Stuck` is all three, where the op's neutral term is rebuilt. Two sound verdicts compose by intersection, which is how a forced `Le` that is also `Ne` becomes `Lt`.
-#[derive(Debug, PartialEq)]
-pub(super) enum Comparison {
-    Eq,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    Ne,
-    Stuck,
+/// One side of a comparison once cancellation has run: its floor, the symbolic part above it, and the whole side.
+struct Operand {
+    floor: Natural,
+    inner: Term,
+    whole: Term,
 }
 
-impl Comparison {
-    /// This verdict met with the fact that the operands are unequal: the orderings left once `Eq` is struck from the set.
-    pub(super) fn unequal(self) -> Self {
-        match self {
-            Comparison::Stuck => Comparison::Ne,
-            Comparison::Le => Comparison::Lt,
-            Comparison::Ge => Comparison::Gt,
-            decided => decided,
+impl Operand {
+    fn of(whole: Term) -> Self {
+        let (floor, inner) = Nat::decompose(&whole);
+        Operand {
+            floor,
+            inner,
+            whole,
         }
     }
-}
 
-/// Whether two sums are equal at no value because their floors differ modulo the gcd of their coefficients: every symbolic summand is a literal coefficient times a natural, so each side is its floor modulo that gcd whatever the symbols take, and two floors apart there never meet — `2 · x + 1` against `2 · y`, the first step of the omega test. A summand that is no literal multiple has coefficient `1`, which takes the gcd to `1` and the test quiet exactly where it has nothing to say; two literals have no coefficient at all, and were decided before this was asked.
-pub(super) fn apart_modulo(
-    floors: (&Natural, &Natural),
-    coefficients: impl IntoIterator<Item = Natural>,
-) -> bool {
-    let divisor = coefficients
-        .into_iter()
-        .fold(Natural::zero(), |divisor, coefficient| {
-            divisor.gcd(&coefficient)
-        });
-
-    !divisor.is_zero() && !divisor.is_one() && floors.0 % &divisor != floors.1 % &divisor
-}
-
-pub(super) fn from_ordering(ordering: Ordering) -> Comparison {
-    match ordering {
-        Ordering::Less => Comparison::Lt,
-        Ordering::Equal => Comparison::Eq,
-        Ordering::Greater => Comparison::Gt,
+    /// This side as the algebra reads it for the floor comparison.
+    fn side(&self) -> Side<'_> {
+        Side {
+            floor: &self.floor,
+            symbolic: !Nat::is_zero(&self.inner),
+        }
     }
 }
 
@@ -70,53 +48,39 @@ pub(super) fn compare_nat(
     let right = Nat::normalize(reducer, right)?;
     // Cancel first, so everything below reads the residuals: the shared part decides nothing on its own, and removing it is what lets `cmp(x + a, x + b)` reach `cmp(a, b)` — and `cmp(a + b, b + a)` reach equality — instead of stalling on two inners that differ only by what they share.
     let (left, right) = Nat::cancel_common(&left, &right);
+    let (left, right) = (Operand::of(left), Operand::of(right));
 
-    let (sl, il) = Nat::decompose(&left);
-    let (sr, ir) = Nat::decompose(&right);
+    // The floors decide where one symbolic part stands on both sides, or where a side is bare. Two inners are one part up to universe instances, for the reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".
+    let same = project_erased_universes(&left.inner) == project_erased_universes(&right.inner);
+    let outcome = Comparison::of_floors(left.side(), right.side(), same);
 
-    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`ge`/`le` reads still use; anything else is undecidable.
-    // Compared up to universe instances for the same reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".
-    let outcome = if project_erased_universes(&il) == project_erased_universes(&ir) {
-        from_ordering(sl.cmp(&sr))
-    } else {
-        match sl.cmp(&sr) {
-            Ordering::Greater if Nat::is_zero(&ir) => Comparison::Gt,
-            Ordering::Less if Nat::is_zero(&il) => Comparison::Lt,
-            Ordering::Equal if Nat::is_zero(&il) => Comparison::Le,
-            Ordering::Equal if Nat::is_zero(&ir) => Comparison::Ge,
-            _ => Comparison::Stuck,
-        }
-    };
-
-    // A statically bounded operand decides against a literal one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes, and `bound(l) = r` forces `l <= r` — the non-strict verdict `le` reads and `lt` cannot, so `x % 7 <= 6` decides as `x % 7 < 7` does. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
+    // A statically bounded side decides against a bare one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes, and `bound(l) = r` forces `l <= r`. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
     let outcome = match outcome {
-        Comparison::Stuck if Nat::is_zero(&ir) => match nat_bound(&il).map(|bound| bound + &sl) {
-            Some(bound) if bound < sr => Comparison::Lt,
-            Some(bound) if bound == sr => Comparison::Le,
-            _ => Comparison::Stuck,
+        Comparison::Stuck if Nat::is_zero(&right.inner) => match nat_bound(&left.inner) {
+            Some(bound) => Comparison::below(&(bound + &left.floor), &right.floor),
+            None => Comparison::Stuck,
         },
-        Comparison::Stuck if Nat::is_zero(&il) => match nat_bound(&ir).map(|bound| bound + &sr) {
-            Some(bound) if bound < sl => Comparison::Gt,
-            Some(bound) if bound == sl => Comparison::Ge,
-            _ => Comparison::Stuck,
+        Comparison::Stuck if Nat::is_zero(&left.inner) => match nat_bound(&right.inner) {
+            Some(bound) => Comparison::below(&(bound + &right.floor), &left.floor).mirrored(),
+            None => Comparison::Stuck,
         },
         decided => decided,
     };
 
-    // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends, and an at-most there is an at-most here, strict where either step is. See `nat_dominators` for why each pair holds unconditionally.
+    // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends. See `nat_dominators` for why each pair holds unconditionally.
     let outcome = match outcome {
-        Comparison::Stuck => dominated(reducer, &sl, &il, &left, &sr, &ir, &right)?,
+        Comparison::Stuck => dominated(reducer, &left, &right)?,
         decided => decided,
     };
 
     // Divisibility decides what no ordering does: floors apart modulo the gcd of every coefficient make the sides unequal at every value, which is `x * 2 + 1 == y * 2` reducing to `false`. Read last, and only where equality is still open, so a verdict the stages above reached costs nothing more.
     let outcome = match outcome {
         Comparison::Stuck | Comparison::Le | Comparison::Ge => {
-            let coefficients = Nat::summands(&il)
+            let coefficients = Nat::summands(&left.inner)
                 .into_iter()
-                .chain(Nat::summands(&ir))
+                .chain(Nat::summands(&right.inner))
                 .map(|summand| Nat::monomial(&summand).0);
-            match apart_modulo((&sl, &sr), coefficients) {
+            match apart_modulo((&left.floor, &right.floor), coefficients) {
                 true => outcome.unequal(),
                 false => outcome,
             }
@@ -124,38 +88,33 @@ pub(super) fn compare_nat(
         decided => decided,
     };
 
-    Ok((outcome, left, right))
+    Ok((outcome, left.whole, right.whole))
 }
 
-/// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares.
-#[allow(clippy::too_many_arguments)]
+/// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares: the dominator's verdict against the other side, read through `Comparison::through_dominator`.
 fn dominated(
     reducer: &mut impl Reducer,
-    sl: &Natural,
-    il: &Term,
-    left: &Term,
-    sr: &Natural,
-    ir: &Term,
-    right: &Term,
+    left: &Operand,
+    right: &Operand,
 ) -> Result<Comparison, ReduceError> {
-    for (bound, strict) in nat_dominators(il) {
-        let (verdict, _, _) = compare_nat(reducer, Nat::rebuild(sl.clone(), bound), right.clone())?;
-        match (verdict, strict) {
-            (Comparison::Lt, _) | (Comparison::Le | Comparison::Eq, true) => {
-                return Ok(Comparison::Lt);
-            }
-            (Comparison::Le | Comparison::Eq, false) => return Ok(Comparison::Le),
-            _ => {}
+    for (bound, strict) in nat_dominators(&left.inner) {
+        let (verdict, _, _) = compare_nat(
+            reducer,
+            Nat::rebuild(left.floor.clone(), bound),
+            right.whole.clone(),
+        )?;
+        if let Some(verdict) = verdict.through_dominator(strict) {
+            return Ok(verdict);
         }
     }
-    for (bound, strict) in nat_dominators(ir) {
-        let (verdict, _, _) = compare_nat(reducer, left.clone(), Nat::rebuild(sr.clone(), bound))?;
-        match (verdict, strict) {
-            (Comparison::Gt, _) | (Comparison::Ge | Comparison::Eq, true) => {
-                return Ok(Comparison::Gt);
-            }
-            (Comparison::Ge | Comparison::Eq, false) => return Ok(Comparison::Ge),
-            _ => {}
+    for (bound, strict) in nat_dominators(&right.inner) {
+        let (verdict, _, _) = compare_nat(
+            reducer,
+            left.whole.clone(),
+            Nat::rebuild(right.floor.clone(), bound),
+        )?;
+        if let Some(verdict) = verdict.mirrored().through_dominator(strict) {
+            return Ok(verdict.mirrored());
         }
     }
     Ok(Comparison::Stuck)

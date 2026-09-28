@@ -8,6 +8,7 @@ use {
         ReduceError, Reducer, Term, int_cancel_common, int_has_stuck_product, int_monomial,
         int_normalize, int_preimage, int_split_by_sign, int_terms,
     },
+    curios_algebra::apart_modulo,
     curios_num::Natural,
 };
 
@@ -28,7 +29,7 @@ pub(super) fn compare_int(
     let (left, right) = int_cancel_common(&left, &right);
 
     let outcome = match (left.as_int(), right.as_int()) {
-        (Some(l), Some(r)) => from_ordering(l.cmp(&r)),
+        (Some(l), Some(r)) => Comparison::of(l.cmp(&r)),
         // Two sound verdicts, intersected: the preimages' order when both sides are widened naturals, and divisibility as `compare_nat` reads it — the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is.
         _ => {
             let (constant_left, summands_left) = int_terms(&left);

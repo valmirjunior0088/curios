@@ -20,6 +20,9 @@ pub use module::*;
 mod atoms;
 use atoms::*;
 
+mod linear;
+pub use linear::*;
+
 mod nat;
 pub use nat::*;
 

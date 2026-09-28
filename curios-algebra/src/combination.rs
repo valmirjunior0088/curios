@@ -255,6 +255,40 @@ impl<O> Combination<Integer, O> {
     }
 }
 
+impl<O> Combination<Integer, O> {
+    /// `-self`: every coefficient and the constant negated.
+    pub fn negated(self) -> Self {
+        Combination {
+            constant: -self.constant,
+            summands: self
+                .summands
+                .into_iter()
+                .map(|summand| Summand {
+                    coefficient: -summand.coefficient,
+                    ..summand
+                })
+                .collect(),
+        }
+    }
+
+    /// This combination over ℕ, when every coefficient and the constant are non-negative — the only combinations ℕ → ℤ can have an image of whatever its atoms are, given the caller has established that every atom is itself a widened natural. `None` otherwise: a negative coefficient can make the value negative, and nothing here reads a bound.
+    pub fn natural(self) -> Option<Combination<Natural, O>> {
+        let constant = Natural::try_from(&self.constant).ok()?;
+        let summands = self
+            .summands
+            .into_iter()
+            .map(|summand| {
+                Some(Summand {
+                    coefficient: Natural::try_from(&summand.coefficient).ok()?,
+                    monomial: summand.monomial,
+                    origin: summand.origin,
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Combination { constant, summands })
+    }
+}
+
 impl<O> Cancelled<Integer, O> {
     /// What the cancellation concludes about `left = right` over `Int`: two constants decide by value, and a split that took anything off leaves an equivalent pair. No sign bound is read, since a summand may be negative, so a constant against a symbolic side is never impossible here.
     pub fn deduction(self) -> Deduction<Self> {

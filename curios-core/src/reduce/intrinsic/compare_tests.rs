@@ -1,9 +1,7 @@
 //! Symbolic `Nat` comparison: shared addends, commuted sums, and the bound an indexed loop walks under.
 
 use {
-    super::{
-        Comparison, align_comparisons, compare_int, compare_nat, from_ordering, reduce_intrinsic,
-    },
+    super::{Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic},
     crate::{Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };
@@ -154,7 +152,7 @@ fn nat_agrees_with_literal_ordering() {
                 compare_nat(&mut reducer, lit(m), lit(n))
                     .expect("reduces")
                     .0,
-                from_ordering(m.cmp(&n)),
+                Comparison::of(m.cmp(&n)),
                 "compare_nat disagreed with the literal ordering on ({m}, {n})",
             );
         }
