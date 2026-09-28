@@ -242,23 +242,44 @@ pub induct Outcome(spec: List(Arg)): pub Type
 | parsed(Values(spec))
 --- The line asked for the help text.
 | help()
---- The line asked for the version.
-| version()
+--- The line asked for the version, which is this text.
+| version(text: Str)
 --- The line was refused.
 | failure(Failure)
 end
 
-let no_occurrences: List(Str) =
-    [];
+--- What the line has given each argument so far, indexed by the arguments as `Values` is, so reading the record walks both together.
+induct Slots: (List(Arg)) -> Type
+--- No arguments, so nothing given.
+| nil(): ([])
+--- The occurrences one argument was given, in the line's order, then the rest.
+| cons(@a: Arg, @rest: List(Arg), found: List(Str), tail: Slots(rest)): ([a, ..rest])
+end
 
-let empty_slots(spec: List(Arg)) -> List(List(Str)) =
-    List/replicate(List/len(spec), no_occurrences);
+--- Nothing given to any argument.
+let empty_slots(spec: List(Arg)) -> Slots(spec) =
+    match spec: (s) => Slots(s) | [] => Slots/nil() | [_, .._]; tail => Slots/cons([], tail) end;
 
-let push_at(slots: List(List(Str)), i: Nat, s: Str) -> List(List(Str)) =
+--- An argument the line reached, and the slots with one more occurrence given to it.
+let Claim(spec: List(Arg)) -> Type =
+    {arg: Arg, put: (Str) -> Slots(spec)};
+
+--- The first argument `wanted` accepts, judged with what it was given so far: the argument, and the way to give it an occurrence without looking for it again. `none` when no argument is wanted, which is the line's fault, never an index gone astray.
+let claim(
+    @spec: List(Arg),
+    slots: Slots(spec),
+    wanted: (Arg, List(Str)) -> Bool,
+) -> Option(Claim(spec)) =
     match slots
-    | [] => []
-    | [head, ..tail] =>
-        match i | 0 => [[..head, s], ..tail] | j + 1 => [head, ..push_at(tail, j, s)] end
+    | nil() => Option/none()
+    | cons(@a, @_, found, tail) =>
+        match wanted(a, found)
+        | true => Option/some((arg = a, put = (s) => Slots/cons([..found, s], tail)))
+        | false =>
+            Option/map(
+                claim(tail, wanted),
+                (c) => (arg = c.arg, put = (s) => Slots/cons(found, c.put(s))))
+        end
     end;
 
 let takes_value(k: Kind) -> Bool =
@@ -270,32 +291,18 @@ let takes_value(k: Kind) -> Bool =
     | rest(_) => false
     end;
 
-let long_index(spec: List(Arg), name: Str) -> Option(Nat) =
-    List/find_index(spec, (a) => Str/eql(a.long, name));
+let long_named(name: Str) -> (Arg, List(Str)) -> Bool =
+    (a, _) => Str/eql(a.long, name);
 
-let short_index(spec: List(Arg), c: Char) -> Option(Nat) =
-    List/find_index(spec, (a) => match a.short | some(d) => Char/eql(c, d) | none() => false end);
+let short_named(c: Char) -> (Arg, List(Str)) -> Bool =
+    (a, _) => match a.short | some(d) => Char/eql(c, d) | none() => false end;
 
-let name_at(spec: List(Arg), i: Nat) -> Str =
-    Option/unwrap_or(Option/map(List/try_get(spec, i), (a) => a.long), "");
+--- A positional the line has not filled yet: positionals fill in declaration order, one token each.
+let unfilled_positional(a: Arg, found: List(Str)) -> Bool =
+    is_positional(a.kind) && match found | [] => true | [_, .._] => false end;
 
-let wants_a_value(spec: List(Arg), i: Nat) -> Bool =
-    Option/unwrap_or(Option/map(List/try_get(spec, i), (a) => takes_value(a.kind)), false);
-
-let positional_indices(spec: List(Arg)) -> List(Nat) =
-    let walk(rest: List(Arg), at: Nat) -> List(Nat) =
-        match rest
-        | [] => []
-        | [a, ..more] =>
-            match is_positional(a.kind)
-            | true => [at, ..walk(more, at + 1)]
-            | false => walk(more, at + 1)
-            end
-        end;
-    walk(spec, 0);
-
-let rest_index(spec: List(Arg)) -> Option(Nat) =
-    List/find_index(spec, (a) => is_rest(a.kind));
+let collects_the_rest(a: Arg, _: List(Str)) -> Bool =
+    is_rest(a.kind);
 
 let wants_help(argv: List(Str)) -> Bool =
     List/any(argv, (t) =>
@@ -306,92 +313,80 @@ let wants_help(argv: List(Str)) -> Bool =
 let wants_version(argv: List(Str)) -> Bool =
     List/any(argv, (t) => Str/eql(t, "--version"));
 
-struct Walk: Type {
-    slots: List(List(Str)),
-    filled: Nat,
+struct Walk(spec: List(Arg)): Type {
+    slots: Slots(spec),
     literal: Bool,
 }
 
-induct Cluster: Type
-| settled(w: Walk)
-| needs(w: Walk, at: Nat, name: Str)
+induct Cluster(spec: List(Arg)): Type
+| settled(w: Walk(spec))
+| needs(w: Walk(spec), name: Str, put: (Str) -> Slots(spec))
 | broke(f: Failure)
 end
 
-let place(spec: List(Arg), w: Walk, token: Str) -> Result(Failure, Walk) =
-    match List/try_get(positional_indices(spec), w.filled)
-    | some(i) =>
-        Result/success(Walk { ..w, slots = push_at(w.slots, i, token), filled = w.filled + 1 })
-    | none() =>
-        match rest_index(spec)
-        | some(i) => Result/success(Walk { ..w, slots = push_at(w.slots, i, token) })
-        | none() => Result/failure(Failure/unexpected(token))
-        end
+let place(@spec: List(Arg), w: Walk(spec), token: Str) -> Result(Failure, Walk(spec)) =
+    choose
+    | some(claimed) = claim(w.slots, unfilled_positional) =>
+        Result/success(Walk { ..w, slots = claimed.put(token) })
+    | some(claimed) = claim(w.slots, collects_the_rest) =>
+        Result/success(Walk { ..w, slots = claimed.put(token) })
+    | _ => Result/failure(Failure/unexpected(token))
     end;
 
-let run_cluster(spec: List(Arg), w: Walk, chars: List(Char), whole: Str) -> Cluster =
+let run_cluster(@spec: List(Arg), w: Walk(spec), chars: List(Char), whole: Str) -> Cluster(spec) =
     match chars
     | [] => Cluster/settled(w)
     | [c, ..more] =>
-        match short_index(spec, c)
+        match claim(w.slots, short_named(c))
         | none() => Cluster/broke(Failure/unknown_option(whole))
-        | some(i) =>
-            let name = name_at(spec, i);
-            match wants_a_value(spec, i)
-            | false =>
-                run_cluster(spec, Walk { ..w, slots = push_at(w.slots, i, name) }, more, whole)
+        | some(claimed) =>
+            let name = claimed.arg.long;
+            match takes_value(claimed.arg.kind)
+            | false => run_cluster(Walk { ..w, slots = claimed.put(name) }, more, whole)
             | true =>
                 match more
-                | [] => Cluster/needs(w, i, name)
+                | [] => Cluster/needs(w, name, claimed.put)
                 | [_, .._] =>
                     Cluster/settled(
-                        Walk {
-                            ..w,
-                            slots = push_at(w.slots, i, Str/flatten(List/map(more, Str/of_char))),
-                        })
+                        Walk { ..w, slots = claimed.put(Str/flatten(List/map(more, Str/of_char))) })
                 end
             end
         end
     end;
 
-let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(List(Str))) =
+let step(@spec: List(Arg), w: Walk(spec), tokens: List(Str)) -> Result(Failure, Slots(spec)) =
     match tokens
     | [] => Result/success(w.slots)
     | [t, ..more] =>
         match w.literal
-        | true =>
-            let w2 = place(spec, w, t)!;
-            step(spec, w2, more)
+        | true => Result/bind(place(w, t), (w2) => step(w2, more))
         | false =>
             match Str/eql(t, "--")
-            | true => step(spec, Walk { ..w, literal = true }, more)
+            | true => step(Walk { ..w, literal = true }, more)
             | false =>
                 choose
                 | some(body) = Str/strip_prefix(t, "--") =>
                     match Str/split_once(body, "=")
                     | some((name, value)) =>
-                        match long_index(spec, name)
+                        match claim(w.slots, long_named(name))
                         | none() => Result/failure(Failure/unknown_option(t))
-                        | some(i) =>
-                            match wants_a_value(spec, i)
+                        | some(claimed) =>
+                            match takes_value(claimed.arg.kind)
                             | false =>
                                 Result/failure(Failure/bad_value(name, "this flag takes no value"))
-                            | true =>
-                                step(spec, Walk { ..w, slots = push_at(w.slots, i, value) }, more)
+                            | true => step(Walk { ..w, slots = claimed.put(value) }, more)
                             end
                         end
                     | none() =>
-                        match long_index(spec, body)
+                        match claim(w.slots, long_named(body))
                         | none() => Result/failure(Failure/unknown_option(t))
-                        | some(i) =>
-                            match wants_a_value(spec, i)
-                            | false =>
-                                step(spec, Walk { ..w, slots = push_at(w.slots, i, body) }, more)
+                        | some(claimed) =>
+                            match takes_value(claimed.arg.kind)
+                            | false => step(Walk { ..w, slots = claimed.put(body) }, more)
                             | true =>
                                 match more
                                 | [] => Result/failure(Failure/missing_value(body))
-                                | [v, ..rest2] =>
-                                    step(spec, Walk { ..w, slots = push_at(w.slots, i, v) }, rest2)
+                                | [v, ..rest2] => step(Walk { ..w, slots = claimed.put(v) }, rest2)
                                 end
                             end
                         end
@@ -399,19 +394,16 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
                 | some(cluster) = Option/filter(
                     Str/strip_prefix(t, "-"),
                     (c) => Bool/not(Str/is_empty(c))) =>
-                    match run_cluster(spec, w, Str/to_list(cluster), t)
+                    match run_cluster(w, Str/to_list(cluster), t)
                     | broke(f) => Result/failure(f)
-                    | settled(w2) => step(spec, w2, more)
-                    | needs(w2, i, name) =>
+                    | settled(w2) => step(w2, more)
+                    | needs(w2, name, put) =>
                         match more
                         | [] => Result/failure(Failure/missing_value(name))
-                        | [v, ..rest2] =>
-                            step(spec, Walk { ..w2, slots = push_at(w2.slots, i, v) }, rest2)
+                        | [v, ..rest2] => step(Walk { ..w2, slots = put(v) }, rest2)
                         end
                     end
-                | _ =>
-                    let w2 = place(spec, w, t)!;
-                    step(spec, w2, more)
+                | _ => Result/bind(place(w, t), (w2) => step(w2, more))
                 end
             end
         end
@@ -449,29 +441,27 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
     | rest(v) => List/traverse(occurrences, (s) => read_with(v, s))
     end;
 
-let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec)) =
-    match spec
-    | [] => Result/success(Values/nil())
-    | [a, ..more] =>
-        let here = Option/unwrap_or(List/try_get(slots, 0), no_occurrences);
-        let later = match slots | [] => [] | [_, ..tail] => tail end;
+let fill(@spec: List(Arg), slots: Slots(spec)) -> Result(Failure, Values(spec)) =
+    match slots
+    | nil() => Result/success(Values/nil())
+    | cons(@a, @_, found, tail) =>
         Result/bind(
-            field(a.long, a.kind, here),
-            (head) => Result/map_success(fill(more, later), (tail) => Values/cons(head, tail)))
+            field(a.long, a.kind, found),
+            (head) => Result/map_success(fill(tail), (more) => Values/cons(head, more)))
     end;
 
---- A line read against `spec`, performing nothing. Help wins over every other reading of the line, and a version is answered only when `versioned`.
-pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec) =
+--- A line read against `spec`, performing nothing. Help wins over every other reading of the line, and the version is answered only when there is one.
+pub let parse(spec: List(Arg), argv: List(Str), version: Option(Str)) -> Outcome(spec) =
     match wants_help(argv)
     | true => Outcome/help()
     | false =>
-        match versioned && wants_version(argv)
-        | true => Outcome/version()
-        | false =>
-            match step(spec, Walk { slots = empty_slots(spec), filled = 0, literal = false }, argv)
+        match Option/filter(version, (_) => wants_version(argv))
+        | some(text) => Outcome/version(text)
+        | none() =>
+            match step(Walk { slots = empty_slots(spec), literal = false }, argv)
             | failure(f) => Outcome/failure(f)
             | success(slots) =>
-                match fill(spec, slots)
+                match fill(slots)
                 | failure(f) => Outcome/failure(f)
                 | success(v) => Outcome/parsed(v)
                 end
@@ -600,8 +590,8 @@ pub induct Chosen: pub Type
 | chose(sub: Cli, rest: List(Str))
 --- The line asked for the help text.
 | wanted_help()
---- The line asked for the version.
-| wanted_version()
+--- The line asked for the version, which is this text.
+| wanted_version(text: Str)
 --- The choice was refused.
 | refused(f: Failure)
 end
@@ -631,9 +621,9 @@ pub let select(cli: Cli, argv: List(Str)) -> Chosen =
             match wants_help([first])
             | true => Chosen/wanted_help()
             | false =>
-                match Option/is_some(v) && wants_version([first])
-                | true => Chosen/wanted_version()
-                | false =>
+                match Option/filter(v, (_) => wants_version([first]))
+                | some(text) => Chosen/wanted_version(text)
+                | none() =>
                     match named(commands, first)
                     | some(sub) => Chosen/chose(sub, rest)
                     | none() => Chosen/refused(Failure/unknown_command(first, names))
@@ -665,16 +655,16 @@ let fail_with(text: Str) -> Io({}) =
 let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
     match cli
     | leaf(_, _, v, args, run) =>
-        match parse(args, argv, Option/is_some(v))
+        match parse(args, argv, v)
         | help() => print(help(within, cli))
-        | version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
+        | version(text) => print(Str/concat(text, "\n"))
         | failure(f) => fail_with(report(within, cli, f))
         | parsed(vals) => run(vals)
         end
-    | group(_, _, v, _) =>
+    | group(_, _, _, _) =>
         match select(cli, argv)
         | wanted_help() => print(help(within, cli))
-        | wanted_version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
+        | wanted_version(text) => print(Str/concat(text, "\n"))
         | refused(f) => fail_with(report(within, cli, f))
         | chose(sub, rest) => drive([..within, name(cli)], sub, rest)
         end

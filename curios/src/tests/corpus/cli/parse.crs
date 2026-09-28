@@ -21,9 +21,9 @@ let why(f: Cli/Failure) -> Str =
 
 -- One rendering for every outcome, so a row's expectation is one string whichever way the line went.
 let read(argv: List(Str)) -> Str =
-    match Cli/parse(spec, argv, true)
+    match Cli/parse(spec, argv, Option/some("1.0.0"))
     | help() => "help"
-    | version() => "version"
+    | version(text) => Str/concat("version ", text)
     | failure(f) => why(f)
     | parsed(v) =>
         Str/join(" ", [
@@ -55,7 +55,7 @@ test help_and_version_answer_before_any_other_reading =
     Test/all([
         Test/equal(read(["--port", "1", "--help"]), "help"),
         Test/equal(read(["--prot", "--help"]), "help"),
-        Test/equal(read(["--version"]), "version")]);
+        Test/equal(read(["--version"]), "version 1.0.0")]);
 
 test each_failure_names_what_the_line_got_wrong =
     Test/all([
@@ -68,8 +68,27 @@ test each_failure_names_what_the_line_got_wrong =
 test a_reader_that_refuses_a_value_reports_its_own_reason =
     let ported: List(Cli/Arg) = [Cli/option("port", Cli/nat, "Port to listen on")];
     Test/equal(
-        match Cli/parse(ported, ["--port", "http"], false)
+        match Cli/parse(ported, ["--port", "http"], Option/none())
         | failure(f) => match f | bad_value(n, r) => Str/flatten([n, ": ", r]) | _ => "other" end
         | _ => "not a failure"
         end,
         "port: expected a number, found 'http'");
+
+let copying: List(Cli/Arg) =
+    [
+        Cli/positional("from", Cli/str, "Source"),
+        Cli/positional("to", Cli/str, "Destination"),
+        Cli/rest("extra", Cli/str, "Anything after")];
+
+-- Positionals fill in declaration order, one token each, and the collector takes every token after them, the `--`-escaped ones included.
+test positionals_fill_in_order_and_the_collector_takes_the_rest =
+    Test/equal(
+        match Cli/parse(copying, ["a", "b", "c", "--", "-d"], Option/none())
+        | parsed(v) =>
+            Str/join(" ", [
+                Cli/get(v, "from"),
+                Cli/get(v, "to"),
+                Str/join(",", Cli/get(v, "extra"))])
+        | _ => "not parsed"
+        end,
+        "a b c,-d");

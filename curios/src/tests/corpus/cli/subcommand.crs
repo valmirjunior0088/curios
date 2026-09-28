@@ -23,7 +23,7 @@ let app: Cli =
 let chose(argv: List(Str)) -> Str =
     match Cli/select(app, argv)
     | wanted_help() => "help"
-    | wanted_version() => "version"
+    | wanted_version(text) => Str/concat("version ", text)
     | refused(f) => Cli/report([], app, f)
     | chose(sub, rest) => Str/flatten([Cli/name(sub), "(", Str/join(",", rest), ")"])
     end;
@@ -38,7 +38,7 @@ test the_first_token_chooses_the_subcommand_and_the_rest_is_its_line =
 test a_group_answers_only_for_its_own_first_token =
     Test/all([
         Test/equal(chose(["--help"]), "help"),
-        Test/equal(chose(["--version"]), "version"),
+        Test/equal(chose(["--version"]), "version 0.1.0"),
         Test/equal(chose(["add", "--help"]), "add(--help)")]);
 
 -- Neither a name that is not there nor no name at all: both refuse, and both list what there is.

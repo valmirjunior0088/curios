@@ -508,7 +508,8 @@ let total_key(f: Flt) -> Nat =
 --- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf`. A NaN writes its sign, its kind and its payload where that is not the kind's own — `+nan`, `-snan`, `+nan(0x5)` — so every NaN reads back as the pattern it is.
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
-    let at = (i: Nat) => Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, i), 0));
+    -- `to_le_bytes`'s length reduces to eight, so every index below discharges its bound by reduction.
+    let at(i: Nat, @ok: Nat/Lt(i, 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
     let b6 = at(6);
     let b7 = at(7);
     let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
