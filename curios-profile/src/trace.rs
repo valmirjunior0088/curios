@@ -463,7 +463,7 @@ impl Visit for Fields {
 }
 
 /// The four characters a tab-separated row cannot hold bare. A value reaches here through `Debug`, so this is about what a field *can* contain rather than what today's fields do contain.
-fn escape(value: &str) -> String {
+pub(crate) fn escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
         match character {

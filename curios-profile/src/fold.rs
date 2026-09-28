@@ -9,7 +9,7 @@
 //! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process. Which files a rotated stream occupies is the writer's decision, so it is answered here rather than by whoever asks.
 
 use {
-    crate::predecessor,
+    crate::{escape, predecessor},
     std::{
         collections::BTreeMap,
         fs::File,
@@ -109,7 +109,25 @@ pub struct ProfileSummary {
     pub self_allocated: u64,
     /// Trips through the allocator while the spans were entered. Divided into [`allocated`](Self::allocated) it gives the average request size, which is what separates a pass that wants fewer allocations from one that wants a smaller structure.
     pub allocations: u64,
+    /// The costliest closed spans of this row, costliest first and at most [`SLOWEST_KEPT`] of them, each with the fields it was created with — for a span that declared fields beyond `group`, and empty for every other.
+    ///
+    /// **What an aggregate cannot say, the instances can.** A row answers how long a span took in all; it cannot say *which* call was slow or what it was handed, and that is the question a hunt for a pathological input asks. A span that declares its inputs as fields — `profile!("entails", assumed = assumed.len(), lower = ?lower)` — is answered here by the calls that cost the most, with their inputs beside them. Formatting a field costs at every span creation, so a field that is there to be read this way belongs on a span added to isolate one investigation, and leaves with it.
+    pub slowest: Vec<SpanInstance>,
 }
+
+/// One closed span, as [`ProfileSummary::slowest`] keeps it.
+#[derive(Debug, Clone)]
+pub struct SpanInstance {
+    /// How long it was entered, over every entry.
+    pub total: Duration,
+    /// The part of [`total`](Self::total) no span entered inside it accounts for.
+    pub self_total: Duration,
+    /// Its creation fields other than `group`, in the order the call site wrote them, unescaped.
+    pub fields: Vec<(String, String)>,
+}
+
+/// How many of its costliest instances a row keeps. Enough to tell one pathological call from a family of them, and bounded so that keeping them costs a fold a constant per span name.
+pub const SLOWEST_KEPT: usize = 10;
 
 /// Recompute a report from the rows of one record stream.
 ///
@@ -164,6 +182,33 @@ impl ProfileReport {
             ));
         }
 
+        if self
+            .summaries
+            .iter()
+            .any(|summary| !summary.slowest.is_empty())
+        {
+            rendered.push_str("\ntotal_ms\tself_ms\ttarget\tname\tgroup\tfields\t(slowest)\n");
+            for summary in &self.summaries {
+                for instance in &summary.slowest {
+                    let fields = instance
+                        .fields
+                        .iter()
+                        .map(|(name, value)| format!("{}={}", escape(name), escape(value)))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    rendered.push_str(&format!(
+                        "{:.3}\t{:.3}\t{}\t{}\t{}\t{}\n",
+                        instance.total.as_secs_f64() * 1_000.0,
+                        instance.self_total.as_secs_f64() * 1_000.0,
+                        summary.target,
+                        summary.name,
+                        summary.group.as_deref().unwrap_or(""),
+                        fields,
+                    ));
+                }
+            }
+        }
+
         if !self.samples.is_empty() {
             rendered.push_str("\ncount\ttotal\tmin\tmean\tmax\ttarget\tname\n");
             for sample in &self.samples {
@@ -203,6 +248,8 @@ impl ProfileReport {
 struct Open {
     callsite: u32,
     group: Option<String>,
+    /// The creation fields other than `group`, for [`ProfileSummary::slowest`].
+    fields: Vec<(String, String)>,
     /// One entry not yet matched by an exit, so a span re-entered within itself is measured over each extent rather than the outermost.
     entered: Vec<Entry>,
     elapsed: u128,
@@ -242,6 +289,7 @@ struct Aggregate {
     allocated: u64,
     own_allocated: u64,
     allocations: u64,
+    slowest: Vec<SpanInstance>,
 }
 
 #[derive(Default)]
@@ -313,10 +361,11 @@ impl Fold {
             return;
         };
 
-        let group = field(columns, "group");
+        let (group, fields) = fields(columns);
         let span = self.open.entry(id).or_default();
         span.callsite = callsite;
         span.group = group;
+        span.fields = fields;
     }
 
     fn enter<'row>(&mut self, columns: impl Iterator<Item = &'row str>) {
@@ -404,6 +453,22 @@ impl Fold {
         aggregate.allocated = aggregate.allocated.saturating_add(span.allocated);
         aggregate.own_allocated = aggregate.own_allocated.saturating_add(span.own_allocated);
         aggregate.allocations = aggregate.allocations.saturating_add(span.allocations);
+
+        if !span.fields.is_empty() {
+            let instance = SpanInstance {
+                total: nanos(span.elapsed),
+                self_total: nanos(span.own),
+                fields: span.fields,
+            };
+            // Costliest first, and the earlier of two equal instances first, so the kept set is the same however the rows were interleaved.
+            let position = aggregate
+                .slowest
+                .partition_point(|kept| kept.total >= instance.total);
+            if position < SLOWEST_KEPT {
+                aggregate.slowest.insert(position, instance);
+                aggregate.slowest.truncate(SLOWEST_KEPT);
+            }
+        }
     }
 
     fn event<'row>(&mut self, mut columns: impl Iterator<Item = &'row str>) {
@@ -450,6 +515,7 @@ impl Fold {
                 allocated: aggregate.allocated,
                 self_allocated: aggregate.own_allocated,
                 allocations: aggregate.allocations,
+                slowest: aggregate.slowest.clone(),
             })
             .collect::<Vec<_>>();
 
@@ -541,6 +607,22 @@ fn field<'row>(columns: impl Iterator<Item = &'row str>, wanted: &str) -> Option
         .filter_map(|pair| pair.split_once('='))
         .find(|(name, _)| *name == wanted)
         .map(|(_, value)| unescape(value))
+}
+
+/// A creation row's `group`, and every other `name=value` field in the order it was written, unescaped.
+fn fields<'row>(
+    columns: impl Iterator<Item = &'row str>,
+) -> (Option<String>, Vec<(String, String)>) {
+    let mut group = None;
+    let mut others = Vec::new();
+    for (name, value) in columns.filter_map(|pair| pair.split_once('=')) {
+        match unescape(name) {
+            name if name == "group" => group = Some(unescape(value)),
+            name => others.push((name, unescape(value))),
+        }
+    }
+
+    (group, others)
 }
 
 fn nanos(value: u128) -> Duration {

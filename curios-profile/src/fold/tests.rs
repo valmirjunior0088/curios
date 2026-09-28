@@ -288,6 +288,96 @@ fn an_exit_that_is_not_the_innermost_entry_credits_no_parent() {
     assert_eq!(row("second").self_total, Duration::from_nanos(400));
 }
 
+/// `count` closed spans of one callsite named `name`, the `n`th entered for `durations(n)` and created with the field `input=n`.
+fn instances(name: &str, count: u64, durations: impl Fn(u64) -> u64) -> String {
+    let mut rows = format!("D\t0\tcurios_cert\t{name}\n");
+    let mut at = 0;
+    for n in 0..count {
+        let id = n + 1;
+        let end = at + durations(n);
+        rows.push_str(&format!(
+            "S\t{id}\t0\t{at}\tinput={n}\n\
+             E\t{id}\t0\t{at}\t0\t0\t0\t0\n\
+             X\t{id}\t0\t{end}\t0\t0\t0\t0\n\
+             C\t{id}\t0\t{end}\n"
+        ));
+        at = end;
+    }
+
+    rows
+}
+
+// What an aggregate cannot say: which call was slow, and what it was handed. A span that declares its inputs keeps its costliest calls with them, costliest first.
+#[test]
+fn a_span_s_costliest_instances_keep_the_fields_it_was_created_with() {
+    let report = folded(&instances("entails", 3, |n| [100, 300, 200][n as usize]));
+
+    let slowest = &report.summaries[0].slowest;
+    let kept = slowest
+        .iter()
+        .map(|instance| (instance.total.as_nanos(), instance.fields.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        kept,
+        vec![
+            (300, vec![("input".to_owned(), "1".to_owned())]),
+            (200, vec![("input".to_owned(), "2".to_owned())]),
+            (100, vec![("input".to_owned(), "0".to_owned())]),
+        ]
+    );
+}
+
+// The instances are bounded, so keeping them costs a fold a constant per span name however many calls the stream holds, and the ones kept are the costliest.
+#[test]
+fn a_row_keeps_its_costliest_instances_and_no_more_than_the_bound() {
+    let count = SLOWEST_KEPT as u64 + 5;
+    let report = folded(&instances("entails", count, |n| 100 + n));
+
+    let slowest = &report.summaries[0].slowest;
+    assert_eq!(slowest.len(), SLOWEST_KEPT);
+    assert_eq!(
+        slowest[0].fields,
+        vec![("input".to_owned(), (count - 1).to_string())]
+    );
+    assert_eq!(
+        slowest[SLOWEST_KEPT - 1].total,
+        Duration::from_nanos(100 + count - SLOWEST_KEPT as u64)
+    );
+}
+
+// A span that declared nothing but its group has no instance worth telling apart — its row's maximum already names its slowest call — so it keeps none, and a report of permanent spans gains no table.
+#[test]
+fn a_span_declaring_nothing_beyond_its_group_keeps_no_instances() {
+    let report = folded(
+        "D\t0\tcurios_cert\tcertify_declaration\n\
+         S\t1\t0\t0\tgroup=Nat/add\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         X\t1\t0\t100\t0\t0\t0\t0\n\
+         C\t1\t0\t100\n",
+    );
+
+    assert!(report.summaries[0].slowest.is_empty());
+    assert!(!report.render().contains("(slowest)"));
+}
+
+// The report lists the kept instances beside the rows, with their fields escaped as the stream writes them, so a field holding a tab still reads as one column.
+#[test]
+fn the_report_lists_the_slowest_instances_with_their_fields() {
+    let report = folded(
+        "D\t0\tcurios_cert\tentails\n\
+         S\t1\t0\t0\tlower=u\\t+\\t1\tassumed=12\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         X\t1\t0\t2000000\t0\t0\t0\t0\n\
+         C\t1\t0\t2000000\n",
+    );
+
+    let rendered = report.render();
+    assert!(
+        rendered.contains("2.000\t2.000\tcurios_cert\tentails\t\tlower=u\\t+\\t1 assumed=12\n"),
+        "{rendered}"
+    );
+}
+
 // A rotation can discard the entry of a span whose children survive, and nothing is invented for it: the children keep their own time, and the exit the stream never saw entered credits no one.
 #[test]
 fn a_span_whose_parent_entered_before_the_stream_opened_keeps_its_own_time() {

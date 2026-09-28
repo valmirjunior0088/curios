@@ -43,6 +43,12 @@ pub use tracing;
 /// ```
 ///
 /// **One row per distinct group value**, so a group is for a bounded set — top-level declarations, stages, passes — and never for a span that runs per node. The value is also formatted at *every* span creation rather than once per distinct value, which is the same depth discipline [`sample!`] carries and for the same reason.
+///
+/// Any other field is kept with the call it describes: a fold keeps a row's costliest calls with the fields each was created with (`ProfileSummary::slowest`), which is how a span answers *which call* was slow and *what it was handed*. That is an investigation's question, and a field formatted at every call is an investigation's price, so such a span is added to isolate one question and removed once it is answered.
+///
+/// ```text
+/// curios_profile::profile!("entails", assumed = assumed.len(), lower = ?lower, upper = ?upper);
+/// ```
 #[macro_export]
 macro_rules! profile {
     ($name:literal => $expr:expr) => {{
