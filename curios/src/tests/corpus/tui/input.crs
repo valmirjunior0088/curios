@@ -59,6 +59,10 @@ test the_kitty_form_reads_the_code_and_modifiers =
             Event/key(Key { ..Key/plain(Code/char('a')), shift = true }),
             Event/key(Key/with_ctrl(Code/enter()))]);
 
+-- The kitty form names its key by its first parameter, so a sequence with none names no key rather than the character zero.
+test a_kitty_sequence_without_a_code_names_no_key =
+    Test/equal(keys(x[0x1B, '[', 'u', 'q']), [k(Code/char('q'))]);
+
 test an_escape_before_a_printable_byte_is_alt =
     Test/equal(keys(x[0x1B, 'x']), [Event/key(Key/with_alt(Code/char('x')))]);
 
@@ -69,6 +73,15 @@ test a_bracketed_paste_is_one_event =
 
 test a_multi_byte_scalar_is_one_character =
     Test/equal(keys(x[0xC3, 0xA9]), [k(Code/char('é'))]);
+
+-- A chunk ending inside a scalar hands its first bytes back, and the next chunk completes the character.
+test a_scalar_split_across_chunks_waits_for_the_rest =
+    let first = input/decode(@Nat, x['a', 0xC3]);
+    let second = input/decode(@Nat, x[..first.rest, 0xA9]);
+    Test/all([
+        Test/equal(first.events, [k(Code/char('a'))]),
+        Test/equal(first.rest, x[0xC3]),
+        Test/equal(second.events, [k(Code/char('é'))])]);
 
 -- A chunk ending in a lone Escape hands it back untouched, and the next chunk completes the sequence it began.
 test a_lone_escape_at_the_end_waits_for_the_next_chunk =
@@ -87,6 +100,14 @@ test an_unfinished_paste_is_cut_at_its_opener =
         Test/equal(Bytes/len(first.rest), 8),
         Test/equal(second.events, [Event/paste("abc")])]);
 
+-- The end marker is looked for only where all six of its bytes fit, so one the chunk cuts in half leaves the paste open, and the next chunk closes it.
+test a_paste_end_split_across_chunks_is_found_whole =
+    let first = input/decode(@Nat, x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2']);
+    let second = input/decode(@Nat, x[..first.rest, '0', '1', '~']);
+    Test/all([
+        Test/equal(List/len(first.events), 0),
+        Test/equal(second.events, [Event/paste("a")])]);
+
 -- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
 test flush_reads_a_lone_escape_as_the_key =
     Test/all([
@@ -103,7 +124,7 @@ let rest_is_a_suffix(b: Bytes) -> Test =
         Test/assert(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))
     end;
 
--- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste.
+-- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste, a scalar cut short, and an end marker cut in half.
 test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =
     Test/all(
         List/map(
@@ -114,5 +135,7 @@ test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =
                 x[0x1B, '['],
                 x[0x1B, '[', 'A'],
                 x[0x1B, '[', '2', '0', '0', '~', 'a', 'b'],
-                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2', '0', '1', '~']],
+                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2', '0', '1', '~'],
+                x['a', 0xC3],
+                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2']],
             rest_is_a_suffix));

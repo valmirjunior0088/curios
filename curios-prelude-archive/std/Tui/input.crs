@@ -1,15 +1,6 @@
-use /std/{Nat, Str, Char, Byte, Bytes, List, Option};
+use /std/{Nat, Str, Char, Byte, Bytes, Bool, List, Option};
 use /std/Tui/{Key, Event};
 use /std/Tui/Key/{Code};
-
-let window(b: Bytes, start: Nat, n: Nat) -> Bytes =
-    match Nat/Le/try(start + n, Bytes/len(b))
-    | none() => x[]
-    | some(ok) => Bytes/slice(b, start, n, @ok)
-    end;
-
-let from(b: Bytes, start: Nat) -> Bytes =
-    window(b, start, Bytes/len(b) - start);
 
 let at(b: Bytes, i: Nat) -> Option(Nat) =
     Option/map(Bytes/try_get(b, i), Byte/to_nat);
@@ -139,10 +130,10 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         match len
         | 0 => Step/emit(Option/none(), i + 1)
         | _ =>
-            match i + len <= Bytes/len(input)
-            | false => Step/cut()
-            | true =>
-                match Str/of_bytes(window(input, i, len))
+            match Nat/Le/try(i + len, Bytes/len(input))
+            | none() => Step/cut()
+            | some(within) =>
+                match Str/of_bytes(Bytes/slice(input, i, len, @within))
                 | none() => Step/emit(Option/none(), i + 1)
                 | some(s) =>
                     match Str/At/try_next(s, Str/At/start(s))
@@ -153,21 +144,36 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             end
         end;
     let paste(_: Nat, start: Nat) -> Step(E) =
-        let find(j: Nat) -> Option(Nat) =
-            match at(input, j)
+        -- Where the end marker begins, at or after `start`, with room for all six of its bytes: past the last place that has room, the chunk ends inside the paste.
+        let find(
+            j: Nat,
+            @onward: Nat/Le(start, j),
+        ) -> Option({at: Nat, onward: Nat/Le(start, at), room: Nat/Le(at + 6, Bytes/len(input))}) =
+            match Nat/Le/try(j + 6, Bytes/len(input))
             | none() => Option/none()
-            | some(_) =>
-                match Bytes/eql(window(input, j, 6), paste_end)
-                | true => Option/some(j)
-                | false => find(j + 1)
+            | some(room) =>
+                match Bytes/eql(Bytes/slice(input, j, 6, @room), paste_end)
+                | true => Option/some((at = j, onward = onward, room = room))
+                | false => find(j + 1, @Nat/Le/trans(@start, @j, @j + 1, onward, Bool/True/qed()))
                 end
             end;
-        match find(start)
+        match find(start, @Nat/Le/refl(start))
         | none() => Step/cut()
-        | some(j) =>
-            match Str/of_bytes(window(input, start, j - start))
-            | some(s) => Step/emit(Option/some(Event/paste(s)), j + 6)
-            | none() => Step/emit(Option/none(), j + 6)
+        | some(marker) =>
+            let before =
+                Bytes/slice(
+                    input,
+                    0,
+                    marker.at,
+                    @Nat/Le/trans(
+                        @marker.at,
+                        @marker.at + 6,
+                        @Bytes/len(input),
+                        Bool/True/qed(),
+                        marker.room));
+            match Str/of_bytes(Bytes/drop(before, start, @marker.onward))
+            | some(s) => Step/emit(Option/some(Event/paste(s)), marker.at + 6)
+            | none() => Step/emit(Option/none(), marker.at + 6)
             end
         end;
     let csi(i: Nat, j: Nat) -> Step(E) =
@@ -184,7 +190,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
                 | _ => Step/emit(Option/none(), p.next)
                 end
             | p.final == 'u' =>
-                match kitty(Option/unwrap_or(List/try_get(p.nums, 0), 0))
+                match Option/bind(List/try_get(p.nums, 0), kitty)
                 | some(code) => Step/emit(key(modified(code, m)), p.next)
                 | none() => Step/emit(Option/none(), p.next)
                 end
@@ -220,9 +226,10 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             end
         end;
     let go(i: Nat, acc: List(Event(E))) -> {events: List(Event(E)), rest: Bytes} =
-        match at(input, i)
+        match Nat/Lt/try(i, Bytes/len(input))
         | none() => (events = List/reverse(acc), rest = x[])
-        | some(n) =>
+        | some(inside) =>
+            let n = Byte/to_nat(Bytes/get(input, i, @inside));
             let step =
                 choose
                 | n == 0x1B => escape(i)
@@ -230,7 +237,10 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
                 | _ => scalar(i, n)
                 end;
             match step
-            | cut() => (events = List/reverse(acc), rest = from(input, i))
+            | cut() =>
+                (
+                    events = List/reverse(acc),
+                    rest = Bytes/drop(input, i, @Nat/Lt/le_of_lt(i, Bytes/len(input), inside)))
             | emit(event, next) =>
                 match event | some(e) => go(next, [e, ..acc]) | none() => go(next, acc) end
             end
