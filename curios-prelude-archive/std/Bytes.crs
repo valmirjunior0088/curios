@@ -142,14 +142,20 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                             ih((np + 1) / 256, high_below(np + 1, Bool/True/qed()))(
                                 (dq + 1) / 256,
                                 heads);
-                        let rejoined: Eq()(256 * ((np + 1) / 256) + (np + 1) % 256, 256 * ((dq + 1) / 256) + (dq + 1) % 256) =
+                        let rejoined: Eq()(
+                            256 * ((np + 1) / 256) + (np + 1) % 256,
+                            256 * ((dq + 1) / 256) + (dq + 1) % 256) =
                             Eq/subst(
                                 (y) =>
-                                    Eq()(256 * ((np + 1) / 256) + (np + 1) % 256, 256 * ((dq + 1) / 256) + y),
+                                    Eq()(
+                                        256 * ((np + 1) / 256) + (np + 1) % 256,
+                                        256 * ((dq + 1) / 256) + y),
                                 digits,
                                 Eq/subst(
                                     (x) =>
-                                        Eq()(256 * ((np + 1) / 256) + (np + 1) % 256, 256 * x + (np + 1) % 256),
+                                        Eq()(
+                                            256 * ((np + 1) / 256) + (np + 1) % 256,
+                                            256 * x + (np + 1) % 256),
                                     highs,
                                     Eq/refl()));
                         Eq/trans(Eq/sym(euclid(np + 1)), Eq/trans(rejoined, euclid(dq + 1)))
