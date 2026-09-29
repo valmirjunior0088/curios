@@ -112,6 +112,41 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
     );
 }
 
+/// A nominal value's parameters are typed as an occurrence's are: its signature or field telescope is read at them, and its type carries them to every rule that meets it.
+///
+/// Each value here is handed `((b : Bool) => Nat)(3)` for its one `Type`-sorted parameter — an application at an argument of the wrong type, which β takes to `Nat` without looking. So the payload checks against the telescope at it, the value's type converts with the declared `S(Nat)` and `F(Nat)`, and nothing but typing the parameter itself can refuse it. Counted and never typed, both were certified. Mutation-checked: counting a value's parameters without typing them accepts both. The control is [`a_nominal_value_at_its_declared_arity_is_accepted`].
+#[test]
+fn a_nominal_value_types_its_parameters() {
+    let b = Free::local(990, Some("b"));
+    let ill_typed = Term::apply(
+        Term::func(
+            [(b, Term::intrinsic(Intrinsic::BoolType))],
+            Term::intrinsic(Intrinsic::NatType),
+        ),
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
+    );
+
+    for (label, module) in [
+        (
+            "a record literal",
+            struct_value_module(vec![ill_typed.clone()]),
+        ),
+        (
+            "a constructor application",
+            variant_value_module(vec![ill_typed]),
+        ),
+    ] {
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+            "{label} was certified at a parameter its declaration does not admit: {verdicts:?}",
+        );
+    }
+}
+
 /// A count carried on a term and used to *index* must be checked, not assumed — twice, in reduction and in synthesis.
 ///
 /// Both are reached the same way. `check_definition` calls `Sort::of` on a declared type and never infers it, so a type position holds a term nothing has typed, and the two functions that walk it were written against an invariant typing would have established.

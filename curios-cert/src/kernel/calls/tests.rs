@@ -5,7 +5,11 @@
 use {
     crate::{Kernel, KernelError, infer},
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Carrier, Cases, Free, Intrinsic, Nat, Scope, Term, Two, UniverseContext},
+    curios_core::{
+        Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Telescope, Term, Two,
+        UniverseContext,
+    },
+    curios_utilities::Qualifier,
 };
 
 fn kernel() -> Kernel {
@@ -153,4 +157,43 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let term = group(&f, signature, &n, body);
 
     assert!(infer(&mut kernel, &term).is_ok());
+}
+
+/// A call standing only in a nominal value's parameter is recorded, because the parameter is typed: `f(n)` sits in `Box(f(n)) { 3 }`, whose field is projected where it is inferred, so no conversion ever reads the value's type. Mutation-checked: counting a value's parameters without typing them leaves the group with no call, and it is accepted.
+#[test]
+fn a_call_in_a_nominal_values_parameter_is_recorded() {
+    let mut kernel = kernel();
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+    kernel.declare_struct(
+        &boxed,
+        &StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::build(
+                [(binder(20, "A"), Term::type_ground())],
+                Telescope::build([(binder(21, "x"), nat_type())], ()),
+            ),
+            result_sort: Term::type_ground(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    let (f, signature) = member();
+    let n = binder(1, "n");
+    let body = Term::let_(
+        &binder(22, "k"),
+        nat_type(),
+        Term::proj(
+            Term::struct_(boxed, [call(&f, Term::free_var(&n))], [nat(3)]),
+            0,
+        ),
+        nat_type(),
+    );
+    let term = group(&f, signature, &n, body);
+
+    assert!(matches!(
+        infer(&mut kernel, &term),
+        Err(KernelError::NotDescending { .. }),
+    ));
 }

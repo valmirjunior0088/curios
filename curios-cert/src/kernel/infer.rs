@@ -249,26 +249,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
 
-            let parameters = at.parameters();
-            let mut cursor = parameters.cursor();
-            for param in &family.params {
-                let (_, domain) = cursor
-                    .entry()
-                    .expect("the handle checked the parameter count");
-
-                check(kernel, param, &domain)?;
-                cursor.advance(param.clone());
-            }
-
+            check_along(kernel, at.parameters(), &family.params)?;
             // The index telescope arrives already opened at those parameters, which is what makes a later index able to mention an earlier one.
-            let indices = at.indices();
-            let mut cursor = indices.cursor();
-            for index in &family.indices {
-                let (_, domain) = cursor.entry().expect("the handle checked the index count");
-
-                check(kernel, index, &domain)?;
-                cursor.advance(index.clone());
-            }
+            check_along(kernel, at.indices(), &family.indices)?;
 
             Ok(sort.term())
         }
@@ -281,21 +264,14 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let sort = infer_sort(kernel, term)?;
             let at = kernel.struct_at(name, universes, params)?;
 
-            let parameters = at.parameters();
-            let mut cursor = parameters.cursor();
-            for param in params {
-                let (_, domain) = cursor
-                    .entry()
-                    .expect("the handle checked the parameter count");
-
-                check(kernel, param, &domain)?;
-                cursor.advance(param.clone());
-            }
+            check_along(kernel, at.parameters(), params)?;
 
             Ok(sort.term())
         }
 
         // A constructor application: its signature, instantiated at the declaration's parameters, ends in the type it constructs — including the index targets this particular case aims at.
+        //
+        // The parameters are typed first, as an occurrence's are, and for the same reason: the signature is read at them and the constructed type carries them, so every rule that meets the value reads them at the declared domains. Only counted, a value handed its family's arguments on its own word — `false` where the declaration says `Nat` — and nothing downstream looked again.
         Subterm::Variant(Variant {
             name,
             universes,
@@ -304,8 +280,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             payload,
         }) => {
             // The handle checks the universe instance and the parameter count before any of the declaration is read at them. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below would compare against the wrong number.
-            let signature = kernel
-                .induct_at_params(name, universes, params)?
+            let at = kernel.induct_at_params(name, universes, params)?;
+            check_along(kernel, at.parameters(), params)?;
+            let signature = at
                 .signature(tag)
                 .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
 
@@ -317,16 +294,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 });
             }
 
-            let mut cursor = signature.cursor();
-            for component in payload {
-                let (_, field) = cursor.entry().expect("arity was checked above");
-
-                check(kernel, component, &field)?;
-                cursor.advance(component.clone());
-            }
-
             // The constructed type, rebuilt from what the terminal states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
-            let targets = cursor.body().expect("arity was checked above");
+            let targets = check_along(kernel, signature, payload)?;
             Ok(Subterm::InductType(InductType {
                 name: name.clone(),
                 universes: universes.clone(),
@@ -336,7 +305,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             .into())
         }
 
-        // A nominal record: its fields check against the declaration's field telescope, and its type is the family at the same parameters.
+        // A nominal record: its parameters check against the declaration's, as a constructor application's do, its fields against the field telescope at them, and its type is the family at the same parameters.
         Subterm::Struct(Struct {
             name,
             universes,
@@ -344,7 +313,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             fields,
             ..
         }) => {
-            let telescope = kernel.struct_at(name, universes, params)?.fields();
+            let at = kernel.struct_at(name, universes, params)?;
+            check_along(kernel, at.parameters(), params)?;
+            let telescope = at.fields();
 
             if telescope.len() != fields.len() {
                 return Err(KernelError::Arity {
@@ -354,13 +325,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 });
             }
 
-            let mut cursor = telescope.cursor();
-            for field in fields {
-                let (_, expected) = cursor.entry().expect("arity was checked above");
-
-                check(kernel, field, &expected)?;
-                cursor.advance(field.clone());
-            }
+            check_along(kernel, telescope, fields)?;
 
             Ok(Subterm::StructType(StructType {
                 name: name.clone(),
@@ -1062,6 +1027,25 @@ fn subsumes_telescope(
             Step::Mismatch => return Ok(false),
         }
     }
+}
+
+/// Check each of `arguments` against its domain in `telescope`, each later domain opened at the arguments before it, and hand back the terminal opened at all of them.
+///
+/// The caller has established that the counts agree — a handle counted an occurrence's parameters or indices, and the arity checks count a payload or a record's fields — so the walk never runs out of entries.
+fn check_along<B: Bound>(
+    kernel: &mut Kernel,
+    telescope: Telescope<B>,
+    arguments: &[Term],
+) -> Result<B, KernelError> {
+    let mut cursor = telescope.cursor();
+    for argument in arguments {
+        let (_, domain) = cursor.entry().expect("the caller checked the count");
+
+        check(kernel, argument, &domain)?;
+        cursor.advance(argument.clone());
+    }
+
+    Ok(cursor.body().expect("the caller checked the count"))
 }
 
 /// The Π a λ inhabits, with each binder standing for the corresponding one of `arguments` where the λ is applied on the spot.
