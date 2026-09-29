@@ -6,7 +6,7 @@
 //! 2. a stuck product distributed, where neither side is a literal;
 //! 3. the truth table over two `Bool` terms;
 //! 4. two connective trees flattened, their leaves forced;
-//! 5. two comparisons aligned to one spelling;
+//! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor pairing first;
 //! 7. the `Nat` peel retried once with each summand's arguments forced;
 //! 8. the elaborator's packed-literal view ([`Driver::packed_view`]);
@@ -22,8 +22,8 @@
 use {
     curios_algebra::{Conclusion, Deduction},
     curios_core::{
-        Intrinsic, Level, Nat, Operand, Produced, ReduceError, Reducer, Subterm, Term, Var, Visit,
-        align_comparisons, decide_bool, int_has_stuck_product, int_normalize, int_same,
+        Aligned, Intrinsic, Level, Nat, Operand, Produced, ReduceError, Reducer, Subterm, Term,
+        Var, Visit, align_comparisons, decide_bool, int_has_stuck_product, int_normalize, int_same,
         is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_int_pair, peel_list,
         peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
@@ -129,9 +129,10 @@ pub fn convert_intrinsics(
         _ => (this, that),
     };
 
-    // A negated comparison, and a `<=` meeting a `<`, are aligned to one spelling of the family before the peels — probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
+    // A negated comparison is read as its dual, and two `Nat` or `Int` comparisons through their linear views: one proposition where those agree, and otherwise both respelled in the one spelling their views give, so the congruence meets aligned operands. Probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
     let (this, that) = match align_comparisons(driver, &this, &that)? {
-        Some(pair) => pair,
+        Some(Aligned::Same) => return Ok(Outcome::Equal),
+        Some(Aligned::Respelled(pair)) => *pair,
         None => (this, that),
     };
 

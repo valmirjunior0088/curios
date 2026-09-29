@@ -2,7 +2,7 @@
 
 use {
     super::{Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic},
-    crate::{Intrinsic, Nat, ReduceError, Subterm, Term},
+    crate::{Aligned, Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };
 
@@ -251,7 +251,7 @@ fn int_decides_floors_apart_modulo_the_coefficients_gcd_unequal() {
     );
 }
 
-// The `<`/`<=` seam, as conversion aligns it: a `<=` meeting a `<` is read as `<` of its successor with the floor that reading shares cancelled, so `x + 1 <= y` reaches exactly `x < y` — the spelling the `<` side stands in — rather than `x + 1 < y + 1`, which nothing downstream relates to it. On either side of the pair.
+// The `<`/`<=` seam, as conversion aligns it: `x + 1 <= y` and `x < y` have one linear view once `<` is read as the `<=` of its successor, so they are one proposition — on either side of the pair.
 #[test]
 fn a_floored_le_meets_the_lt_it_spells() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
@@ -259,8 +259,24 @@ fn a_floored_le_meets_the_lt_it_spells() {
     let strict = Intrinsic::nat_lt(x, y);
 
     let aligned = align_comparisons(&mut Inert, &floored, &strict).expect("reduces");
-    assert_eq!(aligned, Some((strict.clone(), strict.clone())));
+    assert!(matches!(aligned, Some(Aligned::Same)));
 
     let mirrored = align_comparisons(&mut Inert, &strict, &floored).expect("reduces");
-    assert_eq!(mirrored, Some((strict.clone(), strict)));
+    assert!(matches!(mirrored, Some(Aligned::Same)));
+}
+
+// Two comparisons whose views differ are both respelled in the one spelling their views give — the positive part of the difference on the left of a `<=` — so the congruence after compares aligned operands: `n < y + 1` meets `x <= y` as `n <= y`, where `n` against `x` is what is left.
+#[test]
+fn two_comparisons_whose_views_differ_are_respelled_alike() {
+    let (n, x, y) = (sym(0, "n"), sym(1, "x"), sym(2, "y"));
+    let strict = Intrinsic::nat_lt(n.clone(), Nat::rebuild(1u32.into(), y.clone()));
+    let loose = Intrinsic::nat_lte(x.clone(), y.clone());
+
+    match align_comparisons(&mut Inert, &strict, &loose).expect("reduces") {
+        Some(Aligned::Respelled(pair)) => {
+            assert_eq!(pair.0, Intrinsic::NatLe(n, y.clone()));
+            assert_eq!(pair.1, Intrinsic::NatLe(x, y));
+        }
+        _ => panic!("two views that differ are respelled"),
+    }
 }

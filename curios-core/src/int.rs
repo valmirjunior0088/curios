@@ -470,7 +470,7 @@ pub(crate) fn int_rebuild_cancelled(
 
 /// The difference of two reduced terms split by sign for every pair, where [`int_cancel_common`] splits it only once something cancels: every monomial on the side that keeps its coefficient positive, the constant likewise, so two pairs with one difference are one pair — `0 < j - i` and `i < j`, `-i < -j` and `j < i`.
 ///
-/// **Conversion's spelling, never the fold's.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` records for swapped operands. So the one reader is `align_comparisons`, probe-side, where respelling records nothing.
+/// **Read, never written back.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` records for swapped operands. So the one reader is the `Int` comparison fold's `compare_preimages`, which splits a comparison to read the preimages of its widened naturals and only ever decides.
 pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
     let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);

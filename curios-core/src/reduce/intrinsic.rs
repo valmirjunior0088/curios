@@ -25,10 +25,10 @@ pub use truth::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Operands,
-        Subterm, Telescope, Term, Words, int_cancel_common, int_negate, int_of_nat, int_preimage,
-        int_product, int_split_by_sign, int_sum, int_terms, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem, project_erased_universes,
+        Aligned, Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, LinearViews,
+        Nat, Operands, Subterm, Telescope, Term, Words, int_cancel_common, int_negate, int_of_nat,
+        int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
+        peel_first_elem, project_erased_universes,
     },
     curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
@@ -101,95 +101,27 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
     Ok(matches!(&*body, Subterm::Var(var) if var.unwrap() == &binder))
 }
 
-/// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor through [`successor_comparison`], which cancels the floor that step shares with the other operand — `x + 1 <= y` reads `x + 1 < y + 1` and so `x < y` — since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
+/// Two stuck comparisons spelled across the family, aligned: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — first becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`; then two `Nat` or `Int` comparisons are read through their linear views, [`LinearViews::align`], and are one proposition where those agree and otherwise both respelled in the spelling the views give. `None` when nothing moved.
 ///
-/// Asked for by name in both converters beside [`normalize_bool`], and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
+/// Asked for by name in the conversion chain both checkers run, and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
 pub fn align_comparisons(
     reducer: &mut impl Reducer,
     this: &Intrinsic,
     that: &Intrinsic,
-) -> Result<Option<(Intrinsic, Intrinsic)>, ReduceError> {
+) -> Result<Option<Aligned>, ReduceError> {
     let this_dual = dual_of_negated(reducer, this)?;
     let that_dual = dual_of_negated(reducer, that)?;
     let moved = this_dual.is_some() || that_dual.is_some();
     let this = this_dual.unwrap_or_else(|| this.clone());
     let that = that_dual.unwrap_or_else(|| that.clone());
 
-    // The `<=` side is spelled through `successor_comparison`, which cancels the floor the successor shares with the other operand: `x + 1 <= y` reads `x + 1 < y + 1` and then `x < y`, the spelling the fold leaves the `<` side in. Adding the step without cancelling left that floor standing at `Nat`, where nothing downstream takes it off.
-    let aligned = match (&this, &that) {
-        (Intrinsic::NatLe(..), Intrinsic::NatLt(..))
-        | (Intrinsic::IntLe(..), Intrinsic::IntLt(..)) => {
-            successor_comparison(&this).map(|this| (this, that.clone()))
-        }
-        (Intrinsic::NatLt(..), Intrinsic::NatLe(..))
-        | (Intrinsic::IntLt(..), Intrinsic::IntLe(..)) => {
-            successor_comparison(&that).map(|that| (this.clone(), that))
-        }
-        _ => None,
-    };
-    let (this, that, moved) = match aligned {
-        Some((this, that)) => {
+    Ok(match LinearViews::default().align(&this, &that) {
+        Some(Aligned::Same) => Some(Aligned::Same),
+        Some(respelled @ Aligned::Respelled(_)) => {
             reducer.spend(Cost::term(2))?;
-            (this, that, true)
+            Some(respelled)
         }
-        None => (this, that, moved),
-    };
-
-    // An `Int` comparison of widened naturals meets the `Nat` comparison of their preimages — `Nat/to_int(m) < Nat/to_int(n)` is `m < n` — because ℕ → ℤ preserves and reflects order. Probe-side, for the reason the split below is.
-    if let Some(pulled) = nat_comparison_of_int(&this, &that) {
-        reducer.spend(Cost::term(2))?;
-        return Ok(Some((pulled, that)));
-    }
-    if let Some(pulled) = nat_comparison_of_int(&that, &this) {
-        reducer.spend(Cost::term(2))?;
-        return Ok(Some((this, pulled)));
-    }
-
-    // Two `Int` comparisons of one relation meet through their difference, which only a split taken whether or not anything cancels can see: `0 < j - i` is `i < j`, and `-i < -j` is `j < i`. See `int_split_by_sign` for why this is the judgment's spelling and never the fold's.
-    if std::mem::discriminant(&this) == std::mem::discriminant(&that)
-        && let (Some(this_split), Some(that_split)) =
-            (int_split_comparison(&this), int_split_comparison(&that))
-        && (this_split != this || that_split != that)
-    {
-        reducer.spend(Cost::term(2))?;
-        return Ok(Some((this_split, that_split)));
-    }
-    Ok(moved.then_some((this, that)))
-}
-
-/// `int`, an `Int` ordering or equality, as the `Nat` comparison of the same relation over its preimages, when `nat` is that relation and both of `int`'s sides split by sign into widened naturals; `None` otherwise.
-fn nat_comparison_of_int(int: &Intrinsic, nat: &Intrinsic) -> Option<Intrinsic> {
-    let (a, b, rebuild): (_, _, fn(Term, Term) -> Intrinsic) = match (int, nat) {
-        (Intrinsic::IntLt(a, b), Intrinsic::NatLt(..)) => (a, b, Intrinsic::NatLt),
-        (Intrinsic::IntLe(a, b), Intrinsic::NatLe(..)) => (a, b, Intrinsic::NatLe),
-        (Intrinsic::IntEql(a, b), Intrinsic::NatEql(..)) => (a, b, Intrinsic::NatEql),
-        (Intrinsic::IntNeq(a, b), Intrinsic::NatNeq(..)) => (a, b, Intrinsic::NatNeq),
-        _ => return None,
-    };
-    let (left, right) = int_split_by_sign(a, b);
-    Some(rebuild(int_preimage(&left)?, int_preimage(&right)?))
-}
-
-/// An `Int` ordering or equality with its operands split by sign, through `int_split_by_sign`; `None` for any other intrinsic.
-fn int_split_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
-    Some(match comparison {
-        Intrinsic::IntLt(a, b) => {
-            let (left, right) = int_split_by_sign(a, b);
-            Intrinsic::IntLt(left, right)
-        }
-        Intrinsic::IntLe(a, b) => {
-            let (left, right) = int_split_by_sign(a, b);
-            Intrinsic::IntLe(left, right)
-        }
-        Intrinsic::IntEql(a, b) => {
-            let (left, right) = int_split_by_sign(a, b);
-            Intrinsic::IntEql(left, right)
-        }
-        Intrinsic::IntNeq(a, b) => {
-            let (left, right) = int_split_by_sign(a, b);
-            Intrinsic::IntNeq(left, right)
-        }
-        _ => return None,
+        None => moved.then(|| Aligned::Respelled(Box::new((this, that)))),
     })
 }
 

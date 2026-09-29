@@ -277,6 +277,9 @@ const CARRIERS: &[Carrier] = &[
             // And a stuck comparison of widened naturals is the `Nat` comparison of the same relation.
             "Eq(Nat/to_int(m) < Nat/to_int(n), m < n)",
             "Eq(Nat/to_int(m) == Nat/to_int(n), m == n)",
+            // And across the `<`/`<=` seam, since the two are read through one linear view: ℕ → ℤ preserves and reflects order, and `a + 1 <= b` is `a < b` over ℤ.
+            "Eq(Nat/to_int(m) + 1 <= Nat/to_int(n), m < n)",
+            "Eq(Nat/to_int(m) < Nat/to_int(n) + 1, m <= n)",
         ],
         refused: &[
             // Controls, and none is a law: a widened natural against an integer that may be negative, truncated subtraction as though it were the group's, and a difference of widened naturals as though it were one.

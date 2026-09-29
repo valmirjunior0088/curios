@@ -119,7 +119,7 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     let items = rows(&declared())
         .iter()
         .enumerate()
-        .filter_map(|(index, row)| Some((solves(row), solving(index, row)?)))
+        .filter_map(|(index, row)| Some((solves(row)?, solving(index, row)?)))
         .collect::<Vec<_>>();
     assert!(items.iter().any(|(expected, _)| *expected));
     let check = |items: &[&String]| {
@@ -153,16 +153,22 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n\n"));
 }
 
-/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. Not where the law is decided by operand identity or by the truth table: the peel that commutes an operation's operands compares them as written, the `&&` and `||` leaf sets are sets of terms, and the truth table reads a metavariable as one more atom — each decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction.
-fn solves(row: &Row) -> bool {
-    !matches!(
-        (row.carrier, row.operation, row.law.family),
+/// Whether a metavariable standing for one of `row`'s atoms is solved through the law, and `None` where the answer turns on a hash. Not where the law is decided by operand identity or by the truth table: the peel that commutes an operation's operands compares them as written, the `&&` and `||` leaf sets are sets of terms, and the truth table reads a metavariable as one more atom — each decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction. A `Nat` or `Int` equality's commutativity is neither: the alignment orients an equality by its atoms' order, so it solves where the metavariable's rank orders it as the variable it stands for is ordered, and a rank is a structural hash.
+fn solves(row: &Row) -> Option<bool> {
+    match (row.carrier, row.operation, row.law.family) {
+        (
+            Carrier::Natural | Carrier::Integer,
+            Operation::Equal | Operation::Unequal,
+            Family::Commutativity,
+        ) => None,
         (
             _,
             Operation::And | Operation::Or | Operation::Xor | Operation::Equal | Operation::Unequal,
-            Family::Commutativity
-        ) | (Carrier::Boolean, _, Family::Distribution(_))
-    )
+            Family::Commutativity,
+        )
+        | (Carrier::Boolean, _, Family::Distribution(_)) => Some(false),
+        _ => Some(true),
+    }
 }
 
 /// The item that reads `row`'s law through a metavariable, where the law's first variable stands on both of its sides.

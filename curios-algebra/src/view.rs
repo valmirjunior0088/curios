@@ -73,6 +73,61 @@ impl LinearForm {
     }
 }
 
+impl LinearForm {
+    /// This form under `relation`, read as the alignment reads it so two comparisons of one proposition have one reading: a `<` is the `<=` of the difference plus one, which is exact over ℤ; an equality or an inequality is oriented so its first monomial's coefficient is positive — or, where none is left, its constant — since `a = b` is `-a = -b`; and a `<=` is as it stands.
+    pub fn aligned(mut self, relation: Operation) -> (Operation, Self) {
+        match relation {
+            Operation::Less => {
+                self.constant = self.constant + Integer::from(1);
+                (Operation::AtMost, self)
+            }
+            Operation::Equal | Operation::Unequal => {
+                let zero = Integer::from(0);
+                let negative = match self.terms.first() {
+                    Some((coefficient, _)) => *coefficient < zero,
+                    None => self.constant < zero,
+                };
+                if negative {
+                    self.constant = -self.constant;
+                    for (coefficient, _) in &mut self.terms {
+                        *coefficient = -coefficient.clone();
+                    }
+                }
+                (relation, self)
+            }
+            _ => (relation, self),
+        }
+    }
+
+    /// The two sides this form is the difference of, each with non-negative coefficients: the positive monomials and a positive constant on the left, and the negative ones and a negative constant negated on the right, each side's monomials in the form's order.
+    pub fn sides(&self) -> (Part, Part) {
+        let zero = Integer::from(0);
+        let mut left = Part {
+            constant: zero.clone(),
+            terms: Vec::new(),
+        };
+        let mut right = left.clone();
+        match self.constant > zero {
+            true => left.constant = self.constant.clone(),
+            false => right.constant = -self.constant.clone(),
+        }
+        for (coefficient, monomial) in &self.terms {
+            match *coefficient > zero {
+                true => left.terms.push((coefficient.clone(), monomial.clone())),
+                false => right.terms.push((-coefficient.clone(), monomial.clone())),
+            }
+        }
+        (left, right)
+    }
+}
+
+/// One side of a [`LinearForm`] split by sign: a non-negative constant beside monomials with positive coefficients.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub constant: Integer,
+    pub terms: Vec<(Integer, Monomial)>,
+}
+
 /// Atoms by rank, then by the order they were handed out in.
 fn atom_order(left: Atom, right: Atom) -> Ordering {
     left.rank()

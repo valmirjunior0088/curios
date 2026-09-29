@@ -21,15 +21,19 @@
 //! 3. **A side bounded by a literal, or through an operand it never exceeds**: `x % 7 < 7`, `x - y <= x` — the bounds oracle and domination, which `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md` states.
 //! 4. **An equality whose constant the gcd of its coefficients does not divide**, which is false: `2 · x + 1 == 2 · y`.
 //!
+//! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).
+//!
 //! **It decides nothing else about a comparison whose view keeps an atom** — `x + 1 <= y`, `0 < x`, `i + 1 > 0` stay open. Each clause is a held row of `curios`'s law grid, carrier "What conversion decides about a comparison", with its complement a control beside it.
 //!
 //! A view is read-only: it prepares and reports, and it neither searches nor commits anything.
 
 use {
-    super::{Atoms, Intrinsic, Nat, Operands, Subterm, Term, int_monomial, int_terms},
+    super::{
+        Atoms, Intrinsic, Nat, Operands, Subterm, Term, int_from_linear, int_monomial, int_terms,
+    },
     crate::Declaration,
-    curios_algebra::{Atom, Carrier, Combination, LinearForm, Monomial, Operation, Summand},
-    curios_num::Integer,
+    curios_algebra::{Atom, Carrier, Combination, LinearForm, Monomial, Operation, Part, Summand},
+    curios_num::{Integer, Natural},
 };
 
 /// A `Nat` or `Int` comparison as the canonical linear view reads it: the relation, and the difference of its sides.
@@ -48,6 +52,11 @@ pub struct LinearViews {
 impl LinearViews {
     /// The view of `comparison`, when it is a `Nat` or `Int` ordering or equality — `<`, `<=`, `==` or `!=`, which is every comparison the roster builds — and `None` for anything else.
     pub fn view(&mut self, comparison: &Intrinsic) -> Option<LinearView> {
+        self.read(comparison).map(|(_, view)| view)
+    }
+
+    /// [`LinearViews::view`], beside the carrier the comparison is at, which a view does not keep: it does not tell a natural from its image.
+    fn read(&mut self, comparison: &Intrinsic) -> Option<(Carrier, LinearView)> {
         let Declaration::Operation {
             carrier,
             operation,
@@ -68,11 +77,113 @@ impl LinearViews {
         let mut nonnegative = Vec::new();
         let left = side(&mut self.atoms, &mut nonnegative, carrier, left);
         let right = side(&mut self.atoms, &mut nonnegative, carrier, right);
-        Some(LinearView {
-            relation: operation,
-            form: LinearForm::difference(left, right, nonnegative),
-        })
+        Some((
+            carrier,
+            LinearView {
+                relation: operation,
+                form: LinearForm::difference(left, right, nonnegative),
+            },
+        ))
     }
+
+    /// Two comparisons aligned through their views: one proposition where their views agree once aligned — `x + 1 <= y` and `x < y`, `Nat/to_int(m) < Nat/to_int(n)` and `m < n`, `i < j` and `+0 < j - i` — and otherwise both respelled in the one spelling their views give, so a congruence after meets aligned operands: `?n < y + 1` against `x <= y` becomes `?n <= y` against `x <= y`, which solves `?n` as `x`. `None` where either is no `Nat` or `Int` comparison.
+    ///
+    /// **One reading replaces three.** The successor step between `<` and `<=`, `Int`'s difference split by sign, and the pull-back of an `Int` comparison of widened naturals to `Nat` are each a case of reading both comparisons as the difference of their sides over ℤ in one canonical form.
+    pub fn align(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<Aligned> {
+        let (this_carrier, this) = self.read(this)?;
+        let (that_carrier, that) = self.read(that)?;
+        let (this_relation, this_form) = this.form.aligned(this.relation);
+        let (that_relation, that_form) = that.form.aligned(that.relation);
+        if this_relation == that_relation && this_form == that_form {
+            return Some(Aligned::Same);
+        }
+        Some(Aligned::Respelled(Box::new((
+            self.respell(this_carrier, this_relation, &this_form),
+            self.respell(that_carrier, that_relation, &that_form),
+        ))))
+    }
+
+    /// The comparison an aligned view spells: the positive part of its difference on the left, the negated negative part on the right, at the comparison's own carrier — or at `Nat` where every atom is a widened natural, which is what makes an `Int` comparison of widened naturals the `Nat` comparison of their preimages. Rebuilt through the carriers' own sums, so the operands are in the normal form a fold leaves.
+    fn respell(&self, carrier: Carrier, relation: Operation, form: &LinearForm) -> Intrinsic {
+        let (left, right) = form.sides();
+        let every_atom_natural = form.terms.iter().all(|(_, monomial)| {
+            monomial
+                .atoms()
+                .iter()
+                .all(|atom| form.nonnegative.contains(atom))
+        });
+        match carrier == Carrier::Natural || every_atom_natural {
+            true => {
+                let (left, right) = (self.nat_side(&left), self.nat_side(&right));
+                match relation {
+                    Operation::AtMost => Intrinsic::NatLe(left, right),
+                    Operation::Equal => Intrinsic::NatEql(left, right),
+                    _ => Intrinsic::NatNeq(left, right),
+                }
+            }
+            false => {
+                let (left, right) = (self.int_side(&left, form), self.int_side(&right, form));
+                match relation {
+                    Operation::AtMost => Intrinsic::IntLe(left, right),
+                    Operation::Equal => Intrinsic::IntEql(left, right),
+                    _ => Intrinsic::IntNeq(left, right),
+                }
+            }
+        }
+    }
+
+    /// One side as a `Nat`: each monomial the product of its atoms' natural terms, summed over the side's constant.
+    fn nat_side(&self, side: &Part) -> Term {
+        let summands = side
+            .terms
+            .iter()
+            .map(|(coefficient, monomial)| {
+                let factor = monomial
+                    .atoms()
+                    .iter()
+                    .map(|atom| self.atoms.term(*atom).clone())
+                    .reduce(|left, right| Nat::multiply(&left, &right))
+                    .expect("a monomial of a view stands on an atom");
+                (
+                    Natural::try_from(coefficient).expect("a side's coefficients are positive"),
+                    factor,
+                )
+            })
+            .collect();
+        let floor = Natural::try_from(&side.constant).expect("a side's constant is non-negative");
+        Nat::from_linear(summands, floor)
+    }
+
+    /// One side as an `Int`: each monomial over its atoms, a widened natural widened back.
+    fn int_side(&self, side: &Part, form: &LinearForm) -> Term {
+        let monomials = side
+            .terms
+            .iter()
+            .map(|(coefficient, monomial)| {
+                let factors = monomial
+                    .atoms()
+                    .iter()
+                    .map(|atom| {
+                        let term = self.atoms.term(*atom).clone();
+                        match form.nonnegative.contains(atom) {
+                            true => Term::intrinsic(Intrinsic::NatToInt(term)),
+                            false => term,
+                        }
+                    })
+                    .collect();
+                (coefficient.clone(), factors)
+            })
+            .collect();
+        int_from_linear(side.constant.clone(), monomials)
+    }
+}
+
+/// What aligning two comparisons concluded.
+pub enum Aligned {
+    /// The two are one proposition: their aligned views agree.
+    Same,
+    /// The pair, each in the spelling its view gives.
+    Respelled(Box<(Intrinsic, Intrinsic)>),
 }
 
 impl LinearView {
