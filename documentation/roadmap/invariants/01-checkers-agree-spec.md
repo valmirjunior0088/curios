@@ -1,52 +1,21 @@
 # Standard-library invariants, part 1: the checkers agree on what they accept
 
-Working specification for the places where the elaborator and the kernel read one rule two ways, or where the elaborator refuses a program the theory licenses. Each was met writing the standard library's proofs and pinned down with a program; each program below still behaves as stated on the tree this part starts from. None is a soundness hole — the kernel refuses what it would have to trust — but each makes a well-typed program fail, or pass only through an explicit argument the language should not need.
+Working specification for the places where the elaborator and the kernel read one rule two ways, or where the elaborator refuses a program the theory licenses. Each gap below is pinned by a program, re-taken on the tree this part starts from. None is a soundness hole — the kernel refuses what it would have to trust — but each makes a well-typed program fail, or pass only through an explicit argument the language should not need.
 
-Its first two stages are the campaign's first wave and need nothing. Its third runs in the third wave, after [part 3](03-shared-term-costs-spec.md)'s instruments and with [part 2](02-unrecorded-universes-spec.md)'s investigation answered, alone on the elaborator's solver: the last change there cascaded from written-first solving into universes and into walks over shared terms, and two changes to the solver at once would hide each other's regressions.
+It needs nothing. Its fourth stage changes solving, which [part 2](02-unrecorded-universes-spec.md)'s fix changes too, so that fix waits for it; it runs with [part 3](03-shared-term-costs-spec.md)'s instruments in place, so its cost is measured rather than guessed.
 
 ## What this builds on
 
-- **Re-validation.** A solution is re-checked before it commits, inside `Context::with_oracle` (`curios-elab/src/context.rs`), which suppresses every refinement in scope so a committed solution is refinement-free; within the bracket each memoizable node is elaborated once. `solve_refinement_free` (`curios-elab/src/convert.rs`) solves a flexible side by the rigid side's reduct, and by its written spelling only when the reduct is a `stalled_unfolding`.
-- **Frozen frames.** A parked problem freezes the frame it was born under — assumptions, definitions and every kind of refinement — as a `FrozenFrame` (`curios-elab/src/context/frames.rs`), and a retry runs under exactly that frame.
-- **The kernel's refinement gate.** `Scope::refine` (`curios-cert/src/kernel/scope.rs`) records an arm's case equation only when its scrutinee mentions a local, and gates the resolved spelling the same way; its documentation says why — a local-free term's memo entry outlives the arm, so an equation about one could leave an entry resting on an equation later retracted.
-- **The closed machine.** `curios-core/src/machine.rs` evaluates a closed term under a demand, held to the strategies by `the_closed_machine_agrees_with_the_strategy` ([The closed machine](../../soundness/per-term-rules/the-closed-machine.md)).
+- **Recording a case equation.** The elaborator's `refine_head` (`curios-elab/src/typing.rs`) records one by the scrutinee's head shape: a variable, and a local definition's body in turn; a projection; and any other scrutinee in the term-keyed store, under its written spelling, the spelling its dispatch resolves to, and the spelling with its local definitions unfolded. The kernel's `Scope::refine` (`curios-cert/src/kernel/scope.rs`) records one list of equations, keyed on the scrutinee as written and on its resolved spelling, each only when it mentions a local; its documentation says why — a local-free term's evaluation memo entry outlives the arm, so an equation about one could leave an entry resting on an equation later retracted.
+- **Re-validation.** `Convert::solve` (`curios-elab/src/convert.rs`) re-checks a candidate against the metavariable's birth type under its birth telescope, inside `Context::with_oracle`, which withholds every refinement registered so far; a frame the candidate itself enters keeps its own. `solve_refinement_free` solves a flexible side by the rigid side's reduct with refinements withheld, and by its written spelling only when the reduct is a `stalled_unfolding`; the imitation rule beside it guards its candidate the same way. Both gates read `has_refinements`.
+- **Frozen frames.** A parked problem freezes the frame it was born under — assumptions, definitions and every kind of refinement — as a `FrozenFrame` (`curios-elab/src/context/frames.rs`), and `Context::with_retry_frame` runs its retry under exactly that frame, the live one hidden below a retry floor.
+- **Birth records.** A metavariable's `MetaEntry` freezes its Γ as a telescope shared by every metavariable born under an unchanged Γ (`Frames::identity_snapshot`), which keeps minting O(1). `Context::metavar_context_contained` decides whether one metavariable's birth context lies inside another's by comparing telescope names.
+- **The kernel's evaluation memos.** `curios-cert/src/kernel/memos.rs` keeps local-free reducts for the declaration and local-bearing ones for as long as the equations in force stand. `whnf_within` (`kernel/whnf.rs`) asks the memo before it asks the equations. `whnf::equations_tests` holds the interlock: `a_case_equation_reaches_the_reduct_and_not_the_memos`, `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` and `a_local_free_term_is_never_refined`.
+- **The closed machine.** `curios-core/src/machine.rs` evaluates a closed term under a demand with a run-scoped value memo, held to the strategies by `the_closed_machine_agrees_with_the_strategy` ([The closed machine](../../soundness/per-term-rules/the-closed-machine.md)).
 
 ## The gap
 
-**Re-validation withholds the refinements a metavariable was born under.** Suppressing every refinement is right for a metavariable born outside the arm — `solve_refinement_free`'s own example is `?k := 0` because the nil arm refined `n := 0` — and wrong for one born inside it, whose solution may rest on the arm's guard. `Eq/sym`'s `@x` is born inside:
-
-```
-pub let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
-    match k < Bytes/len(b)
-    | true =>
-        match Bytes/get(b, k) == f
-        | true =>
-            let found = Byte/eq_of_eql(Bytes/get(b, k), f, Bool/True/qed());
-            consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
-        | false => fallback
-        end
-    | false => fallback
-    end;
-```
-
-is refused at `found`: inferred `Eq(@Byte, Bytes/get(b, k), f)`, expected `Eq(@Byte, ?, ?)`, because the candidate `Bytes/get(b, k, @qed())` types only under the arm's `k < Bytes/len(b)`. Writing `Eq/sym`'s implicits by hand only moves the failure to `Eq/subst`'s `@y`. The standard library carries this as explicit implicit arguments in `Str.crs`'s `occurrence` and `meets` — `Nat/Le/trans`'s, and `Bytes/get(…, @inside)`.
-
-**A guard on anything but a variable counts as no refinement.** `has_refinements` (`curios-elab/src/context/frames.rs`) counts refinements of plain variables only, so under a guard on a projection or an application — `k < n`, `x == y` — `solve_refinement_free`'s safeguard and the imitation guard beside it are skipped. A metavariable born outside an inner guard whose written candidate fails re-validation then falls back to the inner arm's literal:
-
-```
-pub induct W: (Bool) -> pub Type
-| mk(b: Bool): (b)
-end
-
-let pick(@b: Bool, w: W(b)) -> Bool = b;
-
-pub let stuck(k: Nat, n: Nat) -> Bool =
-    pick(match k < n | true => W/mk(k < n) | false => W/mk(k < n) end);
-```
-
-is refused — inferred `W(true)`, expected `W(false)` — and so is the same shape under an outer `k < Bytes/len(bs)` guard with `Bytes/get(bs, k) == f` inside. `pick(match c | true => W/mk(c) | false => W/mk(c) end)` over a variable `c` passes. Counting every kind alone brings back a second failure of the first kind — a middle implicit whose candidate is a position unfolded down to the `@here := qed()` it was built with — so the two land together.
-
-**The checkers read a local-free refinement key two ways.** The elaborator registers a case equation whose key mentions no local (`curios-elab/src/typing.rs`, `context.rs`); the kernel's gate skips it. So
+**The checkers record different equations.** The kernel records an equation only under a spelling that mentions a local; the elaborator records one wherever an arm is entered. Four routes reach the difference, and each is accepted by the elaborator and refused by the kernel with `expected Holds(…), found True`:
 
 ```
 pub struct U: pub Type { Nat }
@@ -65,30 +34,65 @@ pub let dead(x: U, y: U) -> Nat =
     end;
 ```
 
-is accepted by the elaborator and refused by the kernel: `expected Holds(Nat/lt(3, 2)), found True`. The kernel is right to keep its gate — its memos rest on it — so the elaborator is the side that moves.
+- a resolved spelling that drops its locals, as above: `x == y` resolves to `Nat/lt(3, 2)`, which the elaborator records and the kernel filters;
+- a top-level name as the scrutinee, `match flag` over `let flag: Bool = false`, which the elaborator's variable store refines and the kernel skips as local-free;
+- a projection of a top-level value, `match pair.0` over `let pair: {Bool, Nat} = (false, 0)`, the same through the projection store;
+- a local definition of a closed term, `let c = Nat/lt(3, 2); match c`, which the elaborator refines under the local name while the kernel, substituting the definition, meets a closed scrutinee.
 
-**The kernel's closed memo is consulted before the case equations.** `whnf_within` (`curios-cert/src/kernel/whnf.rs`) asks `whnf_hit` before `refinement_of`, and a closed term's entry is not gated on the equations in force, where the machine and the `infer` memo are. It is sound while the gate above keeps every closed term unrefined; it is recorded so that no change to the gate — this part's own included — lands without the memo order in view.
+The kernel is right to keep its gate — its memos rest on it — so the elaborator is the side that moves.
 
-**The closed machine's memo ignores demand for applications and matches.** It records a forced value under an application's key or a match's whatever the demand (`curios-core/src/machine.rs`), so a plain request after a forced one in the same run is answered `0` where the strategy answers the unevaluated recursive call. A differential in a scratch copy of the machine's tests confirmed it, with controls. It is the class of the closed projection the perimeter entry records as closed.
+**Re-validation withholds the refinements a metavariable was born under.** Withholding every refinement is right for a metavariable born outside the arm — `solve_refinement_free`'s own example is `?k := 0` because the nil arm refined `n := 0` — and wrong for one born inside it, whose solution may rest on the arm's guard. `Eq/sym`'s `@x` is born inside:
 
-**Stuck-match annotations are compared, not re-derived.** Both checkers compare the annotations of stuck matches up to conversion, and the syntactic comparisons include them. No program reaching a wrong answer through it is known.
+```
+pub let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
+    match k < Bytes/len(b)
+    | true =>
+        match Bytes/get(b, k) == f
+        | true =>
+            let found = Byte/eq_of_eql(Bytes/get(b, k), f, Bool/True/qed());
+            consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
+        | false => fallback
+        end
+    | false => fallback
+    end;
+```
+
+is refused at `found`: inferred `Eq(@Byte, Bytes/get(b, k), f)`, expected `Eq(@Byte, ?, ?)`, because the candidate `Bytes/get(b, k, @qed())` types only under the arm's `k < Bytes/len(b)`. Writing `Eq/sym`'s implicits by hand only moves the failure to `Eq/subst`'s `@y`. The standard library carries this as explicit implicit arguments in `Str.crs`'s `meets` and `occurrence` — `Nat/Le/trans`'s, and `Bytes/get(…, @inside)`.
+
+**A guard on anything but a variable counts as no refinement.** `Frames::has_refinements` reads the variable store alone, so under a guard on a projection or an application — `k < n`, `x == y` — both gates it opens are skipped. A metavariable born outside an inner guard then commits the inner arm's literal:
+
+```
+pub induct W: (Bool) -> pub Type
+| mk(b: Bool): (b)
+end
+
+let pick(@b: Bool, w: W(b)) -> Bool = b;
+
+pub let stuck(k: Nat, n: Nat) -> Bool =
+    pick(match k < n | true => W/mk(k < n) | false => W/mk(k < n) end);
+```
+
+is refused — inferred `W(true)`, expected `W(false)` — and `pick(match c | true => W/mk(c) | false => W/mk(c) end)` over a variable `c` passes. Counting every store alone brings back a failure of the previous kind — a middle implicit whose candidate is a position unfolded down to the `@here := qed()` it was built with — so the two land together.
+
+**The closed machine's memo ignores demand for applications and matches.** It records a forced value under an application's key or a match's whatever the demand (`Frame::Head` pushes its `Frame::Memo` before it knows the demand's outcome), so a plain request after a forced one in the same run is answered with the unfolded value where the strategy answers the folded recursive call. The perimeter entry records the projection case as found and closed; that fix decided a projection from its shape, and the application and match keys share the defect.
+
+**The memo order rests on an unwritten precondition.** `whnf_within` answers from the memo before it consults the equations. That is sound because the gate keeps every term the memo holds past an arm local-free and every local-free term unrefined — but the argument is stated in `memos.rs`, not where the order is, and no fixture fails if the gate is removed while the order stays.
 
 ## Stages
 
-1. **The closed memo and the refinement gate.** State the soundness argument where the order lives — the gate keeps closed terms unrefined, so a closed entry never meets an equation — and hold it with a fixture that probes both directions: a closed term reduced outside an arm and asked inside, and the reverse. A hit is fixed at once, ahead of every other stage.
-2. **The machine's memo keyed by demand.** A forced value is recorded for the forced demand; a plain request reads only what a plain request produced. The differential joins the machine's tests, and the perimeter entry is corrected.
-3. **Solving under the refinements a metavariable was born under.** A metavariable freezes the refinements in force at its birth, as a parked problem freezes its frame, and re-validation runs under exactly those — nothing of the arm it is solved in, all of the arm it was born in. Context containment counts refinement depth, so a solution that holds only under an arm cannot escape through a metavariable born outside it. `has_refinements` counts every kind of refinement in both places it is read. The written spelling is not assumed: counting every refinement and re-validating under the birth refinements are tried first on the stalled-unfolding rule as it stands, since written-first solving was reverted after a type-valued metavariable solved by its written spelling sat a universe too high, and its cost argument fell when re-validation stopped walking shared terms per path. Written-first for metavariables that range over values, a type-valued one keeping the stalled-unfolding rule, is the fallback, taken only if the programs above do not pass without it, and then with [part 3](03-shared-term-costs-spec.md)'s benchmark set within its budgets. When this lands, [algebra part 2](../algebra/02-bounds-from-facts-spec.md)'s "When it runs" can use guards on retry too.
-4. **One gate for local-free keys.** The elaborator adopts the kernel's: a local-free scrutinee, or a resolved spelling that drops its locals, is not recorded as a case equation. The dead-arm program is refused by both, with a diagnostic that names the dead arm rather than the proof.
-5. **Stuck-match annotations.** Investigate whether a stuck match's annotation can decide a comparison its re-derived form would not, with a program or an argument; a program found goes to the perimeter's regression discipline.
+1. **One recording rule.** A predicate in `curios-analysis` is the one statement of which spelling may carry a case equation: one that mentions a local once local definitions are unfolded — the spelling the kernel is handed. `Scope::refine` calls it for both of its spellings, and `refine_head` for every store and every spelling it records, a variable and a projection included. The four programs above are refused by both checkers, the elaborator's refusal noting that the arm's guard is closed and reduces to the other case. `curios-analysis/tests/driven.rs` holds both drivers to the predicate.
+2. **The machine's memo keyed by demand.** A value is recorded for the demand it was produced at. A plain request reads plain entries only; a forced request may read either, since every weak-head value that is not a folded spelling is its own forced form and folded spellings are never recorded. The differential joins `closed_machine_tests` with its control, and the perimeter entry is corrected to say what the projection fix covered and what this one does.
+3. **The memo order stated where it lives.** `whnf_within` says why the memo may answer first and which rule it rests on. A fixture reduces a closed term outside an arm and again inside one whose equation would refine it were it recorded, asserting a cached and an uncached kernel agree; with the rule of stage 1 removed and the order kept, it fails.
+4. **Solving under the refinements a metavariable was born under.** A metavariable's birth record freezes the refinements in force at its birth, shared between births under unchanged refinements as the telescope is shared, so minting stays O(1). Re-validation runs under exactly those — nothing of the arm it is solved in, all of the arm it was born in — through the retry frame's machinery rather than a second bracket. Containment compares refinements as well as names: a `Bool` arm opens no binder, so without it a metavariable born inside `match k < n | true =>` counts as contained in one born just outside, and a solution resting on the arm's guard could escape through it. `has_refinements` counts every store in both places it is read. The stalled-unfolding rule for spelling a solution stays as it is; if the programs above still fail under the new rule, what fails is traced and brought back before any other spelling rule is tried. `Str.crs`'s `meets` and `occurrence` drop their explicit implicit arguments. When this lands, [algebra part 2](../algebra/02-bounds-from-facts-spec.md)'s "When it runs" can use guards on retry too.
+5. **Stuck-match annotations.** Both checkers compare the annotations of stuck matches up to conversion, and the syntactic comparisons include them; whether an annotation can decide a comparison its re-derived form would not is an open question with no known program. It is recorded as an unprobed entry of [the soundness perimeter](../../design/language/the-soundness-perimeter.md), with what would answer it, and leaves this part.
 
 ## Verification
 
-- Each program above is a fixture beside the tests of the rule it exercises, asserting the diagnostic or the acceptance, with its control: the variable-match program, and an arm-only solution for a metavariable born outside the arm, refused.
-- `Str.crs`'s `occurrence` and `meets` drop their explicit implicit arguments once stage 3 lands, and `/std` certifies.
-- `a_type_named_through_a_higher_universe_solves_at_its_own` holds throughout.
-- The two-checker fixtures and `kernel_disagreements` stay clean, and each fixture is mutation-checked: restoring the old rule fails it.
-- Part 3's benchmark set stays within its budgets across stage 3.
+- Each program above is a fixture beside the tests of the rule it exercises, asserting the diagnostic or the acceptance, with its control: the variable guard, and an arm-only solution for a metavariable born outside the arm, refused.
+- The four recording programs reach the same verdict in both checkers, and each stage's fixture is mutation-checked: restoring the old rule fails it.
+- The two-checker fixtures and `kernel_disagreements` stay clean, `/std` certifies after `meets` and `occurrence` drop their explicit implicits, and `a_type_named_through_a_higher_universe_solves_at_its_own` holds throughout.
+- Part 3's benchmark set stays within its budgets across stage 4.
 
 ## Retirement
 
-Record the re-validation contract in `curios-elab`'s documentation, the gate's shared statement in both checkers' and in [An independent kernel re-checks what the elaborator accepts](../../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), and the machine's demand keying in the closed-machine entry. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Record the recording rule in `curios-analysis`'s documentation and in [An independent kernel re-checks what the elaborator accepts](../../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), the re-validation contract in `curios-elab`'s, and the machine's demand keying in the closed-machine entry. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
