@@ -80,6 +80,20 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
     assert_eq!(run(source), b"13");
 }
 
+/// `Accessible(R)` is the predicate `(A) -> Prop` that `WellFounded` quantifies, with no lambda around it: an indexed family at its parameters is a family of its own, so it stands where a predicate is expected and the well-foundedness of `<` inhabits it pointwise. Both checkers see the partial application, since the kernel re-checks the program.
+#[test]
+fn an_accessibility_family_at_its_relation_is_a_predicate() {
+    let source = r#"
+        use /std/{Nat, WellFounded};
+        let everywhere(P: (Nat) -> Prop) -> Prop = (n: Nat) -> P(n);
+        let _accessible: everywhere(WellFounded/Accessible((a: Nat, b: Nat) => Nat/Lt(a, b))) =
+            WellFounded/lt;
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
 // A self-reference under a lambda is a knot forced by need, which the erased program ties through a cell: legal, and the shape a lazy structure takes.
 #[test]
 fn a_value_that_names_itself_under_a_lambda_is_admitted() {

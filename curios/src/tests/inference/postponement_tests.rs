@@ -189,14 +189,14 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
 
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
-        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
 
-        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T, n)} =
+        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
             match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
 
-        let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
-            (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
+        let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T)(n)) -> Vec(T)(m) =
+            (match m: (k) => (j: Nat, Vec(T)(j)) -> Vec(T)(k)
             | 0 => (j, x) => Vec/nil()
             | p + 1; ih => (j, x) =>
                 match x
@@ -205,7 +205,7 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
                 end
             end)(n, v);
 
-        let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat, w) =
+        let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat)(w) =
             let bad(u: List(Nat)) -> List(Nat) = List/slice(u, k, 3);
             let paired = of_list(bad(l));
             resize(0, w, paired.1);

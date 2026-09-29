@@ -152,14 +152,14 @@ fn indexed_inductive_declares_constructs_and_matches() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_, _) => Nat
             | nil() => 0
             | cons(@m, x, xs) => Nat/add(len(xs), 1)
             end;
-        let v : Vec(Nat, 2) = Vec/cons(10, Vec/cons(20, Vec/nil()));
+        let v : Vec(Nat)(2) = Vec/cons(10, Vec/cons(20, Vec/nil()));
         len(v)
     "#;
 
@@ -187,21 +187,21 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
 
 #[test]
 fn indexed_inductive_motive_binds_the_index() {
-    // The motive `(k, v) => Vec(T, Nat/add(k, m))` binds the length index ahead of the scrutinee; each arm checks against the motive at that case's target index (`0` for nil, `Nat/succ(j)` for cons), and the whole match at the scrutinee's actual index. The cons arm converges via `Nat/add`'s definitional successor peeling.
+    // The motive `(k, v) => Vec(T)(Nat/add(k, m))` binds the length index ahead of the scrutinee; each arm checks against the motive at that case's target index (`0` for nil, `Nat/succ(j)` for cons), and the whole match at the scrutinee's actual index. The cons arm converges via `Nat/add`'s definitional successor peeling.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
-            match v : (k, v) => Vec(T, Nat/add(k, m))
+        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =
+            match v : (k, v) => Vec(T)(Nat/add(k, m))
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
-        let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
-        let b : Vec(Nat, 1) = Vec/cons(3, Vec/nil());
-        let c : Vec(Nat, 3) = append(a, b);
+        let a : Vec(Nat)(2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
+        let b : Vec(Nat)(1) = Vec/cons(3, Vec/nil());
+        let c : Vec(Nat)(3) = append(a, b);
         0
     "#;
 
@@ -215,13 +215,13 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
     "#;
 
     let under = format!(
         r#"{inductive_decl}
-        let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_) => Nat
             | nil() => 0
             | cons(@m, x, xs) => 1
@@ -237,7 +237,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
 
     let over = format!(
         r#"{inductive_decl}
-        let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_, _, _) => Nat
             | nil() => 0
             | cons(@m, x, xs) => 1
@@ -254,8 +254,8 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     // Parameters are not motive binders at all, so the family a written scrutinee-binder annotation names is checked by ordinary conversion: annotating at the wrong parameter is a plain type mismatch.
     let wrong_annotation = format!(
         r#"{inductive_decl}
-        let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
-            match v : (k, w : Vec(Bytes, k)) => Nat
+        let f(@n : Nat, v : Vec(Nat)(n)) -> Nat =
+            match v : (k, w : Vec(Bytes)(k)) => Nat
             | nil() => 0
             | cons(@m, x, xs) => 1
             end;
@@ -269,36 +269,36 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
 #[test]
 fn index_refinement_learns_inside_the_arm() {
     // Rung B: a scrutinee index that is a stable key is refined to the case's target inside the arm. Three faces of it:
-    // - `subst` casts `Vec(Bytes, n)` to `Vec(Bytes, m)` through an `Eq(Nat, n, m)` under a *constant* motive — the equality is learned (`n := z`, `m := z`), not eliminated;
+    // - `subst` casts `Vec(Bytes)(n)` to `Vec(Bytes)(m)` through an `Eq(Nat)(n, m)` under a *constant* motive — the equality is learned (`n := z`, `m := z`), not eliminated;
     // - `sym` is J-style elimination from the pattern motive alone;
-    // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal because the arm refines `n := 0`.
+    // - `f`'s nil arm uses a hypothesis demanding `Vec(T)(0)` — legal because the arm refines `n := 0`.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         induct Eq(A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
         end
-        let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bytes, n)) -> Vec(Bytes, m) =
-            match p : (_, _, _) => Vec(Bytes, m)
+        let subst(@n : Nat, @m : Nat, p : Eq(Nat)(n, m), v : Vec(Bytes)(n)) -> Vec(Bytes)(m) =
+            match p : (_, _, _) => Vec(Bytes)(m)
             | refl(z) => v
             end;
-        let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
-            match p : (s, t, q) => Eq(A, t, s)
+        let sym(@A : Type, @x : A, @y : A, p : Eq(A)(x, y)) -> Eq(A)(y, x) =
+            match p : (s, t, q) => Eq(A)(t, s)
             | refl(z) => Eq/refl(z)
             end;
-        let zonly(@T : Type, v : Vec(T, 0)) -> Nat = 9;
-        let f(@T : Type, @n : Nat, v : Vec(T, n), w : Vec(T, n)) -> Nat =
+        let zonly(@T : Type, v : Vec(T)(0)) -> Nat = 9;
+        let f(@T : Type, @n : Nat, v : Vec(T)(n), w : Vec(T)(n)) -> Nat =
             match v : (_, _) => Nat
             | nil() => zonly(w)
             | cons(@j, x, xs) => 1
             end;
-        let a : Vec(Bytes, 0) = Vec/nil();
-        let p : Eq(Nat, 0, 0) = Eq/refl(0);
-        let b : Vec(Bytes, 0) = subst(p, a);
-        let q : Eq(Nat, 3, 3) = sym(Eq/refl(3));
+        let a : Vec(Bytes)(0) = Vec/nil();
+        let p : Eq(Nat)(0, 0) = Eq/refl(0);
+        let b : Vec(Bytes)(0) = subst(p, a);
+        let q : Eq(Nat)(3, 3) = sym(Eq/refl(3));
         f(Vec/nil(@Bytes), Vec/nil())
     "#;
 
@@ -322,23 +322,23 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
 
 #[test]
 fn inversion_prunes_impossible_arms_and_solves_binders() {
-    // Rung C: at `Vec(T, Nat/succ(n))` the nil arm's target `0` clashes definitely with the successor spine, so the arm is omitted — checker-verified, no `impossible` keyword — and erase fills its dispatch slot with an unreachable body. In the cons arm the unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
+    // Rung C: at `Vec(T)(Nat/succ(n))` the nil arm's target `0` clashes definitely with the successor spine, so the arm is omitted — checker-verified, no `impossible` keyword — and erase fills its dispatch slot with an unreachable body. In the cons arm the unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is what types `xs : Vec(T)(j)` at the declared `Vec(T)(n)`.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
+        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
             match v : (_, _) => T
             | cons(@j, x, xs) => x
             end;
-        let rest(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Vec(T, n) =
-            match v : (_, _) => Vec(T, n)
+        let rest(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> Vec(T)(n) =
+            match v : (_, _) => Vec(T)(n)
             | cons(@j, x, xs) => xs
             end;
-        let v : Vec(Bytes, 2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
-        let w : Vec(Bytes, 1) = rest(v);
+        let v : Vec(Bytes)(2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
+        let w : Vec(Bytes)(1) = rest(v);
         first(w)
     "#;
 
@@ -352,9 +352,9 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
+        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
             match v : (_, _) => T
             | cons(@j, x, xs) => x
             end;
@@ -375,14 +375,14 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
 
 #[test]
 fn omission_requires_a_definite_clash() {
-    // An opaque index proves nothing: omitting nil at `Vec(T, n)` is rejected with the explanation as the error.
+    // An opaque index proves nothing: omitting nil at `Vec(T)(n)` is rejected with the explanation as the error.
     let opaque = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_, _) => Nat
             | cons(@j, x, xs) => 1
             end;
@@ -450,9 +450,9 @@ fn indexed_inductive_index_mismatch_is_rejected() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let v : Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/nil()));
+        let v : Vec(Nat)(3) = Vec/cons(10, Vec/cons(20, Vec/nil()));
         0
     "#;
 
@@ -468,7 +468,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil()
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         0
     "#;
@@ -495,7 +495,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0, 1)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         0
     "#;
@@ -547,4 +547,63 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         end
     "#;
     assert!(compile(through, Some("/std/Nat")).is_ok());
+}
+
+#[test]
+fn an_indexed_familys_type_takes_its_parameters_and_then_its_indices() {
+    // The type-constructor binding is curried where the parameters end, so the family reports as a function of `T` returning a function of `n`, the way its header reads.
+    let source = r#"
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> Type
+        | nil() : (0)
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
+        end
+        let t : ? = Vec;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? = (T: Type) -> (n: Nat) -> Type"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn an_indexed_family_at_its_parameters_is_a_family_of_its_own() {
+    // `Vec(Nat)` is the family `(Nat) -> Type` without a lambda around it, so it stands where one is expected and applies to an index later.
+    let source = r#"
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> Type
+        | nil() : (0)
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
+        end
+        let family : (Nat) -> Type = Vec(Nat);
+        let v : family(1) = Vec/cons(7, Vec/nil());
+        0
+    "#;
+
+    assert!(compile(source, Some("/std/Nat")).is_ok());
+}
+
+#[test]
+fn an_indexed_family_applied_in_one_call_is_refused() {
+    // One call fills one parameter list: the parameter's list takes one argument, and the index belongs to the next call.
+    let source = r#"
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> Type
+        | nil() : (0)
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
+        end
+        let v : Vec(Nat, 0) = Vec/nil();
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("wrong number of arguments: expected 1, got 2"),
+        "unexpected error: {error}"
+    );
 }

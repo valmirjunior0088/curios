@@ -16,7 +16,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let z_of(@a: Nat, @b: Nat, e: Eq(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
 
         -- A pinned payload beside a proof payload: `below` erases, `w` is the index.
-        let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), x)) -> Nat =
+        let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Nat/Lt(a, b))(x)) -> Nat =
             match acc | intro(@w, _below) => w + 1 end;
 
         -- Targets that swap their binders: each payload is read from its own position.

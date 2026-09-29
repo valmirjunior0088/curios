@@ -177,7 +177,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
 
         /std/print("unreachable")
         "#,
-        "expected: Eq(@Nat, 0, 1)",
+        "expected: Eq(@Nat)(0, 1)",
     );
 }
 
@@ -197,6 +197,6 @@ fn an_unreachable_arm_retypes_no_local() {
 
         /std/print("unreachable")
         "#,
-        "expected: Eq(@Nat, 0, 7)",
+        "expected: Eq(@Nat)(0, 7)",
     );
 }

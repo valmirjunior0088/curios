@@ -1334,7 +1334,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             };
             flat([pure("("), sub(head, frame), pure(field)])
         }
-        // Params then indices, one flat argument list — exactly how the type-constructor function is applied at use sites, and marked the same way. Without the marks this spells `Eq(Nat, 5, 5)`, three positional arguments where `Eq(@A : Type) : (A, A) -> Prop` accepts two: a rendering no use site could reproduce.
+        // The parameters, then the indices, one call each where the family has both — exactly how its type-constructor function is applied at use sites, `Sized(Nat)(1)`, and marked the same way. Without the marks this spells `Eq(Nat)(5, 5)`, an explicit argument where `Eq(@A : Type) : (A, A) -> Prop` takes an implicit one: a rendering no use site could reproduce.
         Subterm::InductType(InductType {
             name,
             universes,
@@ -1348,22 +1348,29 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 frame.spelling.symbol(&name),
                 universe_suffix(&universes, frame.spelling)
             );
-            if arity == 0 {
-                pure(label)
-            } else {
-                listed(
-                    format!("{label}("),
-                    false,
-                    params
-                        .into_iter()
-                        .chain(indices)
-                        .enumerate()
-                        .map(|(index, p)| {
-                            marked_argument(sub(p, frame), marks.and_then(|marks| marks.get(index)))
-                        })
-                        .collect(),
-                    ")",
-                )
+            let arguments = |group: Vec<Term>, offset: usize| -> Vec<Printer> {
+                group
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, argument)| {
+                        marked_argument(
+                            sub(argument, frame),
+                            marks.and_then(|marks| marks.get(offset + index)),
+                        )
+                    })
+                    .collect()
+            };
+            match (params.is_empty(), indices.is_empty()) {
+                (true, true) => pure(label),
+                (false, false) => {
+                    let offset = params.len();
+                    flat([
+                        listed(format!("{label}("), false, arguments(params, 0), ")"),
+                        listed("(".into(), false, arguments(indices, offset), ")"),
+                    ])
+                }
+                (false, true) => listed(format!("{label}("), false, arguments(params, 0), ")"),
+                (true, false) => listed(format!("{label}("), false, arguments(indices, 0), ")"),
             }
         }
         // Prints as the constructor-function call, instantiated type params hidden — `Result/success(42)`.

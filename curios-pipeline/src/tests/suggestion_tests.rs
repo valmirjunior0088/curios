@@ -32,14 +32,14 @@ fn a_computed_equality_goal_suggests_refl() {
 
 #[test]
 fn impossible_constructors_are_not_suggested() {
-    // At `Vec(Nat, 0)` inversion refutes `cons` (a successor target clashes with `0`) and admits `nil` completely.
+    // At `Vec(Nat)(0)` inversion refutes `cons` (a successor target clashes with `0`) and admits `nil` completely.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
         end
-        let v : Vec(Nat, 0) = ?;
+        let v : Vec(Nat)(0) = ?;
         0
     "#;
 

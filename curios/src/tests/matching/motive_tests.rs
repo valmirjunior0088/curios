@@ -30,9 +30,9 @@ fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_, _) => Nat
             | nil() => 0
             | cons(@m, x, xs) => m + 1
@@ -82,14 +82,14 @@ fn a_default_arm_is_allowed_on_an_indexed_family() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head_or(@T : Type, @n : Nat, v : Vec(T, n), fallback : T) -> T =
+        let head_or(@T : Type, @n : Nat, v : Vec(T)(n), fallback : T) -> T =
             match v : (_, _) => T
             | cons(@m, x, xs) => x
             | _ => fallback
             end;
-        let v : Vec(Nat, 2) = Vec/cons(8, Vec/cons(9, Vec/nil()));
+        let v : Vec(Nat)(2) = Vec/cons(8, Vec/cons(9, Vec/nil()));
         /std/print(Nat/to_str(head_or(v, 0)))
         "#;
 
@@ -103,9 +103,9 @@ fn an_under_bound_motive_reports_its_binder_count() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
             match v : (_) => Nat
             | nil() => 0
             | cons(@m, x, xs) => m + 1

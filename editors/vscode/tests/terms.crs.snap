@@ -35,7 +35,7 @@
 #         ^ source.curios punctuation.bracket.curios
 #          ^ source.curios constant.numeric.decimal.curios
 #           ^ source.curios punctuation.bracket.curios
->| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+>| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
 #^ source.curios punctuation.separator.curios
 # ^ source.curios
 #  ^^^^ source.curios entity.name.function.curios
@@ -59,8 +59,8 @@
 #                               ^^^ source.curios entity.name.type.curios
 #                                  ^ source.curios punctuation.bracket.curios
 #                                   ^ source.curios entity.name.type.curios
-#                                    ^ source.curios punctuation.separator.curios
-#                                     ^ source.curios
+#                                    ^ source.curios punctuation.bracket.curios
+#                                     ^ source.curios punctuation.bracket.curios
 #                                      ^ source.curios variable.other.curios
 #                                       ^ source.curios punctuation.bracket.curios
 #                                        ^ source.curios punctuation.bracket.curios

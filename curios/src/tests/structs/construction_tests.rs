@@ -8,11 +8,11 @@ fn named_fields_run_end_to_end() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let p : { n : Nat, v : Vec(Nat, n) } =
+        let p : { n : Nat, v : Vec(Nat)(n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
-        let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
             match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
@@ -69,11 +69,11 @@ fn struct_dependent_fields_run_end_to_end() {
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
+        pub struct Sized : pub Type { n : Nat, v : Vec(Nat)(n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
-        let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
             match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))

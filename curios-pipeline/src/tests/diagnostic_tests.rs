@@ -15,7 +15,7 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
     "#;
     let error = compile(source, None).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("inferred: Prop") && error.contains("expected: Eq(@?, ?, ?)"),
+        error.contains("inferred: Prop") && error.contains("expected: Eq(@?)(?, ?)"),
         "unexpected report: {error}"
     );
     assert!(
@@ -183,11 +183,11 @@ fn a_mismatch_marks_an_implicit_nominal_parameter() {
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(
-        error.contains("inferred: Eq(@Nat, 5, 5)"),
+        error.contains("inferred: Eq(@Nat)(5, 5)"),
         "implicit parameter not marked: {error}"
     );
     assert!(
-        error.contains("expected: Eq(@Nat, 5, 6)"),
+        error.contains("expected: Eq(@Nat)(5, 6)"),
         "implicit parameter not marked: {error}"
     );
 }

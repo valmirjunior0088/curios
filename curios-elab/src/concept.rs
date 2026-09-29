@@ -6,9 +6,7 @@
 mod tests;
 
 use {
-    curios_core::{
-        Free, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType, UniverseContext,
-    },
+    curios_core::{Free, Global, Intrinsic, Spelling, Subterm, Term, TupleType, UniverseContext},
     curios_num::Grain,
     curios_utilities::Qualifier,
     std::fmt,
@@ -104,16 +102,13 @@ impl HeadKey {
             Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
             // The weak-head form of a tuple type is the node itself and its labels are structural, so keying costs a walk down the spine and reduces no field type.
             Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
-            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. ListType(T)` for an intrinsic former like `/sys/List`). The binders need not be opened — the name/former sits on the node.
+            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. ListType(T)` for an intrinsic former like `/sys/List`) — through a second function where an indexed family takes its indices in a call of their own (`λT. λn. InductType(Vec, [T], [n])`). The binders need not be opened — the name/former sits on the node.
             Subterm::Func(func) => {
-                let mut telescope = &func.telescope;
-                while let Telescope::Cons(_, rest) = telescope {
-                    telescope = rest.body();
+                let mut body = func.telescope.terminal();
+                while let Subterm::Func(inner) = &**body {
+                    body = inner.telescope.terminal();
                 }
-                let Telescope::Done(body) = telescope else {
-                    unreachable!("telescope spine ends in Done");
-                };
-                match &***body {
+                match &**body {
                     Subterm::InductType(induct_decl) => {
                         Some(HeadKey::Nominal(induct_decl.name.clone()))
                     }
@@ -123,18 +118,11 @@ impl HeadKey {
                     Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
                     // A constructor whose body is an anonymous product — `let Pair(A: Type) -> Type = {Nat, A};` reduces to `(A: Type) => {Nat, A}` — keys on that body's shape, so `Functor(Pair)` registers where `Monad(Option)` does. Symmetry with the nominal case, not a consumer's demand; it does not extend imitation, since `?M(?A) ≡ {Nat, Nat}` has no unique solution.
                     Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
-                    // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. Its head names the former — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key — and the universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
-                    Subterm::Apply(apply) => {
-                        let name = match &*apply.head {
-                            Subterm::Instance(instance) => instance.head.head_name(),
-                            Subterm::Var(var) => var.as_free(),
-                            _ => None,
-                        };
-                        match name? {
-                            Free::Global(global) => Some(HeadKey::Nominal(global.clone())),
-                            Free::Local(_) => None,
-                        }
-                    }
+                    // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. The head of its application spine names the former — through a curried family's calls, `(n : Nat) => Sized(T)(n)` names `Sized` — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key, and the universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
+                    Subterm::Apply(_) => match body.head_name()? {
+                        Free::Global(global) => Some(HeadKey::Nominal(global.clone())),
+                        Free::Local(_) => None,
+                    },
                     _ => None,
                 }
             }

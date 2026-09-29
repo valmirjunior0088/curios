@@ -200,7 +200,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
         "unexpected error: {error}"
     );
     assert!(
-        error.contains("Eq(@?, ?(k), ?(7))"),
+        error.contains("Eq(@?)(?(k), ?(7))"),
         "unexpected error: {error}"
     );
     assert!(

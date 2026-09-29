@@ -132,6 +132,61 @@ fn a_numeral_operand_prints_bare() {
     assert_eq!(difference.to_string(), "n - 3");
 }
 
+/// A spelling that shortens `names` to their last segment and marks each as `marks` says, as a diagnostic's would.
+fn spelling_of(names: &[(Global, Vec<Plicity>)]) -> Rc<Spelling> {
+    let globals = names
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    Rc::new(
+        Spelling::default()
+            .with_short_names(Rc::new(build_shorten(&globals)))
+            .with_nominal_plicities(Rc::new(names.iter().cloned().collect())),
+    )
+}
+
+fn numeral(value: usize) -> Term {
+    Term::intrinsic(Intrinsic::Nat(Nat::new(value)))
+}
+
+/// A family with parameters and indices prints the way its type-constructor function is applied — the parameters, then the indices, one call each — with the parameters marked as declared.
+#[test]
+fn an_indexed_family_prints_its_parameters_and_its_indices_in_two_calls() {
+    let eq = Global::Authored(Qualifier::from(["std", "Eq"]));
+    let spelling = spelling_of(&[(
+        eq.clone(),
+        vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
+    )]);
+
+    let family = Term::induct_type(
+        eq,
+        [Term::intrinsic(Intrinsic::NatType)],
+        [numeral(1), numeral(2)],
+    );
+    assert_eq!(family.spelled(&spelling).to_string(), "Eq(@Nat)(1, 2)");
+}
+
+/// A family with only parameters, or only indices, takes them in its one call.
+#[test]
+fn a_family_with_one_kind_of_argument_prints_in_one_call() {
+    let option = Global::Authored(Qualifier::from(["std", "Option"]));
+    let sign = Global::Authored(Qualifier::from(["std", "Sign"]));
+    let spelling = spelling_of(&[
+        (option.clone(), vec![Plicity::Explicit]),
+        (sign.clone(), vec![Plicity::Explicit]),
+    ]);
+
+    let parameters = Term::induct_type(
+        option,
+        [Term::intrinsic(Intrinsic::NatType)],
+        Vec::<Term>::new(),
+    );
+    assert_eq!(parameters.spelled(&spelling).to_string(), "Option(Nat)");
+
+    let indices = Term::induct_type(sign, Vec::<Term>::new(), [numeral(7)]);
+    assert_eq!(indices.spelled(&spelling).to_string(), "Sign(7)");
+}
+
 /// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `x => x` does not split it in two.
 #[test]
 fn a_short_lambda_body_stays_on_the_arrows_line() {

@@ -109,7 +109,7 @@ fn parenthesizes_a_reduced_successor_operand() {
 
     let error = error(source);
     assert!(
-        error.contains("expected: Eq(@Nat, n - (k + 1), 0)"),
+        error.contains("expected: Eq(@Nat)(n - (k + 1), 0)"),
         "successor operand not parenthesized: {error}"
     );
     assert!(
@@ -130,11 +130,11 @@ fn keeps_the_name_of_a_stalled_unfolding() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Eq(@Nat, double(n), double(n))"),
+        error.contains("inferred: Eq(@Nat)(double(n), double(n))"),
         "stalled unfolding not kept by name: {error}"
     );
     assert!(
-        error.contains("expected: Eq(@Nat, double(n), "),
+        error.contains("expected: Eq(@Nat)(double(n), "),
         "stalled unfolding not kept by name: {error}"
     );
     assert!(

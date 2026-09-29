@@ -701,13 +701,13 @@ pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = 
 
         let R(y : Nat, x : Nat) -> Prop = Nat/Lt(x, y);
 
-        let f(n : Nat, lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R, n)) -> Nat =
+        let f(n : Nat, lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R)(n)) -> Nat =
             match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;
 
-        let inv(n : Nat, a : Accessible(R, n)) -> (y : Nat, r : R(y, n)) -> Accessible(R, y) =
+        let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
             (y, r) => match a | intro(@_, below) => below(y, r) end;
 
-        let same(lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R, 0), x : Eq(f(0, lt, a), 0))
+        let same(lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R)(0), x : Eq(f(0, lt, a), 0))
             -> Eq(f(0, lt, Accessible/intro(inv(0, a))), 0) = x;
 
         /std/print(Nat/to_str(1))

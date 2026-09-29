@@ -210,9 +210,9 @@ fn constructor_pattern_matches_an_implicit_payload() {
         use /std/{Nat, Str};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat, 3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =
             match v : (_, _) => Nat
             | cons(@m, x, xs) => x
             end;
@@ -228,9 +228,9 @@ fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
         use /std/{Nat, Str};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat, 3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =
             match v : (_, _) => Nat
             | cons(m, x, xs) => x
             end;
@@ -250,9 +250,9 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         use /std/{Nat, Str};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat, 3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =
             match v : (_, _) => Nat
             | cons(@m, @x, xs) => x
             end;

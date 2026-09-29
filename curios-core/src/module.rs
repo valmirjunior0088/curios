@@ -468,7 +468,7 @@ impl Module {
 
     /// Each nominal declaration's argument plicities, keyed by the family's name — parameters then indices, in the order a use site supplies them.
     ///
-    /// Read off the type constructor's own definition, whose declared type is the `FuncType` lowering built from `param_tys ++ index_tys`: the parameters keep their declared marks and the indices are always explicit. That is the only place the marks survive — `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and neither `InductDecl::arity` nor `Telescope` has a slot for them.
+    /// Read off the type constructor's own definition, whose declared type is the one or two `FuncType`s lowering nests — the parameters', then an indexed family's indices' — ending in the sort: the parameters keep their declared marks and the indices are always explicit. That is the only place the marks survive — `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and neither `InductDecl::arity` nor `Telescope` has a slot for them.
     ///
     /// Both item arms are walked: an inductive's type constructor is a `rec` item, since it refers to itself, while structs and concepts are plain `let`s. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
     pub fn nominal_plicities(&self) -> BTreeMap<Global, Vec<Plicity>> {
@@ -483,8 +483,19 @@ impl Module {
             ) {
                 return;
             }
-            if let Subterm::FuncType(FuncType { plicities, .. }) = &*def.type_ {
-                marks.insert(def.name.clone(), plicities.clone());
+            // A type former's result is a sort, so the walk ends at the first node that is not a function type.
+            let mut collected = Vec::new();
+            let mut type_ = &def.type_;
+            while let Subterm::FuncType(FuncType {
+                telescope,
+                plicities,
+            }) = &**type_
+            {
+                collected.extend_from_slice(plicities);
+                type_ = telescope.terminal();
+            }
+            if !collected.is_empty() {
+                marks.insert(def.name.clone(), collected);
             }
         };
 

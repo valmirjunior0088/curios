@@ -137,17 +137,17 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
 
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
-        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
 
-        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T, n)} =
+        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
             match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
 
-        let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
+        let to_list(@T: Type, @n: Nat, v: Vec(T)(n)) -> List(T) =
             match v: (_, _) => List(T) | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
 
-        let resize(w: Nat, @w0: Nat, v: Vec(Char, w0)) -> Vec(Char, w) =
-            (match w: (k) => (n: Nat, Vec(Char, n)) -> Vec(Char, k)
+        let resize(w: Nat, @w0: Nat, v: Vec(Char)(w0)) -> Vec(Char)(w) =
+            (match w: (k) => (n: Nat, Vec(Char)(n)) -> Vec(Char)(k)
             | 0 => (n, x) => Vec/nil()
             | p + 1; ih => (n, x) =>
                 match x
@@ -166,7 +166,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 end;
             go(Str/to_bytes(s), []);
 
-        let padded(s: Str, w: Nat) -> Vec(Char, w) =
+        let padded(s: Str, w: Nat) -> Vec(Char)(w) =
             let t = of_list(codes(s));
             resize(w, t.1);
 

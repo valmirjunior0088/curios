@@ -138,9 +138,9 @@ fn an_indexed_family_spells_each_constructor() {
         use /std/{Nat, Str, Spell, print};
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
-        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
-        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n));
+        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T)(n));
         print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
         "#;
 
@@ -212,10 +212,10 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
         induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
-        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
         satisfy Eql(Certified);
-        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n));
+        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T)(n));
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;

@@ -160,7 +160,7 @@ pub induct Option(A: Type): pub Type
 end
 pub induct Vec(T: Type): (length: Nat) -> pub Type
 | nil(): (0)
-| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
 and Eq(@A: Type): (A, A) -> Prop
 | refl(@value: A): (value, value)
 end
@@ -211,12 +211,14 @@ end
         (payload
           (identifier)
           (call
-            (path
-              (identifier))
+            (call
+              (path
+                (identifier))
+              (arguments
+                (argument
+                  (path
+                    (identifier)))))
             (arguments
-              (argument
-                (path
-                  (identifier)))
               (argument
                 (path
                   (identifier))))))

@@ -1,6 +1,6 @@
 pub induct Vec(T: Type): (length: Nat) -> pub Type
 | nil(): (0)
-| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
 end
 
 pub struct Pair(A: Type, B: Type): pub Type {

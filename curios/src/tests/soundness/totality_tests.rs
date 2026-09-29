@@ -489,14 +489,14 @@ fn a_call_through_a_constructor_payload_descends() {
         use /std/{Nat};
 
         induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
-        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R, y)) : (x)
+        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
         end
 
         let strong(
             P : (Nat) -> Prop,
             step : (n : Nat, ih : (m : Nat, lt : Nat/Lt(m, n)) -> P(m)) -> P(n),
             n : Nat,
-            acc : Accessible((a : Nat, b : Nat) => Nat/Lt(a, b), n),
+            acc : Accessible((a : Nat, b : Nat) => Nat/Lt(a, b))(n),
         ) -> P(n) =
             match acc : (w, _) => P(w)
             | intro(@w, below) => step(w, (m, lt) => strong(P, step, m, below(m, lt)))

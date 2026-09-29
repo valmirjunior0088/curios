@@ -44,19 +44,19 @@ fn struct_spread_multi_override_with_gap() {
     assert_eq!(run(source), b"42");
 }
 
-// A dependent record updates when the override keeps the dependency consistent: `n` and `v : Vec(Nat, n)` replaced together.
+// A dependent record updates when the override keeps the dependency consistent: `n` and `v : Vec(Nat)(n)` replaced together.
 #[test]
 fn struct_spread_dependent_override_runs() {
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> pub Type
         | nil() : (0)
-        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
+        pub struct Sized : pub Type { n : Nat, v : Vec(Nat)(n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
-        let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
             match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))

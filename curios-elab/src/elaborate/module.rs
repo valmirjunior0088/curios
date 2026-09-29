@@ -215,7 +215,7 @@ fn add_declaration_sizing<B: Bound>(
     })
 }
 
-/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an under-applied index type (e.g. `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
+/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an index type lowered without the hidden arguments elaboration inserts (e.g. `Eq`'s `@A`, which its written application never states) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
 ///
 /// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked — index types may mention the group's own members (resolved through the assumed signatures), and the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. A name with no registry entry is an ordinary binding; no-op.
 fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), Error> {

@@ -25,7 +25,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations), with independent nominal/representation visibility and opaque construction
   - [x] Constructor registry & dependent eliminators
-  - [x] Indexed families (e.g. `/std/Tui/Layout/Sizes`)
+  - [x] Indexed families (e.g. `/std/Tui/Layout/Sizes`), [applied to their parameters and then their indices](design/language/an-indexed-family-takes-its-indices-in-a-second-call.md)
   - [x] Variant arity checking
   - [x] Exhaustiveness/coverage checking (index inversion)
   - [x] Large-elimination guard (restricts `Prop` → `Type` elimination; erasure reads a payload the guard admits as pinned back from the scrutinee's index)

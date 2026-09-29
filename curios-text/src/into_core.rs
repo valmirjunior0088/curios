@@ -817,28 +817,22 @@ fn process_items(
                         let induct_decl =
                             curios_core::Term::induct_type(name.clone(), param_vars, index_vars);
 
-                        // The type constructor is flat over params then indices: `Vec : (T : Type, n : Nat) -> Type`. Use sites never distinguish the two. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
-                        let binder_tys: Vec<_> = param_tys
+                        // The type constructor takes its parameters and then its indices, one call each: `Vec : (T : Type) -> (n : Nat) -> Type`, applied `Vec(T)(n)`, so `Vec(T)` is the family its matches eliminate — see documentation/design/language/an-indexed-family-takes-its-indices-in-a-second-call.md. A family with only one of the two takes it in one call, and a nullary one is its normal form outright. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
+                        let index_binders = index_tys
                             .iter()
                             .cloned()
-                            .chain(
-                                index_tys
-                                    .iter()
-                                    .cloned()
-                                    .map(|(n, t)| (Plicity::Explicit, n, t)),
-                            )
-                            .collect();
-                        let (type_, body) = if binder_tys.is_empty() {
-                            (result_sort, induct_decl)
-                        } else {
-                            (
-                                curios_core::Term::func_type_marked(
-                                    binder_tys.clone(),
-                                    result_sort,
-                                ),
-                                curios_core::Term::func_marked(binder_tys, induct_decl),
-                            )
-                        };
+                            .map(|(n, t)| (Plicity::Explicit, n, t))
+                            .collect::<Vec<_>>();
+                        let (type_, body) = [param_tys.clone(), index_binders]
+                            .into_iter()
+                            .filter(|group| !group.is_empty())
+                            .rev()
+                            .fold((result_sort, induct_decl), |(type_, body), group| {
+                                (
+                                    curios_core::Term::func_type_marked(group.clone(), type_),
+                                    curios_core::Term::func_marked(group, body),
+                                )
+                            });
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::InductiveType,
                             span: u.label.span().cloned(),
@@ -870,8 +864,8 @@ fn process_items(
                             n.clone().unwrap_or_else(|| format!("_{i}"))
                         };
 
-                        // Output type term `T`, `T(A, ...)`, or — indexed — the case's full terminal `T(A, ..., target...)`, elaborated as a name ref applied to the parameters and the target's index expressions.
-                        let output_args: Vec<Argument> = u
+                        // Output type term `T`, `T(A, ...)`, `T(target...)`, or — indexed with parameters — the case's full terminal `T(A, ...)(target...)`: a name ref applied the way a use site writes it, one call for the parameters and one for the target's index expressions.
+                        let parameters: Vec<Argument> = u
                             .params
                             .iter()
                             .map(|(p, n, _)| Argument {
@@ -879,20 +873,23 @@ fn process_items(
                                 // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
                                 plicity: *p,
                             })
-                            .chain(c.target.iter().flatten().map(|t| Argument {
+                            .collect();
+                        let targets: Vec<Argument> = c
+                            .target
+                            .iter()
+                            .flatten()
+                            .map(|t| Argument {
                                 term: t.clone(),
                                 plicity: Plicity::Explicit,
-                            }))
-                            .collect();
-                        let output_type: Term = if output_args.is_empty() {
-                            Subterm::Name(Name::from(vec![u.label.clone()])).into()
-                        } else {
-                            Subterm::Apply(Apply {
-                                head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
-                                arguments: output_args,
                             })
-                            .into()
-                        };
+                            .collect();
+                        let output_type: Term = [parameters, targets]
+                            .into_iter()
+                            .filter(|group| !group.is_empty())
+                            .fold(
+                                Subterm::Name(Name::from(vec![u.label.clone()])).into(),
+                                |head, arguments| Subterm::Apply(Apply { head, arguments }).into(),
+                            );
 
                         // Constructor type: (params..., _0 : T_0, ...) -> T. Every inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
                         let binders = lower.mint(

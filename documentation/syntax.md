@@ -509,7 +509,7 @@ Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does no
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T, n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled.
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled.
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -845,15 +845,17 @@ The required result annotation is either a sort or an index telescope followed b
 ```crs
 pub induct Sized(T: Type): (length: Nat) -> pub Type
 | empty(): (0)
-| push(@n: Nat, head: T, tail: Sized(T, n)): (n + 1)
+| push(@n: Nat, head: T, tail: Sized(T)(n)): (n + 1)
 end
 ```
+
+A family with both is a function of its parameters returning a function of its indices, and is applied the way it is declared: `Sized` has type `(T: Type) -> (length: Nat) -> Type` and is written `Sized(T)(n)`, so `Sized(T)` is itself the family `(length: Nat) -> Type` that a match over it eliminates. A family with only parameters or only indices takes them in one call — `Option(A)`, `Tagged(3, s)` below. Why is [An indexed family takes its indices in a second call](design/language/an-indexed-family-takes-its-indices-in-a-second-call.md).
 
 Each index binder may be named or left bare — `(length: Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
 
 ```crs
-pub induct Tagged: (size: Nat, contents: Sized(Nat, size)) -> pub Type
-| tag(@size: Nat, @contents: Sized(Nat, size)): (size, contents)
+pub induct Tagged: (size: Nat, contents: Sized(Nat)(size)) -> pub Type
+| tag(@size: Nat, @contents: Sized(Nat)(size)): (size, contents)
 end
 ```
 

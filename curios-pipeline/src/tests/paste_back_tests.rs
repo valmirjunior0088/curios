@@ -102,3 +102,20 @@ fn an_applied_family_reads_back() {
 
     reads_back(source).unwrap();
 }
+
+#[test]
+fn an_indexed_family_and_its_applications_read_back() {
+    let source = r#"
+        use /std/{Nat};
+        induct Vec(T: Type): (n: Nat) -> Type
+        | nil(): (0)
+        | cons(@m: Nat, x: T, xs: Vec(T)(m)): (m + 1)
+        end
+        pub let family: ? = Vec;
+        pub let at_nat: ? = Vec(Nat);
+        pub let value: ? = Vec/cons(7, Vec/nil());
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
