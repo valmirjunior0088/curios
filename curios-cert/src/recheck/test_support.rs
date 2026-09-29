@@ -1,10 +1,8 @@
 //! The hand-built adversarial modules the recheck suites forge, and the declarations they forge them from.
 //!
-//! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
-
-//! What the walk derives for itself rather than reading off the module.
+//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 //!
-//! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
+//! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
 use {
     crate::{Globals, Kernel, Verdict},
