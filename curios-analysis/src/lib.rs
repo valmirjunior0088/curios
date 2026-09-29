@@ -9,6 +9,9 @@
 mod judge;
 pub use judge::*;
 
+mod case_equation;
+pub use case_equation::*;
+
 mod conversion;
 pub use conversion::*;
 

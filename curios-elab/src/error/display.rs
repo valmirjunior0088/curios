@@ -14,7 +14,13 @@ use {
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
-/// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
+/// The line a report on a dead arm adds: that the arm is never taken, and the guard and case that say so.
+pub(super) fn unreachable_arm_note(guard: &Term, case: &Term, spelling: &Rc<Spelling>) -> String {
+    let guard = guard.spelled(spelling);
+    let case = case.spelled(spelling);
+    format!("  this arm is never taken: its guard {guard} is always {case}")
+}
+
 /// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_utilities::Report), and what the batch's `Display` writes before each snippet.
 pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
     // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
@@ -59,6 +65,7 @@ pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String 
     text
 }
 
+/// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
 fn unnameable_binder(name: &Term) -> bool {
     match &**name {
         Subterm::Var(var) => var.as_free().is_some_and(|free| !free.nameable()),
@@ -1128,6 +1135,10 @@ impl fmt::Display for Displayed<'_> {
                 Displayed(error, Rc::clone(spelling)).fmt(f)
             }
             Error::Located { error, .. } => Displayed(error, Rc::clone(spelling)).fmt(f),
+            Error::InUnreachableArm { guard, case, error } => {
+                Displayed(error, Rc::clone(spelling)).fmt(f)?;
+                write!(f, "\n{}", unreachable_arm_note(guard, case, spelling))
+            }
             Error::Batch(errors) => {
                 // Every member's own rendering, separated by a blank line as a goal batch's entries are. Nothing is added around them: each member carries its own declaration and location.
                 for (index, error) in errors.iter().enumerate() {

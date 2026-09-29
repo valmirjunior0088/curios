@@ -569,6 +569,12 @@ pub enum Error {
         name: String,
         error: Box<Error>,
     },
+    /// An arm whose guard is always a case other than the arm's raised `error`: the arm is dead, which the report says beside what failed, since a proof resting on the guard fails there — no checker records an equation under a spelling that mentions no local.
+    InUnreachableArm {
+        guard: Box<Term>,
+        case: Box<Term>,
+        error: Box<Error>,
+    },
     /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — `Error::batch` flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
     Batch(Vec<Error>),
 }
@@ -1075,9 +1081,9 @@ impl Error {
     pub fn is_incomplete(&self) -> bool {
         match self {
             Self::Goals(_) => true,
-            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
-                error.is_incomplete()
-            }
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. } => error.is_incomplete(),
             Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
         }
@@ -1232,6 +1238,15 @@ impl Error {
         }
     }
 
+    /// Say that the arm this error arose in is dead: its guard `guard` is always `case`, a case other than the arm's.
+    pub(crate) fn in_unreachable_arm(self, guard: Term, case: Term) -> Self {
+        Self::InUnreachableArm {
+            guard: Box::new(guard),
+            case: Box::new(case),
+            error: Box::new(self),
+        }
+    }
+
     pub(crate) fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } | Self::Batch(_) => self,
@@ -1342,7 +1357,9 @@ impl Error {
         spelling: &Rc<Spelling>,
     ) -> Option<String> {
         let term = match self {
-            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. } => {
                 return error.unbound_suggestion(unbound, spelling);
             }
             Self::UnboundVariable { term } => term,
@@ -1411,7 +1428,9 @@ impl Error {
     /// The error under every wrapper.
     pub(crate) fn unwrapped(&self) -> &Self {
         match self {
-            Self::Located { error, .. } | Self::InDeclaration { error, .. } => error.unwrapped(),
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. } => error.unwrapped(),
             error => error,
         }
     }
@@ -1419,7 +1438,9 @@ impl Error {
     /// What the wrappers prefix a body with — `render_body`'s own lines for them, without the body.
     fn declaration_prefix(&self) -> String {
         match self {
-            Self::Located { error, .. } => error.declaration_prefix(),
+            Self::Located { error, .. } | Self::InUnreachableArm { error, .. } => {
+                error.declaration_prefix()
+            }
             Self::InDeclaration { name, error } => {
                 format!("while elaborating {name}:\n{}", error.declaration_prefix())
             }
@@ -1434,6 +1455,11 @@ impl Error {
             Self::InDeclaration { name, error } => {
                 format!("while elaborating {name}:\n{}", error.render_body(spelling))
             }
+            Self::InUnreachableArm { guard, case, error } => format!(
+                "{}\n{}",
+                error.render_body(spelling),
+                unreachable_arm_note(guard, case, spelling)
+            ),
             error => Displayed(error, Rc::clone(spelling)).to_string(),
         }
     }
@@ -1444,7 +1470,9 @@ impl Error {
     fn innermost_span(&self) -> Option<&Span> {
         match self {
             Self::Located { span, error } => error.innermost_span().or(Some(span)),
-            Self::InDeclaration { error, .. } => error.innermost_span(),
+            Self::InDeclaration { error, .. } | Self::InUnreachableArm { error, .. } => {
+                error.innermost_span()
+            }
             Self::UniverseInconsistency { path, .. } => {
                 path.iter().find_map(|origin| origin.span.as_ref())
             }
@@ -1457,6 +1485,11 @@ impl Error {
         match self {
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
                 error.collect_terms(out)
+            }
+            Self::InUnreachableArm { guard, case, error } => {
+                out.push(guard);
+                out.push(case);
+                error.collect_terms(out);
             }
             Self::Batch(errors) => {
                 for error in errors {

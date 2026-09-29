@@ -164,9 +164,20 @@ fn check_fold_arm(
     value: &Term,
     body: &Term,
 ) -> Result<Term, Error> {
-    refine_head(context, head, value)?;
-    retype_locals(context, head, value, Vec::new());
-    check(context, body, result.at(head, &[], &[], value))
+    refine_head(context, head, value)
+        .and_then(|()| {
+            retype_locals(context, head, value, Vec::new());
+            check(context, body, result.at(head, &[], &[], value))
+        })
+        .map_err(|error| from_arm(context, head, value, error))
+}
+
+/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`](crate::unreachable_arm).
+fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> Error {
+    match crate::unreachable_arm(context, head, value) {
+        Some(case) => error.in_unreachable_arm(head.clone(), case),
+        None => error,
+    }
 }
 
 fn elaborate_nat_match(
@@ -453,16 +464,18 @@ fn elaborate_switch(
     // The arms keep the order they arrived in, which `Cases::Switch` states is strictly ascending — elaborating an arm rewrites its body, never its key.
     let mut cases_elaborated = Vec::with_capacity(cases.len());
     for (n, body) in cases {
-        let body = context.with_frame(|context| {
-            let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into();
-            refine_head(context, &head_elaborated, &literal)?;
-            retype_locals(context, &head_elaborated, &literal, Vec::new());
-            check(
-                context,
-                body,
-                result.at(&head_elaborated, &[], &[], &literal),
-            )
-        })?;
+        let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into();
+        let body = context
+            .with_frame(|context| {
+                refine_head(context, &head_elaborated, &literal)?;
+                retype_locals(context, &head_elaborated, &literal, Vec::new());
+                check(
+                    context,
+                    body,
+                    result.at(&head_elaborated, &[], &[], &literal),
+                )
+            })
+            .map_err(|error| from_arm(context, &head_elaborated, &literal, error))?;
         cases_elaborated.push((n.clone(), body));
     }
 
@@ -591,27 +604,31 @@ fn elaborate_bool_match(
         seed_motive(context, term, motive, &head_elaborated, &mode)?;
     }
 
-    let false_elaborated = context.with_frame(|context| {
-        let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(false)).into();
-        refine_head(context, &head_elaborated, &literal)?;
-        retype_locals(context, &head_elaborated, &literal, Vec::new());
-        check(
-            context,
-            false_case,
-            result.at(&head_elaborated, &[], &[], &literal),
-        )
-    })?;
+    let false_literal: Term = Subterm::Intrinsic(Intrinsic::Bool(false)).into();
+    let false_elaborated = context
+        .with_frame(|context| {
+            refine_head(context, &head_elaborated, &false_literal)?;
+            retype_locals(context, &head_elaborated, &false_literal, Vec::new());
+            check(
+                context,
+                false_case,
+                result.at(&head_elaborated, &[], &[], &false_literal),
+            )
+        })
+        .map_err(|error| from_arm(context, &head_elaborated, &false_literal, error))?;
 
-    let true_elaborated = context.with_frame(|context| {
-        let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(true)).into();
-        refine_head(context, &head_elaborated, &literal)?;
-        retype_locals(context, &head_elaborated, &literal, Vec::new());
-        check(
-            context,
-            true_case,
-            result.at(&head_elaborated, &[], &[], &literal),
-        )
-    })?;
+    let true_literal: Term = Subterm::Intrinsic(Intrinsic::Bool(true)).into();
+    let true_elaborated = context
+        .with_frame(|context| {
+            refine_head(context, &head_elaborated, &true_literal)?;
+            retype_locals(context, &head_elaborated, &true_literal, Vec::new());
+            check(
+                context,
+                true_case,
+                result.at(&head_elaborated, &[], &[], &true_literal),
+            )
+        })
+        .map_err(|error| from_arm(context, &head_elaborated, &true_literal, error))?;
 
     let result_type = result.of(&head_elaborated, &[]);
     let rebuilt = Subterm::Match(Match {
@@ -840,35 +857,37 @@ fn elaborate_induct_match(
             .collect::<Vec<_>>();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
-        let body_elaborated = context.with_frame(|context| {
-            let ix_c = assume_payload(context, telescope, &labels);
+        // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
+        let ctor_val = Term::variant_at(
+            name.clone(),
+            universes.clone(),
+            params.clone(),
+            tag.clone(),
+            vars.clone(),
+        );
 
-            // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope above. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
-            let ctor_val = Term::variant_at(
-                name.clone(),
-                universes.clone(),
-                params.clone(),
-                tag.clone(),
-                vars.clone(),
-            );
-            refine_head(context, &head_elaborated, &ctor_val)?;
+        let body_elaborated = context
+            .with_frame(|context| {
+                let ix_c = assume_payload(context, telescope, &labels);
+                refine_head(context, &head_elaborated, &ctor_val)?;
 
-            // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
-            let solutions = match solve_indices(context, &actual_indices, &ix_c, &labels)? {
-                Invert::Solved(solutions) => solutions,
-                Invert::Impossible => Vec::new(),
-            };
-            for (name, solution) in &solutions {
-                context.refine(name, solution);
-            }
+                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+                let solutions = match solve_indices(context, &actual_indices, &ix_c, &labels)? {
+                    Invert::Solved(solutions) => solutions,
+                    Invert::Impossible => Vec::new(),
+                };
+                for (name, solution) in &solutions {
+                    context.refine(name, solution);
+                }
 
-            // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
-            let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
-            retype_locals(context, &head_elaborated, &ctor_val, solutions);
+                // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
+                let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
+                retype_locals(context, &head_elaborated, &ctor_val, solutions);
 
-            let var_refs = vars.iter().collect::<Vec<_>>();
-            check(context, &scope.open(&var_refs), expected)
-        })?;
+                let var_refs = vars.iter().collect::<Vec<_>>();
+                check(context, &scope.open(&var_refs), expected)
+            })
+            .map_err(|error| from_arm(context, &head_elaborated, &ctor_val, error))?;
 
         let label_strs = labels.iter().collect::<Vec<_>>();
         // Rebuild the arm with the constructor's canonical payload plicities, so a re-elaborated arm re-checks identically (idempotence).

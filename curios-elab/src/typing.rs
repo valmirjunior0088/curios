@@ -2,7 +2,7 @@
 mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
-use curios_analysis::Unfolding;
+use curios_analysis::{Unfolding, records_case_equation};
 use curios_core::{
     Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
     IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
@@ -895,12 +895,18 @@ fn retry_checking(
 ///
 /// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. This once drove that too, keying a non-variable index — a constructor, a stuck application — as an equation on the index itself, the reverse of what the inverter pins or a fact the kernel does not have.
 ///
+/// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the kernel records none either — judged on the scrutinee as the kernel spells it, its local definitions substituted, and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
+///
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
 /// That is a typing fact now, not an analysis. This used to be guarded by a walk over the scrutinee and everything it reaches, asking whether its spelling fixes a value: `Cell/get(c)` denotes differently before and after a `Cell/set`, and registering an equation for it read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False`. The walk could never close the case it documented, either: `f(b)` for a *binder* `f` had to be assumed effectful, because the function space admitted `Cell/get` and no property of `(Bool) -> Bool` distinguished an effectful inhabitant from a pure one.
 ///
 /// Retyping every host operation to return `Io` made both questions vacuous. `Cell/get(c)` has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all; and no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding. The refinement the walk had to withhold from a pure opaque head is therefore restored — this is a change that *admits* more, not merely one that deletes an analysis.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    if !records_case_equation(&Unfolding::everything(&*context).term(head)) {
+        return Ok(());
+    }
+
     match &**head {
         Subterm::Var(var) => {
             let name = var.unwrap();
@@ -933,11 +939,27 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 }
             }
 
+            spellings.retain(|(_, original, _)| records_case_equation(original));
             context.refine_scrutinee_spellings(spellings, value);
         }
     }
 
     Ok(())
+}
+
+/// The case a guard always is, where that is a case other than `value`, the arm's: the arm is then never taken, and an error its body raises is reported as one in a dead arm — which is where a proof resting on the guard fails, since no equation is recorded under a spelling that mentions no local ([`records_case_equation`]). `None` where the guard is the arm's own case, or no literal or constructor at all — a guard its locals decide stays stuck.
+pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
+    let spelled = Unfolding::everything(&*context).term(head);
+    let case = reduce_with(context, &spelled).ok()?;
+    let another = match (&*case, &**value) {
+        (
+            Subterm::Intrinsic(this @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
+            Subterm::Intrinsic(that @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
+        ) => this != that,
+        (Subterm::Variant(this), Subterm::Variant(that)) => this.tag != that.tag,
+        _ => false,
+    };
+    another.then_some(case)
 }
 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
