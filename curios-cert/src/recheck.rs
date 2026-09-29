@@ -131,6 +131,15 @@ pub struct Verdict {
     pub error: KernelError,
 }
 
+/// What one whole-module walk reached: every refusal, and the record of what it concluded about the definitions it judged.
+#[derive(Debug)]
+pub struct Rechecked {
+    /// Every refusal the walk reached; empty exactly when the kernel accepted the module.
+    pub verdicts: Vec<Verdict>,
+    /// Each judged definition's totality, closed over everything it mentions — what a later walk reads once the unit is in its scope. A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
+    pub certification: Certification,
+}
+
 /// Re-check `module` with the independent kernel, with `globals` already in scope.
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
@@ -178,18 +187,16 @@ pub fn recheck_module_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    certify_module(module, budget, globals, syntax).0
+    certify_module(module, budget, globals, syntax).verdicts
 }
 
-/// [`recheck_module_verdicts`], with the record the walk leaves of what it concluded: each judged definition's totality, closed over everything it mentions — what a later walk reads as that definition's verdict once the unit is in its scope.
-///
-/// A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
+/// [`recheck_module_verdicts`], with the record the walk leaves of what it concluded — see [`Rechecked`].
 pub fn certify_module(
     module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> (Vec<Verdict>, Certification) {
+) -> Rechecked {
     verdicts_from(Kernel::new(budget, syntax), module.as_module(), globals)
 }
 
@@ -207,10 +214,10 @@ pub fn recheck_module_verdicts_uncached(
         module.as_module(),
         globals,
     )
-    .0
+    .verdicts
 }
 
-/// What a whole-module walk consumed, beside the verdicts it reached and the record it left — the walk's own kernel, handed back for a measurement to read.
+/// What a whole-module walk consumed, beside what it reached — the walk's own kernel, handed back for a measurement to read.
 ///
 /// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` and `DEFAULT_STEP_BUDGET` have to be set against what a real module actually costs, and nothing else can see those figures — the kernel a walk builds is otherwise its own. [`Kernel::retained`] is the compilation-scoped allowance it used and [`Kernel::heaviest_declaration`] the heaviest single judgment it made. The record is there for a measurement walking several units in order, which mounts each with it as a compilation does, so the next walk reads the classification rather than deriving it at a cost no compilation pays.
 ///
@@ -220,11 +227,11 @@ pub fn recheck_module_measured(
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> (Vec<Verdict>, Certification, Kernel) {
+) -> (Rechecked, Kernel) {
     let mut kernel = Kernel::new(budget, syntax);
-    let (verdicts, certification) = verdicts_into(&mut kernel, module.as_module(), globals);
+    let rechecked = verdicts_into(&mut kernel, module.as_module(), globals);
 
-    (verdicts, certification, kernel)
+    (rechecked, kernel)
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.
@@ -330,27 +337,15 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
         })
 }
 
-fn verdicts_from(
-    mut kernel: Kernel,
-    module: &Module,
-    globals: &Globals,
-) -> (Vec<Verdict>, Certification) {
+fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Rechecked {
     verdicts_into(&mut kernel, module, globals)
 }
 
-fn verdicts_into(
-    kernel: &mut Kernel,
-    module: &Module,
-    globals: &Globals,
-) -> (Vec<Verdict>, Certification) {
+fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Rechecked {
     grown(|| verdicts_within(kernel, module, globals))
 }
 
-fn verdicts_within(
-    kernel: &mut Kernel,
-    module: &Module,
-    globals: &Globals,
-) -> (Vec<Verdict>, Certification) {
+fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Rechecked {
     curios_profile::profile!("recheck_module");
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
@@ -625,7 +620,10 @@ fn verdicts_within(
         }
     }
 
-    (verdicts, certification)
+    Rechecked {
+        verdicts,
+        certification,
+    }
 }
 
 /// What is wrong with a universe context the walk is about to assume, if anything.

@@ -5,7 +5,7 @@
 //! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `.artifacts/certification.rkyv` beside this crate, with which the crate certifies the units it restores.
 
 use {
-    curios_cert::{Globals, certify_module},
+    curios_cert::{Globals, Rechecked, certify_module},
     curios_core::{Certification, Zonked},
     std::{fs, path::PathBuf},
 };
@@ -34,7 +34,10 @@ fn certify() {
             let zonked = Zonked::project(core).unwrap_or_else(|refusal| {
                 panic!("a restored prelude root is not zonked: {refusal}")
             });
-            let (refusals, certification) = certify_module(
+            let Rechecked {
+                verdicts: refusals,
+                certification,
+            } = certify_module(
                 &zonked,
                 curios_prelude_archive::DEFAULT_STEP_BUDGET,
                 &globals,

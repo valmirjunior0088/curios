@@ -4,9 +4,10 @@ use {
     super::{Stage, compile_unit_over},
     curios_abi::ForeignStore,
     curios_cert::{
-        Globals, Kernel, Verdict, certify_module, recheck_module_measured, recheck_module_verdicts,
+        Globals, Kernel, Rechecked, Verdict, certify_module, recheck_module_measured,
+        recheck_module_verdicts,
     },
-    curios_core::{Certification, Consumption, Intrinsic, Term, derived_binder_floor},
+    curios_core::{Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
         Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
@@ -180,7 +181,7 @@ pub(crate) fn certify(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
-) -> (Vec<Verdict>, Certification) {
+) -> Rechecked {
     certify_module(module, budget, &globals(scope), *syntax)
 }
 
@@ -191,9 +192,9 @@ pub fn recheck_measured(
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
-    let (verdicts, _, kernel) = recheck_module_measured(module, budget, &globals(scope), *syntax);
+    let (rechecked, kernel) = recheck_module_measured(module, budget, &globals(scope), *syntax);
 
-    (verdicts, kernel)
+    (rechecked.verdicts, kernel)
 }
 
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived and with the record the certifier filed with it.
@@ -705,9 +706,9 @@ pub fn compile_unit(
     let core = curios_core::Zonked::project(&core)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    let (verdicts, certification) = certify(&core, budget, scope, syntax);
-    if let Some(verdict) = verdicts.into_iter().next() {
-        return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
+    let rechecked = certify(&core, budget, scope, syntax);
+    if let Some(verdict) = rechecked.verdicts.first() {
+        return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
 
     let ersd = erase_unit(
@@ -721,7 +722,7 @@ pub fn compile_unit(
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
-    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(certification))
+    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(rechecked.certification))
 }
 
 /// Where a judged unit is kept between compilations.

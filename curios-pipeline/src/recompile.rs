@@ -6,10 +6,10 @@
 
 use {
     crate::{CompileError, globals, kernel_refusal, with_broken},
-    curios_cert::{Verdict, certify_module},
+    curios_cert::{Rechecked, certify_module},
     curios_core::{
-        Bound, Certification, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module,
-        StructDecl, Telescope, Term, Zonked, derived_binder_floor,
+        Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
+        Term, Zonked, derived_binder_floor,
     },
     curios_elab::{
         Context, Established, Mode, Recompile, Resumed, Tail, elaborate_and_zonk_unit_over,
@@ -81,12 +81,12 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    let (verdicts, certification) = recheck_over(&core, budget, scope, &reused, baseline, syntax);
-    if let Some(verdict) = verdicts.into_iter().next() {
-        return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
+    let rechecked = recheck_over(&core, budget, scope, &reused, baseline, syntax);
+    if let Some(verdict) = rechecked.verdicts.first() {
+        return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
     // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach.
-    let certification = certification.extended(baseline.certification());
+    let certification = rechecked.certification.extended(baseline.certification());
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
@@ -112,7 +112,7 @@ pub(crate) fn recheck_over(
     reused: &Module,
     baseline: &Unit,
     syntax: &SyntaxRegistry,
-) -> (Vec<Verdict>, Certification) {
+) -> Rechecked {
     let mut globals = globals(scope);
     globals.mount(reused, baseline.binder_floor(), baseline.certification());
 

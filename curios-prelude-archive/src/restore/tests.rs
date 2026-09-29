@@ -269,10 +269,9 @@ fn kernel_disagreements() {
         for root in prelude {
             let core = root.core();
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-            let (refusals, certification) =
-                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
-            verdicts.extend(refusals);
-            globals.mount(core, root.binder_floor(), &certification);
+            let rechecked = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            verdicts.extend(rechecked.verdicts);
+            globals.mount(core, root.binder_floor(), &rechecked.certification);
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -312,13 +311,12 @@ fn kernel_memo_parity() {
         for root in prelude {
             let core = root.core();
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-            let (cached, certification) =
-                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            let cached = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             assert_eq!(
-                cached,
+                cached.verdicts,
                 recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
             );
-            globals.mount(core, root.binder_floor(), &certification);
+            globals.mount(core, root.binder_floor(), &cached.certification);
         }
     });
 }
@@ -430,7 +428,7 @@ fn stored_prelude_measurements() {
             let erasure = start.elapsed();
 
             let start = Instant::now();
-            let (verdicts, record, kernel) =
+            let (rechecked, kernel) =
                 recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
             let retained = kernel.retained();
@@ -450,7 +448,7 @@ fn stored_prelude_measurements() {
             println!(
                 "  certifying the unit          {:>10.1?}  ({} refusals)",
                 certification,
-                verdicts.len()
+                rechecked.verdicts.len()
             );
             println!(
                 "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
@@ -483,7 +481,7 @@ fn stored_prelude_measurements() {
                 core.binder_floor
             );
 
-            globals.mount(core, root.binder_floor(), &record);
+            globals.mount(core, root.binder_floor(), &rechecked.certification);
             cores.push(core);
             arena = erased;
         }

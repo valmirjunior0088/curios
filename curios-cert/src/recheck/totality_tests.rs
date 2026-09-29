@@ -92,16 +92,23 @@ fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
 /// The library is certified with `reaches` honestly stamped `Partial`, and the record that walk leaves is mounted beside the same terms stamped `Total`. `held : Vouched` mentions only `reaches`, so its walk refuses it exactly when the environment's non-total set holds `reaches` — which the record says it does, whatever the stamp claims. Read off the stamp instead, the set held `sink` alone and the carried walk certified the proof with no verdicts at all; judged in one module from an empty environment, the same proof is refused, which is the second half here.
 #[test]
 fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() {
-    let (verdicts, record) = fixture_certified(
+    let honest = fixture_certified(
         &stamp_trial_module(Totality::Partial, false),
         1_000_000,
         &Globals::default(),
         SYNTAX,
     );
-    assert_eq!(verdicts, Vec::new(), "the honest library is certified");
-    assert_eq!(record.totality(&reaches()), Some(Totality::Partial));
+    assert_eq!(
+        honest.verdicts,
+        Vec::new(),
+        "the honest library is certified"
+    );
+    assert_eq!(
+        honest.certification.totality(&reaches()),
+        Some(Totality::Partial)
+    );
 
-    let carried = carried_beneath_the_lie(&record);
+    let carried = carried_beneath_the_lie(&honest.certification);
     assert!(
         refuses_the_proof_reaching_the_lie(&carried),
         "carried beneath its record, the proof reaching the lying stamp must be refused: {carried:?}",

@@ -5,7 +5,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
 use {
-    crate::{Globals, Kernel, Verdict},
+    crate::{Globals, Kernel, Rechecked, Verdict},
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
@@ -2633,7 +2633,7 @@ pub(super) fn fixture_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    fixture_certified(module, budget, globals, syntax).0
+    fixture_certified(module, budget, globals, syntax).verdicts
 }
 
 /// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
@@ -2642,6 +2642,6 @@ pub(super) fn fixture_certified(
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> (Vec<Verdict>, Certification) {
+) -> Rechecked {
     super::verdicts_from(Kernel::new(budget, syntax), module, globals)
 }
