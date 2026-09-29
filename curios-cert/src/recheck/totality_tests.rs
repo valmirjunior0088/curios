@@ -74,7 +74,7 @@ fn refuses_the_proof_reaching_the_lie(verdicts: &[Verdict]) -> bool {
 }
 
 /// The walk over the proof alone, the lying library mounted beneath it as the compile path mounts a unit — at its floor, with `certification` as the record filed beside it.
-fn carried_beneath_the_lie(certification: Option<&Certification>) -> Vec<Verdict> {
+fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
     fixture_verdicts(
         &carried_proof_module(),
         1_000_000,
@@ -101,7 +101,7 @@ fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() 
     assert_eq!(verdicts, Vec::new(), "the honest library is certified");
     assert_eq!(record.totality(&reaches()), Some(Totality::Partial));
 
-    let carried = carried_beneath_the_lie(Some(&record));
+    let carried = carried_beneath_the_lie(&record);
     assert!(
         refuses_the_proof_reaching_the_lie(&carried),
         "carried beneath its record, the proof reaching the lying stamp must be refused: {carried:?}",
@@ -119,24 +119,24 @@ fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() 
     );
 }
 
-/// A unit mounted with no record is classified by the walk that reads it, from its items, and the stamps on those items are not consulted — so the lying library alone beneath the proof still has the proof refused.
+/// A unit mounted with an empty record — an environment built by hand, with no walk behind it — is classified by the walk that reads it, from its items, and the stamps on those items are not consulted: the lying library beneath the proof still has the proof refused.
 #[test]
-fn a_unit_mounted_without_a_record_is_classified_by_the_reading_walk() {
-    let carried = carried_beneath_the_lie(None);
+fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
+    let carried = carried_beneath_the_lie(&Certification::default());
 
     assert!(
         refuses_the_proof_reaching_the_lie(&carried),
-        "with no record, the reading walk must classify the library itself and refuse the proof: {carried:?}",
+        "with an empty record, the reading walk must classify the library itself and refuse the proof: {carried:?}",
     );
 }
 
-/// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — the `covers` filter in `Globals::of` dropped — fails this test and no other in this file.
+/// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — `Globals::of` taking every record as covering — fails this test and no other in this file.
 #[test]
 fn a_record_that_does_not_cover_its_unit_is_not_read() {
     let forged = Certification::of([(reaches(), Totality::Total)]);
     assert!(!forged.covers(&stamp_trial_module(Totality::Total, false)));
 
-    let carried = carried_beneath_the_lie(Some(&forged));
+    let carried = carried_beneath_the_lie(&forged);
 
     assert!(
         refuses_the_proof_reaching_the_lie(&carried),

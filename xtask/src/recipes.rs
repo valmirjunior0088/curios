@@ -121,24 +121,22 @@ pub(crate) fn rust_docs() -> Result<(), String> {
     Ok(())
 }
 
-/// The standard library's pages, rendered by the compiler from the prelude image its own build filed — no sources are read and nothing is compiled twice, since the image already carries the library's record. `build` is what produces both, and costs nothing when nothing changed; the render is skipped the same way, when the landing page is newer than the image and the compiler that reads it, so a repeated run touches nothing. `cargo x clean` removes the pages with every other filed product.
+/// The standard library's pages, rendered by the compiler from the prelude it embeds — no sources are read and nothing is compiled, since the prelude already carries the library's record. `build` is what produces the compiler, and costs nothing when nothing changed; the render is skipped the same way, when the landing page is newer than the compiler that renders it, so a repeated run touches nothing. `cargo x clean` removes the pages with every other filed product.
 pub(crate) fn std_docs() -> Result<(), String> {
     build()?;
 
-    let artifacts = root().join("curios-prelude-archive").join(".artifacts");
-    let image = artifacts.join("std.rkyv");
-    let pages = artifacts.join("documentation");
+    let pages = root()
+        .join("curios-prelude-archive")
+        .join(".artifacts")
+        .join("documentation");
     let compiler = target_directory().join("release").join("curios");
 
-    if let (Some(rendered), Some(image_at), Some(compiler_at)) = (
-        modified(&pages.join("index.html")),
-        modified(&image),
-        modified(&compiler),
-    ) && rendered >= image_at
+    if let (Some(rendered), Some(compiler_at)) =
+        (modified(&pages.join("index.html")), modified(&compiler))
         && rendered >= compiler_at
     {
         println!(
-            "{} is newer than the image and the compiler; nothing to render",
+            "{} is newer than the compiler; nothing to render",
             pages.display()
         );
         return Ok(());
@@ -146,13 +144,7 @@ pub(crate) fn std_docs() -> Result<(), String> {
 
     run(
         Command::new(&compiler),
-        &[
-            "document",
-            "--archive",
-            &image.to_string_lossy(),
-            "--output",
-            &pages.to_string_lossy(),
-        ],
+        &["document", "--std", &pages.to_string_lossy()],
     )?;
 
     Ok(())

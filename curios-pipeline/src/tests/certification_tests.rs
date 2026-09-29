@@ -19,13 +19,12 @@ pub let twice: Nat = double(2);
 
 /// The certifier's classification of the definition `unit` calls `symbol`.
 fn classified(unit: &Unit, symbol: &str) -> Option<Totality> {
-    let certification = unit.certification()?;
     unit.core()
         .items
         .iter()
         .flat_map(|item| item.definitions())
         .find(|definition| definition.name.symbol().ends_with(&format!("/{symbol}")))
-        .and_then(|definition| certification.totality(&definition.name))
+        .and_then(|definition| unit.certification().totality(&definition.name))
 }
 
 /// A unit the pipeline compiled carries the kernel's record of every definition it holds, each classified as the kernel's own closure found it.
@@ -33,10 +32,7 @@ fn classified(unit: &Unit, symbol: &str) -> Option<Totality> {
 fn a_compiled_unit_files_the_certifiers_record_of_every_definition() {
     let unit = unit_of(SOURCE);
 
-    let certification = unit
-        .certification()
-        .expect("a compiled unit carries a record");
-    assert!(certification.covers(unit.core()));
+    assert!(unit.certification().covers(unit.core()));
     assert_eq!(classified(&unit, "double"), Some(Totality::Total));
     assert_eq!(classified(&unit, "spin"), Some(Totality::Partial));
     assert_eq!(classified(&unit, "twice"), Some(Totality::Total));
@@ -52,25 +48,18 @@ fn an_item_level_recompile_keeps_the_baselines_record_for_what_it_reuses() {
 
     assert!(reuses_body(&baseline, &recompiled, "double"));
     assert!(!reuses_body(&baseline, &recompiled, "twice"));
-    let certification = recompiled
-        .certification()
-        .expect("a recompiled unit carries a record");
-    assert!(certification.covers(recompiled.core()));
+    assert!(recompiled.certification().covers(recompiled.core()));
     assert_eq!(classified(&recompiled, "double"), Some(Totality::Total));
     assert_eq!(classified(&recompiled, "spin"), Some(Totality::Partial));
     assert_eq!(classified(&recompiled, "twice"), Some(Totality::Total));
 }
 
-/// The fixed prelude is lent with the record its build's certification filed, so a walk with the prelude in scope reads the certifier's verdict on every `/sys` and `/std` definition and classifies none of them for itself.
+/// The fixed prelude is lent with the record its build's certification filed, and that record covers each root whole — so a walk with the prelude in scope reads the certifier's verdict on every `/sys` and `/std` definition and classifies none of them for itself.
 #[test]
 fn the_restored_prelude_carries_a_record_covering_every_definition() {
     with_prelude(|prelude| {
         for unit in prelude {
-            let certification = unit
-                .certification()
-                .expect("the restored prelude carries its record");
-
-            assert!(certification.covers(unit.core()));
+            assert!(unit.certification().covers(unit.core()));
         }
     });
 }

@@ -15,7 +15,7 @@ use {
         erase_unit, validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{PreparedText, prepare_prelude},
-    curios_unit::{Record, Unit, framed},
+    curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Report, Source, digest},
     std::{
         collections::BTreeSet,
@@ -53,7 +53,7 @@ fn build() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
-    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is a stored unit, in the format every store slot files a unit in, so a restored prelude is a two-unit prefix and not a shape of its own.
+    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a two-unit prefix and not a shape of its own.
     let sys = archive(
         "sys",
         sys_text,
@@ -70,7 +70,7 @@ fn build() {
         sys.arena(),
     );
 
-    // Filed beside this crate rather than under `OUT_DIR`, because the images are read outside the build: `curios document` renders the standard library's pages from `std.rkyv`, so it needs a path a recipe can name. The crate includes them from the same paths, so there is one image per unit in one place; the rule for a product that outlives its build is `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes.
+    // Filed beside this crate, under `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes. The crate includes them from the same paths, so there is one image per unit in one place.
     let artifacts = manifest.join(".artifacts");
     fs::create_dir_all(&artifacts).expect("failed to create the archive's .artifacts directory");
     // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
@@ -109,7 +109,7 @@ fn archive(
     established: Established<'_>,
     scope: &[&curios_core::Module],
     arena: ErasedArena,
-) -> Unit {
+) -> Uncertified {
     let lowered = prepared.core().clone();
     let mut context = Context::with_default_budget(SYNTAX);
     // An item the parser could not read is absent from `lowered`, so what names it is withheld as a refused item's dependent is, rather than reported unbound once per mention: the seeding the compile pipeline does before it elaborates a unit.
@@ -195,11 +195,11 @@ fn archive(
     // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
     let binder_floor = derived_binder_floor(&core);
 
-    // No certifier has walked this unit yet, and none can from here: `curios-prelude`'s build files its record and attaches it at restore.
-    Unit::new(prepared, core, ersd, binder_floor, None)
+    // Uncertified: no certifier can walk it from here. `curios-prelude`'s build files its record, and that crate certifies the unit as it restores it.
+    Uncertified::new(prepared, core, ersd, binder_floor)
 }
 
-/// Serialize one unit to `<root>.rkyv` as a stored unit — its record, of `reads` and `predecessors`, framed ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
+/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and `predecessors`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
 ///
@@ -207,7 +207,7 @@ fn archive(
 fn write_image(
     artifacts: &Path,
     root: &str,
-    image: &Unit,
+    image: &Uncertified,
     reads: Vec<(PathBuf, Rc<Source>)>,
     predecessors: Vec<String>,
 ) -> String {

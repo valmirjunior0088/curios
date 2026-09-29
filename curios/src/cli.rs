@@ -75,7 +75,7 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// A library is the one thing with an interface, so the target names one — none for the governing package's, or a file its library declares — and `--archive` reads a unit already archived, a verdict slot's or the prelude image, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
+    /// A library is the one thing with an interface, so the target names one — none for the governing package's, or a file its library declares — and `--std` names the standard library this compiler was built with, which has no package to be compiled from and so no store to file its pages under: the flag takes the directory they go in. Where the pages go is `documentation/usage.md`'s Documenting.
     #[command(about = "Write a library's interface as pages")]
     Document {
         #[arg(value_name = "TARGET", help = DOCUMENT.target_help())]
@@ -83,17 +83,17 @@ pub(crate) enum Mode {
 
         #[arg(
             long,
-            value_name = "FILE",
-            conflicts_with = "target",
-            help = "Document the unit archived in FILE, a verdict slot under a store or the prelude image, rather than a package's library (requires --output)"
+            value_name = "DIR",
+            conflicts_with_all = ["target", "output_path"],
+            help = "Document the standard library this compiler was built with, writing the pages under DIR"
         )]
-        archive: Option<PathBuf>,
+        std: Option<PathBuf>,
 
         #[arg(
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Write the pages under DIR (default: under the store, beside the governing manifest; required with --archive)"
+            help = "Write the pages under DIR (default: under the store, beside the governing manifest)"
         )]
         output_path: Option<PathBuf>,
 
@@ -181,7 +181,7 @@ pub(crate) enum Mode {
     ///
     /// Not the last step of a profiled run, deliberately. A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its own last step, so folding there could serve every case but the one profiling exists for. It is a separate pass over a file the compiler has already closed.
     ///
-    /// PATH is the command's own argument rather than a TARGET: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject the way `document --archive` takes an archived unit.
+    /// PATH is the command's own argument rather than a TARGET: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject as a path the resolver never sees.
     #[cfg(feature = "profile")]
     #[command(about = "Summarize a profile stream filed by --profile")]
     Profile {

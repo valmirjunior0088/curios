@@ -17,7 +17,7 @@ use {
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource,
         into_core_unit, into_core_with_prelude,
     },
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Prefix, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
     std::{collections::BTreeSet, fmt},
 };
@@ -191,7 +191,9 @@ pub fn recheck_measured(
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
-    recheck_module_measured(module, budget, &globals(scope), *syntax)
+    let (verdicts, _, kernel) = recheck_module_measured(module, budget, &globals(scope), *syntax);
+
+    (verdicts, kernel)
 }
 
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived and with the record the certifier filed with it.
@@ -719,13 +721,7 @@ pub fn compile_unit(
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
-    Ok(Unit::new(
-        lowered,
-        core,
-        ersd,
-        binder_floor,
-        Some(certification),
-    ))
+    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(certification))
 }
 
 /// Where a judged unit is kept between compilations.

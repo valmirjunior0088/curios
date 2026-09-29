@@ -124,7 +124,7 @@ pub(crate) const DOCUMENT: Contract = Contract {
     product: Product::Pages,
 };
 
-pub(crate) const DOCUMENT_ARCHIVE: Contract = Contract {
+pub(crate) const DOCUMENT_STD: Contract = Contract {
     command: "document",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -237,11 +237,9 @@ impl Mode {
         match self {
             Mode::Run { .. } => &RUN,
             Mode::Compile { .. } => &COMPILE,
-            // An archived unit is read rather than resolved against a package.
-            Mode::Document {
-                archive: Some(_), ..
-            } => &DOCUMENT_ARCHIVE,
-            Mode::Document { archive: None, .. } => &DOCUMENT,
+            // The standard library is read off the prelude rather than resolved against a package.
+            Mode::Document { std: Some(_), .. } => &DOCUMENT_STD,
+            Mode::Document { std: None, .. } => &DOCUMENT,
             Mode::Test { .. } => &TEST,
             Mode::Curate { .. } => &CURATE,
             Mode::Pin { .. } => &PIN,

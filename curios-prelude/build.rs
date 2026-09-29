@@ -2,7 +2,7 @@
 //!
 //! `curios-prelude-archive` produced an image. This restores it, walks every item with the independent kernel, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 //!
-//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `.artifacts/certification.rkyv` beside this crate, which the crate attaches to the units it restores.
+//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `.artifacts/certification.rkyv` beside this crate, with which the crate certifies the units it restores.
 
 use {
     curios_cert::{Globals, certify_module},
@@ -58,7 +58,7 @@ fn certify() {
             }
 
             // With the record this walk just made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again.
-            globals.mount(core, unit.binder_floor(), Some(&certification));
+            globals.mount(core, unit.binder_floor(), &certification);
             items += core.items.len();
             certifications.push(certification);
         }

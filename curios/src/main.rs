@@ -39,7 +39,7 @@ use {
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
-        Linted, STDIN_LABEL, archived_documentation, lint, serve, wonder_cost, wonder_diagnostics,
+        Linted, STDIN_LABEL, lint, serve, std_documentation, wonder_cost, wonder_diagnostics,
         wonder_stage, wonder_tests,
     },
     std::{
@@ -359,22 +359,14 @@ fn dispatch() -> Result<(), Failure> {
             eprintln!();
         }
         Mode::Document {
-            archive,
+            std,
             output_path,
             elaboration,
             ..
         } => {
-            let (record, directory) = match archive {
-                // A unit already archived has no package to file its pages under, so the directory is asked for rather than guessed.
-                Some(path) => {
-                    let Some(directory) = output_path else {
-                        return Err(Failure::Error(format!(
-                            "{}: an archived unit has no store to file its pages under; say where with `--output`",
-                            path.display()
-                        )));
-                    };
-                    (archived_documentation(&path)?, directory)
-                }
+            let (record, directory) = match std {
+                // The standard library has no package to file its pages under, so the flag names where they go rather than a directory being guessed.
+                Some(directory) => (std_documentation()?, directory),
                 None => {
                     let library = contract.admit_library(target, manifest, &here()?)?;
                     let store = contract.access.filed(&library.root);

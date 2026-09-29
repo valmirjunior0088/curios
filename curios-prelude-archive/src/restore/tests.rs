@@ -4,14 +4,14 @@ use {
     super::*,
     crate::SYNTAX,
     curios_cert::{
-        Globals, KernelError, recheck_module_measured, recheck_module_verdicts,
+        Globals, KernelError, certify_module, recheck_module_measured,
         recheck_module_verdicts_uncached,
     },
     curios_core::{
         Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked, derived_binder_floor,
     },
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
-    curios_unit::{Record, Unit, segments},
+    curios_unit::{Record, Uncertified, segments},
     curios_utilities::digest,
     std::{
         cell::{Cell, RefCell},
@@ -24,7 +24,7 @@ use {
 };
 
 /// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about, now that it is more than one unit.
-fn items<'a>(prelude: &'a [&'a Unit]) -> impl Iterator<Item = &'a Item> {
+fn items<'a>(prelude: &'a [&'a Uncertified]) -> impl Iterator<Item = &'a Item> {
     prelude.iter().flat_map(|root| root.core().items.iter())
 }
 
@@ -265,17 +265,14 @@ fn kernel_disagreements() {
         let mut globals = Globals::default();
         let mut verdicts = Vec::new();
 
-        // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel.
+        // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel. Mounted with the record its own walk left, as `curios-prelude`'s build mounts it.
         for root in prelude {
             let core = root.core();
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-            verdicts.extend(recheck_module_verdicts(
-                &zonked,
-                DEFAULT_STEP_BUDGET,
-                &globals,
-                SYNTAX,
-            ));
-            globals.mount(core, root.binder_floor(), root.certification());
+            let (refusals, certification) =
+                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            verdicts.extend(refusals);
+            globals.mount(core, root.binder_floor(), &certification);
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -315,11 +312,13 @@ fn kernel_memo_parity() {
         for root in prelude {
             let core = root.core();
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
+            let (cached, certification) =
+                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             assert_eq!(
-                recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
+                cached,
                 recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
             );
-            globals.mount(core, root.binder_floor(), root.certification());
+            globals.mount(core, root.binder_floor(), &certification);
         }
     });
 }
@@ -431,7 +430,7 @@ fn stored_prelude_measurements() {
             let erasure = start.elapsed();
 
             let start = Instant::now();
-            let (verdicts, kernel) =
+            let (verdicts, record, kernel) =
                 recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
             let retained = kernel.retained();
@@ -484,7 +483,7 @@ fn stored_prelude_measurements() {
                 core.binder_floor
             );
 
-            globals.mount(core, root.binder_floor(), root.certification());
+            globals.mount(core, root.binder_floor(), &record);
             cores.push(core);
             arena = erased;
         }

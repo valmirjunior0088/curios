@@ -16,7 +16,7 @@ use {
         erase_unit,
     },
     curios_text::{UnitSource, into_core_unit},
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Prefix, Uncertified, Unit},
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -86,10 +86,7 @@ pub fn compile_unit_over(
         return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
     }
     // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach.
-    let certification = match baseline.certification() {
-        Some(baseline) => certification.extended(baseline),
-        None => certification,
-    };
+    let certification = certification.extended(baseline.certification());
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
@@ -102,13 +99,7 @@ pub fn compile_unit_over(
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
-    Ok(Unit::new(
-        lowered,
-        core,
-        ersd,
-        binder_floor,
-        Some(certification),
-    ))
+    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(certification))
 }
 
 /// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. They are mounted at the baseline's binder floor, a bound over every binder the reused terms mention, and with the baseline's record, whose classifications of them nothing in the closure has moved.

@@ -15,7 +15,7 @@ pub(crate) const STD_NAME: &str = "std";
 /// See [`STD_NAME`].
 pub(crate) const STD_DESCRIPTION: &str = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations.";
 
-/// What `/sys` is, for the record it carries. No consumer reads this page — `curios document` is pointed at `std.rkyv` — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
+/// What `/sys` is, for the record it carries. No consumer reads this page — `curios document --std` renders `/std`'s — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
 pub(crate) const SYS_NAME: &str = "sys";
 
 /// See [`SYS_NAME`].

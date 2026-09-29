@@ -137,7 +137,7 @@ fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// The store read through, noting for each unit it hands back whether the certifier's record of its definitions came back with it.
+/// The store read through, noting for each unit it hands back whether the certifier's record that came back with it covers the unit's definitions.
 struct Recorded<'a> {
     store: &'a Verdicts,
     certified: std::cell::RefCell<Vec<bool>>,
@@ -146,10 +146,9 @@ struct Recorded<'a> {
 impl Cache for Recorded<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let unit = Cache::get(self.store, source)?;
-        self.certified.borrow_mut().push(
-            unit.certification()
-                .is_some_and(|certification| certification.covers(unit.core())),
-        );
+        self.certified
+            .borrow_mut()
+            .push(unit.certification().covers(unit.core()));
         Some(unit)
     }
 

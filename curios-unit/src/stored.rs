@@ -1,12 +1,12 @@
 //! The stored unit: a record of what a unit was compiled from, framed ahead of the unit in one file.
 //!
-//! Two producers write this format and neither may depend on the other. The store files a unit this way under a slot, from `curios-verdicts` above the pipeline; the fixed prelude is imaged this way by `curios-prelude-archive`'s build script, which sits below every store. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the chain still agrees — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
+//! Two producers write this format and neither may depend on the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdicts` above the pipeline; the fixed prelude is imaged this way by `curios-prelude-archive`'s build script, which sits below every store and below the certifier, so what its images hold is an [`Uncertified`] unit. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the chain still agrees — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::Unit,
+    crate::Uncertified,
     curios_utilities::{Source, digest},
     std::{
         path::{Path, PathBuf},
@@ -39,12 +39,12 @@ impl Record {
     }
 }
 
-/// A stored unit restored: the record beside the unit it vouches for.
+/// A prelude image restored: the record beside the uncertified unit it vouches for.
 ///
-/// Two values rather than one, because they are consumed apart: the unit is what a compilation is folded over, and the record is what the one consumer that asks where a unit came from reads.
+/// Two values rather than one, because they are consumed apart: the unit is what `curios-prelude` certifies and a compilation is folded over, and the record is what the image's own tests hold to the tree it was built from.
 pub struct Stored {
     pub record: Record,
-    pub unit: Unit,
+    pub unit: Uncertified,
 }
 
 /// A read log as a record spells it: each file by canonical path, with the digest of the text that was parsed from it.

@@ -3,30 +3,16 @@
 use {
     curios_document::Kind,
     curios_package::{Governing, order},
-    curios_pipeline::{CompileError, DEFAULT_STEP_BUDGET, Fold},
+    curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_text::Overlay,
     curios_utilities::{Qualifier, test_support::Temporary},
-    curios_wonder::documentation,
+    curios_wonder::{documentation, std_documentation},
     std::fs,
 };
 
-/// The standard library's record, off the image the compiler was built with.
-///
-/// **The record of `/std`, named by its prefix rather than taken as the first one found.** Both prelude roots carry one — `/sys` documents itself so that `/std` has something to adopt its intrinsic declarations out of — and the fold puts `/sys` first, so a search for "the" record finds the wrong half.
+/// The standard library's record, off the prelude the compiler was built with — exactly what `document --std` renders.
 fn standard_library() -> curios_document::Documentation {
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .units(
-            |_| {},
-            |prelude, _| {
-                prelude
-                    .iter()
-                    .filter_map(|root| root.text().documentation())
-                    .find(|record| record.prefix == Qualifier::from(["std"]))
-                    .cloned()
-                    .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
-            },
-        )
-        .expect("the standard library documents")
+    std_documentation().expect("the standard library documents")
 }
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.

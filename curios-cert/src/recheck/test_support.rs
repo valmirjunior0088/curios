@@ -2513,9 +2513,13 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     }
 }
 
-/// The environment a walk is handed: everything `module` puts in scope, at the floor its own terms derive, with no record — so a walk classifies its items' totality for itself.
+/// The environment a walk is handed: everything `module` puts in scope, at the floor its own terms derive, with an empty record — so a walk classifies its items' totality for itself.
 pub(super) fn already_judged(module: &Module) -> Globals {
-    Globals::of(module, derived_binder_floor(module), None)
+    Globals::of(
+        module,
+        derived_binder_floor(module),
+        &Certification::default(),
+    )
 }
 
 /// A module carrying `items` and `induct_decls` and nothing else.

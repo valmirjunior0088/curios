@@ -76,7 +76,7 @@ Ten commands, and `wonder`'s five queries — eleven where the compiler was buil
 | --- | --- | --- | --- | --- |
 | [`run`](#run) | a program | trailing `ARGS…` for the program | nothing | reads, files what it built |
 | [`compile`](#compile) | a program | `-o`/`--output <PATH>` | a native executable | reads, files what it built |
-| [`document`](#document) | a library | `--archive <FILE>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--archive` |
+| [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
 | [`test`](#test) | anything | `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
 | [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
@@ -123,12 +123,12 @@ Dispatched through the same code as `run`, so the two cannot drift apart. A decl
 ```sh
 curios document              # .curios/documentation/<name>/
 curios document -o site      # somewhere else
-curios document --archive curios-prelude-archive/.artifacts/std.rkyv -o site   # the standard library
+curios document --std site   # the standard library
 ```
 
 `curios document` writes a library's interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `---` documentation comments attached to each. The target names the library — none for the governing package's, or `lib.crs` or a module its `mod` lines reach — since a library is the one thing with an interface; a program, a loose file or standard input is refused.
 
-`--archive <FILE>` reads a unit already archived instead, a verdict slot under a store or the prelude image the compiler was built with, and renders the record that unit carries: that is how the standard library is documented, since it has no package to be compiled from. It takes no target, and an archived unit has no store to file pages under, so `--archive` requires `--output`.
+`--std <DIR>` documents the standard library the compiler was built with instead, writing its pages under `DIR`: the record is read off the prelude every compilation starts from, so nothing is compiled and no sources are read. It takes no target, and since the standard library has no store to file pages under, the flag itself names where they go and `--output` does not apply.
 
 The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
 

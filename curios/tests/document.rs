@@ -1,6 +1,6 @@
 //! What the `document` subcommand writes, end to end: the bundle under the store, its layout, and the override.
 //!
-//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that the prelude image documents the standard library through `--archive`, and that a package without a library is refused by name.
+//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that `--std` documents the standard library the compiler embeds, and that a package without a library is refused by name.
 
 use {
     curios_utilities::test_support::Temporary,
@@ -136,18 +136,13 @@ fn output_names_another_directory() {
     );
 }
 
-/// The image the compiler was built with, where its build script filed it: the `/std` half of the prelude, which is the half that carries a record — every checkout that built `curios` has it.
-const IMAGE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../curios-prelude-archive/.artifacts/std.rkyv"
-);
-
+/// The standard library the compiler was built with, documented off the prelude it embeds into the directory `--std` names.
 #[test]
-fn the_prelude_image_documents_the_standard_library_into_output() {
-    let root = temporary("image");
+fn the_standard_library_documents_into_the_directory_std_names() {
+    let root = temporary("std");
     fs::create_dir_all(&root).unwrap();
 
-    let output = curios(&root, &["document", "--archive", IMAGE, "-o", "site"]);
+    let output = curios(&root, &["document", "--std", "site"]);
     assert!(
         output.status.success(),
         "{}",
@@ -162,7 +157,7 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     );
     assert!(
         landing.contains("The standard library"),
-        "the image's description: {landing}"
+        "the library's description: {landing}"
     );
     assert!(landing.contains("href=\"Result.crs.html\""), "{landing}");
     let result = fs::read_to_string(site.join("Result.crs.html")).expect("a module's page");
@@ -178,58 +173,8 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     );
     assert!(
         !root.join(".curios").exists(),
-        "a file has no package, so nothing is filed under a store"
+        "the standard library has no package, so nothing is filed under a store"
     );
-}
-
-/// A verdict slot frames a record ahead of its unit, and `document --archive` reads the unit off it as it reads the image, so a library filed under a store documents without compiling again. `document` is itself what files it: it is a build, and keeps what it compiled as `run` and `test` keep theirs.
-#[test]
-fn a_verdict_slot_documents_the_unit_it_holds() {
-    let root = project("slot");
-
-    let output = curios(&root, &["document"]);
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let slot = fs::read_dir(root.join(".curios/verdicts"))
-        .expect("a store with the library's unit in it")
-        .map(|slot| slot.unwrap().path())
-        .next()
-        .expect("the library's slot");
-
-    let output = curios(
-        &root,
-        &[
-            "document",
-            "--archive",
-            slot.to_str().unwrap(),
-            "-o",
-            "site",
-        ],
-    );
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let landing = fs::read_to_string(root.join("site/index.html")).expect("a landing page");
-    assert!(
-        landing.contains(r#"<h1><span class="sep">/</span>shapes</h1>"#),
-        "{landing}"
-    );
-}
-
-#[test]
-fn a_file_without_output_is_refused_before_it_is_read() {
-    let root = temporary("image-no-output");
-    fs::create_dir_all(&root).unwrap();
-
-    let output = curios(&root, &["document", "--archive", IMAGE]);
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("--output"), "{stderr}");
 }
 
 #[test]

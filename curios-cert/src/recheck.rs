@@ -210,9 +210,9 @@ pub fn recheck_module_verdicts_uncached(
     .0
 }
 
-/// What a whole-module walk consumed, beside the verdicts it reached — the walk's own kernel, handed back for a measurement to read.
+/// What a whole-module walk consumed, beside the verdicts it reached and the record it left — the walk's own kernel, handed back for a measurement to read.
 ///
-/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` and `DEFAULT_STEP_BUDGET` have to be set against what a real module actually costs, and nothing else can see those figures — the kernel a walk builds is otherwise its own. [`Kernel::retained`] is the compilation-scoped allowance it used and [`Kernel::heaviest_declaration`] the heaviest single judgment it made.
+/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` and `DEFAULT_STEP_BUDGET` have to be set against what a real module actually costs, and nothing else can see those figures — the kernel a walk builds is otherwise its own. [`Kernel::retained`] is the compilation-scoped allowance it used and [`Kernel::heaviest_declaration`] the heaviest single judgment it made. The record is there for a measurement walking several units in order, which mounts each with it as a compilation does, so the next walk reads the classification rather than deriving it at a cost no compilation pays.
 ///
 /// It hands back the kernel rather than a tuple of figures so that asking a new question of a finished walk costs a reader rather than a signature. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
 pub fn recheck_module_measured(
@@ -220,11 +220,11 @@ pub fn recheck_module_measured(
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> (Vec<Verdict>, Kernel) {
+) -> (Vec<Verdict>, Certification, Kernel) {
     let mut kernel = Kernel::new(budget, syntax);
-    let (verdicts, _) = verdicts_into(&mut kernel, module.as_module(), globals);
+    let (verdicts, certification) = verdicts_into(&mut kernel, module.as_module(), globals);
 
-    (verdicts, kernel)
+    (verdicts, certification, kernel)
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.

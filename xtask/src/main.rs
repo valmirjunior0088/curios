@@ -128,7 +128,7 @@ enum Recipe {
     RustDocs,
 
     #[command(
-        about = "Build the compiler, then the standard library's pages under curios-prelude-archive/.artifacts/documentation from the prelude image it was built with"
+        about = "Build the compiler, then the standard library's pages under curios-prelude-archive/.artifacts/documentation from the prelude it embeds"
     )]
     StdDocs,
 

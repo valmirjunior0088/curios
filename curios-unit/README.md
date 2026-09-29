@@ -8,7 +8,7 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Decision.** This crate depends on every stage that does not judge — `curios-text`, `curios-elab`, `curios-ersd` — and deliberately not on `curios-cert`; judgment is interleaved by the driver above it. Checkable: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`.
 
-**Rationale.** The driver depends on the kernel, and `curios-prelude-archive`'s build script has to construct a `Unit`. A build script reaching the kernel re-runs on every certifier edit, and re-running that one re-elaborates the whole standard library — the 469-second regression `curios-analysis` was split out to fix, arriving through a different door.
+**Rationale.** The driver depends on the kernel, and `curios-prelude-archive`'s build script has to construct a unit — an `Uncertified` one, since no certifier can reach it there. A build script reaching the kernel re-runs on every certifier edit, and re-running that one re-elaborates the whole standard library — the 469-second regression `curios-analysis` was split out to fix, arriving through a different door.
 
 ### A scope is borrowed, per stage, as that stage's own type
 
@@ -20,9 +20,17 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Decision.** What a stored unit *is* — the `Record` of what it was compiled from, the framing that puts that record ahead of the archived unit in one file, and the reading of the two back apart — is this crate's. What verifies a record, and where a slot is addressed, stay in `curios-verdicts` and `curios-package`.
 
-**Rationale.** Two producers write the format and neither may depend on the other: the store files a unit from above the pipeline, and `curios-prelude-archive`'s build script images the fixed prelude from below every store. Stating the format once below both is what lets the prelude image carry the same record a slot does, so a question about a standard-library module can take the archived unit as a baseline exactly as it takes a stored one, and lets `curios document` read a unit off either.
+**Rationale.** Two producers write the format and neither may depend on the other: the store files a unit from above the pipeline, and `curios-prelude-archive`'s build script images the fixed prelude from below every store. Stating the format once below both is what lets the prelude image carry the same record a slot does — the compiler's own account of the tree it was built from — though what it frames is the unit before certification, where a slot frames a certified one.
 
 **Rejected.** A crate of its own for the format: one struct and two functions do not carry a crate. The archive crate depending on `curios-verdicts`: that pulls `curios-package` and the pipeline under the build script that constructs the prelude, which is the regression the "below the kernel" decision exists to prevent, arriving through another door.
+
+### A unit is certified by construction
+
+**Decision.** A `Unit` carries the certifier's record of its definitions, and `Uncertified::certified` is the only way to make one: a compilation assembles an `Uncertified` from what each stage produced and certifies it with the record the kernel's walk left. The only uncertified units kept anywhere are the prelude's images, which `curios-prelude` certifies as it restores them.
+
+**Rationale.** A unit in scope is read by a later walk for its definitions' totality, so a unit without a record is one every reader would have to handle — and it had exactly one producer, the archive's build script, which sits below the certifier by design. Stating the state in the type rather than in an `Option` removes the case from every consumer instead of documenting it at each.
+
+**Rejected.** An optional record, which is what this replaced: a special case every reader carried for one producer. A unit generic over its record, with `()` for an image: two named types say the same with none of the machinery. The record outside the unit: every scope would become a slice of pairs and every slot would gain a third segment, for nothing the pairing inside does not already give.
 
 ### The erased arena is the prefix's, not the unit's
 

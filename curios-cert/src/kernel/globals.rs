@@ -39,13 +39,13 @@ pub struct Globals {
     structs: BTreeMap<Global, StructDecl>,
     /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace — the one query that had no home when it lived on a prefix descriptor.
     concepts: HashSet<Global>,
-    /// The names in scope here that are *not* known to terminate, closed transitively already, as the certifier's record of each unit mounted with one classifies them.
+    /// The names in scope here that are *not* known to terminate, closed transitively already, as the certifier's record of each unit mounted here classifies them.
     ///
     /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked. Held as the non-total set rather than a flag per definition because that is what a walk seeds from.
     ///
     /// It is read off [`Certification`], which only this crate's walk makes, and never off the totality elaboration stamps on a [`Definition`](curios_core::Definition): a verdict arriving here is one this crate reached about those exact terms.
     partial: BTreeSet<Global>,
-    /// The items of every unit mounted here without a record covering it — none filed, or one that does not name every definition the unit holds. A walk classifies these for itself, from their terms, beside the non-total set it seeds its closure from.
+    /// The items of every unit mounted here with a record that does not cover it — one naming fewer definitions than the unit holds, an empty one included. A walk classifies these for itself, from their terms, beside the non-total set it seeds its closure from.
     unclassified: Vec<Item>,
     /// One above the highest binder index every term in scope here mentions, as derived by the walk that established this environment.
     ///
@@ -56,10 +56,10 @@ pub struct Globals {
 impl Globals {
     /// Everything `module` puts in scope: its definitions at their declared types with their real bodies, and its nominal registry.
     ///
-    /// `carried` is the binder floor derived by the build that established `module` — `curios_core::derived_binder_floor` over exactly it — which is why this does not walk the terms again. `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it is absent or does not, `module`'s items are held for a walk to classify.
+    /// `carried` is the binder floor derived by the build that established `module` — `curios_core::derived_binder_floor` over exactly it — which is why this does not walk the terms again. `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it does not, `module`'s items are held for a walk to classify. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///
     /// A definition enters here exactly as a refused item enters a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
-    pub fn of(module: &Module, carried: usize, certification: Option<&Certification>) -> Self {
+    pub fn of(module: &Module, carried: usize, certification: &Certification) -> Self {
         let mut definitions = HashMap::new();
         let mut record = |name: Free, type_: &Term, value: &Term, universes: &UniverseContext| {
             // Written straight in rather than through `insert`: a fresh environment has no memos behind it, so the overwrite that method reports has nothing to invalidate.
@@ -96,18 +96,20 @@ impl Globals {
         }
 
         // Restricted to `module`'s own definitions rather than every name the record classifies: a baseline's record mounted beside the items an item-level recompile reused also classifies the items it is re-judging, and a stale `Partial` seeded for one of those would outlive the walk that reclassifies it.
-        let (partial, unclassified) = match certification.filter(|record| record.covers(module)) {
-            Some(record) => (
+        let (partial, unclassified) = match certification.covers(module) {
+            true => (
                 module
                     .items
                     .iter()
                     .flat_map(Item::definitions)
-                    .filter(|definition| record.totality(&definition.name) != Some(Totality::Total))
+                    .filter(|definition| {
+                        certification.totality(&definition.name) != Some(Totality::Total)
+                    })
                     .map(|definition| definition.name)
                     .collect(),
                 Vec::new(),
             ),
-            None => (BTreeSet::new(), module.items.clone()),
+            false => (BTreeSet::new(), module.items.clone()),
         };
 
         Self {
@@ -126,12 +128,7 @@ impl Globals {
     /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike `Globals::insert`, for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
     ///
     /// The floor combines by maximum, which can only widen: a bound is not a verdict, and a walk seeded above every identity in scope cannot capture one.
-    pub fn mount(
-        &mut self,
-        module: &Module,
-        carried: usize,
-        certification: Option<&Certification>,
-    ) {
+    pub fn mount(&mut self, module: &Module, carried: usize, certification: &Certification) {
         let added = Self::of(module, carried, certification);
 
         for (name, definition) in added.definitions {

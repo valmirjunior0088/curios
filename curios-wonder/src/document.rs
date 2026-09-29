@@ -1,26 +1,34 @@
-//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written; `curios document` is a build, and reads the same record off a compilation that files what it compiled, in `curios`'s pipeline. [`archived_documentation`] is the same record read off a unit already archived, which is how `curios document --archive` documents a library without compiling it again: a store slot's unit, or the prelude image, which has no package to be compiled from.
+//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written; `curios document` is a build, and reads the same record off a compilation that files what it compiled, in `curios`'s pipeline. [`std_documentation`] is the same record read off the standard library this compiler was built with, which is how `curios document --std` documents it: it has no package a build would compile it from, and the prelude every compilation starts from already carries its record.
 
 use {
     crate::ReadOnly,
     curios_document::Documentation,
-    curios_pipeline::{Cache, CompileError, Fold},
+    curios_pipeline::{Cache, CompileError, DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Overlay, RootSource},
-    curios_verdicts::{Verdicts, archived_unit},
-    std::path::Path,
+    curios_utilities::Qualifier,
+    curios_verdicts::Verdicts,
 };
 
-/// The record carried by the unit archived at `path`: a verdict slot under a store, or the prelude image, read through [`archived_unit`], which is what knows a slot's framing. A unit that carries no record — an executable's — is refused by name.
-pub fn archived_documentation(path: &Path) -> Result<Documentation, String> {
-    archived_unit(path)?
-        .text()
-        .documentation()
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "{}: the archived unit carries no interface to document",
-                path.display()
-            )
-        })
+/// The standard library's record, read off the prelude this compiler was built with — no sources, no store, and nothing compiled.
+///
+/// **The record of `/std`, named by its prefix rather than taken as the first one found.** Both prelude roots carry one — `/sys` documents itself so that `/std` has something to adopt its intrinsic declarations out of — and the fold puts `/sys` first, so a search for "the" record finds the wrong half.
+pub fn std_documentation() -> Result<Documentation, CompileError> {
+    let std = Qualifier::from(["std"]);
+
+    // No units, so nothing is compiled and the budget is never spent: the fold is how the prelude is lent above the pipeline.
+    Fold::new(DEFAULT_STEP_BUDGET, &[], None).units(
+        |_| {},
+        |prelude, _| {
+            prelude
+                .iter()
+                .filter_map(|root| root.text().documentation())
+                .find(|record| record.prefix == std)
+                .cloned()
+                .ok_or_else(|| {
+                    CompileError::failure("the prelude carries no /std record".to_string())
+                })
+        },
+    )
 }
 
 /// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read but never written.

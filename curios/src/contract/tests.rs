@@ -21,7 +21,7 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["compile", TARGET],
         &["compile", TARGET, "--output", "out"],
         &["document", TARGET],
-        &["document", "--archive", "unit.rkyv", "--output", "site"],
+        &["document", "--std", "site"],
         &["test", TARGET],
         &["curate"],
         &["pin", "foreign", "probe", "--path", "probe.wasm"],
@@ -399,7 +399,7 @@ compile TARGET --output out — Program (its own file), store Write, leaves Exec
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document TARGET — Library, store Write, leaves Pages, options --archive --output --budget --manifest
+document TARGET — Library, store Write, leaves Pages, options --std --output --budget --manifest
   work/app: (none) → library app
   work/app: serve → refused: `document` takes a library, and a program is not one
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -419,7 +419,7 @@ document TARGET — Library, store Write, leaves Pages, options --archive --outp
   work/app/serve: bench → refused: `document` takes a library, and a program is not one
   work/app/nested: (none) → library nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document --archive unit.rkyv --output site — Nothing, store None, leaves Pages, options --archive --output --budget --manifest
+document --std site — Nothing, store None, leaves Pages, options --std --output --budget --manifest
   takes no subject
 test TARGET — Any, store Write, leaves Nothing, options --filter --budget --manifest
   work/app: (none) → entire app
