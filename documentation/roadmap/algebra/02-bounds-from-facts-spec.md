@@ -102,6 +102,13 @@ A refused bound's report lists the facts the procedure considered, each with whe
 
 Prelude elaboration and certification are read from the two profile streams `cargo x clippy` writes, since it builds with `--all-features`: `curios-prelude-archive/.artifacts/profile.tsv` for elaboration and erasure, and `curios-prelude/.artifacts/profile.tsv` for certification. Each is folded with `cargo run --all-features --package curios -- profile <stream>`. The build scripts are instrumented debug builds: a duration is noisy and inflated, while call counts and allocated megabytes are the stable figures. A stage's record names the span and the resource it compares.
 
+| After | Elaboration allocated, `elaborate_and_zonk_with_prelude` | Certification allocated, `recheck_module` | `entailment::entail` calls in elaboration |
+| --- | --- | --- | --- |
+| The baseline, `bb28989d` | 34 123.3 MB | 5 003.0 MB | — |
+| Stage 2 | 34 111.8 MB | 5 002.4 MB | 0 |
+
+Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be.
+
 ## Census
 
 Taken at `bb28989d` over `curios-prelude-archive/std`, outside `Nat/Le`, `Nat/Lt`, `Int/Le` and `Int/Lt`. A chain is one bridge expression at one site, however many lemmas it nests. `Le/refl` (15 calls) is not a bridge, since conversion decides `x <= x`, and neither are the `try` decision procedures (23).
@@ -140,8 +147,8 @@ A range check's false arm is a disjunction and is outside the fragment: `Str/Val
 Each lands alone, with its rows stated first.
 
 1. **The census and the grid.** Retake the census on the tree the work starts from. State each shape it found as a row the procedure must fill, at `Nat` and `Int`, and each non-target as a control it must refuse. Measure that the procedure runs on nothing the corpus accepts.
-2. **Tautologies conversion decides.** The `holds_of_eq` entry, with the plumbing every later stage uses: the hook at both points, the vocabulary slots, the report.
-3. **Linear facts, direct sums.** Hypotheses, proof fields, local definitions and guards at insertion; the direct form; omitted `@` bounds.
+2. **Tautologies conversion decides.** The `holds_of_eq` entry, with the plumbing every later stage uses: the hook at both points and the vocabulary slots.
+3. **Linear facts, direct sums.** Hypotheses, proof fields, local definitions and guards at insertion; the direct form; omitted `@` bounds; and the report, which from here on has facts to name.
 4. **Refutations and the other entry points.** The refuting form, the `False` producer and `proved`.
 5. **Defined operations.** Truncated subtraction, `/` and `%` by a literal, and part 3's operations as each lands.
 6. **Products.** Pairwise products of facts for a variable multiplier.

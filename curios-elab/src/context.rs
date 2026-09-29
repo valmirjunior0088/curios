@@ -140,6 +140,8 @@ pub struct Context {
     program: Program,
     // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks. `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
     island: Option<Qualifier>,
+    /// Whether the procedure that proves a bound from the facts in scope is running ([`crate::entail`]). It does not run inside itself: what it elaborates is its own candidate, and a bound one of the candidate's operands carries is not the one it was asked about.
+    entailing: bool,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
     checked: Vec<(Term, Term, Rc<str>)>,
     /// The item that recorded each entry of `checked`, in parallel, so a retracted item's terms can be taken out from among the others'.
@@ -210,6 +212,7 @@ impl Context {
             universe_solver: UniverseSolver::new(0),
             program: Program::new(),
             island: Some(Qualifier::empty()),
+            entailing: false,
             checked: Vec::new(),
             checked_by: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
@@ -1355,6 +1358,20 @@ impl Context {
         let previous = self.island.take();
         let result = f(self);
         self.island = previous;
+
+        result
+    }
+
+    /// Whether the procedure that proves a bound from the facts in scope is running, so it is not asked again from inside its own candidate.
+    pub(crate) fn entailing(&self) -> bool {
+        self.entailing
+    }
+
+    /// Run `f` as that procedure, which is not asked again until `f` returns.
+    pub(crate) fn with_entailing<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let previous = std::mem::replace(&mut self.entailing, true);
+        let result = f(self);
+        self.entailing = previous;
 
         result
     }

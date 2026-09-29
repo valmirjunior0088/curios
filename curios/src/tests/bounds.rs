@@ -7,7 +7,7 @@
 use super::typecheck;
 
 /// The last stage of algebra part 2 that has landed.
-const LANDED: u8 = 1;
+const LANDED: u8 = 2;
 
 /// The imports every program opens with, and the two entry points each declares for itself.
 const HEADER: &str = "use /std/{Nat, Int, Bool, List, Eq, Io};
@@ -51,6 +51,7 @@ const fn body(stage: u8, binders: &'static str, result: &'static str, body: &'st
 const ROWS: &[Row] = &[
     // A tautology conversion decides and reduction does not.
     claim(2, "b: Bool", "Bool/Holds(b || Bool/not(b))"),
+    claim(2, "b: Bool", "Bool/Holds(Bool/not(b && Bool/not(b)))"),
     // The spec's own rows: a strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         3,
@@ -190,6 +191,8 @@ const ROWS: &[Row] = &[
 
 /// What the procedure must refuse, at every stage.
 const CONTROLS: &[Row] = &[
+    // A decision no tautology settles, with nothing in scope that could.
+    claim(0, "b: Bool", "Bool/Holds(b)"),
     // No fact in scope.
     claim(0, "i: Nat, n: Nat", "Nat/Lt(i, n)"),
     // A fact too weak for the goal.

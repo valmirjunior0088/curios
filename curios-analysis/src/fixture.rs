@@ -5,9 +5,10 @@
 //! **Behind `test-support`, not `#[cfg(test)]`.** That cfg is set only while *this* crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — which is exactly the case here, and the same reason `curios-runtime`'s `test_support` is a feature. The gate also keeps this module out of every normal build, which matters more than convenience: it spells prelude names, and keeping them out of every build that ships is what the gate is for.
 
 use curios_utilities::{
-    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
-    LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax,
-    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
+    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
+    OrdDerivation, ProofSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -98,5 +99,9 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             hash: field(&["std", "Digest", "Digest"], "digest"),
             tagged: name(&["std", "Digest", "tagged"]),
         },
+    },
+    entailment: EntailmentSyntax {
+        holds_of_eq: name(&["std", "Bool", "holds_of_eq"]),
+        refl: name(&["std", "Eq", "refl"]),
     },
 };

@@ -117,7 +117,7 @@ pub(super) fn insert_auto_argument(
     let binder = binder_name(label);
 
     match plicity {
-        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
+        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. One that follows from the facts in scope is proved here for the same reason ([`crate::entail`]). A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
         Plicity::Implicit => {
             let provenance = ImplicitOrigin {
                 func: func.clone(),
@@ -132,6 +132,13 @@ pub(super) fn insert_auto_argument(
             // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
             let proposition = crate::is_prop(context, type_).unwrap_or(false);
             let waiting = proposition && waits_on_metavariable(context, &reduced);
+            if proposition
+                && !waiting
+                && let Some(proof) = crate::entail(context, type_, &reduced)
+                    .map_err(|error| bound_exhausted(context, error, type_, &provenance))?
+            {
+                return Ok(proof);
+            }
             let reduct =
                 (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
             let (slot, hole) = context.fresh_metavar(
@@ -169,7 +176,7 @@ pub(super) fn insert_auto_argument(
 
 /// Try a bound standing as the hole `slot` once more: fill the hole if the bound has come to truth, record what it reduced to if it came to anything else, and answer whether it still waits on a metavariable.
 ///
-/// The fill is a metavariable solution, so the bound is reduced as re-validation judges one: under the refinements the slot was born under and no others ([`Context::with_refinements`]). A bound true under the guard of the arm the call sits in is filled on retry as it would have been at insertion, and the fill cannot leave that arm: a solution for a metavariable born outside it that mentions the unfilled slot is not contained in that metavariable's birth context and waits, and once the slot is filled it is re-validated without the guard. A bound true only under a guard the slot was not born under stays unfilled and is reported.
+/// The fill is a metavariable solution, so the bound is reduced as re-validation judges one: under the refinements the slot was born under and no others ([`Context::with_refinements`]). A bound true under the guard of the arm the call sits in is filled on retry as it would have been at insertion, and the fill cannot leave that arm: a solution for a metavariable born outside it that mentions the unfilled slot is not contained in that metavariable's birth context and waits, and once the slot is filled it is re-validated without the guard. A bound true only under a guard the slot was not born under stays unfilled and is reported. A bound that follows from the facts in scope under those refinements is proved there as well ([`crate::entail`]).
 pub(crate) fn attempt_discharge(
     context: &mut Context,
     slot: MetavarId,
@@ -192,6 +199,13 @@ pub(crate) fn attempt_discharge(
     }
     if waits_on_metavariable(context, &reduced) {
         return Ok(true);
+    }
+    let proof = context
+        .with_refinements(&birth, |context| crate::entail(context, bound, &reduced))
+        .map_err(|error| bound_exhausted(context, error, bound, provenance))?;
+    if let Some(proof) = proof {
+        context.solve_metavar(slot, proof);
+        return Ok(false);
     }
     if matches!(&*reduced, Subterm::InductType(_)) {
         context.note_reduct(slot, reduced);

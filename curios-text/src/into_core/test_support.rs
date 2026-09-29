@@ -5,10 +5,10 @@
 use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
-    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
-    LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax, Qualifier,
-    ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
-    test_support::Temporary,
+    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
+    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
+    OrdDerivation, ProofSyntax, Qualifier, ResultSyntax, RootKind, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
 };
 use std::{fs, path::Path};
 
@@ -104,6 +104,10 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             hash: registry_field(&["std", "Digest", "Digest"], "digest"),
             tagged: registry_name(&["std", "Digest", "tagged"]),
         },
+    },
+    entailment: EntailmentSyntax {
+        holds_of_eq: registry_name(&["std", "Bool", "holds_of_eq"]),
+        refl: registry_name(&["std", "Eq", "refl"]),
     },
 };
 

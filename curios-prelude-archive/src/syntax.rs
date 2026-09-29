@@ -1,9 +1,10 @@
 //! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies.
 
 use curios_utilities::{
-    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation,
-    LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, ProofSyntax,
-    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
+    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
+    OrdDerivation, ProofSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -97,5 +98,9 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             hash: field(&["std", "Hash", "Hash"], "hash"),
             tagged: name(&["std", "Hash", "tagged"]),
         },
+    },
+    entailment: EntailmentSyntax {
+        holds_of_eq: name(&["std", "Bool", "holds_of_eq"]),
+        refl: name(&["std", "Eq", "Eq", "refl"]),
     },
 };

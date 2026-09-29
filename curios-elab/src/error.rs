@@ -1104,6 +1104,18 @@ impl Error {
         }
     }
 
+    /// Whether this failure is a spent budget: no judgment of the term it was spent on, so a procedure that asks and gets this propagates it rather than reading it as a refusal.
+    pub(crate) fn is_exhausted(&self) -> bool {
+        match self {
+            Self::ReduceExhausted { .. } | Self::ConvertExhausted { .. } => true,
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.is_exhausted(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn duplicate_witness(
         concept: Global,
         key: super::WitnessKey,

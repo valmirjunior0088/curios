@@ -60,6 +60,7 @@ pub struct SyntaxRegistry {
     pub proof: ProofSyntax,
     pub test: TestSyntax,
     pub derivations: DerivationSyntax,
+    pub entailment: EntailmentSyntax,
 }
 
 impl SyntaxRegistry {
@@ -79,6 +80,7 @@ impl SyntaxRegistry {
             proof,
             test,
             derivations,
+            entailment,
         } = self;
 
         option
@@ -93,11 +95,12 @@ impl SyntaxRegistry {
             .chain(proof.targets())
             .chain(test.targets())
             .chain(derivations.targets())
+            .chain(entailment.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only three groups hold concept methods; the other eight are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only three groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
@@ -111,6 +114,7 @@ impl SyntaxRegistry {
             proof: _,
             test: _,
             derivations,
+            entailment: _,
         } = self;
 
         operator
@@ -335,6 +339,23 @@ impl ProofSyntax {
         } = self;
 
         [true_qed, true_type, holds].into_iter()
+    }
+}
+
+/// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context, which is how an item of `/std` compiled before this vocabulary keeps the behavior it had without it, and why the scheduler gains no edge for it.
+#[derive(Debug, Clone, Copy)]
+pub struct EntailmentSyntax {
+    /// A decision conversion equates with `true` holds: the proof of a tautology conversion decides and reduction does not.
+    pub holds_of_eq: SyntaxName,
+    /// The constructor of propositional equality, which such a tautology is closed by.
+    pub refl: SyntaxName,
+}
+
+impl EntailmentSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { holds_of_eq, refl } = self;
+
+        [holds_of_eq, refl].into_iter()
     }
 }
 

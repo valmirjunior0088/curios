@@ -187,6 +187,8 @@ pub(super) fn insert_implicits_on_check(
 /// A *spent* budget is not an answer. Reduction failing to reach `True` because it ran out of steps is not evidence that the proposition is untrue, so the failure propagates instead of collapsing into `None`: the caller's fallback mints a hole, and a hole minted here reports as an uninferred implicit against a caller who may well have established the bound. That reads as the user's fault at the argument rather than as the resource limit it is, and it is the one place where an exhausted budget could be mistaken for a judgment.
 ///
 /// Answers the reduct beside the inhabitant, since the caller that mints a hole for an undischarged bound records what the bound came to — `False` — for the report that hole becomes.
+///
+/// **A search beside it, not in it.** Where this answers nothing, [`crate::entail`] may still prove the bound from the facts in scope — a separate, fallible step with its own contract, after which this remains a unique answer or none.
 pub(super) fn trivially_inhabited(
     context: &mut Context,
     type_: &Term,
