@@ -93,7 +93,7 @@ fn slice_proof_aligns_with_byte_walk() {
 fn decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
-        let lemmas = (Str/Valid/from_bad, Nat/Le/trans, Nat/Lt/lt_of_le_succ, Nat/Lt/lt_of_le_lt,
+        let lemmas = (Str/Valid/from_bad, Nat/Le/trans, Nat/Lt/lt_of_le_lt,
             Nat/Le/add_mono_l, Nat/Le/mul_mono_r, Nat/Le/sub_mono_r, Nat/Le/of_in_range,
             Str/count_scalars, Str/Valid/decode_head);
         /std/print("ok")

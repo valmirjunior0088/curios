@@ -26,20 +26,6 @@ pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
         end
     end;
 
---- `i < n` gives `i + 1 <= n`: what a window opened just past a checked index demands.
-pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
-    match n
-    | 0 => match p end
-    | np + 1 => match i | 0 => Bool/True/qed() | ip + 1 => le_succ_of_lt(ip, np, p) end
-    end;
-
---- `a + 1 <= b` gives `a < b`.
-pub let lt_of_le_succ(a: Nat, b: Nat, p: Nat/Le(a + 1, b)) -> Lt(a, b) =
-    match b
-    | 0 => match p end
-    | bp + 1 => match a | 0 => Bool/True/qed() | ap + 1 => lt_of_le_succ(ap, bp, p) end
-    end;
-
 --- `a < b` gives `0 < b - a`: what lies between a value and a strict bound on it is not empty.
 pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
     match a
