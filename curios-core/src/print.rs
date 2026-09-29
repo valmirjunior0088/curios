@@ -776,22 +776,24 @@ fn routes<'a>(
     None
 }
 
-/// The method a projection off a witness stands for, spelled as a program reaches it: the operator dispatching to it between exactly two operands, or its wrapper — called with the concept's parameters marked `@`, the witness only where resolution would not restore it, and, for a wrapper taking the method's own parameters in its group, those in the same call. `arguments` is the call the projection heads, when it heads one. `None` for anything else, which prints as it is.
-fn method_doc(
+/// The operator a call of the method a projection off `witness` stands for prints as: the one dispatching to that method, when the call passes it exactly two explicit arguments — an open witness goal's the operator it was inserted for. What [`method_doc`] prints infix, and so what [`print_operand`] parenthesizes: a method call spelled `b - a` is as much an operand needing parentheses as the intrinsic subtraction is.
+fn method_operator(
     witness: &Term,
     index: usize,
-    arguments: Option<&[Argument]>,
+    arguments: &[Argument],
     frame: Frame,
-) -> Option<Printer> {
-    let table = frame.spelling.witnesses.as_deref()?;
-    let explicit = |arguments: &[Argument]| {
-        arguments
-            .iter()
-            .all(|argument| argument.plicity == Plicity::Explicit)
+) -> Option<InfixOp> {
+    let [_, _] = arguments else {
+        return None;
     };
-
-    let (concept, parameters) = match witness_form(witness, frame)? {
-        // An open witness goal carries only the operator it was inserted for.
+    if arguments
+        .iter()
+        .any(|argument| argument.plicity != Plicity::Explicit)
+    {
+        return None;
+    }
+    let table = frame.spelling.witnesses.as_deref()?;
+    let concept = match witness_form(witness, frame)? {
         WitnessForm::Pending => {
             let Subterm::Metavar(Metavar {
                 origin: MetavarOrigin::Witness(origin),
@@ -803,12 +805,38 @@ fn method_doc(
             let CalleeId::Operator(op) = origin.func else {
                 return None;
             };
-            let arguments @ [left, right] = arguments? else {
-                return None;
-            };
-            return explicit(arguments)
-                .then(|| print_infix(op.symbol(), left.term.clone(), right.term.clone(), frame));
+            return Some(op);
         }
+        WitnessForm::Local { concept, .. } | WitnessForm::Global { concept, .. } => concept,
+    };
+    match table.concepts.get(&concept)?.get(index)? {
+        FieldSpelling::Method { operator, .. } => *operator,
+        _ => None,
+    }
+}
+
+/// The method a projection off a witness stands for, spelled as a program reaches it: the operator dispatching to it between exactly two operands, or its wrapper — called with the concept's parameters marked `@`, the witness only where resolution would not restore it, and, for a wrapper taking the method's own parameters in its group, those in the same call. `arguments` is the call the projection heads, when it heads one. `None` for anything else, which prints as it is.
+fn method_doc(
+    witness: &Term,
+    index: usize,
+    arguments: Option<&[Argument]>,
+    frame: Frame,
+) -> Option<Printer> {
+    let table = frame.spelling.witnesses.as_deref()?;
+    if let Some(arguments @ [left, right]) = arguments
+        && let Some(op) = method_operator(witness, index, arguments, frame)
+    {
+        return Some(print_infix(
+            op.symbol(),
+            left.term.clone(),
+            right.term.clone(),
+            frame,
+        ));
+    }
+
+    let (concept, parameters) = match witness_form(witness, frame)? {
+        // An open witness goal carries only the operator it was inserted for, which spells it or nothing does.
+        WitnessForm::Pending => return None,
         WitnessForm::Local {
             node,
             concept,
@@ -827,24 +855,11 @@ fn method_doc(
     };
 
     let FieldSpelling::Method {
-        wrapper,
-        merged,
-        operator,
+        wrapper, merged, ..
     } = table.concepts.get(&concept)?.get(index)?.clone()
     else {
         return None;
     };
-
-    if let (Some(op), Some(arguments @ [left, right])) = (operator, arguments)
-        && explicit(arguments)
-    {
-        return Some(print_infix(
-            op.symbol(),
-            left.term.clone(),
-            right.term.clone(),
-            frame,
-        ));
-    }
 
     let restored = restorable(witness, frame);
     let reference = Term::var(Var::free(Free::Global(wrapper)));
@@ -1382,6 +1397,11 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
         }
         Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
         Subterm::Transient(Transient::Infix(_)) => true,
+        Subterm::Apply(Apply { head, arguments }) => matches!(
+            &**head,
+            Subterm::Proj(Proj { head: witness, field: Field::Index(index) })
+                if method_operator(witness, *index, arguments, frame).is_some()
+        ),
         _ => false,
     };
 
