@@ -11,17 +11,17 @@ let is_num_byte(byte: Byte) -> Bool =
     | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39)
     end;
 
-let parse_null: Parse(Json) =
-    Parse/map(Parse/take_literal("null"), (_) => Json/null());
+let parse_null: Parse(Bytes, Json) =
+    Parse/map(Parse/bytes/literal("null"), (_) => Json/null());
 
-let parse_true_val: Parse(Json) =
-    Parse/map(Parse/take_literal("true"), (_) => Json/bool(true));
+let parse_true_val: Parse(Bytes, Json) =
+    Parse/map(Parse/bytes/literal("true"), (_) => Json/bool(true));
 
-let parse_false_val: Parse(Json) =
-    Parse/map(Parse/take_literal("false"), (_) => Json/bool(false));
+let parse_false_val: Parse(Bytes, Json) =
+    Parse/map(Parse/bytes/literal("false"), (_) => Json/bool(false));
 
-let parse_num: Parse(Json) =
-    let chunk = Parse/take_while(is_num_byte)!;
+let parse_num: Parse(Bytes, Json) =
+    let chunk = Parse/bytes/take_while(is_num_byte)!;
     match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
     | some(value) => Parse/pure(Json/num(value))
     | none() => Parse/fail("expected number")
@@ -30,14 +30,14 @@ let parse_num: Parse(Json) =
 let is_not_string_special(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 34 => false | 92 => false | _ => true end;
 
-let hex_digit: Parse(Nat) =
-    let byte = Parse/any_byte!;
+let hex_digit: Parse(Bytes, Nat) =
+    let byte = Parse/bytes/byte!;
     match Option/bind(Char/of_ascii(byte), Char/of_hex_digit)
     | some(v) => Parse/pure(v)
     | none() => Parse/fail("invalid hex digit")
     end;
 
-let hex4: Parse(Nat) =
+let hex4: Parse(Bytes, Nat) =
     let a = hex_digit!;
     let b = hex_digit!;
     let c = hex_digit!;
@@ -45,19 +45,19 @@ let hex4: Parse(Nat) =
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
 --- `code` as its UTF-8 bytes, declining a value that is no Unicode scalar.
-let scalar_utf8(code: Nat) -> Parse(Bytes) =
+let scalar_utf8(code: Nat) -> Parse(Bytes, Bytes) =
     match Char/of_nat(code)
     | some(c) => Parse/pure(Char/to_utf8(c))
     | none() => Parse/fail("invalid Unicode scalar")
     end;
 
-let parse_unicode: Parse(Bytes) =
+let parse_unicode: Parse(Bytes, Bytes) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF
     | false => scalar_utf8(hi)
     | true =>
-        let _ = Parse/label(Parse/take_byte(0x5C), "expected low surrogate")!;
-        let _ = Parse/label(Parse/take_byte(0x75), "expected low surrogate")!;
+        let _ = Parse/label(Parse/bytes/expect(0x5C), "expected low surrogate")!;
+        let _ = Parse/label(Parse/bytes/expect(0x75), "expected low surrogate")!;
         let lo = hex4!;
         match lo >= 0xDC00 && lo <= 0xDFFF
         | true => scalar_utf8(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
@@ -65,8 +65,8 @@ let parse_unicode: Parse(Bytes) =
         end
     end;
 
-let escape_fields: Parse(Bytes) =
-    let byte = Parse/any_byte!;
+let escape_fields: Parse(Bytes, Bytes) =
+    let byte = Parse/bytes/byte!;
     match Byte/to_nat(byte)
     | 34 => Parse/pure(Str/to_bytes("\""))
     | 92 => Parse/pure(Str/to_bytes("\\"))
@@ -80,26 +80,26 @@ let escape_fields: Parse(Bytes) =
     | _ => Parse/fail("unknown escape")
     end;
 
-let parse_str_escape: Parse(Bytes) =
-    let _ = Parse/take_byte(0x5C)!;
+let parse_str_escape: Parse(Bytes, Bytes) =
+    let _ = Parse/bytes/expect(0x5C)!;
     Parse/commit(escape_fields);
 
-let parse_str_segment: Parse(Bytes) =
-    Parse/take_while(is_not_string_special);
+let parse_str_segment: Parse(Bytes, Bytes) =
+    Parse/bytes/take_while(is_not_string_special);
 
-let parse_str_body: Parse(List(Bytes)) =
+let parse_str_body: Parse(Bytes, List(Bytes)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
-let parse_raw_str: Parse(Str) =
-    let _ = Parse/take_byte(0x22)!;
+let parse_raw_str: Parse(Bytes, Str) =
+    let _ = Parse/bytes/expect(0x22)!;
     let chunks = parse_str_body!;
-    let _ = Parse/take_byte(0x22)!;
+    let _ = Parse/bytes/expect(0x22)!;
     match Str/of_bytes(Bytes/flatten(chunks))
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("invalid UTF-8 in string")
     end;
 
-let parse_str_value: Parse(Json) =
+let parse_str_value: Parse(Bytes, Json) =
     Parse/map(parse_raw_str, (s) => Json/str(s));
 
 let is_ws(byte: Byte) -> Bool =
@@ -111,27 +111,33 @@ let is_ws(byte: Byte) -> Bool =
     | _ => false
     end;
 
-let ws: Parse({}) =
-    Parse/map(Parse/take_while(is_ws), (_) => ());
+let ws: Parse(Bytes, {}) =
+    Parse/map(Parse/bytes/take_while(is_ws), (_) => ());
 
-let symbol(b: Byte) -> Parse(Byte) =
+let symbol(b: Byte) -> Parse(Bytes, Byte) =
     let _ = ws!;
-    Parse/take_byte(b);
+    Parse/bytes/expect(b);
 
-let after_comma(@A: Type, elem: Parse(A)) -> Parse(A) =
+let after_comma(@A: Type, elem: Parse(Bytes, A)) -> Parse(Bytes, A) =
     let _ = symbol(0x2C)!;
     Parse/commit(elem);
 
-let elements(@A: Type, elem: Parse(A)) -> Parse(List(A)) =
+let elements(@A: Type, elem: Parse(Bytes, A)) -> Parse(Bytes, List(A)) =
     Parse/bind(elem, (first) =>
         Parse/map(Parse/many0(after_comma(elem)), (rest) => [first, ..rest]));
 
-let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> Parse(List(A)) =
+let bracketed(
+    @A: Type,
+    open: Byte,
+    elem: Parse(Bytes, A),
+    close: Byte,
+    after: Str,
+) -> Parse(Bytes, List(A)) =
     let _ = symbol(open)!;
     let _ = ws!;
-    let byte = Parse/peek_byte!;
+    let byte = Parse/bytes/peek_byte!;
     match byte == close
-    | true => Parse/map(Parse/any_byte, (_) => [])
+    | true => Parse/map(Parse/bytes/byte, (_) => [])
     | false =>
         let elems = Parse/commit(elements(elem))!;
         let _ = Parse/label(symbol(close), after)!;
@@ -141,9 +147,9 @@ let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> 
 let is_num_start(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 45 => true | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39) end;
 
-let value: Parse(Json) =
+let value: Parse(Bytes, Json) =
     let _ = ws!;
-    let byte = Parse/peek_byte!;
+    let byte = Parse/bytes/peek_byte!;
     match Byte/to_nat(byte)
     | 110 => parse_null
     | 116 => parse_true_val
@@ -153,22 +159,22 @@ let value: Parse(Json) =
     | 123 => parse_obj
     | _ => match is_num_start(byte) | true => parse_num | false => Parse/fail("expected value") end
     end
-and parse_arr: Parse(Json) =
+and parse_arr: Parse(Bytes, Json) =
     Parse/map(bracketed(0x5B, value, 0x5D, "expected ',' or ']'"), (elems) => Json/arr(elems))
-and parse_obj: Parse(Json) =
+and parse_obj: Parse(Bytes, Json) =
     Parse/map(bracketed(0x7B, parse_pair, 0x7D, "expected ',' or '}'"), (pairs) => Json/obj(pairs))
-and parse_pair: Parse({Str, Json}) =
+and parse_pair: Parse(Bytes, {Str, Json}) =
     let _ = ws!;
     let key = parse_raw_str!;
     Parse/commit(member_value(key))
-and member_value(key: Str) -> Parse({Str, Json}) =
+and member_value(key: Str) -> Parse(Bytes, {Str, Json}) =
     let _ = symbol(0x3A)!;
     let val = value!;
     Parse/pure((key, val));
 
 --- A whole document, surrounding whitespace included; anything after the value is refused.
-pub let decode: Parse(Json) =
+pub let decode: Parse(Bytes, Json) =
     let parsed = value!;
     let _ = ws!;
-    let _ = Parse/eof!;
+    let _ = Parse/eof()!;
     Parse/pure(parsed);

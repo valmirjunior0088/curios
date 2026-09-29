@@ -72,19 +72,19 @@ pub let render(r: Request) -> Bytes =
 let until(target: Byte) -> (Byte) -> Bool =
     (byte) => Bool/not(byte == target);
 
-let text(b: Bytes) -> Parse(Str) =
+let text(b: Bytes) -> Parse(Bytes, Str) =
     match Str/of_bytes(b)
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("a request is text before its body")
     end;
 
-let request_line: Parse({Method, Str}) =
-    let m = Parse/take_while(until(' '))!;
-    let _ = Parse/take_byte(' ')!;
-    let t = Parse/take_while(until(' '))!;
-    let _ = Parse/take_byte(' ')!;
-    let _ = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_literal("\r\n")!;
+let request_line: Parse(Bytes, {Method, Str}) =
+    let m = Parse/bytes/take_while(until(' '))!;
+    let _ = Parse/bytes/expect(' ')!;
+    let t = Parse/bytes/take_while(until(' '))!;
+    let _ = Parse/bytes/expect(' ')!;
+    let _ = Parse/bytes/take_while(until('\r'))!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let spelled = text(m)!;
     let target = text(t)!;
     match Method/of_str(spelled)
@@ -92,8 +92,8 @@ let request_line: Parse({Method, Str}) =
     | none() => Parse/fail(Str/flatten(["unknown method '", spelled, "'"]))
     end;
 
-let guard_header: Parse({}) =
-    let next = Parse/peek!;
+let guard_header: Parse(Bytes, {}) =
+    let next = Parse/bytes/peek!;
     match next
     | none() => Parse/fail("unexpected end of headers")
     | some(byte) =>
@@ -101,12 +101,12 @@ let guard_header: Parse({}) =
     end;
 
 --- One `name: value` line; the value is trimmed.
-pub let header_line: Parse({Str, Str}) =
+pub let header_line: Parse(Bytes, {Str, Str}) =
     let _ = guard_header!;
-    let name = Parse/take_while(until(':'))!;
-    let _ = Parse/take_byte(':')!;
-    let value = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_literal("\r\n")!;
+    let name = Parse/bytes/take_while(until(':'))!;
+    let _ = Parse/bytes/expect(':')!;
+    let value = Parse/bytes/take_while(until('\r'))!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let n = text(name)!;
     let v = text(value)!;
     Parse/pure((n, Str/trim(v)));
@@ -116,13 +116,13 @@ let lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
         List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
         ((_, value)) => value);
 
-let body_of(headers: List({Str, Str})) -> Parse(Bytes) =
+let body_of(headers: List({Str, Str})) -> Parse(Bytes, Bytes) =
     match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
-    | some(n) => Parse/take(n)
+    | some(n) => Parse/bytes/take(n)
     | none() => Parse/pure(x[])
     end;
 
-let url_of(headers: List({Str, Str}), target: Str) -> Parse(Url) =
+let url_of(headers: List({Str, Str}), target: Str) -> Parse(Bytes, Url) =
     let authority = Option/unwrap_or(lookup(headers, "Host"), "localhost");
     match Url/of_str(Str/flatten(["http://", authority, target]))
     | success(u) => Parse/pure(u)
@@ -130,10 +130,10 @@ let url_of(headers: List({Str, Str}), target: Str) -> Parse(Url) =
     end;
 
 --- A whole request as a server reads it: the request line, the headers, then `Content-Length` bytes of body or none. The URL is rebuilt from `Host` and the target, under `http`, since the wire does not say.
-pub let decode: Parse(Request) =
+pub let decode: Parse(Bytes, Request) =
     let (method, target) = request_line!;
     let headers = Parse/many0(header_line)!;
-    let _ = Parse/take_literal("\r\n")!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let body = body_of(headers)!;
     let url = url_of(headers, target)!;
     Parse/pure(Request { method = method, url = url, headers = headers, body = body });

@@ -1,23 +1,39 @@
-use /std/{Str, Char, Bool, Bytes, Result, Option, Parse};
-use /std/Parse/{Of, At, Boundary, Error, end_of, let Text};
+use /std/{Str, Char, Nat, Bool, Bytes, Result, Option, Parse};
+use /std/Parse/{Of, At, Pos, Input, Error};
+
+--- What a text parser's positions know: that the input is valid text and that a character may begin at the position — a `Str/At`'s own facts, so a text primitive reads its string and its position back out of one.
+pub struct Boundary(input: Bytes, offset: Nat): Prop {
+    valid: Str/Valid(input),
+    within: Nat/Le(offset, Bytes/len(input)),
+    boundary: Bool/Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
+}
+
+--- A text parser walks its string's bytes, and its positions are the string's own.
+satisfy Input(Str) {
+    Holds(input, offset) = Boundary(input, offset),
+    bytes(s) = s.bytes,
+    start(s) =
+        let first = Str/At/start(s);
+        Boundary { valid = s.valid, within = first.within, boundary = first.boundary },
+}
 
 --- The string a text parser's input is, read back out of a position in it.
-let text(@input: Bytes, at: At(Boundary, input)) -> Str =
+let text(@input: Bytes, at: Pos(Str, input)) -> Str =
     Str { bytes = input, valid = at.holds.valid };
 
 --- Where a text parser stands, as a position of that string.
-let position(@input: Bytes, at: At(Boundary, input)) -> Str/At(text(at)) =
+let position(@input: Bytes, at: Pos(Str, input)) -> Str/At(text(at)) =
     Str/At { offset = at.offset, within = at.holds.within, boundary = at.holds.boundary };
 
 --- A position of the string, as one a text parser may stand at.
-let back(@input: Bytes, at: At(Boundary, input), p: Str/At(text(at))) -> At(Boundary, input) =
+let back(@input: Bytes, at: Pos(Str, input), p: Str/At(text(at))) -> Pos(Str, input) =
     At {
         offset = p.offset,
         holds = Boundary { valid = at.holds.valid, within = p.within, boundary = p.boundary },
     };
 
 --- The next character; declines at the end of the input.
-pub let char: Text(Char) =
+pub let char: Parse(Str, Char) =
     Of {
         run(_, at) =
             match Str/At/try_next(text(at), position(at))
@@ -27,12 +43,12 @@ pub let char: Text(Char) =
     };
 
 --- The next character when `pred` accepts it; declines otherwise, consuming nothing.
-pub let char_if(pred: (Char) -> Bool) -> Text(Char) =
+pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =
     Parse/bind(char, (c) =>
         match pred(c) | true => Parse/pure(c) | false => Parse/fail("unexpected character") end);
 
 --- The character `expected`; declines on any other.
-pub let expect(expected: Char) -> Text(Char) =
+pub let expect(expected: Char) -> Parse(Str, Char) =
     let message = Str/flatten(["expected '", Str/of_char(expected), "'"]);
     Of {
         run(_, at) =
@@ -47,7 +63,7 @@ pub let expect(expected: Char) -> Text(Char) =
     };
 
 --- The characters of `lit`, exactly; declines on anything else.
-pub let literal(lit: Str) -> Text({}) =
+pub let literal(lit: Str) -> Parse(Str, {}) =
     let message = Str/flatten(["expected \"", lit, "\""]);
     Of {
         run(_, at) =
@@ -58,7 +74,7 @@ pub let literal(lit: Str) -> Text({}) =
     };
 
 --- The longest run of characters `pred` accepts, possibly empty, as the piece of the input it is.
-pub let take_while(pred: (Char) -> Bool) -> Text(Str) =
+pub let take_while(pred: (Char) -> Bool) -> Parse(Str, Str) =
     Of {
         run(_, at) =
             let taken = Str/span(text(at), position(at), pred);
@@ -68,7 +84,7 @@ pub let take_while(pred: (Char) -> Bool) -> Text(Str) =
     };
 
 --- The next character without consuming it, or `none` at the end of the input.
-pub let peek: Text(Option(Char)) =
+pub let peek: Parse(Str, Option(Char)) =
     Of {
         run(_, at) =
             Result/success((
@@ -77,25 +93,8 @@ pub let peek: Text(Option(Char)) =
     };
 
 --- Everything from the current position to the end of the input.
-pub let rest: Text(Str) =
+pub let rest: Parse(Str, Str) =
     Of {
         run(_, at) =
             Result/success((back(at, Str/At/finish(text(at))), Str/after(text(at), position(at)))),
     };
-
---- The end of the input; declines while anything remains.
-pub let eof: Text({}) =
-    end_of();
-
---- `p` from the start of `s`: its value, or the refusal that stopped it, at a byte offset into `s`. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof`.
-pub let run(@A: Type, p: Text(A), s: Str) -> Result(Error, A) =
-    let start = Str/At/start(s);
-    let at =
-        At {
-            offset = 0,
-            holds = Boundary { valid = s.valid, within = start.within, boundary = start.boundary },
-        };
-    match p.run(s.bytes, at)
-    | success((_, a)) => Result/success(a)
-    | failure(refusal) => Result/failure(refusal)
-    end;

@@ -73,10 +73,10 @@ fn bare_tuple_continuation_tail_infers() {
     // The recorded dead-end from the result-directed elaboration work: a bare tuple in a monadic continuation's tail, its expected type a metavariable pinned only by the *outer* apply's result unification. The in-apply postponement defers the tuple, the constraint store parks the flex–flex codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
         use /std/{Parse, Byte, Nat, Bytes, Io};
-        let pairer : Parse({ Byte, Byte }) =
-            Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
-        let with_sugar : Parse({ Byte, Byte }) =
-            let a = Parse/any_byte!;
+        let pairer : Parse(Bytes, { Byte, Byte }) =
+            Parse/bind(Parse/bytes/byte, (a) => Parse/pure((a, a)));
+        let with_sugar : Parse(Bytes, { Byte, Byte }) =
+            let a = Parse/bytes/byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))
         | success(pair) => /std/print(Nat/to_str(Byte/to_nat(pair.0)))

@@ -30,20 +30,20 @@ let until(target: Byte) -> (Byte) -> Bool =
 let is_digit(byte: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), '0', '9');
 
-let as_text(b: Bytes) -> Parse(Str) =
+let as_text(b: Bytes) -> Parse(Bytes, Str) =
     match Str/of_bytes(b)
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("a reply is text before its body")
     end;
 
 --- The status line: the version, the code and the reason. A code that is not a number is a refusal.
-pub let status_line: Parse(Status) =
-    let version = Parse/take_while(until(' '))!;
-    let _ = Parse/take_byte(' ')!;
-    let digits = Parse/take_while(is_digit)!;
-    let _ = Parse/take_byte(' ')!;
-    let reason = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_literal("\r\n")!;
+pub let status_line: Parse(Bytes, Status) =
+    let version = Parse/bytes/take_while(until(' '))!;
+    let _ = Parse/bytes/expect(' ')!;
+    let digits = Parse/bytes/take_while(is_digit)!;
+    let _ = Parse/bytes/expect(' ')!;
+    let reason = Parse/bytes/take_while(until('\r'))!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let v = as_text(version)!;
     let spelled = as_text(digits)!;
     let r = as_text(reason)!;
@@ -52,20 +52,20 @@ pub let status_line: Parse(Status) =
     | none() => Parse/fail("a status code is a number")
     end;
 
-let guard_header: Parse({}) =
-    let next = Parse/peek!;
+let guard_header: Parse(Bytes, {}) =
+    let next = Parse/bytes/peek!;
     match next
     | none() => Parse/fail("unexpected end of headers")
     | some(byte) =>
         match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
     end;
 
-let header_line: Parse({Str, Str}) =
+let header_line: Parse(Bytes, {Str, Str}) =
     let _ = guard_header!;
-    let name = Parse/take_while(until(':'))!;
-    let _ = Parse/take_byte(':')!;
-    let value = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_literal("\r\n")!;
+    let name = Parse/bytes/take_while(until(':'))!;
+    let _ = Parse/bytes/expect(':')!;
+    let value = Parse/bytes/take_while(until('\r'))!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let n = as_text(name)!;
     let v = as_text(value)!;
     Parse/pure((n, Str/trim(v)));
@@ -85,34 +85,34 @@ let hex_value(byte: Byte) -> Option(Nat) =
     end;
 
 --- One hexadecimal digit's value; declines, consuming nothing, at anything else.
-let hex_digit: Parse(Nat) =
-    Parse/bind(Parse/any_byte, (byte) =>
+let hex_digit: Parse(Bytes, Nat) =
+    Parse/bind(Parse/bytes/byte, (byte) =>
         match hex_value(byte)
         | some(v) => Parse/pure(v)
         | none() => Parse/fail("a hexadecimal digit")
         end);
 
 --- One chunk's size line: the hexadecimal size, any extension after `;` ignored, then the line's end.
-let chunk_size: Parse(Nat) =
+let chunk_size: Parse(Bytes, Nat) =
     let digits = Parse/many0(hex_digit)!;
-    let _ = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_literal("\r\n")!;
+    let _ = Parse/bytes/take_while(until('\r'))!;
+    let _ = Parse/bytes/literal("\r\n")!;
     match digits
     | [] => Parse/fail("a chunk states its size")
     | _ => Parse/pure(List/fold(digits, 0, (digit, acc) => acc * 16 + digit))
     end;
 
 --- The chunks until the empty one, then any trailers, then the block's end; `acc` is what has arrived.
-let chunks(acc: Bytes) -> Parse(Bytes) =
+let chunks(acc: Bytes) -> Parse(Bytes, Bytes) =
     let n = chunk_size!;
     match n
     | 0 =>
         let _ = Parse/many0(header_line)!;
-        let _ = Parse/take_literal("\r\n")!;
+        let _ = Parse/bytes/literal("\r\n")!;
         Parse/pure(acc)
     | _ =>
-        let chunk = Parse/take(n)!;
-        let _ = Parse/take_literal("\r\n")!;
+        let chunk = Parse/bytes/take(n)!;
+        let _ = Parse/bytes/literal("\r\n")!;
         chunks(x[..acc, ..chunk])
     end;
 
@@ -124,21 +124,21 @@ let chunked(headers: List({Str, Str})) -> Bool =
     | none() => false
     end;
 
-let body_of(headers: List({Str, Str})) -> Parse(Bytes) =
+let body_of(headers: List({Str, Str})) -> Parse(Bytes, Bytes) =
     match chunked(headers)
     | true => chunks(x[])
     | false =>
         match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
-        | some(n) => Parse/take(n)
-        | none() => Parse/rest
+        | some(n) => Parse/bytes/take(n)
+        | none() => Parse/bytes/rest
         end
     end;
 
 --- A whole reply: the status line, the headers, then the body — the chunks when the transfer encoding is chunked, `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise.
-pub let decode: Parse(Response) =
+pub let decode: Parse(Bytes, Response) =
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
-    let _ = Parse/take_literal("\r\n")!;
+    let _ = Parse/bytes/literal("\r\n")!;
     let body = body_of(headers)!;
     Parse/pure(Response { status = status, headers = headers, body = body });
 

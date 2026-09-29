@@ -110,7 +110,7 @@ fn an_ih_fold_costs_transitions_rather_than_frames() {
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(n)));
 }
 
-/// The arm that binds its hypothesis and then returns it — `Parse/take_while`'s `let (taken, at_cur, stopped) = ih; match stopped | true => ih | …`, spelled as `count(x[]) = 5`, `count(x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the hypothesis and the tail demands the same term again; recorded, the second demand is a probe and the fold is linear under the budget the single-projection test passes under. Unrecorded, each level ran the level below twice, so the fold doubled per element and ran out of steps a few dozen bytes in — which is where a literal URL's type-level parse went.
+/// The arm that binds its hypothesis and then returns it — `Parse/bytes/take_while`'s `let (taken, at_cur, stopped) = ih; match stopped | true => ih | …`, spelled as `count(x[]) = 5`, `count(x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the hypothesis and the tail demands the same term again; recorded, the second demand is a probe and the fold is linear under the budget the single-projection test passes under. Unrecorded, each level ran the level below twice, so the fold doubled per element and ran out of steps a few dozen bytes in — which is where a literal URL's type-level parse went.
 #[test]
 fn a_hypothesis_demanded_twice_is_forced_once() {
     let n = 2_000usize;

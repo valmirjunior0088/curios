@@ -11,8 +11,8 @@ let is_ws(b: Byte) -> Bool =
     | _ => false
     end;
 
-let ws: Parse({}) =
-    Parse/map(Parse/take_while(is_ws), (_) => ());
+let ws: Parse(Bytes, {}) =
+    Parse/map(Parse/bytes/take_while(is_ws), (_) => ());
 
 let text(b: Bytes) -> Str =
     Option/unwrap_or(Str/of_bytes(b), "");
@@ -22,30 +22,30 @@ let is_name_byte(b: Byte) -> Bool =
     Bool/not(is_ws(b) || n == '<' || n == '>' || n == '/' || n == '=' || n == '"' || n == '\'');
 
 --- A tag or attribute name: everything up to whitespace or a delimiter, empty when there is none.
-let name: Parse(Str) =
-    Parse/map(Parse/take_while(is_name_byte), text);
+let name: Parse(Bytes, Str) =
+    Parse/map(Parse/bytes/take_while(is_name_byte), text);
 
-let until_byte(stop: Byte) -> Parse(Bytes) =
-    Parse/take_while((b) => Bool/not(b == stop));
+let until_byte(stop: Byte) -> Parse(Bytes, Bytes) =
+    Parse/bytes/take_while((b) => Bool/not(b == stop));
 
 --- Everything before the next `lit`, or to the end of the input, `lit` itself left unconsumed.
-let until_literal(lit: Str) -> Parse(Bytes) =
+let until_literal(lit: Str) -> Parse(Bytes, Bytes) =
     let first = Option/unwrap_or(Bytes/try_get(Str/to_bytes(lit), 0), 0);
-    let go(acc: Bytes, fuel: Nat) -> Parse(Bytes) =
+    let go(acc: Bytes, fuel: Nat) -> Parse(Bytes, Bytes) =
         let chunk = until_byte(first)!;
         let here = x[..acc, ..chunk];
-        let ahead = Parse/optional(Parse/lookahead(Parse/take_literal(lit)))!;
+        let ahead = Parse/optional(Parse/lookahead(Parse/bytes/literal(lit)))!;
         match ahead
         | some(_) => Parse/pure(here)
         | none() =>
             match fuel
             | 0 => Parse/pure(here)
             | rest + 1 =>
-                let next = Parse/optional(Parse/any_byte)!;
+                let next = Parse/optional(Parse/bytes/byte)!;
                 match next | none() => Parse/pure(here) | some(b) => go(x[..here, b], rest) end
             end
         end;
-    let remaining = Parse/lookahead(Parse/rest)!;
+    let remaining = Parse/lookahead(Parse/bytes/rest)!;
     go(x[], Bytes/len(remaining));
 
 let named_reference(body: Str) -> Option(Str) =
@@ -106,23 +106,23 @@ pub let decode(s: Str) -> Str =
     | [first, ..rest] => Str/concat(first, Str/flatten(List/map(rest, decode_piece)))
     end;
 
-let quoted(quote: Byte) -> Parse(Str) =
-    let _ = Parse/take_byte(quote)!;
+let quoted(quote: Byte) -> Parse(Bytes, Str) =
+    let _ = Parse/bytes/expect(quote)!;
     let value = until_byte(quote)!;
-    let _ = Parse/optional(Parse/take_byte(quote))!;
+    let _ = Parse/optional(Parse/bytes/expect(quote))!;
     Parse/pure(text(value));
 
-let unquoted: Parse(Str) =
-    Parse/map(Parse/take_while((b) => Bool/not(is_ws(b) || b == '>')), text);
+let unquoted: Parse(Bytes, Str) =
+    Parse/map(Parse/bytes/take_while((b) => Bool/not(is_ws(b) || b == '>')), text);
 
-let attr_value: Parse(Str) =
+let attr_value: Parse(Bytes, Str) =
     let _ = ws!;
-    let _ = Parse/take_byte('=')!;
+    let _ = Parse/bytes/expect('=')!;
     let _ = ws!;
     Parse/or(quoted('"'), Parse/or(quoted('\''), unquoted));
 
 --- One attribute: a name, then `=` and a value, quoted or bare, when there is one. Declines at anything but a name, which ends the run.
-let attribute: Parse(Attr) =
+let attribute: Parse(Bytes, Attr) =
     let _ = ws!;
     let n = name!;
     match Str/is_empty(n)
@@ -132,42 +132,42 @@ let attribute: Parse(Attr) =
         Parse/pure(match value | some(v) => Attr/attr(n, decode(v)) | none() => Attr/flag(n) end)
     end;
 
-let close_tag: Parse({}) =
-    let _ = Parse/take_literal("</")!;
+let close_tag: Parse(Bytes, {}) =
+    let _ = Parse/bytes/literal("</")!;
     let _ = name!;
     let _ = ws!;
-    let _ = Parse/optional(Parse/take_byte('>'))!;
+    let _ = Parse/optional(Parse/bytes/expect('>'))!;
     Parse/pure(());
 
-let comment: Parse(Html) =
-    let _ = Parse/take_literal("<!--")!;
+let comment: Parse(Bytes, Html) =
+    let _ = Parse/bytes/literal("<!--")!;
     let body = until_literal("-->")!;
-    let _ = Parse/optional(Parse/take_literal("-->"))!;
+    let _ = Parse/optional(Parse/bytes/literal("-->"))!;
     Parse/pure(Html/comment(text(body)));
 
 --- A doctype or any other `<!…>` declaration, skipped as an empty run.
-let declaration: Parse(Html) =
-    let _ = Parse/take_literal("<!")!;
+let declaration: Parse(Bytes, Html) =
+    let _ = Parse/bytes/literal("<!")!;
     let _ = until_byte('>')!;
-    let _ = Parse/optional(Parse/take_byte('>'))!;
+    let _ = Parse/optional(Parse/bytes/expect('>'))!;
     Parse/pure(Html/fragment([]));
 
-let text_run: Parse(Html) =
+let text_run: Parse(Bytes, Html) =
     let chunk = until_byte('<')!;
     Parse/pure(Html/text(decode(text(chunk))));
 
-let lone_bracket: Parse(Html) =
-    Parse/map(Parse/any_byte, (_) => Html/text("<"));
+let lone_bracket: Parse(Bytes, Html) =
+    Parse/map(Parse/bytes/byte, (_) => Html/text("<"));
 
 --- An element from its opening tag: one closed with `/>` is `void`; `script` and `style` hold their text as written up to their closing tag; any other holds the trees up to the next closing tag, whichever name it bears, or the end of the input — so `<br>` written without the slash holds what follows it, since no element name is consulted.
-let element: Parse(Html) =
-    let _ = Parse/take_byte('<')!;
+let element: Parse(Bytes, Html) =
+    let _ = Parse/bytes/expect('<')!;
     let n = name!;
     let attrs = Parse/many0(attribute)!;
     let _ = ws!;
-    let closed = Parse/optional(Parse/take_byte('/'))!;
+    let closed = Parse/optional(Parse/bytes/expect('/'))!;
     let _ = ws!;
-    let _ = Parse/optional(Parse/take_byte('>'))!;
+    let _ = Parse/optional(Parse/bytes/expect('>'))!;
     match Option/is_some(closed)
     | true => Parse/pure(Html/void(n, attrs))
     | false =>
@@ -182,15 +182,15 @@ let element: Parse(Html) =
             Parse/pure(Html/element(n, attrs, children))
         end
     end
-and tree: Parse(Html) =
-    let next = Parse/peek!;
+and tree: Parse(Bytes, Html) =
+    let next = Parse/bytes/peek!;
     match next
     | none() => Parse/fail("the end of the input")
     | some(b) =>
         match b == '<'
         | false => text_run
         | true =>
-            let ahead = Parse/lookahead(Parse/take(2))!;
+            let ahead = Parse/lookahead(Parse/bytes/take(2))!;
             match Bytes/try_get(ahead, 1)
             | none() => lone_bracket
             | some(second) =>
@@ -203,10 +203,10 @@ and tree: Parse(Html) =
             end
         end
     end
-and trees: Parse(List(Html)) =
+and trees: Parse(Bytes, List(Html)) =
     Parse/many0(tree);
 
-let stray_close: Parse(Html) =
+let stray_close: Parse(Bytes, Html) =
     Parse/map(close_tag, (_) => Html/fragment([]));
 
 let is_empty_fragment(h: Html) -> Bool =
@@ -215,9 +215,9 @@ let is_empty_fragment(h: Html) -> Bool =
     | _ => false
     end;
 
-let content: Parse(Html) =
+let content: Parse(Bytes, Html) =
     let all = Parse/many0(Parse/or(tree, stray_close))!;
-    let _ = Parse/eof!;
+    let _ = Parse/eof()!;
     let read = List/filter(all, (n) => Bool/not(is_empty_fragment(n)));
     Parse/pure(
         match read

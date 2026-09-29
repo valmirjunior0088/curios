@@ -437,10 +437,10 @@ Operator notation always uses witness resolution, including intrinsic operands. 
 `action!` is monadic sequencing. Each occurrence is equivalent to a call to `/std/Monad/bind(action, continuation)` in the monad of its region.
 
 ```crs
-use /std/{Nat, Byte, Parse};
-pub let parser: Parse(Nat) =
-    let a = Parse/any_byte!;
-    let b = Parse/any_byte!;
+use /std/{Nat, Byte, Bytes, Parse};
+pub let parser: Parse(Bytes, Nat) =
+    let a = Parse/bytes/byte!;
+    let b = Parse/bytes/byte!;
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 

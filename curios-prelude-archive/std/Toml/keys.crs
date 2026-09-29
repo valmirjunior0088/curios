@@ -2,8 +2,8 @@ use /std/{Bytes, Str, List, Parse};
 use /std/Toml/scan/{is_bare_byte, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
-let key_bare: Parse(Str) =
-    let chunk = Parse/take_while(is_bare_byte)!;
+let key_bare: Parse(Bytes, Str) =
+    let chunk = Parse/bytes/take_while(is_bare_byte)!;
     match Bytes/len(chunk) == 0
     | true => Parse/fail("expected key")
     | false =>
@@ -13,16 +13,16 @@ let key_bare: Parse(Str) =
         end
     end;
 
-pub let key_part: Parse(Str) =
+pub let key_part: Parse(Bytes, Str) =
     Parse/or(key_bare, Parse/or(str_basic, str_literal));
 
-let dot_part: Parse(Str) =
+let dot_part: Parse(Bytes, Str) =
     let _ = ws!;
-    let _ = Parse/take_byte(0x2E)!;
+    let _ = Parse/bytes/expect(0x2E)!;
     let _ = ws!;
     key_part;
 
-pub let key_dotted: Parse(List(Str)) =
+pub let key_dotted: Parse(Bytes, List(Str)) =
     let first = key_part!;
     let rest = Parse/many0(dot_part)!;
     Parse/pure([first, ..rest]);

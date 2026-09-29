@@ -698,9 +698,9 @@ fn encode_rejects_a_non_utf8_key() {
 fn parse_eof_accepts_only_end_of_input() {
     let source = r#"
         use /std/{Str, Bytes, Nat, Byte, Result, Parse, rand, Io};
-        let doc : Parse(Byte) =
-            let b = Parse/any_byte!;
-            let _ = Parse/eof!;
+        let doc : Parse(Bytes, Byte) =
+            let b = Parse/bytes/byte!;
+            let _ = Parse/eof()!;
             Parse/pure(b);
         let check(input : Bytes) -> Str =
             match Parse/run(doc, input)

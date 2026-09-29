@@ -30,9 +30,9 @@ enum Inner {
 fn grammar(rules: usize, inner: Inner) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Parse, Io};\n\n\
-         let ws: Parse(Bytes) = Parse/take_while((b) => b == 0x20);\n\
-         let dig: Parse(Bytes) = Parse/take_while((b) => 0x30 <= Byte/to_nat(b));\n\
-         let eq: Parse(Bytes) = Parse/map(Parse/take_literal(\"=\"), (_) => Str/to_bytes(\"=\"));\n\n",
+         let ws: Parse(Bytes, Bytes) = Parse/bytes/take_while((b) => b == 0x20);\n\
+         let dig: Parse(Bytes, Bytes) = Parse/bytes/take_while((b) => 0x30 <= Byte/to_nat(b));\n\
+         let eq: Parse(Bytes, Bytes) = Parse/map(Parse/bytes/literal(\"=\"), (_) => Str/to_bytes(\"=\"));\n\n",
     );
 
     for rule in 0..rules {
@@ -56,17 +56,17 @@ fn grammar(rules: usize, inner: Inner) -> String {
             Inner::Hoisted => {
                 let _ = writeln!(
                     source,
-                    "let m{rule}: Parse(List(Bytes)) = Parse/many0({previous});"
+                    "let m{rule}: Parse(Bytes, List(Bytes)) = Parse/many0({previous});"
                 );
                 let _ = writeln!(
                     source,
-                    "let s{rule}: Parse(List(Bytes)) = Parse/sep_by0({previous}, eq);"
+                    "let s{rule}: Parse(Bytes, List(Bytes)) = Parse/sep_by0({previous}, eq);"
                 );
                 (Some(format!("m{rule}")), Some(format!("s{rule}")))
             }
         };
 
-        let _ = writeln!(source, "let r{rule}: Parse(Bytes) =");
+        let _ = writeln!(source, "let r{rule}: Parse(Bytes, Bytes) =");
         let _ = writeln!(source, "    let x0 = {previous}!;");
         let _ = writeln!(source, "    let x1 = {older}!;");
         let _ = writeln!(source, "    let x2 = {previous}!;");
@@ -78,7 +78,7 @@ fn grammar(rules: usize, inner: Inner) -> String {
         let _ = writeln!(source, "    Parse/pure(x0);");
     }
 
-    let _ = writeln!(source, "\nlet top: Parse(Bytes) = r{};\n", rules - 1);
+    let _ = writeln!(source, "\nlet top: Parse(Bytes, Bytes) = r{};\n", rules - 1);
     source.push_str(ENTRY);
     source
 }

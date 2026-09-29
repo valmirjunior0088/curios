@@ -398,7 +398,7 @@ pub(crate) fn blocked_on_metavar(
     }
     Ok(match &*reduced {
         Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => {
-            // A lambda one of whose expected *domains* is stuck: its body may need that domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`, or the fold's initial accumulator) pins the domain. Every binder the lambda itself has is looked at, not the first alone — `(t, (acc, i)) => …` projects its second parameter — each opened under a fresh variable so a later domain's dependency on an earlier binder is a stuck reduction rather than a bound index.
+            // A lambda one of whose expected *domains* is stuck: its body may need that domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(Bytes, A)`, or the fold's initial accumulator) pins the domain. Every binder the lambda itself has is looked at, not the first alone — `(t, (acc, i)) => …` projects its second parameter — each opened under a fresh variable so a later domain's dependency on an earlier binder is a stuck reduction rather than a bound index.
             let arity = match &**arg {
                 Subterm::Func(func) => func.telescope.len(),
                 _ => 0,
@@ -416,7 +416,7 @@ pub(crate) fn blocked_on_metavar(
                 }
                 walk.advance_fresh(|hint| context.fresh(hint));
             }
-            // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
+            // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(Bytes, ?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
             domain_blocked
                 || (expected_ground
                     && reduced.metavars().iter().any(|id| {

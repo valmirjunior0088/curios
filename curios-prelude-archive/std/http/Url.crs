@@ -35,12 +35,12 @@ pub let default_port(s: Scheme) -> Nat =
 let until(stops: List(Byte)) -> (Byte) -> Bool =
     (byte) => Bool/not(List/any(stops, (stop) => byte == stop));
 
-let text(b: Bytes) -> Parse(Str) =
+let text(b: Bytes) -> Parse(Bytes, Str) =
     match Str/of_bytes(b) | some(s) => Parse/pure(s) | none() => Parse/fail("a URL is text") end;
 
-let scheme: Parse(Scheme) =
-    let name = Parse/take_while(until([':']))!;
-    let _ = Parse/take_literal("://")!;
+let scheme: Parse(Bytes, Scheme) =
+    let name = Parse/bytes/take_while(until([':']))!;
+    let _ = Parse/bytes/literal("://")!;
     let s = text(name)!;
     choose
     | Str/eql_ascii_ci(s, "http") => Parse/pure(Scheme/http())
@@ -51,48 +51,48 @@ let scheme: Parse(Scheme) =
 let is_digit(byte: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), '0', '9');
 
-let port_number: Parse(Nat) =
-    let _ = Parse/take_byte(':')!;
-    let digits = Parse/take_while(is_digit)!;
+let port_number: Parse(Bytes, Nat) =
+    let _ = Parse/bytes/expect(':')!;
+    let digits = Parse/bytes/take_while(is_digit)!;
     let spelled = text(digits)!;
     match Nat/of_str(spelled)
     | some(n) => Parse/pure(n)
     | none() => Parse/fail("a port is a number")
     end;
 
-let port_of(s: Scheme) -> Parse(Nat) =
-    let next = Parse/peek!;
+let port_of(s: Scheme) -> Parse(Bytes, Nat) =
+    let next = Parse/bytes/peek!;
     match next
     | some(b) => match Byte/to_nat(b) | ':' => port_number | _ => Parse/pure(default_port(s)) end
     | none() => Parse/pure(default_port(s))
     end;
 
-let path: Parse(Str) =
-    let b = Parse/take_while(until(['?', '#']))!;
+let path: Parse(Bytes, Str) =
+    let b = Parse/bytes/take_while(until(['?', '#']))!;
     let s = text(b)!;
     match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
 
-let query_text: Parse(Option(Str)) =
-    let _ = Parse/take_byte('?')!;
-    let b = Parse/take_while(until(['#']))!;
+let query_text: Parse(Bytes, Option(Str)) =
+    let _ = Parse/bytes/expect('?')!;
+    let b = Parse/bytes/take_while(until(['#']))!;
     let s = text(b)!;
     Parse/pure(Option/some(s));
 
-let query: Parse(Option(Str)) =
-    let next = Parse/peek!;
+let query: Parse(Bytes, Option(Str)) =
+    let next = Parse/bytes/peek!;
     match next
     | some(b) => match Byte/to_nat(b) | '?' => query_text | _ => Parse/pure(Option/none()) end
     | none() => Parse/pure(Option/none())
     end;
 
-let url: Parse(Url) =
+let url: Parse(Bytes, Url) =
     let s = scheme!;
-    let h = Parse/take_while(until([':', '/', '?', '#']))!;
+    let h = Parse/bytes/take_while(until([':', '/', '?', '#']))!;
     let host = text(h)!;
     let p = port_of(s)!;
     let pa = path!;
     let q = query!;
-    let _ = Parse/rest!;
+    let _ = Parse/bytes/rest!;
     match Str/is_empty(host)
     | true => Parse/fail("a URL names a host")
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })

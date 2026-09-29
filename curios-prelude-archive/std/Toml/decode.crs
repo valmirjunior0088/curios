@@ -1,4 +1,4 @@
-use /std/{Bool, Str, List, Map, Result, Parse};
+use /std/{Bool, Str, List, Map, Result, Bytes, Parse};
 use /std/Toml/{Toml, Error, let Build};
 use /std/Toml/build/{apply_assign, apply_header, apply_aot, build_empty};
 use /std/Toml/scan/{line_end, trivia, ws};
@@ -11,11 +11,11 @@ induct Stmt: Type
 | array_header(List(Str))
 end
 
-let key_path(acc: List(Str)) -> Parse(List(Str)) =
+let key_path(acc: List(Str)) -> Parse(Bytes, List(Str)) =
     let k = key_part!;
     let _ = ws!;
     let acc2 = [..acc, k];
-    let dot = Parse/optional(Parse/take_byte(0x2E))!;
+    let dot = Parse/optional(Parse/bytes/expect(0x2E))!;
     match dot
     | some(_) =>
         let _ = ws!;
@@ -23,28 +23,28 @@ let key_path(acc: List(Str)) -> Parse(List(Str)) =
     | none() => Parse/pure(acc2)
     end;
 
-let header(double: Bool) -> Parse(List(Str)) =
+let header(double: Bool) -> Parse(Bytes, List(Str)) =
     let _ = ws!;
     let path = key_path([])!;
-    let _ = Parse/label(Parse/take_byte(0x5D), "expected ']' in table header")!;
+    let _ = Parse/label(Parse/bytes/expect(0x5D), "expected ']' in table header")!;
     match double
     | true =>
-        let _ = Parse/label(Parse/take_byte(0x5D), "expected ']]' in table header")!;
+        let _ = Parse/label(Parse/bytes/expect(0x5D), "expected ']]' in table header")!;
         Parse/pure(path)
     | false => Parse/pure(path)
     end;
 
-let stmt: Parse(Stmt) =
-    let bracket = Parse/optional(Parse/take_byte(0x5B))!;
+let stmt: Parse(Bytes, Stmt) =
+    let bracket = Parse/optional(Parse/bytes/expect(0x5B))!;
     match bracket
     | none() =>
         let path = key_path([])!;
-        let _ = Parse/label(Parse/take_byte(0x3D), "expected '=' after key")!;
+        let _ = Parse/label(Parse/bytes/expect(0x3D), "expected '=' after key")!;
         let _ = ws!;
         let value = value_parse!;
         Parse/pure(Stmt/assign(path, value))
     | some(_) =>
-        let doubled = Parse/optional(Parse/take_byte(0x5B))!;
+        let doubled = Parse/optional(Parse/bytes/expect(0x5B))!;
         match doubled
         | some(_) =>
             let path = header(true)!;
@@ -55,9 +55,9 @@ let stmt: Parse(Stmt) =
         end
     end;
 
-let stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
+let stmts(acc: List(Stmt)) -> Parse(Bytes, List(Stmt)) =
     let _ = trivia!;
-    let done = Parse/optional(Parse/eof)!;
+    let done = Parse/optional(Parse/eof())!;
     match done
     | some(_) => Parse/pure(acc)
     | none() =>

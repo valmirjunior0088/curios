@@ -1,0 +1,148 @@
+use /std/{Result, Nat, Byte, Bytes, Str, Bool, Option, Parse};
+use /std/Parse/{Of, At, Pos, Input, Error};
+
+--- A bytes parser walks its input as it is, and its positions lie within it.
+satisfy Input(Bytes) {
+    Holds(input, offset) = Nat/Le(offset, Bytes/len(input)),
+    bytes(input) = input,
+    start(_) = Bool/True/qed(),
+}
+
+--- The position past `at`, which holds a byte: still within the input.
+let step(
+    @input: Bytes,
+    at: Pos(Bytes, input),
+    ok: Nat/Lt(at.offset, Bytes/len(input)),
+) -> Pos(Bytes, input) =
+    At { offset = at.offset + 1, holds = ok };
+
+--- The next byte; declines at the end of the input.
+pub let byte: Parse(Bytes, Byte) =
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(ok) => Result/success((step(at, ok), Bytes/get(input, at.offset, @ok)))
+            end,
+    };
+
+--- The next byte when `pred` accepts it; declines otherwise, consuming nothing.
+pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
+    Parse/bind(byte, (b) =>
+        match pred(b) | true => Parse/pure(b) | false => Parse/fail("unexpected byte") end);
+
+--- The next byte without consuming it; declines at the end of the input.
+pub let peek_byte: Parse(Bytes, Byte) =
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(ok) => Result/success((at, Bytes/get(input, at.offset, @ok)))
+            end,
+    };
+
+--- The next byte without consuming it, or `none` at the end of the input.
+pub let peek: Parse(Bytes, Option(Byte)) =
+    Parse/or(Parse/map(peek_byte, (b) => Option/some(b)), Parse/pure(Option/none()));
+
+let byte_spelling(b: Byte) -> Str =
+    match Str/of_bytes(x[b])
+    | some(s) =>
+        match Nat/in_range(Byte/to_nat(b), 0x21, 0x7E)
+        | true => Str/flatten(["'", s, "'"])
+        | false => Str/concat("byte ", Nat/to_str(Byte/to_nat(b)))
+        end
+    | none() => Str/concat("byte ", Nat/to_str(Byte/to_nat(b)))
+    end;
+
+--- The byte `expected`; declines on any other.
+pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
+    let message = Str/concat("expected ", byte_spelling(expected));
+    Of {
+        run(input, at) =
+            match Nat/Lt/try(at.offset, Bytes/len(input))
+            | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
+            | some(ok) =>
+                let got = Bytes/get(input, at.offset, @ok);
+                match got == expected
+                | true => Result/success((step(at, ok), got))
+                | false => Result/failure(Error/declined(message, at.offset))
+                end
+            end,
+    };
+
+--- The position past `lit` read from `at`, byte by byte, or `none` where the input is not it.
+let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos(Bytes, input)) =
+    match lit
+    | x[] => Option/some(at)
+    | x[h, ..t] =>
+        match Nat/Lt/try(at.offset, Bytes/len(input))
+        | none() => Option/none()
+        | some(ok) =>
+            match Bytes/get(input, at.offset, @ok) == h
+            | true => literal_past(t, step(at, ok))
+            | false => Option/none()
+            end
+        end
+    end;
+
+--- The bytes of `lit`, exactly; declines on anything else.
+pub let literal(lit: Str) -> Parse(Bytes, {}) =
+    let message = Str/flatten(["expected \"", lit, "\""]);
+    Of {
+        run(_, at) =
+            match literal_past(Str/to_bytes(lit), at)
+            | some(stop) => Result/success((stop, ()))
+            | none() => Result/failure(Error/declined(message, at.offset))
+            end,
+    };
+
+--- The longest run of bytes `pred` accepts, possibly empty.
+pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
+    Of {
+        run(input, at) =
+            let (taken, at_stop, _) =
+                match Bytes/len(input) - at.offset: (_) =>
+                    {taken: Nat, within: Nat/Le(at.offset + taken, Bytes/len(input)), stopped: Bool}
+                | 0 => (0, at.holds, false)
+                | _ + 1; ih =>
+                    let (taken, at_cur, stopped) = ih;
+                    match stopped
+                    | true => ih
+                    | false =>
+                        match Nat/Lt/try(at.offset + taken, Bytes/len(input))
+                        | none() => (taken, at_cur, true)
+                        | some(ok) =>
+                            match pred(Bytes/get(input, at.offset + taken, @ok))
+                            | true => (taken + 1, ok, false)
+                            | false => (taken, at_cur, true)
+                            end
+                        end
+                    end
+                end;
+            Result/success((
+                At { offset = at.offset + taken, holds = at_stop },
+                Bytes/slice(input, at.offset, taken, @at_stop))),
+    };
+
+--- Everything from the current position to the end of the input.
+pub let rest: Parse(Bytes, Bytes) =
+    Of {
+        run(input, at) =
+            Result/success((
+                At { offset = Bytes/len(input), holds = Nat/Le/refl(Bytes/len(input)) },
+                Bytes/drop(input, at.offset, @at.holds))),
+    };
+
+--- The next `n` bytes, or everything that remains when fewer are left.
+pub let take(n: Nat) -> Parse(Bytes, Bytes) =
+    Of {
+        run(input, at) =
+            match Nat/Le/try(at.offset + n, Bytes/len(input))
+            | some(within) =>
+                Result/success((
+                    At { offset = at.offset + n, holds = within },
+                    Bytes/slice(input, at.offset, n, @within)))
+            | none() => rest.run(input, at)
+            end,
+    };

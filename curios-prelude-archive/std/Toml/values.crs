@@ -1,4 +1,4 @@
-use /std/{Byte, Str, List, Map, Parse};
+use /std/{Byte, Str, List, Map, Bytes, Parse};
 use /std/Toml/{Toml};
 use /std/Toml/build/{inline_fold};
 use /std/Toml/scan/{trivia, ws};
@@ -7,67 +7,67 @@ use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
 use /std/Toml/datetime/{datetime_value};
 
-let val_str_basic: Parse(Toml) =
+let val_str_basic: Parse(Bytes, Toml) =
     Parse/map(Parse/or(str_ml_basic, str_basic), (s) => Toml/str(s));
 
-let val_str_literal: Parse(Toml) =
+let val_str_literal: Parse(Bytes, Toml) =
     Parse/map(Parse/or(str_ml_literal, str_literal), (s) => Toml/str(s));
 
-let val_true: Parse(Toml) =
-    Parse/map(Parse/take_literal("true"), (_) => Toml/bool(true));
+let val_true: Parse(Bytes, Toml) =
+    Parse/map(Parse/bytes/literal("true"), (_) => Toml/bool(true));
 
-let val_false: Parse(Toml) =
-    Parse/map(Parse/take_literal("false"), (_) => Toml/bool(false));
+let val_false: Parse(Bytes, Toml) =
+    Parse/map(Parse/bytes/literal("false"), (_) => Toml/bool(false));
 
-let val_number_signed: Parse(Toml) =
+let val_number_signed: Parse(Bytes, Toml) =
     Parse/or(flt_special, Parse/or(flt_number, int_value));
 
-let val_number_digit: Parse(Toml) =
+let val_number_digit: Parse(Bytes, Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
-let array_parse: Parse(Toml) =
-    let _ = Parse/label(Parse/take_byte(0x5B), "expected array")!;
+let array_parse: Parse(Bytes, Toml) =
+    let _ = Parse/label(Parse/bytes/expect(0x5B), "expected array")!;
     array_items([])
-and array_items(acc: List(Toml)) -> Parse(Toml) =
+and array_items(acc: List(Toml)) -> Parse(Bytes, Toml) =
     let _ = trivia!;
-    let closed = Parse/optional(Parse/take_byte(0x5D))!;
+    let closed = Parse/optional(Parse/bytes/expect(0x5D))!;
     match closed
     | some(_) => Parse/pure(Toml/arr(acc))
     | none() =>
         let v = value_parse!;
         let _ = trivia!;
         let acc2 = [..acc, v];
-        let comma = Parse/optional(Parse/take_byte(0x2C))!;
+        let comma = Parse/optional(Parse/bytes/expect(0x2C))!;
         match comma
         | some(_) => array_items(acc2)
         | none() =>
-            let stop = Parse/optional(Parse/take_byte(0x5D))!;
+            let stop = Parse/optional(Parse/bytes/expect(0x5D))!;
             match stop
             | some(_) => Parse/pure(Toml/arr(acc2))
             | none() => Parse/fail("expected ',' or ']' in array")
             end
         end
     end
-and inline_parse: Parse(Toml) =
-    let _ = Parse/label(Parse/take_byte(0x7B), "expected inline table")!;
+and inline_parse: Parse(Bytes, Toml) =
+    let _ = Parse/label(Parse/bytes/expect(0x7B), "expected inline table")!;
     let _ = ws!;
-    let empty = Parse/optional(Parse/take_byte(0x7D))!;
+    let empty = Parse/optional(Parse/bytes/expect(0x7D))!;
     match empty | some(_) => Parse/pure(Toml/table(Map/empty())) | none() => inline_items([]) end
-and inline_items(acc: List({List(Str), Toml})) -> Parse(Toml) =
+and inline_items(acc: List({List(Str), Toml})) -> Parse(Bytes, Toml) =
     let path = key_dotted!;
     let _ = ws!;
-    let _ = Parse/label(Parse/take_byte(0x3D), "expected '=' in inline table")!;
+    let _ = Parse/label(Parse/bytes/expect(0x3D), "expected '=' in inline table")!;
     let _ = ws!;
     let v = value_parse!;
     let _ = ws!;
     let acc2 = [..acc, (path, v)];
-    let comma = Parse/optional(Parse/take_byte(0x2C))!;
+    let comma = Parse/optional(Parse/bytes/expect(0x2C))!;
     match comma
     | some(_) =>
         let _ = ws!;
         inline_items(acc2)
     | none() =>
-        let stop = Parse/optional(Parse/take_byte(0x7D))!;
+        let stop = Parse/optional(Parse/bytes/expect(0x7D))!;
         match stop
         | some(_) =>
             match inline_fold(acc2)
@@ -77,8 +77,8 @@ and inline_items(acc: List({List(Str), Toml})) -> Parse(Toml) =
         | none() => Parse/fail("expected ',' or '}' in inline table")
         end
     end
-pub and value_parse: Parse(Toml) =
-    let next = Parse/peek!;
+pub and value_parse: Parse(Bytes, Toml) =
+    let next = Parse/bytes/peek!;
     match next
     | none() => Parse/fail("expected value")
     | some(b) =>
