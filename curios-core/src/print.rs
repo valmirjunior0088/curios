@@ -1278,7 +1278,8 @@ fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<Form
 /// Print a recognized former: the name alone when the binders took every argument, the application to what they left otherwise, each argument marked as the declaration marks it — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
 fn former_doc(former: FormerEta, frame: Frame) -> Printer {
     match former {
-        FormerEta::Intrinsic(name) => pure(name),
+        // Spelled as its carrier resolves from the reader, as the intrinsic's own type former is: `/std/Io` wherever `Io` is not in scope.
+        FormerEta::Intrinsic(name) => pure(frame.spelling.intrinsic_symbol(name)),
         FormerEta::Nominal(name, prefix, arity) => {
             let marks = frame.spelling.nominal_marks(&name, arity);
             let reference = Term::var(Var::free(Free::Global(name)));
