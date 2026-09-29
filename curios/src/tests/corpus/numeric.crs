@@ -42,8 +42,8 @@ test narrowings_answer_their_partiality_with_an_option =
         Test/equal(Flt/try_to_nat(+1.5), Option/some(1)),
         Test/equal(Flt/try_to_nat(-1.5), Option/none()),
         Test/equal(Flt/try_to_nat(-0.0), Option/some(0)),
-        Test/equal(Flt/try_to_nat(Flt/pos_inf), Option/none()),
-        Test/equal(Flt/try_to_nat(Flt/nan), Option/none()),
+        Test/equal(Flt/try_to_nat(+inf.0), Option/none()),
+        Test/equal(Flt/try_to_nat(+nan.0), Option/none()),
         Test/equal(Flt/try_to_int(-1.5), Option/some(-1)),
-        Test/equal(Flt/try_to_int(Flt/neg_inf), Option/none()),
-        Test/equal(Flt/try_to_int(Flt/nan), Option/none())]);
+        Test/equal(Flt/try_to_int(-inf.0), Option/none()),
+        Test/equal(Flt/try_to_int(+nan.0), Option/none())]);

@@ -44,7 +44,7 @@ fn a_numeral_with_a_dangling_dot_is_refused_by_the_rule() {
 
 #[test]
 fn rejects_a_float_literal_that_overflows_to_infinity() {
-    // The model rounds an overflowing magnitude to the infinity of its sign, which the grammar cannot spell — the literal is refused outright rather than backtracked into a different parse of the same digits.
+    // The model rounds an overflowing magnitude to the infinity of its sign, which is refused rather than taken — an infinity has literals of its own — and refused outright rather than backtracked into a different parse of the same digits.
     assert!("1.0e999".parse::<Term>().is_err());
     assert!("-1.0e999".parse::<Term>().is_err());
     // An exponent too large to be a decimal exponent at all is refused before any narrowing, rather than overflowing the count it is read into.
@@ -68,6 +68,34 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
         "1.0e-324".parse::<Term>().unwrap(),
         Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(0.0))))
     );
+}
+
+/// The values no decimal spells have signed literals of their own: the infinities, and the default NaN with its sign clear and set. Unsigned, `inf.0` is a projection of a binder named `inf`, and nothing may be glued after the `.0`.
+#[test]
+fn the_non_finite_values_are_signed_literals() {
+    let flt = |value: Floating| Term::from(Subterm::Intrinsic(Intrinsic::Flt(value)));
+    let negative = |value: Floating| value.copysign(Floating::infinite(true));
+
+    assert_eq!(
+        "+inf.0".parse::<Term>().unwrap(),
+        flt(Floating::infinite(false))
+    );
+    assert_eq!(
+        "-inf.0".parse::<Term>().unwrap(),
+        flt(Floating::infinite(true))
+    );
+    assert_eq!("+nan.0".parse::<Term>().unwrap(), flt(Floating::nan()));
+    assert_eq!(
+        "-nan.0".parse::<Term>().unwrap(),
+        flt(negative(Floating::nan()))
+    );
+
+    assert!(!matches!(
+        &*"inf.0".parse::<Term>().unwrap(),
+        Subterm::Intrinsic(Intrinsic::Flt(_))
+    ));
+    assert!("+inf.05".parse::<Term>().is_err());
+    assert!("+nan.0x".parse::<Term>().is_err());
 }
 
 #[test]

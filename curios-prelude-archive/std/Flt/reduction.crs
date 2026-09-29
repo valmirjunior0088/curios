@@ -139,9 +139,9 @@ let zero_sum(r: Rounding, terms: List(Term)) -> Flt =
 pub let summed(r: Rounding, terms: List(Term)) -> Flt =
     choose
     | some(n) = nan_of(terms) => n
-    | any_invalid(terms) || any_infinite(terms, false) && any_infinite(terms, true) => Flt/nan
-    | any_infinite(terms, false) => Flt/pos_inf
-    | any_infinite(terms, true) => Flt/neg_inf
+    | any_invalid(terms) || any_infinite(terms, false) && any_infinite(terms, true) => +nan.0
+    | any_infinite(terms, false) => +inf.0
+    | any_infinite(terms, true) => -inf.0
     -- No NaN, invalid term or infinity: every term is a number.
     | _ =>
         let s = number_sum(terms);
@@ -164,8 +164,8 @@ pub let scaled(r: Rounding, factors: List(Term)) -> {Flt, Int} =
     let negative = negative_product(factors);
     choose
     | some(n) = nan_of(factors) => (n, +0)
-    | any_invalid(factors) || any_infinity(factors) && any_zero(factors) => (Flt/nan, +0)
-    | any_infinity(factors) => (match negative | true => Flt/neg_inf | false => Flt/pos_inf end, +0)
+    | any_invalid(factors) || any_infinity(factors) && any_zero(factors) => (+nan.0, +0)
+    | any_infinity(factors) => (match negative | true => -inf.0 | false => +inf.0 end, +0)
     | any_zero(factors) => (match negative | true => -0.0 | false => +0.0 end, +0)
     -- No NaN, invalid factor, infinity or zero: every factor is a nonzero number.
     | _ =>

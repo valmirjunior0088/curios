@@ -1,4 +1,4 @@
-//! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding. The narrowings that answer partiality with an `Option` are the corpus's `/numeric`.
+//! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding; and the literals of the values no decimal spells. The narrowings that answer partiality with an `Option` are the corpus's `/numeric`.
 
 use crate::tests::run;
 
@@ -9,7 +9,7 @@ fn codec_round_trips_on_runtime_values() {
         use /std/{Str, Nat, Flt, Bytes, Option, List, Bool, Io};
         let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
         let check(x : Flt) -> Str =
-            let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), Flt/nan);
+            let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), +nan.0);
             match Bytes/eql(Flt/to_le_bytes(back), Flt/to_le_bytes(x))
             | true => "ok"
             | false => Str/concat(Flt/to_str(x), Str/concat(" -> ", Flt/to_str(back)))
@@ -46,4 +46,19 @@ fn flt_of_le_bytes_roundtrips_raw_bytes() {
         "#;
 
     assert_eq!(run(source), 1.5f64.to_le_bytes());
+}
+
+/// Each non-finite literal is the value `Flt`'s arithmetic computes for it: `Eq/refl()` proves each equation by conversion alone — the default NaN is what an invalid operation with no NaN operand answers, and `-nan.0` is it with its sign flipped, the bit that keeps the two apart. And a NaN literal is a NaN at run time: it equals nothing, itself included.
+#[test]
+fn the_non_finite_literals_are_the_values_flt_computes() {
+    let source = r#"
+        use /std/{Flt, Eq};
+        let _inf: Eq()(+inf.0, Flt/div(+1.0, +0.0)) = Eq/refl();
+        let _neg_inf: Eq()(-inf.0, Flt/div(-1.0, +0.0)) = Eq/refl();
+        let _nan: Eq()(+nan.0, Flt/div(+0.0, +0.0)) = Eq/refl();
+        let _neg_nan: Eq()(-nan.0, Flt/neg(+nan.0)) = Eq/refl();
+        /std/print(match +nan.0 == +nan.0 | true => "equal" | false => "unequal" end)
+        "#;
+
+    assert_eq!(run(source), b"unequal");
 }

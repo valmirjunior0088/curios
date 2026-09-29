@@ -38,29 +38,17 @@ mod reduction;
 pub let EightBytes(b: Bytes) -> Prop =
     Bool/Holds(Nat/eql(Bytes/len(b), 8));
 
---- Positive infinity.
-pub let pos_inf: Flt =
-    div(+1.0, +0.0);
-
---- Negative infinity.
-pub let neg_inf: Flt =
-    div(-1.0, +0.0);
-
---- The default NaN: positive, quiet and without a payload, which is what an invalid operation with no NaN operand answers.
-pub let nan: Flt =
-    of_le_bytes(x[0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xF8, 0x7F]);
-
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
-    f > neg_inf && f < pos_inf;
+    f > -inf.0 && f < +inf.0;
 
 --- That `f` is a number, decided: the domain `to_int` states.
 pub let Finite(f: Flt) -> Prop =
-    Bool/Holds(neg_inf < f && f < pos_inf);
+    Bool/Holds(-inf.0 < f && f < +inf.0);
 
 --- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
 pub let NonNeg(f: Flt) -> Prop =
-    Bool/Holds(+0.0 <= f && f < pos_inf);
+    Bool/Holds(+0.0 <= f && f < +inf.0);
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =
@@ -76,7 +64,7 @@ pub let is_sign_minus(f: Flt) -> Bool =
 
 --- Whether `f` is an infinity of either sign.
 pub let is_infinite(f: Flt) -> Bool =
-    f == pos_inf || f == neg_inf;
+    f == +inf.0 || f == -inf.0;
 
 --- Whether `f` is a zero of either sign.
 pub let is_zero(f: Flt) -> Bool =
@@ -126,8 +114,7 @@ pub let FiniteNonZero(f: Flt) -> Prop =
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match neg_inf < f && f < pos_inf: (d) =>
-        (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
+    match -inf.0 < f && f < +inf.0: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
     | true => (_) => Bool/True/qed()
     | false => (no) => match no end
     end(ok);
@@ -151,7 +138,7 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
         let negative = is_sign_minus(x);
         match b
         -- A zero divisor, which is invalid.
-        | 0 => nan
+        | 0 => +nan.0
         | bp + 1 =>
             let q = a / (bp + 1);
             let r = a % (bp + 1);
@@ -163,7 +150,7 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
             end
         end
     -- An infinity: invalid when it is `x`, and `x` itself when it is only `y`.
-    | _ => match is_infinite(x) | true => nan | false => x end
+    | _ => match is_infinite(x) | true => +nan.0 | false => x end
     end;
 
 --- IEEE's `sum` (§9.4), rounded ties to even: `rounded/sum` takes the direction.
@@ -234,7 +221,7 @@ pub let next_up(f: Flt) -> Flt =
     let b = exact/bits(f);
     choose
     | is_nan(f) => f + f
-    | f == pos_inf => f
+    | f == +inf.0 => f
     | is_zero(f) => exact/of_bits(1)
     | is_sign_minus(f) => exact/of_bits(b - 1)
     | _ => exact/of_bits(b + 1)
@@ -344,14 +331,14 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    match neg_inf < f && f < pos_inf: (r) => Option(Bool/Holds(r))
+    match -inf.0 < f && f < +inf.0: (r) => Option(Bool/Holds(r))
     | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f < pos_inf: (r) => Option(Bool/Holds(r))
+    match f >= +0.0 && f < +inf.0: (r) => Option(Bool/Holds(r))
     | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
@@ -641,7 +628,7 @@ let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
 let special_of_str(negative: Bool, body: Str) -> Option(Flt) =
     choose
     | Str/eql_ascii_ci(body, "inf") || Str/eql_ascii_ci(body, "infinity") =>
-        Option/some(match negative | true => neg_inf | false => pos_inf end)
+        Option/some(match negative | true => -inf.0 | false => +inf.0 end)
     | some(n) = nan_of_str(body) => Option/some(match negative | true => neg(n) | false => n end)
     | _ => Option/none()
     end;
@@ -884,15 +871,16 @@ satisfy Show(Flt) {
     show = to_str,
 }
 
---- A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the infinities and the default NaN spell as their names here, and any other NaN as the eight bytes that build it, so what reads back is the same pattern.
+--- A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the infinities and the default NaN of either sign spell as their literals, and any other NaN as the eight bytes that build it, so what reads back is the same pattern.
 satisfy Spell(Flt) {
     spell(f) =
         choose
         | Bool/not(is_finite(f)) =>
             choose
-            | f > +0.0 => "/std/Flt/pos_inf"
-            | f < +0.0 => "/std/Flt/neg_inf"
-            | exact/bits(f) == exact/bits(nan) => "/std/Flt/nan"
+            | f > +0.0 => "+inf.0"
+            | f < +0.0 => "-inf.0"
+            | exact/bits(f) == exact/bits(+nan.0) => "+nan.0"
+            | exact/bits(f) == exact/bits(-nan.0) => "-nan.0"
             | _ =>
                 let atoms =
                     Bytes/fold(

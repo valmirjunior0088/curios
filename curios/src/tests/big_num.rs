@@ -94,7 +94,7 @@ fn flt_of_str_matches_rust_parse() {
     ];
     let array = cases
         .iter()
-        .map(|text| format!("Flt/to_str(Option/unwrap_or(Flt/of_str(\"{text}\"), Flt/nan))"))
+        .map(|text| format!("Flt/to_str(Option/unwrap_or(Flt/of_str(\"{text}\"), +nan.0))"))
         .collect::<Vec<_>>()
         .join(", ");
     let source = format!(

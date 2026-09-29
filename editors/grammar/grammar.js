@@ -486,10 +486,11 @@ module.exports = grammar({
 
     // ---- Literals ----
 
-    // The sign is glued to the digits: `-42` is one literal, `- 42` a subtraction.
+    // The sign is glued to the digits: `-42` is one literal, `- 42` a subtraction. The float values no decimal spells take a required sign: `+inf.0`, `-inf.0`, `+nan.0`, `-nan.0`.
     number: (_) =>
       token(
         choice(
+          /[+-](inf|nan)\.0/,
           /[+-]?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?/,
           /[+-]?0x[0-9a-fA-F]+/,
           /[+-]?0b[01]+/,

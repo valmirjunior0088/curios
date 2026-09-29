@@ -3805,6 +3805,10 @@
         "members": [
           {
             "type": "PATTERN",
+            "value": "[+-](inf|nan)\\.0"
+          },
+          {
+            "type": "PATTERN",
             "value": "[+-]?[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?"
           },
           {

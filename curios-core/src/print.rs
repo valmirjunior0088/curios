@@ -945,7 +945,23 @@ fn print_atom(atom: Atom) -> Printer {
     flat([pure("'"), pure(atom.as_string())])
 }
 
-fn print_flt(flt: Floating) -> Printer {
+/// A `Flt` as what reads back as it, bit for bit: a finite value as its signed decimal, the four values no decimal spells as their literals — `+inf.0`, `-inf.0`, and the default NaN of either sign as `+nan.0` and `-nan.0` — and any other NaN, which no literal spells, as the call building it from its bytes, `Flt/of_le_bytes(x[…])`.
+fn print_flt(flt: Floating, frame: Frame) -> Printer {
+    if !flt.is_finite() {
+        let sign = match flt.abs().to_bits() == flt.to_bits() {
+            true => "+",
+            false => "-",
+        };
+        if !flt.is_nan() {
+            return pure(format!("{sign}inf.0"));
+        }
+        if flt.abs().to_bits() == Floating::nan().to_bits() {
+            return pure(format!("{sign}nan.0"));
+        }
+        let bytes = Term::intrinsic(Intrinsic::Bin(Grain::X, flt.to_le_bytes()));
+        return print_call("Flt/of_le_bytes", vec![], vec![bytes], frame);
+    }
+
     let mut string = format!("{:+}", f64::from(flt));
 
     // string always starts with '+' or '-'; work on the digits after the sign
@@ -1427,7 +1443,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::IntShl(l, r) => print_call("Int/shl", vec![], vec![l, r], frame),
         Intrinsic::IntShr(l, r) => print_call("Int/shr", vec![], vec![l, r], frame),
         Intrinsic::FltType => pure(frame.spelling.intrinsic_symbol("Flt")),
-        Intrinsic::Flt(flt) => print_flt(flt),
+        Intrinsic::Flt(flt) => print_flt(flt, frame),
         Intrinsic::FltAdd(Rounding::TiesToEven, l, r) => print_infix("+", l, r, frame),
         Intrinsic::FltSub(Rounding::TiesToEven, l, r) => print_infix("-", l, r, frame),
         Intrinsic::FltMul(Rounding::TiesToEven, l, r) => print_infix("*", l, r, frame),

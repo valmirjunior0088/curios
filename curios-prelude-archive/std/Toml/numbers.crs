@@ -200,10 +200,10 @@ pub let flt_special: Parse(Bytes, Toml) =
     Parse/or(
         Parse/map(
             Parse/bytes/literal("inf"),
-            (_) => Toml/flt(match negative | true => Flt/neg_inf | false => Flt/pos_inf end)),
+            (_) => Toml/flt(match negative | true => -inf.0 | false => +inf.0 end)),
         Parse/map(
             Parse/bytes/literal("nan"),
-            (_) => Toml/flt(match negative | true => Flt/neg(Flt/nan) | false => Flt/nan end)));
+            (_) => Toml/flt(match negative | true => -nan.0 | false => +nan.0 end)));
 
 let frac_fields(sig0: Nat, count0: Nat) -> Parse(Bytes, {Nat, Nat, Nat, Bool}) =
     let (sig, count, down) = flt_digits(sig0, count0, true)!;

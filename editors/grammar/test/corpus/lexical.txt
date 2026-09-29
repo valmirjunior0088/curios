@@ -52,6 +52,33 @@ c
         (identifier)))))
 
 ================================================================================
+The float values no decimal spells are signed words
+================================================================================
+
+let e = -inf.0;
+let f = +nan.0 + inf.0;
+e
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (number))
+    (let_term
+      (let_binding
+        (identifier)
+        (binary
+          (number)
+          (projection
+            (path
+              (identifier))
+            (field_identifier))))
+      (path
+        (identifier)))))
+
+================================================================================
 The grain letter glues to the bracket
 ================================================================================
 

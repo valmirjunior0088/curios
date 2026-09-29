@@ -6,9 +6,9 @@ use /std/Flt/{Rounding, rounded, signals, Exceptions, Env, Class};
 let _renders_in_a_type: Eq()(Flt/to_str(0.1), "+0.1") = Eq/refl();
 let _renders_a_large_value_in_a_type: Eq()(Flt/to_str(1.0e300), Flt/to_str(1.0e300)) = Eq/refl();
 let _orders_the_zeros_in_a_type: Eq()(Flt/ord(-0.0, +0.0), Ordering/lt()) = Eq/refl();
-let _orders_nan_after_infinity_in_a_type: Eq()(Flt/ord(Flt/nan, Flt/pos_inf), Ordering/gt()) =
+let _orders_nan_after_infinity_in_a_type: Eq()(Flt/ord(+nan.0, +inf.0), Ordering/gt()) =
     Eq/refl();
-let _reads_infinity_in_a_type: Eq()(Flt/of_str("-Infinity"), Option/some(Flt/neg_inf)) = Eq/refl();
+let _reads_infinity_in_a_type: Eq()(Flt/of_str("-Infinity"), Option/some(-inf.0)) = Eq/refl();
 
 -- Every direction folds in a type, and each operation rounds its exact result exactly as `of_dyadic` rounds that result written out: `0.1 + 0.2` is `21617278211378382 · 2^-56`, `0.1 · 0.1` is `m² · 2^-112` for the tenth's significand `m`, `(1/3) · 3` is `18014398509481983 · 2^-54`, and `0.1 · 10 - 1` is `4 · 2^-56` exactly, which only a fused operation sees.
 let _sum_rounds_its_exact_value_ties_to_even: Eq()(rounded/add(Rounding/ties_to_even(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
@@ -78,9 +78,9 @@ test ord_is_the_ieee_total_order =
         [
             Flt/ord(-0.0, +0.0),
             Flt/ord(+0.0, -0.0),
-            Flt/ord(Flt/nan, Flt/nan),
-            Flt/ord(Flt/nan, Flt/pos_inf),
-            Flt/ord(Flt/neg_inf, Flt/nan),
+            Flt/ord(+nan.0, +nan.0),
+            Flt/ord(+nan.0, +inf.0),
+            Flt/ord(-inf.0, +nan.0),
             Flt/ord(1.0, 2.0),
             Flt/ord(2.0, 2.0)],
         [
@@ -96,22 +96,22 @@ test ord_is_the_ieee_total_order =
 test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
     Test/all([
         Test/equal(
-            spelled(List/sort([1.0, Flt/nan, 0.5, -0.0, +0.0])),
+            spelled(List/sort([1.0, +nan.0, 0.5, -0.0, +0.0])),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([Flt/nan, +0.0, 1.0, -0.0, 0.5])),
+            spelled(List/sort([+nan.0, +0.0, 1.0, -0.0, 0.5])),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([0.5, -0.0, Flt/nan, 1.0, +0.0])),
+            spelled(List/sort([0.5, -0.0, +nan.0, 1.0, +0.0])),
             ["-0", "+0", "+0.5", "+1", "+nan"])]);
 
 -- `of_str` reads every spelling `to_str` writes, the infinities and the default NaN among them, in any case and with an optional sign.
 test of_str_reads_back_what_to_str_writes =
     Test/equal(
         [
-            read(Flt/to_str(Flt/pos_inf)),
-            read(Flt/to_str(Flt/neg_inf)),
-            read(Flt/to_str(Flt/nan)),
+            read(Flt/to_str(+inf.0)),
+            read(Flt/to_str(-inf.0)),
+            read(Flt/to_str(+nan.0)),
             read("INF"),
             read("-Infinity"),
             read("nan"),
@@ -141,8 +141,8 @@ test remainder_is_to_the_nearest_quotient =
             Flt/remainder(7.0, 2.0),
             Flt/remainder(5.0, 2.0),
             Flt/remainder(-4.0, 2.0),
-            Flt/remainder(1.0, Flt/pos_inf),
-            Flt/remainder(Flt/pos_inf, 1.0),
+            Flt/remainder(1.0, +inf.0),
+            Flt/remainder(+inf.0, 1.0),
             Flt/remainder(1.0, 0.0)], show),
         ["-1", "-1", "+1", "-0", "+1", "+nan", "+nan"]);
 
@@ -155,23 +155,23 @@ test next_up_and_down_at_the_edges =
             Flt/next_up(1.0),
             Flt/next_up(+0.0),
             Flt/next_up(-0.0),
-            Flt/next_up(Flt/pos_inf),
-            Flt/next_up(Flt/neg_inf),
+            Flt/next_up(+inf.0),
+            Flt/next_up(-inf.0),
             Flt/next_down(+0.0),
             Flt/next_up(largest)], Flt/to_le_bytes),
-        List/map([1.0000000000000002, least, least, Flt/pos_inf, Flt/neg(largest), Flt/neg(least), Flt/pos_inf], Flt/to_le_bytes));
+        List/map([1.0000000000000002, least, least, +inf.0, Flt/neg(largest), Flt/neg(least), +inf.0], Flt/to_le_bytes));
 
 -- The six §9.6 variants: a NaN gives way to a number only in the `_number` forms, and the magnitude forms compare absolute values, breaking a tie as `min` and `max` do.
 test the_min_and_max_variants =
     Test/equal(
         List/map([
-            Flt/minimum_number(Flt/nan, 1.0),
-            Flt/maximum_number(1.0, Flt/nan),
+            Flt/minimum_number(+nan.0, 1.0),
+            Flt/maximum_number(1.0, +nan.0),
             Flt/minimum_magnitude(-3.0, 2.0),
             Flt/maximum_magnitude(-3.0, 2.0),
             Flt/minimum_magnitude(-2.0, 2.0),
-            Flt/maximum_magnitude_number(Flt/nan, -2.0),
-            Flt/minimum_magnitude(Flt/nan, 1.0)], show),
+            Flt/maximum_magnitude_number(+nan.0, -2.0),
+            Flt/minimum_magnitude(+nan.0, 1.0)], show),
         ["+1", "+1", "+2", "-3", "-2", "-2", "+nan"]);
 
 -- The payload operations: a quiet and a signaling NaN built from a payload read it back, an inadmissible payload builds `+0`, and anything but a NaN has payload `-1`.
@@ -184,7 +184,7 @@ test payloads_are_set_and_read =
 -- Every class IEEE names, and the predicates that answer it.
 test the_ten_classes =
     Test/equal(
-        List/map([Flt/signaling_nan(1.0), Flt/nan, Flt/neg_inf, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0, Flt/pos_inf], (f) => Spell/spell(Flt/class(f))),
+        List/map([Flt/signaling_nan(1.0), +nan.0, -inf.0, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0, +inf.0], (f) => Spell/spell(Flt/class(f))),
         ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()", "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()", "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()", "Class/positive_infinity()"]);
 
 -- Conversion to an integer in each direction, and `logB` where it is defined.
@@ -195,7 +195,7 @@ test to_int_rounds_in_its_direction =
                 (r) => rounded/to_int(r, -2.5, @Bool/True/qed())),
             [-2, -3, -2, -2, -3]),
         Test/equal(Flt/try_log_b(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), Option/some(-1074)),
-        Test/equal(Flt/try_log_b(Flt/pos_inf), Option/none())]);
+        Test/equal(Flt/try_log_b(+inf.0), Option/none())]);
 
 -- The environment rounds in its direction, restores the one before a block, and accumulates what every operation raised; a `State` over its status sequences in it.
 let rounds_and_records: Env(Flt) =
@@ -203,7 +203,7 @@ let rounds_and_records: Env(Flt) =
     let after = Env/rounding!;
     let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), 2.0)!;
     let status = State/get()!;
-    Env/pure(match after == status.rounding | true => third | false => Flt/nan end);
+    Env/pure(match after == status.rounding | true => third | false => +nan.0 end);
 
 test the_environment_rounds_and_records =
     let (third, raised) = Env/run(rounds_and_records);
@@ -217,11 +217,11 @@ test comparisons_signal_as_ieee_tabulates =
     let invalid = Exceptions { ..Exceptions/none, invalid = true };
     Test/equal(
         [
-            raised(Env/eql(Flt/nan, 1.0)),
-            raised(Env/lt(Flt/nan, 1.0)),
-            raised(Env/lt_quiet(Flt/nan, 1.0)),
+            raised(Env/eql(+nan.0, 1.0)),
+            raised(Env/lt(+nan.0, 1.0)),
+            raised(Env/lt_quiet(+nan.0, 1.0)),
             raised(Env/eql(Flt/signaling_nan(1.0), 1.0)),
-            raised(Env/eql_signaling(Flt/nan, Flt/nan)),
+            raised(Env/eql_signaling(+nan.0, +nan.0)),
             raised(Env/lt(1.0, 2.0))],
         [Exceptions/none, invalid, Exceptions/none, invalid, invalid, Exceptions/none]);
 
@@ -230,11 +230,12 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
     let negative = Result/unwrap_or(Toml/decode("v = -nan"), Map/empty());
     Test/all([
         Test/equal(Spell/spell(Flt/quiet_nan(5.0)), "/std/Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127], @/std/Bool/True/qed())"),
-        Test/equal(Spell/spell(Flt/nan), "/std/Flt/nan"),
+        Test/equal(Spell/spell(+nan.0), "+nan.0"),
+        Test/equal(Spell/spell(-nan.0), "-nan.0"),
         Test/equal(
             match Map/get(negative, "v") | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f) | _ => false end,
             true),
-        Test/equal(Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(Flt/neg(Flt/nan)))), ""), "v = -nan\n")]);
+        Test/equal(Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(-nan.0))), ""), "v = -nan\n")]);
 
 -- Every class reads back from what `to_str` writes, bit for bit — the NaNs with their signs, kinds and payloads — and from what `to_hex_str` writes.
 let _a_nan_spells_its_kind_in_a_type: Eq()(Flt/to_str(Flt/signaling_nan(18.0)), "+snan(0x12)") = Eq/refl();
@@ -250,14 +251,14 @@ test every_class_reads_back_from_its_text =
     let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
         List/map([
-            Flt/nan, Flt/neg(Flt/nan), Flt/signaling_nan(1.0), Flt/neg(Flt/signaling_nan(18.0)), Flt/quiet_nan(5.0),
-            Flt/pos_inf, Flt/neg_inf, +0.0, -0.0, least, Flt/neg(least), largest, 0.1, -2.5, 1.0e300], reads_back),
+            +nan.0, -nan.0, Flt/signaling_nan(1.0), Flt/neg(Flt/signaling_nan(18.0)), Flt/quiet_nan(5.0),
+            +inf.0, -inf.0, +0.0, -0.0, least, Flt/neg(least), largest, 0.1, -2.5, 1.0e300], reads_back),
         List/map(List/range(0, 15), (_) => true));
 
 test nan_and_hex_text_spell_as_ieee_writes_them =
     Test/all([
         Test/equal(
-            List/map([Flt/nan, Flt/neg(Flt/nan), Flt/signaling_nan(1.0), Flt/quiet_nan(5.0)], Flt/to_str),
+            List/map([+nan.0, -nan.0, Flt/signaling_nan(1.0), Flt/quiet_nan(5.0)], Flt/to_str),
             ["+nan", "-nan", "+snan", "+nan(0x5)"]),
         Test/equal(
             List/map([3.0, -0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0], Flt/to_hex_str),
@@ -305,7 +306,7 @@ test dyadics_compute_and_compare_as_numbers =
     Test/all([
         Test/equal(Dyadic { mantissa = +6, exponent = -1 }, Dyadic/of_int(+3)),
         Test/equal(half * half - half, Dyadic/neg(Dyadic/of(0.25, @Bool/True/qed()))),
-        Test/equal(List/map([Flt/pos_inf, Flt/nan, -0.0], Dyadic/try_of), [Option/none(), Option/none(), Option/some(Dyadic/of_int(+0))]),
+        Test/equal(List/map([+inf.0, +nan.0, -0.0], Dyadic/try_of), [Option/none(), Option/none(), Option/some(Dyadic/of_int(+0))]),
         Test/equal(List/sort([Dyadic/of_int(+2), half, Dyadic/of_int(-1)]), [Dyadic/of_int(-1), half, Dyadic/of_int(+2)]),
         Test/equal(Show/show(Dyadic/of(-0.75, @Bool/True/qed())), "-6755399441055744*2^-53"),
         Test/equal(
@@ -333,23 +334,23 @@ test reductions_round_once_and_signal_as_ieee_defines =
     Test/all([
         Test/equal(show(Flt/sum([0.1, 0.2, 0.3])), show(0.6)),
         Test/equal(show(Flt/sum([])), show(+0.0)),
-        Test/equal(Flt/is_nan(Flt/sum([Flt/pos_inf, Flt/neg_inf])), true),
-        Test/equal(signals/sum(Rounding/ties_to_even(), [Flt/pos_inf, Flt/neg_inf]), invalid),
-        Test/equal(signals/dot(Rounding/ties_to_even(), Vec/of_list([Flt/pos_inf]), Vec/of_list([0.0])), invalid),
+        Test/equal(Flt/is_nan(Flt/sum([+inf.0, -inf.0])), true),
+        Test/equal(signals/sum(Rounding/ties_to_even(), [+inf.0, -inf.0]), invalid),
+        Test/equal(signals/dot(Rounding/ties_to_even(), Vec/of_list([+inf.0]), Vec/of_list([0.0])), invalid),
         Test/equal(signals/sum(Rounding/ties_to_even(), [1.0e308, 1.0e308]), Exceptions { ..Exceptions/none, overflow = true, inexact = true }),
         Test/equal(show(Flt/sum_abs([-1.5, 2.5])), show(4.0)),
         Test/equal(show(Flt/sum_square([3.0, 4.0])), show(25.0)),
         Test/equal(sf, +1993),
         Test/equal(pr >= 1.0 && pr < 2.0, true),
         Test/equal(Flt/scaled_prod_sum(Vec/of_list([1.0, 2.0]), Vec/of_list([2.0, 2.0])), (1.5, +3)),
-        Test/equal(Flt/scaled_prod_diff(Vec/of_list([Flt/pos_inf]), Vec/of_list([Flt/pos_inf])).0 != Flt/scaled_prod_diff(Vec/of_list([Flt/pos_inf]), Vec/of_list([Flt/pos_inf])).0, true)]);
+        Test/equal(Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0 != Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0, true)]);
 
 test augmented_operations_answer_the_error =
     let tiny = Flt/scale(1.0, -60);
     Test/all([
         Test/equal(Flt/augmented_add(1.0, tiny), (1.0, tiny)),
         Test/equal(Flt/augmented_sub(1.0, 1.0), (+0.0, +0.0)),
-        Test/equal(Flt/augmented_mul(Flt/pos_inf, 2.0), (Flt/pos_inf, Flt/pos_inf)),
+        Test/equal(Flt/augmented_mul(+inf.0, 2.0), (+inf.0, +inf.0)),
         Test/equal(signals/augmented_add(1.0, tiny), Exceptions/none),
         Test/equal(signals/augmented_mul(1.0e308, 10.0), Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
 

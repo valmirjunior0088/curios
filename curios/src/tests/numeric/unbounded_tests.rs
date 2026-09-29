@@ -65,13 +65,13 @@ fn folded_and_executed_scalar_ops_agree() {
         // `Flt/rem` is exact `fmod` in every folder, and the emitted Wasm must compute the same: it once expanded `x - trunc(x / y) * y` inline, which rounds at each step and disagreed with the fold on about half of all finite pairs — `1e8 % 3` was `1` folded and `0` executed, and `1 % inf` was `1` folded and NaN executed. Each row below is a pair the expansion got wrong.
         "Flt/to_str(Flt/rem(Flt/add(100000000.0, Nat/to_flt(n)), 3.0))",
         "Flt/to_str(Flt/rem(Flt/add(5.0, Nat/to_flt(n)), 0.1))",
-        "Flt/to_str(Flt/rem(Flt/add(1.0, Nat/to_flt(n)), Flt/pos_inf))",
+        "Flt/to_str(Flt/rem(Flt/add(1.0, Nat/to_flt(n)), +inf.0))",
         "Flt/to_str(Flt/rem(Flt/sub(-7.0, Nat/to_flt(n)), 2.0))",
         // An equal pair under `min`/`max` answers by sign, as 754-2019's `minimum`/`maximum` do — and a NaN operand propagates rather than being dropped, which is where Rust's `f64::min` and Wasm's `f64.min` part company. The model defines all three answers, so these rows compare a fold to an execution rather than either to a host.
         "Flt/to_str(Flt/min(Nat/to_flt(n), Flt/neg(Nat/to_flt(n))))",
         "Flt/to_str(Flt/max(Flt/neg(Nat/to_flt(n)), Nat/to_flt(n)))",
-        "Flt/to_str(Flt/min(Flt/add(Flt/nan, Nat/to_flt(n)), 1.0))",
-        "Flt/to_str(Flt/max(1.0, Flt/add(Flt/nan, Nat/to_flt(n))))",
+        "Flt/to_str(Flt/min(Flt/add(+nan.0, Nat/to_flt(n)), 1.0))",
+        "Flt/to_str(Flt/max(1.0, Flt/add(+nan.0, Nat/to_flt(n))))",
     ]);
 }
 
@@ -145,8 +145,8 @@ fn folded_and_executed_nans_agree() {
         bytes(&format!("Flt/abs({quiet})")),
         bytes(&format!("Flt/copysign({signaling}, -1.0)")),
         bytes(&format!("Flt/div({zero}, {zero})")),
-        bytes(&format!("Flt/sub(Flt/pos_inf, Flt/add(Flt/pos_inf, {zero}))")),
-        bytes(&format!("Flt/mul(Flt/add(Flt/pos_inf, {zero}), 0.0)")),
+        bytes(&format!("Flt/sub(+inf.0, Flt/add(+inf.0, {zero}))")),
+        bytes(&format!("Flt/mul(Flt/add(+inf.0, {zero}), 0.0)")),
         bytes(&format!("Flt/sqrt(Flt/sub(-1.0, {zero}))")),
         bytes(&format!("Flt/rem(1.0, {zero})")),
         "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \

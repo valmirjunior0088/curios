@@ -158,7 +158,7 @@ fn numerals_and_booleans_spell_as_their_literals() {
 ///
 /// The three non-finites were told apart by string-matching `Flt/to_str`'s output, so a rendering change would have silently sent one down the numeral path and produced text that is no `Flt` literal — with `nan` the only branch a test looked at. They are decided from the value now; both infinities are here so neither can drift alone. The last row is an overflowing multiply, which is how a non-finite reaches a report without anyone spelling one.
 #[test]
-fn floats_spell_as_literals_and_non_finites_by_name() {
+fn floats_and_their_non_finite_values_spell_as_literals() {
     assert_eq!(
         run(r#"
         use /std/{Flt, Str, Io, Spell, print};
@@ -167,15 +167,15 @@ fn floats_spell_as_literals_and_non_finites_by_name() {
         let _ = line(Spell/spell(-2.5))!;
         let _ = line(Spell/spell(100.0))!;
         let _ = line(Spell/spell(-0.0))!;
-        let _ = line(Spell/spell(Flt/nan))!;
-        let _ = line(Spell/spell(Flt/pos_inf))!;
-        let _ = line(Spell/spell(Flt/neg_inf))!;
+        let _ = line(Spell/spell(+nan.0))!;
+        let _ = line(Spell/spell(+inf.0))!;
+        let _ = line(Spell/spell(-inf.0))!;
         let _ = line(Spell/spell(Flt/mul(1.0e200, 1.0e200)))!;
         Io/pure(())
         "#),
         concat!(
             "2.5\n-2.5\n100.0\n-0.0\n",
-            "/std/Flt/nan\n/std/Flt/pos_inf\n/std/Flt/neg_inf\n/std/Flt/pos_inf\n"
+            "+nan.0\n+inf.0\n-inf.0\n+inf.0\n"
         )
         .as_bytes()
     );

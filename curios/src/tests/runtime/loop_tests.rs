@@ -162,9 +162,9 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
     assert_eq!(io.output().to_vec(), b"496");
 }
 
-/// Narrowed through `try_to_nat` because the subject *is* a NaN on one edge — the fixture unwraps against `Flt/nan` deliberately — so `NonNeg` is undischargeable by construction rather than by cost, and the deciding pair is the only correct shape. (`flt_of_str_returns_option` is the other side of that line: its subject is computed but always a number, so it takes the bounded form.)
+/// Narrowed through `try_to_nat` because the subject *is* a NaN on one edge — the fixture unwraps against `+nan.0` deliberately — so `NonNeg` is undischargeable by construction rather than by cost, and the deciding pair is the only correct shape. (`flt_of_str_returns_option` is the other side of that line: its subject is computed but always a number, so it takes the bounded form.)
 ///
-/// An `Option(Flt)` built in a bind's continuation, unwrapped against `Flt/nan`, is the shape that ran the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and with `curios_cont::Literal::Flt` compared under IEEE equality `forward_continuations` read that untouched edge as rewritten on every round. The literal is bitwise now; this is the program that found it, kept so the fixpoint's convergence on a NaN-carrying edge is asserted end-to-end rather than only at the pass.
+/// An `Option(Flt)` built in a bind's continuation, unwrapped against `+nan.0`, is the shape that ran the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and with `curios_cont::Literal::Flt` compared under IEEE equality `forward_continuations` read that untouched edge as rewritten on every round. The literal is bitwise now; this is the program that found it, kept so the fixpoint's convergence on a NaN-carrying edge is asserted end-to-end rather than only at the pass.
 #[test]
 fn a_nan_default_on_a_runtime_option_converges() {
     assert_eq!(
@@ -175,7 +175,7 @@ fn a_nan_default_on_a_runtime_option_converges() {
             let n = Nat/of_str(s)!;
             Option/some(Nat/to_flt(n));
         /std/print(Nat/to_str(
-            Option/unwrap_or(Flt/try_to_nat(Option/unwrap_or(f(Nat/to_str(taint)), Flt/nan)), 0)))
+            Option/unwrap_or(Flt/try_to_nat(Option/unwrap_or(f(Nat/to_str(taint)), +nan.0)), 0)))
         "#),
         b"3"
     );

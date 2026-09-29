@@ -220,12 +220,12 @@ fn a_flt_narrowing_bound_discharges_behind_a_guard() {
         run(r#"
         use /std/{Flt, Nat, Int, Str, Option};
         let to_nat_or(f: Flt, fallback: Nat) -> Nat =
-            match f >= +0.0 && f < Flt/pos_inf
+            match f >= +0.0 && f < +inf.0
             | true => Flt/to_nat(f)
             | false => fallback
             end;
         let to_int_or(f: Flt, fallback: Int) -> Int =
-            match Flt/neg_inf < f && f < Flt/pos_inf
+            match -inf.0 < f && f < +inf.0
             | true => Flt/to_int(f)
             | false => fallback
             end;
@@ -251,8 +251,8 @@ fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
             match Flt/try_to_int(f) | some(n) => Int/to_str(n) | none() => "-" end;
         let probe(f: Flt) -> Str = Str/concat(Str/concat(to_nat(f), "/"), to_int(f));
         /std/print(List/fold(
-            [probe(2.5), probe(-0.0), probe(-2.5), probe(Flt/pos_inf), probe(Flt/neg_inf),
-                probe(Flt/nan)],
+            [probe(2.5), probe(-0.0), probe(-2.5), probe(+inf.0), probe(-inf.0),
+                probe(+nan.0)],
             "",
             (s, acc) => Str/concat(acc, Str/concat(s, " "))))
         "#),

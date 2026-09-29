@@ -13,7 +13,7 @@ use {
     },
     crate::parse::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
-    curios_num::{Grain, Natural, Rounding},
+    curios_num::{Floating, Grain, Natural, Rounding},
     curios_print::{
         Printer, begins, fill, flat, group, hard_line, if_break, indent, line, named, pure,
         reaches, sep_flat, soft_line,
@@ -311,9 +311,22 @@ fn print_motive(motive: Option<Term>) -> Printer {
     }
 }
 
-fn print_flt(value: f64) -> Printer {
+/// A `Flt` literal as written: a finite value as its signed decimal, and the values no decimal spells as their literals, `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`. Source spells no other NaN, so the syntax holds none.
+fn print_flt(value: Floating) -> Printer {
+    if !value.is_finite() {
+        let sign = match value.abs().to_bits() == value.to_bits() {
+            true => "+",
+            false => "-",
+        };
+        let word = match value.is_nan() {
+            true => "nan",
+            false => "inf",
+        };
+        return pure(format!("{sign}{word}.0"));
+    }
+
     // `Display` for `f64` never uses exponent notation (that is `{:e}`), so decimalizing is one suffix check.
-    let mut string = value.to_string();
+    let mut string = f64::from(value).to_string();
 
     if !string.contains('.') {
         string.push_str(".0");
@@ -723,7 +736,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Int/shr", vec![], vec![left, right])
         }
         Intrinsic::FltType => pure("Flt"),
-        Intrinsic::Flt(value) => print_flt(f64::from(value)),
+        Intrinsic::Flt(value) => print_flt(value),
         Intrinsic::FltAdd(rounding, left, right) => {
             print_intrinsic_call(flt_rounded(rounding, "add"), vec![], vec![left, right])
         }

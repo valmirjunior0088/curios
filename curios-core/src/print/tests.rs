@@ -451,3 +451,18 @@ fn an_operators_method_projected_off_a_witness_prints_as_the_operator() {
         );
     }
 }
+
+/// A `Flt` prints as what reads back as it, bit for bit: the infinities and the default NaN of either sign as their literals, and any other NaN, which no literal spells, as the call building it from its bytes.
+#[test]
+fn a_non_finite_flt_prints_as_what_reads_back_as_it() {
+    let printed = |value: Floating| Term::intrinsic(Intrinsic::Flt(value)).to_string();
+    let negative = |value: Floating| value.copysign(Floating::infinite(true));
+
+    assert_eq!(printed(Floating::infinite(false)), "+inf.0");
+    assert_eq!(printed(Floating::infinite(true)), "-inf.0");
+    assert_eq!(printed(Floating::nan()), "+nan.0");
+    assert_eq!(printed(negative(Floating::nan())), "-nan.0");
+
+    let payload = printed(Floating::from_bits(0x7ff8_0000_0000_0001));
+    assert!(payload.contains("of_le_bytes(x["), "{payload}");
+}

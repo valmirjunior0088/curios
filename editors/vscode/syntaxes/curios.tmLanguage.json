@@ -91,6 +91,10 @@
       "patterns": [
         {
           "name": "constant.numeric.float.curios",
+          "match": "(?<![\\w/])[+-](?:inf|nan)\\.0\\b"
+        },
+        {
+          "name": "constant.numeric.float.curios",
           "match": "(?<![\\w/])[+-]?\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
         },
         {

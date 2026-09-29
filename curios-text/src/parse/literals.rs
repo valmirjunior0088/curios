@@ -106,6 +106,43 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
 }
 
 pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
+    parse_non_finite_flt()
+        .or(parse_decimal_flt())
+        .map(|value| Subterm::Intrinsic(Intrinsic::Flt(value)))
+        .map(Into::into)
+}
+
+/// `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`: the values of `Flt` no decimal spells, in R7RS Scheme's spelling. The sign is required, since `inf.0` bare is field `0` of a binder named `inf`, and nothing may be glued after the `.0`. `+nan.0` is the default quiet NaN and `-nan.0` the same with its sign set; any other NaN has no literal and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one.
+fn parse_non_finite_flt<'a>() -> Parser<'a, Floating> {
+    take_exact("+")
+        .map(|()| false)
+        .or(take_exact("-").map(|()| true))
+        .and(
+            take_exact("inf.0")
+                .map(|()| Floating::infinite(false))
+                .or(take_exact("nan.0").map(|()| Floating::nan())),
+        )
+        .and_drop(not_ahead_word())
+        .and_drop(parse_whitespace())
+        .map(|(negative, value)| match negative {
+            true => value.copysign(Floating::infinite(true)),
+            false => value,
+        })
+}
+
+// Succeeds, consuming nothing, when the input does not go on with a character an identifier or a numeral could continue with.
+fn not_ahead_word<'a>() -> Parser<'a, ()> {
+    look_ahead(take_while(|char: char| {
+        char.is_alphanumeric() || char == '_' || char == '.'
+    }))
+    .flat_map(|rest| match rest.is_empty() {
+        true => pure(()),
+        false => fail("a literal's word goes on"),
+    })
+}
+
+/// A finite `Flt` literal: a decimal with a dot and at least one digit after it, optionally signed and scaled by an exponent.
+fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
     take_exact("-")
         .map(|()| "-".to_string())
         .or(take_exact("+").map(|()| "+".to_string()))
@@ -138,15 +175,13 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
         })
         .and_drop(parse_whitespace())
         .flat_map::<Floating, _>(|value: Floating| {
-            // An overflowing magnitude rounds to the infinity of its sign, a value the grammar has no spelling for — refused here, past the so the digits that committed this branch as a float literal cannot silently reparse as something else.
+            // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, the infinity has literals of its own, and the digits that committed this branch as a float literal cannot silently reparse as something else.
             if value.is_finite() {
                 pure(value)
             } else {
-                fail("Float literal overflows Flt")
+                fail("Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`")
             }
         })
-        .map(|value| Subterm::Intrinsic(Intrinsic::Flt(value)))
-        .map(Into::into)
 }
 
 /// Split a float literal's digits into the numeral they spell and the power of ten scaling it: `12.5e3` is `125` scaled by `2`. The grammar has already established a dot with at least one digit after it, so what is left to refuse is a malformed exponent or a stray character the character class admitted.

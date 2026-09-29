@@ -113,6 +113,14 @@ A floating-point literal has a decimal point followed by at least one decimal di
 
 Floating-point literals have type `Flt`. `5.` is not one, and is refused rather than read as the numeral `5` with a stray dot after it.
 
+The values no decimal spells have literals of their own, each with a required sign: `+inf.0` and `-inf.0` are the infinities, `+nan.0` is the default quiet NaN, and `-nan.0` is the same NaN with its sign set. Without its sign, `inf.0` is field `0` of a binder named `inf`. A decimal too large for `Flt` is refused rather than rounded to an infinity. Every other NaN has no literal, and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one ([A float's non-finite values are literals](design/language/a-floats-non-finite-values-are-literals.md)).
+
+```crs
++inf.0
+-inf.0
++nan.0
+```
+
 ### Character and string literals
 
 A character literal contains one Unicode scalar value or one supported escape, and is polymorphic exactly as a numeral is: it realizes as the proof-certified `Char` wherever nothing pins it, and as the code point at an expected `Nat`, `Byte`, or `Int` (`Byte` refuses a code point past `255`; `Bool` and `Flt` never realize from a character). `Char` excludes the surrogate range and values above `U+10FFFF`; `Char/to_nat` converts a *value*, whose type is already fixed. In a match, a character literal is a `Nat` dispatch case — see [Natural-number dispatch](#natural-number-dispatch).
