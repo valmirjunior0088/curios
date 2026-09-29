@@ -12,8 +12,8 @@
 
 use {
     curios_core::{
-        Bound, Definition, Enter, Func, FuncType, Global, Intrinsic, Item, Let, Match, Module, Rec,
-        Struct, Subterm, Telescope, Term, Totality, Variant,
+        Bound, Definition, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item, Let, Match,
+        Module, Rec, Struct, Subterm, Telescope, Term, Totality, Variant,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -41,7 +41,7 @@ fn push(positions: &mut Vec<Position>, site: &Rc<str>, term: &Term) {
 /// Every term in a type position.
 ///
 /// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/big_nat/Canonical` into `is_trimmed`.
-pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
+pub(crate) fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Position> {
     let mut positions = Vec::new();
 
     for definition in definitions(module) {
@@ -58,7 +58,7 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     }
 
     // The entrypoint expression and its annotation are not items, so nothing above reaches them. An exploit needs only a local `rec` and one construction, both of which fit in the trailing expression.
-    if let Some(entry) = &module.entry {
+    if let Some(entry) = entry {
         if let Some(type_) = &entry.type_ {
             let site: Rc<str> = "the entrypoint's type".into();
             push(&mut positions, &site, type_);

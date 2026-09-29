@@ -10,7 +10,7 @@
 
 use {
     super::{error, run},
-    curios_core::Module,
+    curios_core::Program,
     curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
@@ -48,11 +48,12 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
 /// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
 fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let (module, _): (Module, _) =
+    let (program, _): (Program, _) =
         typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
             .expect("the fixture type-checks");
 
-    module
+    program
+        .module
         .items
         .iter()
         .flat_map(|item| {

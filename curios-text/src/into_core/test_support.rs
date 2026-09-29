@@ -121,63 +121,81 @@ pub(super) fn global_name(path: &str) -> curios_core::Global {
 }
 
 pub(super) fn run(src: &str) -> curios_core::Term {
-    let (module, _, _, _) = super::into_core(
+    let (program, _, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
     )
     .unwrap();
 
-    curios_core::test_support::into_nested_term(module)
+    curios_core::test_support::into_nested_term(program)
 }
 
 pub(super) fn lowered_module(src: &str) -> curios_core::Module {
-    let (module, _, _, _) = super::into_core(
+    let (program, _, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
     )
     .unwrap();
 
-    module
+    program.module
 }
 
 pub(super) fn written_type(id: usize) -> curios_core::Term {
     curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
 }
 
-pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
-    let (module, metavar_floor, universe_floor, _) = super::into_core(
+/// `src` lowered and elaborated as a program against `established`, its entry inferred.
+fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> curios_core::Program {
+    let (program, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
     )
     .unwrap();
-    let mut context = curios_elab::Context::with_default_budget(SYNTAX);
-    curios_elab::elaborate_and_zonk_module(&mut context, &module, metavar_floor, universe_floor)
-        .unwrap()
+    let (module, entry) = curios_elab::elaborate_and_zonk_program(
+        &mut curios_elab::Context::with_default_budget(SYNTAX),
+        established,
+        &program.module,
+        metavar_floor,
+        universe_floor,
+        curios_elab::Tail::Entry(&program.entry),
+    )
+    .unwrap();
+
+    curios_core::Program {
+        module,
+        entry: entry.expect("nothing here fails to parse, so nothing withholds the entry"),
+    }
 }
 
-pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
+/// `src` elaborated with nothing in scope, and the term it closes with.
+pub(super) fn elaborate_source_program(src: &str) -> curios_core::Program {
+    elaborate_program(src, curios_elab::Established::nothing())
+}
+
+/// The module `src` elaborates to with nothing in scope.
+pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
+    elaborate_source_program(src).module
+}
+
+pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
     let (lowered, metavar_floor, universe_floor, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
     )
     .unwrap();
-    assert!(lowered.items.len() >= 2);
+    assert!(lowered.module.items.len() >= 2);
 
-    let mut lowered_prefix = lowered.clone();
+    let mut lowered_prefix = lowered.module.clone();
     lowered_prefix.items.truncate(1);
     lowered_prefix.induct_decls.clear();
     lowered_prefix.struct_decls.clear();
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
     lowered_prefix.tests.clear();
-    lowered_prefix.entry = Some(curios_core::Entrypoint {
-        body: curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
-        type_: None,
-    });
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
@@ -186,22 +204,11 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
     )
     .unwrap();
 
-    let full = curios_elab::elaborate_and_zonk_module(
-        &mut curios_elab::Context::with_default_budget(SYNTAX),
-        &lowered,
-        metavar_floor,
-        universe_floor,
-    )
-    .unwrap();
-    let cached = curios_elab::elaborate_and_zonk_unit(
-        &mut curios_elab::Context::with_default_budget(SYNTAX),
+    let full = elaborate_program(src, curios_elab::Established::nothing());
+    let cached = elaborate_program(
+        src,
         curios_elab::Established::over(std::slice::from_ref(&&prelude)),
-        &lowered,
-        metavar_floor,
-        universe_floor,
-        curios_elab::Tail::Written,
-    )
-    .unwrap();
+    );
     (full, cached)
 }
 

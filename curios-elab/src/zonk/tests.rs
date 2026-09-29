@@ -18,10 +18,19 @@ fn nat_lit(n: usize) -> Term {
     Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n))).into()
 }
 
+/// A lowered module holding `body` as its one definition's value.
 fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
     Module {
         mounts: Vec::new(),
-        items: Vec::new(),
+        items: vec![Item::Let(Definition {
+            name: Global::Authored(Qualifier::from(["held"])),
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext::empty(),
+            island: Qualifier::empty(),
+            totality: Totality::default(),
+            type_: nat(),
+            body,
+        })],
         universe_seeds,
         induct_decls: Default::default(),
         struct_decls: Default::default(),
@@ -29,7 +38,6 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
         witnesses: Default::default(),
         tests: Default::default(),
         binder_floor: 0,
-        entry: Some(Entrypoint { body, type_: None }),
     }
 }
 
@@ -214,7 +222,6 @@ fn two_items_with_unsolved_holes_are_both_reported() {
     };
     let module = Module {
         items: vec![item("a", Term::hole(0)), item("b", Term::hole(1))],
-        entry: None,
         ..lowered_module(nat_lit(0), Vec::new())
     };
 
@@ -253,7 +260,7 @@ fn goals_are_gathered_once_per_node() {
     for _ in 0..60 {
         body = Term::intrinsic(Intrinsic::nat_add(body.clone(), body));
     }
-    let reports = collect_goal_reports(&mut context, &lowered_module(body, Vec::new()));
+    let reports = collect_goal_reports(&mut context, &lowered_module(body, Vec::new()), None);
 
     assert_eq!(reports.len(), 1);
 }

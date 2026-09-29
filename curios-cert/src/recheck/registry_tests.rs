@@ -177,7 +177,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);

@@ -1,7 +1,7 @@
 use {
     super::*,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{DefinitionKind, Entrypoint, Free, Intrinsic, Nat, UniverseContext},
+    curios_core::{DefinitionKind, Free, Intrinsic, UniverseContext},
     curios_utilities::Qualifier,
 };
 
@@ -34,10 +34,6 @@ fn module(items: Vec<Item>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::Nat(Nat::new(0u32))),
-            type_: None,
-        }),
     }
 }
 

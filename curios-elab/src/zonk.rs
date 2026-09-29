@@ -179,9 +179,9 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     )
 }
 
-/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item plus the entrypoint body and annotation, yielding a meta-free module for `erase`.
+/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item and registry entry, yielding a meta-free module for `erase`. A program's entry is zonked beside it by [`zonk_entry`].
 ///
-/// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the entry and the registries are zonked only once every item has, since a refusal among the items stands on its own.
+/// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the registries are zonked only once every item has, since a refusal among the items stands on its own.
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
     curios_profile::profile!("zonk_module");
     // One pass for the whole module, so a solution its items share is zonked once.
@@ -197,21 +197,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
     if !refusals.is_empty() {
         return Err(Error::batch(refusals));
     }
-
-    let entry = module
-        .entry
-        .as_ref()
-        .map(|entry| {
-            Ok::<_, Error>(Entrypoint {
-                body: zonk_term(context, &entry.body)?,
-                type_: entry
-                    .type_
-                    .as_ref()
-                    .map(|type_| zonk_term(context, type_))
-                    .transpose()?,
-            })
-        })
-        .transpose()?;
 
     // The registry's telescopes flow into `erase`, which runs meta-free with its own (solution-less) context — so they are zonked like everything else.
     let induct_decls = module
@@ -289,10 +274,28 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         witnesses: module.witnesses.clone(),
         tests: module.tests.clone(),
         binder_floor: module.binder_floor,
-        entry,
     };
     validate_universes(&module)?;
     Ok(module)
+}
+
+/// Zonk a program's entry — its body and the type it was judged at — and validate its universes against the schemes `module`, the program's zonked module, declares.
+pub(crate) fn zonk_entry(
+    context: &Context,
+    module: &Module,
+    entry: &Entrypoint,
+) -> Result<Entrypoint, Error> {
+    let context = &Zonk::new(context);
+    let entry = Entrypoint {
+        body: zonk_term(context, &entry.body)?,
+        type_: entry
+            .type_
+            .as_ref()
+            .map(|type_| zonk_term(context, type_))
+            .transpose()?,
+    };
+    validate_entry_universes(module, &entry)?;
+    Ok(entry)
 }
 
 pub(crate) fn validate_bound_universes<B: Bound>(
@@ -453,6 +456,53 @@ fn validate_instance_arities<B: Bound>(
     }
 }
 
+/// The universe parameter counts a module's definitions and registry entries declare, which an occurrence's instance is held to.
+struct Schemes {
+    definitions: BTreeMap<Global, usize>,
+    inducts: BTreeMap<Global, usize>,
+    structs: BTreeMap<Global, usize>,
+}
+
+impl Schemes {
+    fn of(module: &Module) -> Self {
+        Self {
+            definitions: module
+                .items
+                .iter()
+                .flat_map(Item::definitions)
+                .map(|definition| {
+                    let count = definition.universe_context.parameter_count;
+                    (definition.name, count)
+                })
+                .collect(),
+            inducts: module
+                .induct_decls
+                .iter()
+                .map(|(name, declaration)| {
+                    (name.clone(), declaration.universe_context.parameter_count)
+                })
+                .collect(),
+            structs: module
+                .struct_decls
+                .iter()
+                .map(|(name, declaration)| {
+                    (name.clone(), declaration.universe_context.parameter_count)
+                })
+                .collect(),
+        }
+    }
+
+    fn validate<B: Bound>(&self, value: &B, owner: &str) -> Result<(), Error> {
+        validate_instance_arities(
+            value,
+            &self.definitions,
+            &self.inducts,
+            &self.structs,
+            owner,
+        )
+    }
+}
+
 fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     let mut definition_schemes = BTreeMap::new();
     for item in &module.items {
@@ -473,23 +523,10 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             }
         }
     }
-    let definitions = definition_schemes
-        .iter()
-        .map(|(name, (_, context))| (name.clone(), context.parameter_count))
-        .collect::<BTreeMap<_, _>>();
-    let inducts = module
-        .induct_decls
-        .iter()
-        .map(|(name, declaration)| (name.clone(), declaration.universe_context.parameter_count))
-        .collect::<BTreeMap<_, _>>();
-    let structs = module
-        .struct_decls
-        .iter()
-        .map(|(name, declaration)| (name.clone(), declaration.universe_context.parameter_count))
-        .collect::<BTreeMap<_, _>>();
+    let schemes = Schemes::of(module);
     macro_rules! validate {
         ($value:expr, $owner:expr $(,)?) => {
-            validate_instance_arities($value, &definitions, &inducts, &structs, $owner)
+            schemes.validate($value, $owner)
         };
     }
 
@@ -588,12 +625,6 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             | DefinitionKind::Test => {}
         }
     }
-    if let Some(entry) = &module.entry {
-        validate!(&entry.body, "module body")?;
-        if let Some(type_) = &entry.type_ {
-            validate!(type_, "module body annotation")?;
-        }
-    }
     Ok(())
 }
 
@@ -681,18 +712,24 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             &format!("concept {name} parameters"),
         )?;
     }
-    if let Some(entry) = &module.entry {
-        validate_bound_universes(&entry.body, 0, "module body")?;
-        if let Some(type_) = &entry.type_ {
-            validate_bound_universes(type_, 0, "module body type")?;
-        }
-    }
     if !module.universe_seeds.is_empty() {
         return Err(Error::UniverseInvariant(
             "finalized module retained lowering-time universe seeds".into(),
         ));
     }
     validate_module_instance_arities(module)?;
+    Ok(())
+}
+
+/// [`validate_universes`] for a program's entry: its body and the type it states are under no scheme, and every instance in them is held to the one `module` declares for the name it instantiates.
+pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(), Error> {
+    let schemes = Schemes::of(module);
+    validate_bound_universes(&entry.body, 0, "module body")?;
+    schemes.validate(&entry.body, "module body")?;
+    if let Some(type_) = &entry.type_ {
+        validate_bound_universes(type_, 0, "module body type")?;
+        schemes.validate(type_, "module body type")?;
+    }
     Ok(())
 }
 
@@ -736,12 +773,6 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     for concept in module.concepts.values() {
         collect!(&concept.params);
     }
-    if let Some(entry) = &module.entry {
-        collect!(&entry.body);
-        if let Some(type_) = &entry.type_ {
-            collect!(type_);
-        }
-    }
 
     if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= floor) {
         return Err(Error::UniverseInvariant(format!(
@@ -782,7 +813,11 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 ///
 /// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`](super::suggest_candidates)), displayed through the same pipeline.
-pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Vec<GoalReport> {
+pub(crate) fn collect_goal_reports(
+    context: &mut Context,
+    module: &Module,
+    entry: Option<&Entrypoint>,
+) -> Vec<GoalReport> {
     /// Collected goal sites in discovery order: each goal's id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner), shared into the scan closures.
     type GoalSites = Rc<RefCell<Vec<(MetavarId, Option<Span>, Option<Global>)>>>;
 
@@ -838,7 +873,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
         }
     }
-    if let Some(entry) = &module.entry {
+    if let Some(entry) = entry {
         scan(&entry.body, None, &goals, &seen_goals, &referenced);
         if let Some(type_) = &entry.type_ {
             scan(type_, None, &goals, &seen_goals, &referenced);
@@ -910,6 +945,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             &telescope,
             &result,
             module,
+            entry,
             owner.as_ref(),
         ));
     }

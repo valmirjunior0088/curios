@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_core::{Item, Module},
-    curios_elab::{Context, Resumed, erase_unit},
+    curios_elab::{Context, Resumed, erase_program},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_unit::{Prefix, Unit},
@@ -87,12 +87,12 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
     .map_err(String::from)
 }
 
-/// Elaborate `source` to its meta-free Core module and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
+/// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the program's own items erased onto it and its entry sealed — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
 /// It used to erase *fresh*, passing the whole module to an erasure entry of its own, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
-    let (module, _foreigns, _records) = with_prelude(|prelude| {
+    let (program, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
@@ -104,16 +104,16 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
         )
     })
     .unwrap();
-    let module = curios_core::Zonked::project(&module).expect("the elaborated module is zonked");
+    let program = curios_core::Zonked::project(&program).expect("the elaborated program is zonked");
     with_prelude(|prelude| {
         let scope = Prefix::over(prelude);
-        erase_unit(
+        erase_program(
             &mut Context::with_default_budget(SYNTAX),
             Resumed::of(&scope.cores(), scope.arena()),
-            &module,
+            &program,
         )
     })
-    .expect("the elaborated module erases into a verified erased module")
+    .expect("the elaborated program erases into a verified erased module")
     .into_module()
 }
 
@@ -266,7 +266,6 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.concepts, incremental.concepts);
     assert_eq!(whole.witnesses, incremental.witnesses);
     assert_eq!(whole.tests, incremental.tests);
-    assert_eq!(whole.entry, incremental.entry);
     assert!(incremental.binder_floor >= whole.binder_floor);
 }
 

@@ -11,7 +11,7 @@ use {
     curios_core::Item,
     curios_core::{Global, Sharing, Zonked, derived_binder_floor, validate_stored_identities},
     curios_elab::{
-        Context, ErasedArena, Established, Resumed, Tail, elaborate_and_zonk_unit, erase_unit,
+        Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{PreparedText, prepare_prelude},
@@ -117,7 +117,6 @@ fn archive(
             &lowered,
             prepared.metavariable_floor(),
             prepared.universe_floor(),
-            Tail::Written,
         )
     });
     // A broken item refuses the root whatever elaboration said of the rest, and its parse report comes first, with elaboration's beside it in the same build — the pipeline's `with_broken`, for the one unit it does not compile.

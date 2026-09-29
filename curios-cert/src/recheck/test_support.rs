@@ -9,7 +9,7 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Program, RecGroup,
         RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam, derived_binder_floor,
@@ -95,7 +95,7 @@ pub(super) fn equality_declaration() -> InductDecl {
 }
 
 /// The module the doc comment above describes: three declarations, and the five definitions that close on `False`.
-pub(super) fn forgery() -> Module {
+pub(super) fn forgery() -> Program {
     let type_0 = Term::type_ground();
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -297,25 +297,27 @@ pub(super) fn forgery() -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![unbox, boxes_equal, types_equal, cast, forged],
-        universe_seeds: Vec::new(),
-        induct_decls: BTreeMap::from([
-            (false_name, proposition(Vec::new())),
-            (box_name, box_decl),
-            (equality_name, equality_decl),
-        ]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 1_000,
-        // The module as a whole is a closed program of type `False`.
-        entry: Some(Entrypoint {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: vec![unbox, boxes_equal, types_equal, cast, forged],
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::from([
+                (false_name, proposition(Vec::new())),
+                (box_name, box_decl),
+                (equality_name, equality_decl),
+            ]),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 1_000,
+        },
+        // The program as a whole is closed, at type `False`.
+        entry: Entrypoint {
             body: Term::free_var(&Free::from(&forged_name)),
             type_: Some(false_type),
-        }),
+        },
     }
 }
 
@@ -325,7 +327,7 @@ pub(super) fn member() -> Free {
 }
 
 /// `let bad : Absurd = <the member selection of `rec f : Absurd = body`>`, with `Absurd` an empty proposition.
-pub(super) fn selection_module(body: Term) -> Module {
+pub(super) fn selection_module(body: Term) -> Program {
     let name = Global::Authored(Qualifier::from(["Absurd"]));
     let absurd = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
     let f = member();
@@ -335,24 +337,26 @@ pub(super) fn selection_module(body: Term) -> Module {
         body: Scope::close(Many(1), &[&f], body),
     }]);
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["bad"])),
-            absurd.clone(),
-            Term::rec_proj(group, 0),
-        )],
-        universe_seeds: Vec::new(),
-        induct_decls: BTreeMap::from([(name, proposition(Vec::new()))]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 1_000,
-        entry: Some(Entrypoint {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["bad"])),
+                absurd.clone(),
+                Term::rec_proj(group, 0),
+            )],
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::from([(name, proposition(Vec::new()))]),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 1_000,
+        },
+        entry: Entrypoint {
             body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
             type_: Some(absurd),
-        }),
+        },
     }
 }
 
@@ -390,7 +394,6 @@ pub(super) fn indexed_module(target: Term) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -416,7 +419,6 @@ pub(super) fn level_definition(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -443,7 +445,6 @@ pub(super) fn level_registry(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -498,7 +499,6 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -556,7 +556,7 @@ pub(super) fn clashing_index_decls(
 }
 
 /// The module the doc comment above describes, with `Two`'s sort written as a redex that reduces to `Prop`.
-pub(super) fn aliased_sort_forgery() -> Module {
+pub(super) fn aliased_sort_forgery() -> Program {
     let sort = Free::local(701, Some("s"));
     let aliased = Term::apply(
         Term::func([(sort.clone(), Term::type_ground())], Term::free_var(&sort)),
@@ -604,20 +604,22 @@ pub(super) fn aliased_sort_forgery() -> Module {
         ),
     );
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![held, forged],
-        universe_seeds: Vec::new(),
-        induct_decls: decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 1_000,
-        entry: Some(Entrypoint {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: vec![held, forged],
+            universe_seeds: Vec::new(),
+            induct_decls: decls,
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 1_000,
+        },
+        entry: Entrypoint {
             body: Term::free_var(&Free::from(&forged_name)),
             type_: Some(false_type),
-        }),
+        },
     }
 }
 
@@ -670,7 +672,6 @@ pub(super) fn relevant_index_control() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -757,7 +758,6 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -786,7 +786,6 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -816,7 +815,6 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -867,7 +865,6 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -907,7 +904,6 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -957,7 +953,6 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1031,7 +1026,6 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1117,7 +1111,6 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1188,7 +1181,6 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1252,7 +1244,6 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1307,7 +1298,6 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1331,7 +1321,6 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
@@ -1426,7 +1415,6 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1469,7 +1457,6 @@ pub(super) fn rec_apply_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1602,7 +1589,6 @@ pub(super) fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1620,7 +1606,6 @@ pub(super) fn carried_proof_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1700,7 +1685,6 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: None,
     }
 }
 
@@ -1756,7 +1740,6 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1910,7 +1893,6 @@ pub(super) fn index_forgery() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -1954,7 +1936,6 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     vec![
@@ -2204,7 +2185,6 @@ pub(super) fn computed_field_forgery() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -2271,7 +2251,6 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: None,
     }
 }
 
@@ -2446,7 +2425,6 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -2474,7 +2452,6 @@ pub(super) fn collision_module(
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 
@@ -2560,22 +2537,41 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
     )
 }
 
+/// What a fixture puts to the walk: a unit alone, or a program — a unit and the entry it closes with.
+pub(super) trait Walked {
+    fn parts(&self) -> (&Module, Option<&Entrypoint>);
+}
+
+impl Walked for Module {
+    fn parts(&self) -> (&Module, Option<&Entrypoint>) {
+        (self, None)
+    }
+}
+
+impl Walked for Program {
+    fn parts(&self) -> (&Module, Option<&Entrypoint>) {
+        (&self.module, Some(&self.entry))
+    }
+}
+
 /// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the kernel's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
 pub(super) fn fixture_verdicts(
-    module: &Module,
+    fixture: &impl Walked,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    fixture_certified(module, budget, globals, syntax).verdicts
+    fixture_certified(fixture, budget, globals, syntax).verdicts
 }
 
 /// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
 pub(super) fn fixture_certified(
-    module: &Module,
+    fixture: &impl Walked,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Rechecked {
-    super::verdicts_from(Kernel::new(budget, syntax), module, globals)
+    let (module, entry) = fixture.parts();
+
+    super::verdicts_from(Kernel::new(budget, syntax), module, entry, globals)
 }

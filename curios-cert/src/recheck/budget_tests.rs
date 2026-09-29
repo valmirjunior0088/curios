@@ -5,7 +5,7 @@ use {
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat,
-        RecGroup, RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
+        Program, RecGroup, RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -18,7 +18,7 @@ fn good() -> Global {
 }
 
 /// `induct Good | c(x : Alias)` with `Alias : Type = Good`, beside an entrypoint `0` declared at `Spin : Type = rec s : Type = s`, which no budget converts to `Nat`.
-fn spent_entry_beside_an_aliased_payload() -> Module {
+fn spent_entry_beside_an_aliased_payload() -> Program {
     let alias = Global::Authored(Qualifier::from(["Alias"]));
     let spin = Global::Authored(Qualifier::from(["Spin"]));
     let s = Free::local(930, Some("s"));
@@ -50,27 +50,29 @@ fn spent_entry_beside_an_aliased_payload() -> Module {
         polarities: Vec::new(),
     };
 
-    Module {
-        mounts: Vec::new(),
-        items: vec![
-            authored(
-                &alias,
-                Term::type_ground(),
-                Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
-            ),
-            authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
-        ],
-        universe_seeds: Vec::new(),
-        induct_decls: BTreeMap::from([(good(), declaration)]),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 1_000,
-        entry: Some(Entrypoint {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: vec![
+                authored(
+                    &alias,
+                    Term::type_ground(),
+                    Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
+                ),
+                authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
+            ],
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::from([(good(), declaration)]),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 1_000,
+        },
+        entry: Entrypoint {
             body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             type_: Some(Term::free_var(&Free::from(&spin))),
-        }),
+        },
     }
 }
 

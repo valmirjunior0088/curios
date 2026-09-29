@@ -50,7 +50,6 @@ fn reading_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     }
 }
 

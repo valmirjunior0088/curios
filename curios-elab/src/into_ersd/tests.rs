@@ -1,6 +1,6 @@
 use crate::reduce::test_support::qed;
-use curios_core::Zonked;
 use curios_core::*;
+use curios_core::{Program, Zonked};
 use curios_ersd::{FieldShape, test_support::shape};
 use {
     crate::*,
@@ -43,52 +43,51 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
     })
 }
 
-fn module(items: Vec<Item>, body: Term) -> Module {
-    Module {
-        mounts: Vec::new(),
-        items,
-        universe_seeds: vec![],
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 0,
-        entry: Some(Entrypoint { body, type_: None }),
+/// A program of `items` closing with `body`, at no stated type yet — see [`stating`].
+fn module(items: Vec<Item>, body: Term) -> Program {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items,
+            universe_seeds: vec![],
+            induct_decls: BTreeMap::new(),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 0,
+        },
+        entry: Entrypoint { body, type_: None },
     }
 }
 
-fn zonked(module: &Module) -> Zonked<Module> {
-    Zonked::project(module).expect("the fixture is zonked")
+fn zonked<T: Zonkable>(value: &T) -> Zonked<T> {
+    Zonked::project(value).expect("the fixture is zonked")
 }
 
-/// `module` with its entry stating `type_`, which is what the entry's body is sealed at.
-fn stating(module: &Module, type_: Term) -> Module {
-    let mut module = module.clone();
-    module
-        .entry
-        .as_mut()
-        .expect("the fixture has an entry")
-        .type_ = Some(type_);
-    module
+/// `program` with its entry stating `type_`, which is what the entry's body is sealed at.
+fn stating(program: &Program, type_: Term) -> Program {
+    let mut program = program.clone();
+    program.entry.type_ = Some(type_);
+    program
 }
 
-/// `module` erased as the one unit of a program, its entry stating `type_`.
+/// `program` erased with nothing in scope, its entry stating `type_`.
 fn try_erase(
     context: &mut Context,
-    module: &Module,
+    program: &Program,
     type_: Term,
 ) -> Result<curios_ersd::Module, Error> {
-    erase_unit(
+    erase_program(
         context,
         Resumed::of(&[], ErasedArena::default()),
-        &zonked(&stating(module, type_)),
+        &zonked(&stating(program, type_)),
     )
     .map(ErasedArena::into_module)
 }
 
-fn erase(context: &mut Context, module: &Module, type_: Term) -> curios_ersd::Module {
-    try_erase(context, module, type_).expect("the module erases")
+fn erase(context: &mut Context, program: &Program, type_: Term) -> curios_ersd::Module {
+    try_erase(context, program, type_).expect("the program erases")
 }
 
 /// The recorded payload row — field hint and carrier shape — of the one constructor of the single-constructor family whose debug name ends in `name`. The arena is what erasure wrote; the header the printer renders from it is a second spelling, and a test that scraped that spelling would pass by matching nothing if it moved.
@@ -340,12 +339,12 @@ fn identity_arena(stamp: Totality) -> ErasedArena {
     declared.totality = stamp;
     let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
 
-    erase_unit(
+    erase_program(
         &mut context,
         Resumed::of(&[], ErasedArena::default()),
         &zonked(&stating(&module(items, body), nat)),
     )
-    .expect("the module erases")
+    .expect("the program erases")
 }
 
 /// Every erased function's termination flag.
@@ -510,10 +509,11 @@ fn universe_erasure_is_a_validated_structural_projection() {
         Term::type_at(Level::constant(3)),
     );
 
-    let projected = super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&source))
-        .unwrap()
-        .into_inner()
-        .into_module();
+    let projected =
+        super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&source.module))
+            .unwrap()
+            .into_inner()
+            .into_module();
     let Item::Let(definition) = &projected.items[0] else {
         panic!("expected definition")
     };
@@ -523,16 +523,23 @@ fn universe_erasure_is_a_validated_structural_projection() {
         panic!("expected nominal type")
     };
     assert!(induct.universes.is_empty());
+    // The entry is projected beside the module by the same structural rule, its instance dropped.
     assert_eq!(
-        projected.entry.as_ref().map(|entry| &entry.body),
-        Some(&Term::free_var(&global("poly")))
+        project_erased_universes(&source.entry.body),
+        Term::free_var(&global("poly"))
     );
 
-    let invalid = stating(
-        &module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0)))),
-        Term::type_at(Level::constant(1)),
+    let invalid = module(
+        vec![self::definition(
+            "unsolved",
+            Term::type_at(Level::constant(1)),
+            Term::type_at(Level::meta(UniverseMetaId(0))),
+        )],
+        nat_lit(0),
     );
-    assert!(super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid)).is_err());
+    assert!(
+        super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid.module)).is_err()
+    );
 }
 
 #[test]
@@ -694,17 +701,19 @@ fn a_variant_constructs_with_its_registered_schema() {
         Atom::from("some"),
         [nat_lit(6)],
     );
-    let fixture = Module {
-        mounts: Vec::new(),
-        items: Vec::new(),
-        universe_seeds: vec![],
-        induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 0,
-        entry: Some(Entrypoint { body, type_: None }),
+    let fixture = Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: Vec::new(),
+            universe_seeds: vec![],
+            induct_decls,
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 0,
+        },
+        entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&mut context, &fixture, opt_type());
     assert_eq!(
@@ -989,17 +998,19 @@ fn a_variant_match_binds_payload_without_projections() {
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
-    let fixture = Module {
-        mounts: Vec::new(),
-        items: Vec::new(),
-        universe_seeds: vec![],
-        induct_decls,
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 0,
-        entry: Some(Entrypoint { body, type_: None }),
+    let fixture = Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: Vec::new(),
+            universe_seeds: vec![],
+            induct_decls,
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 0,
+        },
+        entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&mut context, &fixture, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
@@ -1308,17 +1319,19 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         (d, induct_type("Chained")),
         (e, induct_type("Selfy")),
     ]);
-    let fixture = Module {
-        mounts: Vec::new(),
-        items: Vec::new(),
-        universe_seeds: vec![],
-        induct_decls,
-        struct_decls,
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 0,
-        entry: Some(Entrypoint { body, type_: None }),
+    let fixture = Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: Vec::new(),
+            universe_seeds: vec![],
+            induct_decls,
+            struct_decls,
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 0,
+        },
+        entry: Entrypoint { body, type_: None },
     };
     let erased = erase(&mut context, &fixture, expected);
 

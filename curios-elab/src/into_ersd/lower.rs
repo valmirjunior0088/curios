@@ -8,10 +8,10 @@ use {
         Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Subterm,
         Telescope, Term, emitted, intrinsic, reduce_with,
     },
-    crate::validate_universes,
+    crate::{validate_entry_universes, validate_universes},
     curios_core::{
         Certification, ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item,
-        Module, Operand, StructDecl, Zonked, foreign_operands, project_erased_universes,
+        Module, Operand, Program, StructDecl, Zonked, foreign_operands, project_erased_universes,
     },
     curios_utilities::{Span, grown},
     std::{
@@ -163,10 +163,6 @@ fn project_module(module: &Module) -> Module {
         witnesses: module.witnesses.clone(),
         tests: module.tests.clone(),
         binder_floor: module.binder_floor,
-        entry: module.entry.as_ref().map(|entry| Entrypoint {
-            body: project_erased_universes(&entry.body),
-            type_: entry.type_.as_ref().map(project_erased_universes),
-        }),
     }
 }
 
@@ -486,11 +482,11 @@ impl ErasedArena {
     }
 }
 
-/// Erase one unit's items onto what its scope already erased, sealing an entrypoint when the unit has one.
+/// Erase one unit's items onto what its scope already erased, leaving the arena open for its successors to resume over.
 ///
 /// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every reference into the scope is already bound.
 ///
-/// **A unit with an entrypoint is sealed at the type its entry states, and one without is left open — and that is the whole of what used to be two functions.** One erased the fixed prelude's item chain with no entry to seal; the other erased a program and sealed one. Being the entry *is* having an entrypoint, and the type the body was judged at is part of it, which [`Zonked`] holds: so the entry is read off the module, and no caller can pair a body with no type or a type with no body.
+/// **A unit and a program are erased by one walk, and only a program's is sealed.** One function used to erase the fixed prelude's item chain with no entry to seal and another erased a program and sealed one — two copies of one walk. The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk and seals the entry at the type it states, which [`Zonked`] holds.
 ///
 /// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the scope's Core and its erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
 pub fn erase_unit(
@@ -499,20 +495,45 @@ pub fn erase_unit(
     module: &Zonked<Module>,
 ) -> Result<ErasedArena, Error> {
     curios_profile::profile!("erase_unit");
-    grown(|| erase_unit_within(context, resumed, module))
+    grown(|| erase_within(context, resumed, module, None))
 }
 
-fn erase_unit_within(
+/// [`erase_unit`] for a program: its module erased onto its scope, then its entry sealed at the type it states — the arena whose [`ErasedArena::into_module`] the back half lowers.
+pub fn erase_program(
+    context: &mut Context,
+    resumed: Resumed<'_>,
+    program: &Zonked<Program>,
+) -> Result<ErasedArena, Error> {
+    curios_profile::profile!("erase_unit");
+    grown(|| erase_within(context, resumed, &program.module(), Some(program.entry())))
+}
+
+fn erase_within(
     context: &mut Context,
     resumed: Resumed<'_>,
     module: &Zonked<Module>,
+    entry: Option<(&Term, &Term)>,
 ) -> Result<ErasedArena, Error> {
     let scope = resumed.projected_cores();
-    let module = UniverseErased::<Zonked<Module>>::project(module)?.into_inner();
-    let entry = module
-        .entry()
-        .map(|(body, type_)| (body.clone(), type_.clone()));
-    let module = module.into_module();
+    // The entry's universes are held to its module's schemes before projection erases them.
+    let entry = entry
+        .map(|(body, type_)| {
+            validate_entry_universes(
+                module.as_module(),
+                &Entrypoint {
+                    body: body.clone(),
+                    type_: Some(type_.clone()),
+                },
+            )?;
+            Ok::<_, Error>((
+                project_erased_universes(body),
+                project_erased_universes(type_),
+            ))
+        })
+        .transpose()?;
+    let module = UniverseErased::<Zonked<Module>>::project(module)?
+        .into_inner()
+        .into_module();
     // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
         // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.

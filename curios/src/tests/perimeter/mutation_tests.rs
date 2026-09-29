@@ -3,13 +3,13 @@
 //! Filed here because it is a perimeter instrument — it attacks the walk rather than any one rule — and it was a two-test module of its own before.
 
 use {
-    curios_core::{Item, Module, Term, Zonked},
+    curios_core::{Item, Module, Program, Term, Zonked},
     curios_text::{Entrypoint, RootSource},
 };
 
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.
-fn recheck(module: &Module, budget: u64) -> Vec<curios_cert::Verdict> {
-    let zonked = Zonked::project(module).expect("a mutant stays zonked");
+fn recheck(program: &Program, budget: u64) -> Vec<curios_cert::Verdict> {
+    let zonked = Zonked::project(program).expect("a mutant stays zonked");
     curios_pipeline::recheck_with_prelude(&zonked, budget)
 }
 /// Programs whose items sit at deliberately varied types — intrinsic, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.
@@ -77,7 +77,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, obligations) = curios_pipeline::typecheck_with_prelude(
+        let (program, obligations) = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             &RootSource::none(),
@@ -88,17 +88,17 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the subject carries an erasure obligation, so it is the wrong control",
         );
         assert!(
-            recheck(&module, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
+            recheck(&program, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
-        for index in lets(&module) {
-            let Item::Let(definition) = &module.items[index] else {
+        for index in lets(&program.module) {
+            let Item::Let(definition) = &program.module.items[index] else {
                 unreachable!("the index came from a `let`");
             };
 
-            let mut mutant: Module = module.clone();
-            let Item::Let(target) = &mut mutant.items[index] else {
+            let mut mutant: Program = program.clone();
+            let Item::Let(target) = &mut mutant.module.items[index] else {
                 unreachable!("the item was a `let` a moment ago");
             };
             target.body = foreign_body();
@@ -132,16 +132,16 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, _) = curios_pipeline::typecheck_with_prelude(
+        let (program, _) = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             &RootSource::none(),
         )
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
-        let declared = lets(&module)
+        let declared = lets(&program.module)
             .into_iter()
-            .map(|index| match &module.items[index] {
+            .map(|index| match &program.module.items[index] {
                 Item::Let(definition) => (index, definition.type_.clone()),
                 Item::Rec(_) => unreachable!("the index came from a `let`"),
             })
@@ -149,15 +149,15 @@ fn every_type_replaced_by_another_item_s_is_refused() {
 
         for (index, _) in &declared {
             for (other, replacement) in &declared {
-                let Item::Let(definition) = &module.items[*index] else {
+                let Item::Let(definition) = &program.module.items[*index] else {
                     unreachable!("the index came from a `let`");
                 };
                 if other == index || definition.type_ == *replacement {
                     continue;
                 }
 
-                let mut mutant: Module = module.clone();
-                let Item::Let(target) = &mut mutant.items[*index] else {
+                let mut mutant: Program = program.clone();
+                let Item::Let(target) = &mut mutant.module.items[*index] else {
                     unreachable!("the item was a `let` a moment ago");
                 };
                 target.type_ = replacement.clone();
@@ -210,19 +210,19 @@ const GRAFTS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// Elaborate `source` and return its module.
-fn elaborated(description: &str, source: &str) -> Module {
+/// Elaborate `source` and return the program.
+fn elaborated(description: &str, source: &str) -> Program {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    let (module, _) = curios_pipeline::typecheck_with_prelude(
+    let (program, _) = curios_pipeline::typecheck_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
     )
     .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
-    module
+    program
 }
 
 /// A body grafted from a program that differs only in an index must be refused by the host.
@@ -233,6 +233,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         let host = elaborated(description, host_source);
 
         let donated = donor
+            .module
             .items
             .iter()
             .find_map(|item| match item {
@@ -248,8 +249,9 @@ fn a_body_grafted_across_an_index_is_refused() {
             "{description}: the host must be accepted before anything is grafted into it",
         );
 
-        let mut grafted: Module = host.clone();
+        let mut grafted: Program = host.clone();
         let target = grafted
+            .module
             .items
             .iter_mut()
             .find_map(|item| match item {

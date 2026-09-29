@@ -12,7 +12,7 @@ fn no_items_simple_tail() {
 
 #[test]
 fn written_types_get_distinct_levels_and_lexical_roles() {
-    let (module, _, universe_floor, _) = super::into_core(
+    let (program, _, universe_floor, _) = super::into_core(
         &"let id(@A : Type, x : A) -> A = x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
@@ -23,7 +23,8 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
 
     assert_eq!(universe_floor, 2);
     assert_eq!(
-        module
+        program
+            .module
             .universe_seeds
             .iter()
             .map(|seed| seed.role)
@@ -34,7 +35,8 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
         ],
     );
     assert!(
-        module
+        program
+            .module
             .universe_seeds
             .iter()
             .all(|seed| seed.origin.is_some())
@@ -54,7 +56,9 @@ fn cached_and_full_elaboration_have_identical_universe_transactions() {
 
 #[test]
 fn a_polymorphic_definition_instantiates_at_prop_and_type() {
-    let module = elaborate_source("let id(@A : Type, x : A) -> A = x; (id(Prop), id(Type))");
+    let program =
+        elaborate_source_program("let id(@A : Type, x : A) -> A = x; (id(Prop), id(Type))");
+    let module = &program.module;
     let definition = module
         .items
         .iter()
@@ -67,11 +71,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .unwrap();
     assert_eq!(definition.universe_context.parameter_count, 1);
 
-    let body = &module
-        .entry
-        .as_ref()
-        .expect("the entrypoint has a body")
-        .body;
+    let body = &program.entry.body;
     let curios_core::Subterm::Tuple(tuple) = &**body else {
         panic!("the entrypoint is a tuple");
     };

@@ -1469,11 +1469,22 @@ impl<'a> UnitSource<'a> {
 /// **This is the whole of what used to be three functions.** They differed in where their items sat, whether anything was already in scope, and where four counters started — every one of which is an argument here. `into_core` was the no-scope entry spelling, kept for `curios-text`'s own tests; `prepare_prelude` was the mounted spelling; `into_core_with_prelude` was the entry spelling with one predecessor. Three copies of one walk agreed by being read, which is the shape every configuration-dependent defect in this stage has had.
 ///
 /// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient where a copy was used.
+///
+/// An entry source's final term is lowered too — a refusal in it is this lowering's — and handed back only by the entry's own spelling, [`into_core_with_prelude`]: a unit is a [`curios_core::Module`] alone.
 pub fn into_core_unit(
     source: &UnitSource<'_>,
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
+    lower_unit(source, scope, syntax).map(|(unit, _)| unit)
+}
+
+/// [`into_core_unit`], with the final term an entry source closes with, lowered beside the unit.
+fn lower_unit(
+    source: &UnitSource<'_>,
+    scope: &[&PreparedText],
+    syntax: &SyntaxRegistry,
+) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     curios_profile::profile!("into_core_unit");
     curios_utilities::grown(|| into_core_unit_within(source, scope, syntax))
 }
@@ -1482,7 +1493,7 @@ fn into_core_unit_within(
     source: &UnitSource<'_>,
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
-) -> Result<PreparedText, Error> {
+) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic this campaign exists to stop producing.
     let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
     let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
@@ -1699,7 +1710,7 @@ fn into_core_unit_within(
         )
     });
 
-    Ok(PreparedText {
+    let unit = PreparedText {
         mounts: own.clone(),
         foreigns,
         table: table.into_own().into_iter().collect(),
@@ -1714,7 +1725,6 @@ fn into_core_unit_within(
             witnesses,
             tests,
             binder_floor: binders.count(),
-            entry,
         },
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
@@ -1731,7 +1741,9 @@ fn into_core_unit_within(
         ),
         reached: reached.into_inner(),
         documentation,
-    })
+    };
+
+    Ok((unit, entry))
 }
 
 /// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-text`'s own stage tests do.
@@ -1739,11 +1751,14 @@ pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
-    let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), &[], syntax)?;
+) -> Result<(curios_core::Program, usize, usize, ForeignStore), Error> {
+    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax)?;
 
     Ok((
-        unit.core,
+        curios_core::Program {
+            module: unit.core,
+            entry: entry.expect("an entry source's parse holds its final term"),
+        },
         unit.metavariable_floor,
         unit.universe_floor,
         unit.foreigns,
@@ -1761,9 +1776,9 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), scope, syntax)
 }
 
-/// The entry program lowered: its module, the floors elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
+/// The entry program lowered: its module and the term it closes with, the floors elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
 pub struct LoweredEntry {
-    pub core: curios_core::Module,
+    pub program: curios_core::Program,
     pub metavariable_floor: usize,
     pub universe_floor: usize,
     pub foreigns: ForeignStore,
@@ -1798,10 +1813,13 @@ pub fn into_core_with_prelude(
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<LoweredEntry, Error> {
-    let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;
+    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;
 
     Ok(LoweredEntry {
-        core: unit.core,
+        program: curios_core::Program {
+            module: unit.core,
+            entry: entry.expect("an entry source's parse holds its final term"),
+        },
         metavariable_floor: unit.metavariable_floor,
         universe_floor: unit.universe_floor,
         foreigns: unit.foreigns,

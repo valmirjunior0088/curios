@@ -12,7 +12,7 @@ use {
         check_type_totality, check_written_type_totality, collect_goal_reports,
         finish_deferred_witnesses, is_prop, record_definition_totality, record_totality,
         reduce_with, register_witness, retry_deferred_witnesses, sort_term, test_program_tail,
-        zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
+        zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1210,8 +1210,10 @@ fn check_witness_cycles(context: &mut Context, items: &[&Item]) -> Result<(), Er
 
 /// What one unit's elaboration produced, before anything is finalized: the module itself and the refusals it recovered from.
 struct ElaboratedSuffix {
-    /// The items that elaborated, with the registry entries, witness markers and tests of those alone; the entry, stating the type it was judged at, when it elaborated and nothing depends on a refusal.
+    /// The items that elaborated, with the registry entries, witness markers and tests of those alone.
     module: Module,
+    /// A program's entry, stating the type it was judged at, when it elaborated and nothing depends on a refusal.
+    entry: Option<Entrypoint>,
     /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
     /// Every name an item this run produced no item for: withheld before it elaborated, refused, or retracted after the fact. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
@@ -1231,7 +1233,7 @@ fn elaborate_module_suffix(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    tail: Tail<'_>,
+    tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
     // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
@@ -1305,8 +1307,9 @@ fn elaborate_module_suffix(
     // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them — and over the tests no refusal poisoned, since a test of a refused declaration is that refusal's dependent and is no longer in the module to schedule. The filter asks the poison rather than the survivors because a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them, so a filter over this module's survivors would drop every one. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
     let synthesized;
     let entry = match tail {
-        Tail::Written => module.entry.as_ref(),
-        Tail::Tests(scheduled) => {
+        None => None,
+        Some(Tail::Entry(entry)) => Some(entry),
+        Some(Tail::Tests(scheduled)) => {
             let scheduled = scheduled
                 .iter()
                 .filter(|test| !poison.holds(&test.name))
@@ -1417,11 +1420,11 @@ fn elaborate_module_suffix(
         witnesses,
         tests,
         binder_floor: module.binder_floor,
-        entry,
     };
 
     Ok(ElaboratedSuffix {
         module,
+        entry,
         refusals,
         dropped,
     })
@@ -1452,52 +1455,66 @@ fn elaborate_entry(
     }))
 }
 
-/// A finalized module and what finalizing it decided: the module, its entry stating the type it was judged at, and the erasure obligations this checker decides but does not always raise — see [`elaborate_and_zonk_unit_reporting`] for why they are reported rather than thrown.
-pub struct FinalizedModule {
+/// What finalizing an elaborated unit decided: the module, the entry a program closes with — stating the type it was judged at — and the erasure obligations this checker decides but does not always raise; see [`elaborate_and_zonk_program_reporting`] for why they are reported rather than thrown.
+struct Finalized {
+    module: Module,
+    entry: Option<Entrypoint>,
+    /// The (T) and (V) obligations, reported rather than raised. Empty when the module and its entry carry none.
+    obligations: Vec<Error>,
+}
+
+/// A program elaborated, zonked and checked, with the erasure obligations elaboration decided over it reported rather than raised — see [`elaborate_and_zonk_program_reporting`].
+pub struct FinalizedProgram {
     pub module: Module,
-    /// The (T) and (V) obligations, reported rather than raised. Empty when the module carries none.
+    /// The entry the program closes with, stating the type it was judged at. `None` only where it was withheld for reaching an item the lowering could not read — see [`elaborate_and_zonk_program`].
+    pub entry: Option<Entrypoint>,
+    /// The (T) and (V) obligations, reported rather than raised. Empty when the program carries none.
     pub obligations: Vec<Error>,
 }
 
-/// Finalize an elaborated module and run the **soundness perimeter** over it.
+/// Finalize an elaborated module, and a program's entry beside it, and run the **soundness perimeter** over them.
 ///
 /// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: the checks were previously written out at each entry point, so "what does soundness depend on?" was answered by diffing two call sites, and a check added to one and not the other would have degraded the claim silently for every real compilation.
 ///
 /// The order is load-bearing, in three places:
 ///
-/// - `default_universes` then `zonk_module` come first, which is what makes everything after metavariable-free by construction — `zonk_module` errors on an unsolved hole, so no metavariable can later be solved to a partial or negatively-occurring term. `zonk_module` also runs `validate_universes`.
+/// - `default_universes` then `zonk_module` and `zonk_entry` come first, which is what makes everything after metavariable-free by construction — both error on an unsolved hole, so no metavariable can later be solved to a partial or negatively-occurring term. Both also validate universes.
 /// - [`Context::restore_budget`] precedes the passes because they reduce, and each has to spend on the same footing as an item rather than on whatever the last item left.
 /// - [`record_totality`] precedes both gates, which read the flags it stamps.
 ///
 /// `check_positivity` is independent of the rest and could sit anywhere after the zonk. `inherited` carries the classifications of a replayed prefix, whose own verdicts were settled when its archive was built; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
 fn finalize_and_check(
     context: &mut Context,
-    mut module: Module,
+    module: Module,
+    entry: Option<Entrypoint>,
     inherited: &BTreeMap<Global, Totality>,
-) -> Result<FinalizedModule, Error> {
+) -> Result<Finalized, Error> {
     curios_profile::profile!("finalize_and_check");
     let mut entry_terms = Vec::new();
-    if let Some(entry) = &module.entry {
+    if let Some(entry) = &entry {
         entry_terms.push(entry.body.clone());
         entry_terms.extend(entry.type_.clone());
     }
     let mut entry_terms = context
         .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
         .into_iter();
-    if let Some(entry) = &mut module.entry {
-        entry.body = entry_terms.next().expect("entry body was finalized");
-        if entry.type_.is_some() {
-            entry.type_ = Some(entry_terms.next().expect("entry type was finalized"));
-        }
-    }
+    let entry = entry.map(|entry| Entrypoint {
+        body: entry_terms.next().expect("entry body was finalized"),
+        type_: entry
+            .type_
+            .map(|_| entry_terms.next().expect("entry type was finalized")),
+    });
 
     // Written goals report as one complete batch before zonking: collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`collect_goal_reports`).
-    let goal_reports = collect_goal_reports(context, &module);
+    let goal_reports = collect_goal_reports(context, &module, entry.as_ref());
     if !goal_reports.is_empty() {
         return Err(Error::goals(goal_reports));
     }
 
     let mut module = zonk_module(context, &module)?;
+    let entry = entry
+        .map(|entry| zonk_entry(context, &module, &entry))
+        .transpose()?;
     context.restore_budget();
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
@@ -1508,33 +1525,35 @@ fn finalize_and_check(
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
     let mut zonked = Zonked::default();
     let obligations = [
-        check_type_totality(context, &module, inherited, &mut zonked),
+        check_type_totality(context, &module, entry.as_ref(), inherited, &mut zonked),
         check_proof_totality(context, &module, inherited, &mut zonked),
     ]
     .into_iter()
     .filter_map(Result::err)
     .collect();
 
-    Ok(FinalizedModule {
+    Ok(Finalized {
         module,
+        entry,
         obligations,
     })
 }
 
 /// The erasure-obligation verdicts, as one error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
-fn raise(outcome: FinalizedModule) -> Result<Module, Error> {
-    let FinalizedModule {
+fn raise(outcome: Finalized) -> Result<(Module, Option<Entrypoint>), Error> {
+    let Finalized {
         module,
+        entry,
         obligations,
     } = outcome;
     match obligations.is_empty() {
-        true => Ok(module),
+        true => Ok((module, entry)),
         false => Err(Error::batch(obligations)),
     }
 }
 
 /// What a run with refusals raises: every refusal in item order, then what finalizing the survivors said — their goal batch or a zonk refusal, or the erasure obligations of a module that finalized. The survivors are finalized anyway so that the goals beside the refusals are reported in the same run.
-fn refused(refusals: Vec<Error>, finalized: Result<FinalizedModule, Error>) -> Error {
+fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
     let mut errors = refusals;
     match finalized {
         Ok(finalized) => errors.extend(finalized.obligations),
@@ -1552,30 +1571,32 @@ pub fn elaborate_and_zonk_module(
     universe_floor: usize,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
-    grown(|| elaborate_and_zonk_module_within(context, module, metavar_floor, universe_floor))
+    grown(|| {
+        let suffix = elaborate_module_suffix(
+            context,
+            Established::nothing(),
+            module,
+            metavar_floor,
+            universe_floor,
+            None,
+        )?;
+        // Nothing is inherited: `module` is the whole unit, so every name it mentions it also defines.
+        let finalized = finalize_and_check(context, suffix.module, None, &BTreeMap::new());
+        if !suffix.refusals.is_empty() {
+            return Err(refused(suffix.refusals, finalized));
+        }
+
+        raise(finalized?).map(|(module, _)| module)
+    })
 }
 
-fn elaborate_and_zonk_module_within(
-    context: &mut Context,
-    module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
-) -> Result<Module, Error> {
-    let suffix = elaborate_module_suffix(
-        context,
-        Established::nothing(),
-        module,
-        metavar_floor,
-        universe_floor,
-        Tail::Written,
-    )?;
-    // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
-    let finalized = finalize_and_check(context, suffix.module, &BTreeMap::new());
-    if !suffix.refusals.is_empty() {
-        return Err(refused(suffix.refusals, finalized));
-    }
-
-    raise(finalized?)
+/// Which final term a program's elaboration checks: the entry it closes with, or a test program's tail synthesized over the unit's registered tests once its items are defined. A policy rather than an entry handed in, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
+#[derive(Debug, Clone, Copy)]
+pub enum Tail<'a> {
+    /// The program's own [`Entrypoint`], exactly as lowered.
+    Entry(&'a Entrypoint),
+    /// `Test/main([...])` over these tests, replacing the program's written entry; a unit with no tests gets `Test/main([])`.
+    Tests(&'a [ScheduledTest]),
 }
 
 /// Elaborate one [`Module`] against the units already established, then zonk and check it.
@@ -1585,95 +1606,121 @@ fn elaborate_and_zonk_module_within(
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
 /// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost. The one quantity that combines is the binder floor, which is a bound rather than a set and is taken as the maximum of the scope's and this unit's.
-/// Which final term a unit's elaboration checks: the entry the module carries, a test program's tail synthesized over the unit's registered tests once its items are defined, or both. A policy rather than an optional entry, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
-#[derive(Debug, Clone, Copy)]
-pub enum Tail<'a> {
-    /// The module's own [`Entrypoint`], exactly as lowered — or none, for a library.
-    Written,
-    /// `Test/main([...])` over these tests, replacing whatever entry the module carries; a unit with no tests gets `Test/main([])`.
-    Tests(&'a [ScheduledTest]),
-}
-
 pub fn elaborate_and_zonk_unit(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    tail: Tail<'_>,
 ) -> Result<Module, Error> {
-    raise(elaborate_and_zonk_unit_reporting(
+    let finalized = elaborate_and_zonk(
         context,
         established,
         module,
         metavar_floor,
         universe_floor,
-        tail,
-    )?)
+        None,
+    )?;
+    raise(finalized).map(|(module, _)| module)
 }
 
-/// [`elaborate_and_zonk_unit`] with the erasure obligations *reported* rather than raised.
+/// [`elaborate_and_zonk_unit`] for a program: `module` and the term `tail` closes it with, both elaborated, zonked and checked.
 ///
-/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no module, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_unit`].
-pub fn elaborate_and_zonk_unit_reporting(
+/// The entry comes back `None` only where it was withheld for reaching an item the lowering could not read. Withholding records no refusal — that is `recovery`'s decision for every dependent of a broken item — so the caller, which holds the broken items, reports them, and a program with none always has its entry.
+pub fn elaborate_and_zonk_program(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
     tail: Tail<'_>,
-) -> Result<FinalizedModule, Error> {
+) -> Result<(Module, Option<Entrypoint>), Error> {
+    raise(elaborate_and_zonk(
+        context,
+        established,
+        module,
+        metavar_floor,
+        universe_floor,
+        Some(tail),
+    )?)
+}
+
+/// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
+///
+/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no program, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
+pub fn elaborate_and_zonk_program_reporting(
+    context: &mut Context,
+    established: Established<'_>,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    tail: Tail<'_>,
+) -> Result<FinalizedProgram, Error> {
+    let Finalized {
+        module,
+        entry,
+        obligations,
+    } = elaborate_and_zonk(
+        context,
+        established,
+        module,
+        metavar_floor,
+        universe_floor,
+        Some(tail),
+    )?;
+
+    Ok(FinalizedProgram {
+        module,
+        entry,
+        obligations,
+    })
+}
+
+/// The walk every unit and program is elaborated by: the items, then the term `tail` closes a program with, finalized together.
+fn elaborate_and_zonk(
+    context: &mut Context,
+    established: Established<'_>,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    tail: Option<Tail<'_>>,
+) -> Result<Finalized, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        elaborate_and_zonk_unit_reporting_within(
+        let elaborated = elaborate_module_suffix(
             context,
             established,
             module,
             metavar_floor,
             universe_floor,
             tail,
-        )
-    })
-}
+        )?;
+        // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
+        let inherited = established.recorded_totality();
+        let finalized =
+            finalize_and_check(context, elaborated.module, elaborated.entry, &inherited);
+        if !elaborated.refusals.is_empty() {
+            return Err(refused(elaborated.refusals, finalized));
+        }
+        let Finalized {
+            module: suffix,
+            entry,
+            obligations,
+        } = finalized?;
 
-fn elaborate_and_zonk_unit_reporting_within(
-    context: &mut Context,
-    established: Established<'_>,
-    module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
-    tail: Tail<'_>,
-) -> Result<FinalizedModule, Error> {
-    let elaborated = elaborate_module_suffix(
-        context,
-        established,
-        module,
-        metavar_floor,
-        universe_floor,
-        tail,
-    )?;
-    // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
-    let inherited = established.recorded_totality();
-    let finalized = finalize_and_check(context, elaborated.module, &inherited);
-    if !elaborated.refusals.is_empty() {
-        return Err(refused(elaborated.refusals, finalized));
-    }
-    let FinalizedModule {
-        module: suffix,
-        obligations,
-    } = finalized?;
+        // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
+        //
+        // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
+        let module = Module {
+            binder_floor: established.binder_floor().max(suffix.binder_floor),
+            ..suffix
+        };
 
-    // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
-    //
-    // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
-    let module = Module {
-        binder_floor: established.binder_floor().max(suffix.binder_floor),
-        ..suffix
-    };
-
-    Ok(FinalizedModule {
-        module,
-        obligations,
+        Ok(Finalized {
+            module,
+            entry,
+            obligations,
+        })
     })
 }
 
@@ -1697,7 +1744,6 @@ pub fn elaborate_and_zonk_unit_over(
     recompile: Recompile<'_>,
     metavar_floor: usize,
     universe_floor: usize,
-    tail: Tail<'_>,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
     grown(|| {
@@ -1707,7 +1753,6 @@ pub fn elaborate_and_zonk_unit_over(
             recompile,
             metavar_floor,
             universe_floor,
-            tail,
         )
     })
 }
@@ -1718,7 +1763,6 @@ fn elaborate_and_zonk_unit_over_within(
     recompile: Recompile<'_>,
     metavar_floor: usize,
     universe_floor: usize,
-    tail: Tail<'_>,
 ) -> Result<Module, Error> {
     let mut scope = established.modules().to_vec();
     scope.push(recompile.reused);
@@ -1730,16 +1774,17 @@ fn elaborate_and_zonk_unit_over_within(
         recompile.closure,
         metavar_floor,
         universe_floor,
-        tail,
+        None,
     )?;
     let inherited = extended.recorded_totality();
-    let finalized = finalize_and_check(context, elaborated.module, &inherited);
+    let finalized = finalize_and_check(context, elaborated.module, None, &inherited);
     if !elaborated.refusals.is_empty() {
         return Err(refused(elaborated.refusals, finalized));
     }
-    let FinalizedModule {
+    let Finalized {
         module: closure,
         obligations,
+        ..
     } = finalized?;
 
     let mut module = reassemble(
@@ -1756,10 +1801,12 @@ fn elaborate_and_zonk_unit_over_within(
         "a reused item's verdict moved, so the closure was not closed"
     );
 
-    raise(FinalizedModule {
+    raise(Finalized {
         module,
+        entry: None,
         obligations,
     })
+    .map(|(module, _)| module)
 }
 
 /// The reused items and the re-elaborated closure as one module, in the lowering's item order, over the union of their registries.
@@ -1847,7 +1894,6 @@ fn reassemble(
             .cloned()
             .collect(),
         binder_floor: scope_floor.max(closure.binder_floor),
-        entry: closure.entry,
     }
 }
 

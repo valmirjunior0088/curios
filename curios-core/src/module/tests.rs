@@ -88,17 +88,13 @@ fn the_floor_clears_every_local_a_term_mentions() {
         tests: Vec::new(),
         // The understated claim the walk must not believe.
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(crate::Intrinsic::NatType),
-            type_: None,
-        }),
     };
 
     assert_eq!(derived_binder_floor(&module), 4_243);
 }
 
-/// A module carrying `body` in its one definition, and `entrypoint` as the program's own body.
-fn stored(body: Term, entrypoint: Term) -> Module {
+/// A module carrying `body` in its one definition.
+fn stored(body: Term) -> Module {
     Module {
         items: vec![Item::Let(Definition {
             name: Global::Authored(Qualifier::from(["held"])),
@@ -117,10 +113,6 @@ fn stored(body: Term, entrypoint: Term) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: entrypoint,
-            type_: None,
-        }),
     }
 }
 
@@ -129,10 +121,7 @@ fn stored(body: Term, entrypoint: Term) -> Module {
 /// Each of these is an identity minted by one compilation's counter. Stored, it is read by a compilation that mints from its own counter and would hand the same index out again — which aliases silently rather than crashing, and is why the seam that writes a unit refuses rather than reports.
 #[test]
 fn a_stored_unit_may_not_carry_a_free_local() {
-    let module = stored(
-        Term::free_var(&Free::local(7, Some("y"))),
-        Term::intrinsic(crate::Intrinsic::NatType),
-    );
+    let module = stored(Term::free_var(&Free::local(7, Some("y"))));
 
     assert_eq!(
         validate_stored_identities(&module),
@@ -145,10 +134,7 @@ fn a_stored_unit_may_not_carry_a_free_local() {
 
 #[test]
 fn a_stored_unit_may_not_carry_a_metavariable() {
-    let module = stored(
-        Term::hole(crate::MetavarId::from(3)),
-        Term::intrinsic(crate::Intrinsic::NatType),
-    );
+    let module = stored(Term::hole(crate::MetavarId::from(3)));
 
     assert_eq!(
         validate_stored_identities(&module),
@@ -158,32 +144,12 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
     );
 }
 
-/// Every position the floor walk covers is a position this one covers, because both read the same list. The entrypoint is the position most easily left out of a hand-written list: it belongs to no declared name, so it is the one a walk over `items` misses.
-#[test]
-fn a_stored_unit_may_not_carry_one_in_its_entrypoint() {
-    let module = stored(
-        Term::intrinsic(crate::Intrinsic::NatType),
-        Term::free_var(&Free::local(1, None)),
-    );
-
-    assert_eq!(
-        validate_stored_identities(&module),
-        Err(Positional::FreeLocal {
-            owner: None,
-            index: 1,
-        })
-    );
-}
-
 /// A witness declared here, scoped to a mount this module does not own.
 ///
 /// Before B1 there was nothing to check: an identity was a bare ordinal, so "unscoped" named no state a module could be in. What makes it checkable is that the ordinal now counts *within* a mount — and a module declaring a witness under somebody else's mount is claiming an ordinal in a space it does not own, which two compilations would both hand out.
 #[test]
 fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
-    let mut module = stored(
-        Term::intrinsic(crate::Intrinsic::NatType),
-        Term::intrinsic(crate::Intrinsic::NatType),
-    );
+    let mut module = stored(Term::intrinsic(crate::Intrinsic::NatType));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
     let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs", "Shape"]), 0));
     module.witnesses.insert(witness.clone());
@@ -199,13 +165,9 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
 /// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Module::witnesses` and deliberately not through the position walk.
 #[test]
 fn a_stored_unit_may_name_a_witness_another_mount_declared() {
-    let mut module = stored(
-        Term::free_var(&Free::Global(Global::Witness(WitnessId::new(
-            Qualifier::from(["theirs", "Shape"]),
-            3,
-        )))),
-        Term::intrinsic(crate::Intrinsic::NatType),
-    );
+    let mut module = stored(Term::free_var(&Free::Global(Global::Witness(
+        WitnessId::new(Qualifier::from(["theirs", "Shape"]), 3),
+    ))));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
 
     assert_eq!(validate_stored_identities(&module), Ok(()));
@@ -214,10 +176,9 @@ fn a_stored_unit_may_name_a_witness_another_mount_declared() {
 /// The control. A free *global* is how one definition names another and is in every stored unit there has ever been, so a check that refused it would refuse the prelude — which is what makes this the test that the refusals above are aimed at something narrower than "a free variable".
 #[test]
 fn a_stored_unit_may_carry_a_global_it_names() {
-    let module = stored(
-        Term::free_var(&Free::global(Qualifier::from(["elsewhere"]))),
-        Term::free_var(&Free::global(Qualifier::from(["elsewhere"]))),
-    );
+    let module = stored(Term::free_var(&Free::global(Qualifier::from([
+        "elsewhere",
+    ]))));
 
     assert_eq!(validate_stored_identities(&module), Ok(()));
 }
@@ -234,7 +195,6 @@ fn a_meta_free_module_projects_as_zonked() {
         witnesses: Default::default(),
         tests: Default::default(),
         binder_floor: 0,
-        entry: None,
     };
 
     assert!(Zonked::project(&module).is_ok());
@@ -254,7 +214,6 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
         witnesses: Default::default(),
         tests: Default::default(),
         binder_floor: 0,
-        entry: None,
     };
 
     let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");
@@ -278,7 +237,6 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
         witnesses: Default::default(),
         tests: Default::default(),
         binder_floor: 0,
-        entry: None,
     };
 
     let refusal = Zonked::project(&module).expect_err("the transient must refuse the projection");
@@ -297,7 +255,6 @@ fn over(items: Vec<Item>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: None,
     }
 }
 

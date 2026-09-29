@@ -12,7 +12,7 @@ use {
         Term, Zonked, derived_binder_floor,
     },
     curios_elab::{
-        Context, Established, Recompile, Resumed, Tail, elaborate_and_zonk_unit_over, erase_unit,
+        Context, Established, Recompile, Resumed, elaborate_and_zonk_unit_over, erase_unit,
     },
     curios_text::{UnitSource, into_core_unit},
     curios_unit::{Prefix, Uncertified, Unit},
@@ -38,9 +38,8 @@ pub fn compile_unit_over(
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let closure = invalidated(baseline, lowered.core());
-    // A reused item is exactly as the baseline elaborated it. The entry is never reused — it is the one item with no name to be reached by — and the seed table is the new lowering's, which the closure module carries whole.
+    // A reused item is exactly as the baseline elaborated it, and the seed table is the new lowering's, which the closure module carries whole.
     let reused = Module {
-        entry: None,
         universe_seeds: Vec::new(),
         ..baseline.core().restricted(|name| !closure.contains(name))
     };
@@ -61,7 +60,6 @@ pub fn compile_unit_over(
             },
             lowered.metavariable_floor(),
             lowered.universe_floor(),
-            Tail::Written,
         )
         .map_err(|error| {
             CompileError::of(&error, |member| {

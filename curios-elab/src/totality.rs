@@ -18,7 +18,8 @@ use {
     super::{Context, Error, is_prop, zonk},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term, Totality,
+        Definition, Enter, Entrypoint, Global, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
+        Totality,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -296,11 +297,12 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
+    entry: Option<&Entrypoint>,
     inherited: &BTreeMap<Global, Totality>,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_type_totality");
-    let mut positions = type_positions(module);
+    let mut positions = type_positions(module, entry);
     positions.extend(checked_type_positions(context, cache)?);
     report(context, module, &positions, inherited, Erased::Type)
 }

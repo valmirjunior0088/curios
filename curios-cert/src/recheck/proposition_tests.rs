@@ -157,7 +157,6 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     assert_eq!(

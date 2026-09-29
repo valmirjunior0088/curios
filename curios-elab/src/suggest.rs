@@ -16,7 +16,9 @@ use {
         zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
-    curios_core::{Apply, Free, Global, InductType, Item, Module, StructType, Subterm, Term, Var},
+    curios_core::{
+        Apply, Entrypoint, Free, Global, InductType, Item, Module, StructType, Subterm, Term, Var,
+    },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -34,19 +36,20 @@ struct Candidate {
     pool: usize,
 }
 
-/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope` and expected `goal_type`), the module (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
+/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope` and expected `goal_type`), the module and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
 pub(crate) fn suggest_candidates(
     context: &mut Context,
     telescope: &[(Free, Term)],
     goal_type: &Term,
     module: &Module,
+    entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Vec<Term> {
     context.with_frame(|context| {
         for (name, type_) in telescope {
             context.assume(name, type_);
         }
-        suggest_in_scope(context, telescope, goal_type, module, owner)
+        suggest_in_scope(context, telescope, goal_type, module, entry, owner)
     })
 }
 
@@ -56,6 +59,7 @@ fn suggest_in_scope(
     telescope: &[(Free, Term)],
     goal_type: &Term,
     module: &Module,
+    entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Vec<Term> {
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -107,7 +111,7 @@ fn suggest_in_scope(
             });
         }
     }
-    for (pool, (name, type_)) in module_pool(context, module, owner) {
+    for (pool, (name, type_)) in module_pool(context, module, entry, owner) {
         if attempts >= ATTEMPTS {
             break;
         }
@@ -141,6 +145,7 @@ fn suggest_in_scope(
 fn module_pool(
     context: &Context,
     module: &Module,
+    entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Vec<(usize, (Global, Term))> {
     let mut pool = Vec::new();
@@ -181,7 +186,7 @@ fn module_pool(
             }
         }
     }
-    if let Some(entry) = &module.entry {
+    if let Some(entry) = entry {
         collect(&entry.body);
     }
     for global in &referenced {

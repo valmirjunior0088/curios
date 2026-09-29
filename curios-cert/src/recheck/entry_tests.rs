@@ -3,25 +3,27 @@
 use {
     crate::{Globals, KernelError},
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Entrypoint, Intrinsic, Module, Nat, Term},
+    curios_core::{Entrypoint, Intrinsic, Module, Nat, Program, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 use super::test_support::*;
 
-/// A module holding nothing but `entry`.
-fn entry_module(entry: Entrypoint) -> Module {
-    Module {
-        mounts: Vec::new(),
-        items: Vec::new(),
-        universe_seeds: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-        binder_floor: 1_000,
-        entry: Some(entry),
+/// A program of nothing but `entry`.
+fn entry_module(entry: Entrypoint) -> Program {
+    Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: Vec::new(),
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::new(),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+            binder_floor: 1_000,
+        },
+        entry,
     }
 }
 

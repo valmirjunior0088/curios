@@ -259,7 +259,7 @@ pub fn typecheck_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<(curios_core::Module, Vec<String>), CompileError> {
+) -> Result<(curios_core::Program, Vec<String>), CompileError> {
     with_prelude(|prelude| {
         crate::typecheck_reporting(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })
@@ -272,7 +272,7 @@ pub fn typecheck_with_prelude_measured(
     loader: &curios_text::RootSource,
 ) -> Result<
     (
-        curios_core::Module,
+        curios_core::Program,
         Vec<String>,
         curios_core::Consumption,
         u64,
@@ -284,18 +284,18 @@ pub fn typecheck_with_prelude_measured(
     })
 }
 
-/// Put `module` to the independent kernel with the fixed prelude in scope, handing back the walk's own kernel for a measurement to read. See `curios_cert::recheck_module_measured`.
+/// Put `program` to the independent kernel with the fixed prelude in scope, handing back the walk's own kernel for a measurement to read. See `curios_cert::recheck_program_measured`.
 pub fn recheck_with_prelude_measured(
-    module: &curios_core::Zonked<curios_core::Module>,
+    program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
-    with_prelude(|prelude| crate::recheck_measured(module, budget, Prefix::over(prelude), &SYNTAX))
+    with_prelude(|prelude| crate::recheck_measured(program, budget, Prefix::over(prelude), &SYNTAX))
 }
 
-/// Put `module` to the independent kernel with the fixed prelude in scope. See [`recheck`].
+/// Put `program` to the independent kernel with the fixed prelude in scope. See [`recheck`].
 pub fn recheck_with_prelude(
-    module: &curios_core::Zonked<curios_core::Module>,
+    program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| recheck(module, budget, Prefix::over(prelude), &SYNTAX))
+    with_prelude(|prelude| recheck(program, budget, Prefix::over(prelude), &SYNTAX))
 }

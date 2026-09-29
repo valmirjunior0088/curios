@@ -246,7 +246,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);

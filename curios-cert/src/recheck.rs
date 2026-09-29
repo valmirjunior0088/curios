@@ -51,9 +51,10 @@ use {
     },
     curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
     curios_core::{
-        Bound, Certification, Certified, Definition, Free, Global, InductDecl, Item, Level,
-        MetavarId, Module, Reads, StructDecl, Term, Totality, UniverseContext, Zonked,
-        derived_binder_floor_outside, rewrite_universe_levels_scoped_shared, universe_metas,
+        Bound, Certification, Certified, Definition, Entrypoint, Free, Global, InductDecl, Item,
+        Level, MetavarId, Module, Program, Reads, StructDecl, Term, Totality, UniverseContext,
+        Zonked, derived_binder_floor_outside, rewrite_universe_levels_scoped_shared,
+        universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -202,7 +203,29 @@ pub fn certify_module(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Rechecked {
-    verdicts_from(Kernel::new(budget, syntax), module.as_module(), globals)
+    verdicts_from(
+        Kernel::new(budget, syntax),
+        module.as_module(),
+        None,
+        globals,
+    )
+}
+
+/// [`certify_module`] for a program: its module walked as any unit's, and the term it closes with checked against the type it states.
+pub fn certify_program(
+    program: &Zonked<Program>,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> Rechecked {
+    let program = program.as_program();
+
+    verdicts_from(
+        Kernel::new(budget, syntax),
+        &program.module,
+        Some(&program.entry),
+        globals,
+    )
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
@@ -217,6 +240,7 @@ pub fn recheck_module_verdicts_uncached(
     verdicts_from(
         Kernel::uncached(budget, syntax),
         module.as_module(),
+        None,
         globals,
     )
     .verdicts
@@ -234,7 +258,21 @@ pub fn recheck_module_measured(
     syntax: SyntaxRegistry,
 ) -> (Rechecked, Kernel) {
     let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(&mut kernel, module.as_module(), globals);
+    let rechecked = verdicts_into(&mut kernel, module.as_module(), None, globals);
+
+    (rechecked, kernel)
+}
+
+/// [`recheck_module_measured`] for a program — [`certify_program`]'s walk, with its kernel handed back.
+pub fn recheck_program_measured(
+    program: &Zonked<Program>,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> (Rechecked, Kernel) {
+    let program = program.as_program();
+    let mut kernel = Kernel::new(budget, syntax);
+    let rechecked = verdicts_into(&mut kernel, &program.module, Some(&program.entry), globals);
 
     (rechecked, kernel)
 }
@@ -342,15 +380,31 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
         })
 }
 
-fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Rechecked {
-    verdicts_into(&mut kernel, module, globals)
+fn verdicts_from(
+    mut kernel: Kernel,
+    module: &Module,
+    entry: Option<&Entrypoint>,
+    globals: &Globals,
+) -> Rechecked {
+    verdicts_into(&mut kernel, module, entry, globals)
 }
 
-fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Rechecked {
-    grown(|| verdicts_within(kernel, module, globals))
+fn verdicts_into(
+    kernel: &mut Kernel,
+    module: &Module,
+    entry: Option<&Entrypoint>,
+    globals: &Globals,
+) -> Rechecked {
+    grown(|| verdicts_within(kernel, module, entry, globals))
 }
 
-fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Rechecked {
+/// The walk: `module`'s items, then — for a program — the term `entry` closes it with.
+fn verdicts_within(
+    kernel: &mut Kernel,
+    module: &Module,
+    entry: Option<&Entrypoint>,
+    globals: &Globals,
+) -> Rechecked {
     curios_profile::profile!("recheck_module");
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
@@ -372,9 +426,15 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
     // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
     //
     // The mark is derived here rather than taken from `Module::binder_floor`, which nothing checks. The three are combined by maximum because a floor is a bound and not a verdict: widening can never refuse a module that was fine, so a position this walk fails to reach degrades to a carried value instead of to a capture.
-    kernel.set_local_floor(module.binder_floor.max(globals.binder_floor()).max(
-        derived_binder_floor_outside(module, |name| globals.in_scope(name)),
-    ));
+    kernel.set_local_floor(
+        module
+            .binder_floor
+            .max(globals.binder_floor())
+            .max(derived_binder_floor_outside(module, |name| {
+                globals.in_scope(name)
+            }))
+            .max(entry.map_or(0, Entrypoint::binder_floor)),
+    );
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
     let contexts = module
@@ -443,7 +503,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
         }
     }
     // The module's own entry stands under no scheme, so every parameter index in it escapes.
-    if let Some(entry) = &module.entry
+    if let Some(entry) = entry
         && let Some(error) = entry
             .type_
             .as_ref()
@@ -551,7 +611,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
     }
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
-    if let Some(entry) = &module.entry {
+    if let Some(entry) = entry {
         let checked = match &entry.type_ {
             Some(type_) => check_entrypoint(kernel, &entry.body, type_),
             None => Err(KernelError::UntypedEntry),

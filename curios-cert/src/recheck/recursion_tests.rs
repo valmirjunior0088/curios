@@ -90,7 +90,6 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: None,
     };
 
     assert_eq!(

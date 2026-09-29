@@ -38,11 +38,11 @@ pub fn declared_tests(
                 )
             })?;
             let units = crate::overlaid(units, overlay);
-            let module = Fold::new(budget, &units, cache)
+            let program = Fold::new(budget, &units, cache)
                 .check(&entrypoint, &loader, EntryTail::Authored, |_| {})?
                 .verdict?;
 
-            declared_test_paths(&module)
+            declared_test_paths(&program.module)
         }
     };
 

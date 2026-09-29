@@ -2,7 +2,7 @@
 //!
 //! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
 //!
-//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, the binder high-water mark a checker must seed above, and the entrypoint's own type and body.
+//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, and the binder high-water mark a checker must seed above. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
 //!
 //! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable is decided by each checker for itself, the elaborator's solver and the certifier's loop check; whether a definition terminates runs the size-change engine in `curios-analysis`, which both checkers drive. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
@@ -358,16 +358,24 @@ impl Item {
     }
 }
 
-/// A unit's entrypoint: the expression, with the type it is judged at. One type rather than two module fields, so a type without an entry — a type for no expression — is unspellable rather than asserted away; a unit that is not the entry simply carries no `Entry` at all.
+/// A program's entrypoint: the expression it closes with, with the type it is judged at. One type rather than two fields, so a type without an entry — a type for no expression — is unspellable rather than asserted away.
 #[derive(Debug, Clone, PartialEq)]
-#[curios_archive::archived]
 pub struct Entrypoint {
     pub body: Term,
-    /// The type the body is judged at. Before elaboration it is what whoever built the entry states — a written annotation, or the program contract a compile supplies — and absent only where nothing is stated, for elaboration to infer. Elaboration writes the type the body was judged at either way, so every stage after it reads the entry's type off the entry: [`Zonked::project`] refuses an entry without one, and [`Zonked::entry`] hands it back beside the body.
+    /// The type the body is judged at. Before elaboration it is what whoever built the entry states — a written annotation, or the program contract a compile supplies — and absent only where nothing is stated, for elaboration to infer. Elaboration writes the type the body was judged at either way, so every stage after it reads the entry's type off the entry: [`Zonked::project`] refuses a program whose entry states none, and [`Zonked::entry`] hands it back beside the body.
     pub type_: Option<Term>,
 }
 
-/// The whole program as a *flat* list of top-level `items`, with the optional [`Entrypoint`].
+/// A program: the unit it is compiled from, and the term it closes with.
+///
+/// The one compilation that has an entrypoint is the one that holds a `Program`; every other unit — a library, a prelude root, a recompile's reused items — is a [`Module`] alone. The entry used to be an optional field of every module, `None` for all of them but one, and each stage reading a module then had a case for the entry it almost never had. Carried beside the module instead, the entry exists exactly where a program is compiled, and a stored unit cannot hold one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Program {
+    pub module: Module,
+    pub entry: Entrypoint,
+}
+
+/// The whole of one unit as a *flat* list of top-level `items`, with the registries they are checked against.
 ///
 /// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that `text::into_core` used to fold the entire prelude into — the construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine were both O(N) in stack and overflowed at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
@@ -394,10 +402,6 @@ pub struct Module {
     ///
     /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
     pub binder_floor: usize,
-    /// The entrypoint, for the one unit in a compilation that has one.
-    ///
-    /// `None` is what makes a unit *not* the entry, and it is the only thing that does: a unit with no successors owns the entrypoint, and every other unit is a scope its successors are compiled against. The prelude used to store `Nat::Zero` here and have its build certify that dummy — a value standing in for "there is none", the same shape `RootId::Entry` had before it became a mount.
-    pub entry: Option<Entrypoint>,
 }
 
 impl Module {
@@ -459,10 +463,6 @@ impl Module {
             witnesses: self.witnesses.clone(),
             tests: self.tests.clone(),
             binder_floor: self.binder_floor,
-            entry: self.entry.as_ref().map(|entry| Entrypoint {
-                body: sharing.share(&entry.body),
-                type_: entry.type_.as_ref().map(|type_| sharing.share(type_)),
-            }),
         }
     }
 
@@ -575,7 +575,6 @@ impl Module {
                 .cloned()
                 .collect(),
             binder_floor: self.binder_floor,
-            entry: self.entry.clone(),
         }
     }
 
@@ -598,19 +597,27 @@ impl Module {
     }
 }
 
-impl fmt::Display for Module {
-    // Printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Module]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
-        let spelling = Rc::new(
+impl Module {
+    /// The spelling this module prints its terms in.
+    ///
+    /// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Module]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
+    fn spelling(&self) -> Rc<Spelling> {
+        Rc::new(
             Spelling::default().with_short_names(Rc::new(build_shorten(&self.module_symbols()))),
-        );
+        )
+    }
 
+    /// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
+    fn print_items(
+        &self,
+        formatter: &mut fmt::Formatter<'_>,
+        spelling: &Rc<Spelling>,
+    ) -> fmt::Result {
         for item in &self.items {
             match item {
                 Item::Let(def) => {
                     write!(formatter, "let ")?;
-                    def.print(formatter, &spelling)?;
+                    def.print(formatter, spelling)?;
                     writeln!(formatter, ";")?;
                 }
                 Item::Rec(rec) => {
@@ -619,7 +626,7 @@ impl fmt::Display for Module {
                         if index > 0 {
                             write!(formatter, "and ")?;
                         }
-                        def.print(formatter, &spelling)?;
+                        def.print(formatter, spelling)?;
                         write!(formatter, " ")?;
                     }
                     writeln!(formatter, ";")?;
@@ -627,11 +634,24 @@ impl fmt::Display for Module {
             }
         }
 
-        if let Some(entry) = &self.entry {
-            write!(formatter, "{}", entry.body.spelled(&spelling))?;
-            if let Some(type_) = &entry.type_ {
-                write!(formatter, "\n: {}", type_.spelled(&spelling))?;
-            }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Module {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.print_items(formatter, &self.spelling())
+    }
+}
+
+impl fmt::Display for Program {
+    /// The module's items, then the entry in the module's spelling, with the type it states beneath it.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spelling = self.module.spelling();
+        self.module.print_items(formatter, &spelling)?;
+        write!(formatter, "{}", self.entry.body.spelled(&spelling))?;
+        if let Some(type_) = &self.entry.type_ {
+            write!(formatter, "\n: {}", type_.spelled(&spelling))?;
         }
 
         Ok(())
@@ -646,6 +666,16 @@ impl Term {
 }
 
 impl Entrypoint {
+    /// One past the highest local binder index the entry's body or stated type mentions — what a walk judging the entry beside its module must seed above, as [`derived_binder_floor`] is for the module.
+    pub fn binder_floor(&self) -> usize {
+        std::iter::once(&self.body)
+            .chain(&self.type_)
+            .flat_map(Term::free_vars)
+            .filter_map(|free| free.local_index())
+            .max()
+            .map_or(0, |index| index as usize + 1)
+    }
+
     /// The top-level names the entry reaches, through its body and the type it states.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = term_reaches(&self.body);
@@ -852,13 +882,6 @@ fn module_positions(
     for (name, concept) in module.concepts.iter().filter(|(name, _)| !in_scope(name)) {
         visit(Some(name), &concept.params);
     }
-
-    if let Some(entry) = &module.entry {
-        if let Some(type_) = &entry.type_ {
-            visit(None, type_);
-        }
-        visit(None, &entry.body);
-    }
 }
 
 /// An identity a stored unit may not carry: one meaningful only in the compilation that assigned it.
@@ -975,34 +998,53 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
     highest.map_or(0, |index| index as usize + 1)
 }
 
-/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, the lowering-time `universe_seeds` are cleared, and an entrypoint states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
+/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, the lowering-time `universe_seeds` are cleared, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
 pub struct Zonked<T>(T);
 
-impl Zonked<Module> {
-    /// Validate that `module` is zonked and take evidence of it. The clone is cheap — items share their terms by `Rc`.
-    pub fn project(module: &Module) -> Result<Self, ZonkedRefusal> {
-        match zonked_refusal(module) {
+/// What [`Zonked`] can be evidence of: something elaboration and zonk are answerable for, which names the first place it is not finished.
+pub trait Zonkable: Clone {
+    /// The first place elaboration-only syntax survives — or, for a program, where its entry states no type — or `None` when there is none.
+    fn unfinished(&self) -> Option<String>;
+}
+
+impl Zonkable for Module {
+    fn unfinished(&self) -> Option<String> {
+        zonked_refusal(self)
+    }
+}
+
+impl Zonkable for Program {
+    /// The module's first unfinished place, then the entry's: a program is finished when its module is and its entry states the type it was judged at, meta-free.
+    fn unfinished(&self) -> Option<String> {
+        zonked_refusal(&self.module).or_else(|| {
+            let unfinished = |term: &Term| term.has_metavar() || term.has_transient();
+            match &self.entry.type_ {
+                None => Some("the entrypoint states no type it was judged at".to_owned()),
+                Some(type_) if unfinished(&self.entry.body) || unfinished(type_) => {
+                    Some("elaboration-only syntax survives in the entrypoint".to_owned())
+                }
+                Some(_) => None,
+            }
+        })
+    }
+}
+
+impl<T: Zonkable> Zonked<T> {
+    /// Validate that `value` is zonked and take evidence of it. The clone is cheap — items share their terms by `Rc`.
+    pub fn project(value: &T) -> Result<Self, ZonkedRefusal> {
+        match value.unfinished() {
             Some(place) => Err(ZonkedRefusal { place }),
-            None => Ok(Self(module.clone())),
+            None => Ok(Self(value.clone())),
         }
     }
+}
 
+impl Zonked<Module> {
     pub fn as_module(&self) -> &Module {
         &self.0
-    }
-
-    /// The entrypoint's body and the type it was judged at — `None` for a unit that is not the entry.
-    pub fn entry(&self) -> Option<(&Term, &Term)> {
-        self.0.entry.as_ref().map(|entry| {
-            let type_ = entry
-                .type_
-                .as_ref()
-                .expect("projection refuses an entry that states no type");
-            (&entry.body, type_)
-        })
     }
 
     pub fn into_module(self) -> Module {
@@ -1020,6 +1062,27 @@ impl Zonked<Module> {
     }
 }
 
+impl Zonked<Program> {
+    pub fn as_program(&self) -> &Program {
+        &self.0
+    }
+
+    /// The program's module, with the evidence its projection established. The clone is cheap — items share their terms by `Rc`.
+    pub fn module(&self) -> Zonked<Module> {
+        Zonked(self.0.module.clone())
+    }
+
+    /// The entrypoint's body and the type it was judged at.
+    pub fn entry(&self) -> (&Term, &Term) {
+        let entry = &self.0.entry;
+        let type_ = entry
+            .type_
+            .as_ref()
+            .expect("projection refuses an entry that states no type");
+        (&entry.body, type_)
+    }
+}
+
 /// Why [`Zonked::project`] refused: the first term-bearing place where a metavariable or a transient survived, or the uncleared seeds.
 #[derive(Debug)]
 pub struct ZonkedRefusal {
@@ -1032,7 +1095,7 @@ impl fmt::Display for ZonkedRefusal {
     }
 }
 
-/// The four term-bearing places elaboration and zonk are answerable for — a definition's type and body, the entrypoint and the type elaboration wrote beside it, and the two registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
+/// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
     fn unfinished(term: &Term) -> bool {
         term.has_metavar() || term.has_transient()
@@ -1057,14 +1120,6 @@ fn zonked_refusal(module: &Module) -> Option<String> {
                 "elaboration-only syntax survives in {}",
                 item.describe()
             ));
-        }
-    }
-    if let Some(entry) = &module.entry {
-        let Some(type_) = &entry.type_ else {
-            return Some("the entrypoint states no type it was judged at".to_owned());
-        };
-        if unfinished(&entry.body) || unfinished(type_) {
-            return Some("elaboration-only syntax survives in the entrypoint".to_owned());
         }
     }
     for (name, decl) in &module.induct_decls {
