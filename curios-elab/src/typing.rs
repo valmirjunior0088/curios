@@ -978,6 +978,8 @@ fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, 
 /// A scrutinee's applied spine taken to weak-head normal form one application layer at a time, or `None` when it is not an application spine or nothing moved.
 ///
 /// Bounded rather than reduced: it opens layers and stops, so it never forces an argument. That is what makes it usable at *registration*, where reducing would cost the guard its subject's evaluation.
+///
+/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to ends the walk where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong reached `Telescope::open`'s assertion as a panic.
 fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let mut current = term.clone();
 
@@ -992,6 +994,9 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
         };
 
         let args = apply.params().collect::<Vec<_>>();
+        if telescope.len() != args.len() {
+            return Ok((step > 0).then_some(current));
+        }
         current = telescope.open(&args);
     }
 

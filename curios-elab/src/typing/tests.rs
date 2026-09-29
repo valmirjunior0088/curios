@@ -188,3 +188,27 @@ fn both_checkers_decide_non_informativeness_alike() {
         "no type in the table is informative",
     );
 }
+
+/// A guard's resolved spelling opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does: a two-parameter lambda applied to one argument stops the walk where it stands, where opening it reached `Telescope::open`'s assertion as a panic. The control is the same lambda saturated, whose layer opens.
+#[test]
+fn a_layer_whose_arguments_do_not_saturate_its_lambda_stops_the_walk() {
+    let mut context = Context::with_default_budget(SYNTAX);
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let (x, y, a) = (
+        context.fresh(Some("x")),
+        context.fresh(Some("y")),
+        context.fresh(Some("a")),
+    );
+    let first = Term::func(
+        [(x.clone(), nat.clone()), (y.clone(), nat)],
+        Term::free_var(&x),
+    );
+
+    let short = Term::apply(first.clone(), [Term::free_var(&a)]);
+    let walked = super::spine_whnf(&mut context, &short).expect("the walk reduces heads only");
+    assert_eq!(walked, None);
+
+    let saturated = Term::apply(first, [Term::free_var(&a), Term::free_var(&a)]);
+    let walked = super::spine_whnf(&mut context, &saturated).expect("the walk reduces heads only");
+    assert_eq!(walked, Some(Term::free_var(&a)));
+}

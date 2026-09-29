@@ -83,7 +83,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
   - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
-- [ ] `spine_whnf` checks a spine's length against the arity it opens, where a mismatch reaches `Telescope::open`'s assertion as a panic today; no program is known to reach it
+- [x] `spine_whnf` opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does, so a spine that does not match its lambda ends the walk instead of reaching `Telescope::open`'s assertion
 
 ### The certifier
 
