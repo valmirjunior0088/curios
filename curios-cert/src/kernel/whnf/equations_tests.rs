@@ -3,7 +3,8 @@
 use {
     crate::{Kernel, whnf},
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Cost, Intrinsic, Reducer, Term},
+    curios_core::{Cost, Free, Intrinsic, Reducer, Term},
+    curios_utilities::Qualifier,
 };
 
 use super::test_support::*;
@@ -330,6 +331,48 @@ fn a_local_free_term_is_never_refined() {
 
     assert_eq!(inside, Ok(nat(7)), "the equation is not this term's");
     assert_eq!(outside, Ok(nat(7)), "and nothing remembered says otherwise");
+}
+
+/// A closed term remembered before an arm answers inside it as a kernel with no memo would, which is the precondition of `whnf_within` asking the memo before the equations.
+///
+/// The memo's declaration-lived tables hold only local-free terms, and no equation is recorded under a local-free spelling (`records_case_equation`), so an entry can never stand in for an answer an equation in force would give. The fixture asks for exactly that: `konst(1)` reduced outside, then an arm that would equate `konst(1)` with `0` were the equation recorded, and the same term asked inside it — of a caching kernel and an uncaching one, which must agree.
+///
+/// Mutation-checked: recording the local-free equation while keeping the order has the caching kernel answer `7` from the entry it stored outside, and the uncaching one `0` from the equation, and the assertion sees them part.
+#[test]
+fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
+    let sequence = |kernel: &mut Kernel| {
+        // A global, as a top-level definition is: a name `binder` mints is a local, and a term mentioning one is local-bearing however closed it reads.
+        let konst = Free::global(Qualifier::from(["konst"]));
+        let x = binder(3, "x");
+        kernel.define(
+            &konst,
+            &Term::func_type([(x.clone(), nat_type())], nat_type()),
+            &Term::func([(x.clone(), nat_type())], nat(7)),
+            &monomorphic(),
+        );
+        let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
+
+        let before = whnf(kernel, closed.clone());
+        let inside = kernel.scoped(|kernel| {
+            kernel
+                .refine(closed.clone(), nat(0))
+                .expect("asking to record a local-free equation is not an error");
+            whnf(kernel, closed.clone())
+        });
+
+        [before, inside]
+    };
+
+    let cached = sequence(&mut kernel());
+    let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
+    uncached.set_local_floor(1_000);
+
+    assert_eq!(cached, [Ok(nat(7)), Ok(nat(7))]);
+    assert_eq!(
+        sequence(&mut uncached),
+        cached,
+        "the memo changed an answer inside the arm"
+    );
 }
 
 /// A reduct that *drops* a local is still reached, which is the direction `Scope::could_reduce_to` must not be strict in.
