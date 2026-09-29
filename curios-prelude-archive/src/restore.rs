@@ -5,13 +5,11 @@ use {
     std::{cell::LazyCell, sync::OnceLock},
 };
 
-// From `.artifacts/` beside this crate, where the build script files them.
+// From `OUT_DIR`, where the build script files them.
 //
 // Two images rather than one paired file, because each is framed as a store slot is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
-const SYS_BYTES: &[u8] =
-    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/.artifacts/sys.rkyv"));
-const STD_BYTES: &[u8] =
-    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/.artifacts/std.rkyv"));
+const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
+const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
 
 /// The prelude's roots in dependency order, as the build script folded them: `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
 const ROOTS: [(&str, &[u8]); 2] = [("sys", SYS_BYTES), ("std", STD_BYTES)];

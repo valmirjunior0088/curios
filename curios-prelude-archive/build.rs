@@ -70,18 +70,13 @@ fn build() {
         sys.arena(),
     );
 
-    // Filed beside this crate, under `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes. The crate includes them from the same paths, so there is one image per unit in one place.
-    let artifacts = manifest.join(".artifacts");
-    fs::create_dir_all(&artifacts).expect("failed to create the archive's .artifacts directory");
-    // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
-    let sys_digest = write_image(&artifacts, "sys", &sys, sys_modules.reads(), Vec::new());
-    write_image(
-        &artifacts,
-        "std",
-        &std,
-        std_modules.reads(),
-        vec![sys_digest],
+    // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the crate that includes them is their one reader: nothing outside the build opens an image.
+    let out = PathBuf::from(
+        env::var_os("OUT_DIR").expect("Cargo runs a build script with `OUT_DIR` set"),
     );
+    // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
+    let sys_digest = write_image(&out, "sys", &sys, sys_modules.reads(), Vec::new());
+    write_image(&out, "std", &std, std_modules.reads(), vec![sys_digest]);
 }
 
 /// Resolve and lower one prelude root against the roots already lowered, with every invariant the lowered form is trusted to satisfy asserted here.
@@ -205,7 +200,7 @@ fn archive(
 ///
 /// The record is the compiler's own account of the tree the root was built from, by canonical path on the machine that built it. That is the intended meaning: a checkout claiming `/std` is the tree the archive came from exactly when the paths agree, and a compiler moved to another machine or built from another checkout records paths no other tree has.
 fn write_image(
-    artifacts: &Path,
+    directory: &Path,
     root: &str,
     image: &Uncertified,
     reads: Vec<(PathBuf, Rc<Source>)>,
@@ -221,7 +216,7 @@ fn write_image(
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 
-    let path = artifacts.join(format!("{root}.rkyv"));
+    let path = directory.join(format!("{root}.rkyv"));
     println!("/{root} archived to {} bytes", first.len());
     fs::write(&path, framed(&recorded, &first))
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));

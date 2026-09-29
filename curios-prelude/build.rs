@@ -2,7 +2,7 @@
 //!
 //! `curios-prelude-archive` produced an image. This restores it, walks every item with the independent kernel, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 //!
-//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `.artifacts/certification.rkyv` beside this crate, with which the crate certifies the units it restores.
+//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `certification.rkyv` under `OUT_DIR`, with which the crate certifies the units it restores.
 
 use {
     curios_cert::{Globals, Rechecked, certify_module},
@@ -73,21 +73,15 @@ fn certify() {
     });
 }
 
-/// File the roots' records, in the fold's order, where the crate's own restoration reads them.
-///
-/// Under `.artifacts/` rather than `OUT_DIR`, as the images are: a build product outliving the build that made it lives beside its owner.
+/// File the roots' records, in the fold's order, where the crate's own restoration reads them: under `OUT_DIR`, as the images are, since the crate is their one reader.
 fn file_certifications(certifications: &Vec<Certification>) {
-    let artifacts = PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR")
-            .expect("Cargo runs a build script with `CARGO_MANIFEST_DIR` set"),
-    )
-    .join(".artifacts");
-    fs::create_dir_all(&artifacts)
-        .unwrap_or_else(|error| panic!("failed to create {}: {error}", artifacts.display()));
+    let out = PathBuf::from(
+        std::env::var_os("OUT_DIR").expect("Cargo runs a build script with `OUT_DIR` set"),
+    );
 
     let bytes = curios_archive::to_bytes(certifications)
         .unwrap_or_else(|error| panic!("the prelude's certification failed to serialize: {error}"));
-    let path = artifacts.join("certification.rkyv");
+    let path = out.join("certification.rkyv");
     fs::write(&path, &*bytes)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }

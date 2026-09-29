@@ -13,11 +13,8 @@ use {
     std::cell::LazyCell,
 };
 
-/// The certifier's record of each root, in the fold's order — filed by this crate's build script as it certified the images, and read from `.artifacts/` beside the crate as the images are read from beside theirs.
-const CERTIFICATION_BYTES: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/.artifacts/certification.rkyv"
-));
+/// The certifier's record of each root, in the fold's order — filed under `OUT_DIR` by this crate's build script as it certified the images.
+const CERTIFICATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/certification.rkyv"));
 
 thread_local! {
     /// The restored fixed prelude, each root's unit carrying the record its certification filed. Per thread for the reason the archive's own restoration is: a `Unit` is not `Send`.
