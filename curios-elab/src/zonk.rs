@@ -179,7 +179,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     )
 }
 
-/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item and registry entry, yielding a meta-free module for `erase`. A program's entry is zonked beside it by [`zonk_entry`].
+/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item and registry entry, yielding a meta-free module for `erase`. A program's entry is zonked beside it by `zonk_entry`.
 ///
 /// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the registries are zonked only once every item has, since a refusal among the items stands on its own.
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {

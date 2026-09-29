@@ -16,7 +16,7 @@
 //!
 //! # Discovery, grading, and closure are three things
 //!
-//! Finding a group's calls, grading each against its caller's parameters, and closing the graded calls into a verdict are separate here. [`grade`] reads one call's arguments under a [`SizeContext`] — what the arms enclosing it established — and [`decide`] closes a group's calls and demands a descent on every cycle. [`group_totality`] is one way to feed them: the discovery walk, which traverses member bodies for calls on its own. A walk that meets calls another way, while typing the bodies, grades and closes them with the same two functions, so the two differ only in how calls are found.
+//! Finding a group's calls, grading each against its caller's parameters, and closing the graded calls into a verdict are separate here. [`grade()`] reads one call's arguments under a [`SizeContext`] — what the arms enclosing it established — and [`decide`] closes a group's calls and demands a descent on every cycle. [`group_totality`] is one way to feed them: the discovery walk, which traverses member bodies for calls on its own. A walk that meets calls another way, while typing the bodies, grades and closes them with the same two functions, so the two differ only in how calls are found.
 
 mod guard;
 use guard::*;
@@ -125,7 +125,7 @@ impl Member {
     }
 }
 
-/// One member body's traversal: it finds the recursive calls, and has [`grade`] grade each under the context its arms built.
+/// One member body's traversal: it finds the recursive calls, and has [`grade()`] grade each under the context its arms built.
 struct Walk<'a, E: Env> {
     env: &'a mut E,
     group: &'a RecGroup,
