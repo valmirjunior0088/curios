@@ -86,8 +86,7 @@ let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat
             | 0 => match lt end
             | _ + 1 => match le end
             end)
-    | kp + 1 =>
-        Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(Nat/Lt/le_succ_of_lt(m, n, lt), le)))
+    | kp + 1 => Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(lt, le)))
     end;
 
 --- `<` on `Nat` is well-founded.

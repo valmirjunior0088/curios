@@ -46,7 +46,7 @@ let split(n: Nat) -> Split(n) =
                 Nat/Le/antisym(
                     Byte/to_nat(prev.low),
                     255,
-                    Nat/Lt/le_succ_of_lt(Byte/to_nat(prev.low), 256, Bool/True/qed()),
+                    Bool/True/qed(),
                     Nat/Lt/le_of_not_lt(Byte/to_nat(prev.low), 255, Bool/True/qed()));
             Split {
                 high = prev.high + 1,

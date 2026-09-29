@@ -329,11 +329,7 @@ let begins_below(
             | false =>
                 Eq/subst(
                     (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/Le/antisym(
-                        mp,
-                        n,
-                        Nat/Lt/le_of_not_lt(n, mp, Bool/True/qed()),
-                        Nat/Lt/le_succ_of_lt(n, mp + 1, inside)),
+                    Nat/Le/antisym(mp, n, Nat/Lt/le_of_not_lt(n, mp, Bool/True/qed()), inside),
                     Bool/True/qed())
             end
         end

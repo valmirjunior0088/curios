@@ -194,8 +194,7 @@ pub let balanced(
             | lo + 1 < hi =>
                 let mid = (lo + hi) / 2;
                 let apart: Nat/Le(lo + 1, hi) = Nat/Lt/le_of_lt(lo + 1, hi, Bool/True/qed());
-                let twice: Nat/Lt(lo + hi, hi * 2) =
-                    Nat/Lt/lt_of_le_succ(lo + hi, hi * 2, Nat/Le/add_mono_l(hi, apart));
+                let twice: Nat/Lt(lo + hi, hi * 2) = Nat/Le/add_mono_l(hi, apart);
                 let below: Nat/Lt(mid, hi) = Nat/div_mod/div_lt_of_lt_mul(hi, lo + hi, 2, twice);
                 combine(
                     go(

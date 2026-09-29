@@ -204,19 +204,8 @@ pub let prev(
     | j + 1 =>
         let back = floor(s, j, Nat/Le/trans(Nat/Le/add_r(j, 1), at.within));
         let inside =
-            Nat/Lt/lt_of_le_succ(
-                back.at.offset,
-                Bytes/len(s.bytes),
-                Nat/Le/trans(
-                    @back.at.offset + 1,
-                    @j + 1,
-                    @Bytes/len(s.bytes),
-                    back.below,
-                    at.within));
-        (
-            char = next(s, back.at, @inside).char,
-            past = back.at,
-            progress = Nat/Lt/lt_of_le_succ(back.at.offset, j + 1, back.below))
+            Nat/Le/trans(@back.at.offset + 1, @j + 1, @Bytes/len(s.bytes), back.below, at.within);
+        (char = next(s, back.at, @inside).char, past = back.at, progress = back.below)
     end;
 
 --- The character before `at`, the position before it and the proof that it lies before, or `none` at the start of `s`.

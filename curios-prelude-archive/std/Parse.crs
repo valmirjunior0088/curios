@@ -240,7 +240,7 @@ let step(
     at: At(Bound, input),
     ok: Nat/Lt(at.offset, Bytes/len(input)),
 ) -> At(Bound, input) =
-    At { offset = at.offset + 1, holds = Nat/Lt/le_succ_of_lt(at.offset, Bytes/len(input), ok) };
+    At { offset = at.offset + 1, holds = ok };
 
 --- The next byte; declines at the end of the input.
 pub let any_byte: Parse(Byte) =
@@ -340,11 +340,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                         | none() => (taken, at_cur, true)
                         | some(ok) =>
                             match pred(Bytes/get(input, at.offset + taken, @ok))
-                            | true =>
-                                (
-                                    taken + 1,
-                                    Nat/Lt/le_succ_of_lt(at.offset + taken, Bytes/len(input), ok),
-                                    false)
+                            | true => (taken + 1, ok, false)
                             | false => (taken, at_cur, true)
                             end
                         end

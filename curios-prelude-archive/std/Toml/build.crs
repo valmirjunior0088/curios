@@ -42,7 +42,7 @@ let replace_at(
     [
         ..List/slice(@Toml, items, 0, index, @Nat/Lt/le_of_lt(index, count, ok)),
         value,
-        ..List/drop(@Toml, items, index + 1, @Nat/Lt/le_succ_of_lt(index, count, ok))];
+        ..List/drop(@Toml, items, index + 1, @ok)];
 
 let may_extend(side: Map(Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
     match Map/get(side, kp)

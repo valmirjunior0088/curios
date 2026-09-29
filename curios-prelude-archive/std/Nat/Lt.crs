@@ -89,11 +89,11 @@ pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b
 
 --- A strict bound composed with a loose one stays strict.
 pub let lt_of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
-    lt_of_le_succ(a, c, Le/trans(le_succ_of_lt(a, b, p), q));
+    Le/trans(p, q);
 
 --- A loose bound composed with a strict one stays strict.
 pub let lt_of_le_lt(a: Nat, b: Nat, c: Nat, p: Nat/Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
-    lt_of_le_succ(a, c, Le/trans(@a + 1, @b + 1, @c, p, le_succ_of_lt(b, c, q)));
+    Le/trans(@a + 1, @b + 1, @c, p, q);
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 ---
@@ -106,4 +106,4 @@ pub let add_mul_lt(
     pa: Lt(a, m),
     pb: Lt(b, n),
 ) -> Lt(a * n + b, m * n) =
-    lt_of_lt_le(a * n + b, a * n + n, m * n, pb, Le/mul_mono_r(n, le_succ_of_lt(a, m, pa)));
+    lt_of_lt_le(a * n + b, a * n + n, m * n, pb, Le/mul_mono_r(n, pa));

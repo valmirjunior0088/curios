@@ -48,7 +48,7 @@ pub let le_div_of_mul_le(
                 d,
                 Bool/True/qed(),
                 Bool/True/qed()),
-            Le/trans(Le/mul_mono_r(d, Lt/le_succ_of_lt(Nat/div(n, d, @ok), m, Bool/True/qed())), p))
+            Le/trans(Le/mul_mono_r(@Nat/div(n, d, @ok) + 1, @m, d, Bool/True/qed()), p))
         end
     end;
 
