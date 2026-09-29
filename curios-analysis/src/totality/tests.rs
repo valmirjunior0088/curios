@@ -52,6 +52,15 @@ impl Env for Probe {
     }
 }
 
+/// One graded call, from member `caller` to member `callee`.
+fn call(caller: usize, callee: usize, matrix: Matrix) -> Call {
+    Call {
+        caller,
+        callee,
+        matrix,
+    }
+}
+
 /// Build a matrix from a row-major grid of size grades.
 fn matrix(rows: &[&[Size]]) -> Matrix {
     let columns = rows.first().map_or(0, |row| row.len());
@@ -235,13 +244,13 @@ fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
     ];
     let calls = refined
         .iter()
-        .map(|matrix| (0usize, 0usize, matrix.clone()))
+        .map(|matrix| call(0, 0, matrix.clone()))
         .collect::<Vec<_>>();
     let closed = close(calls).expect("the closure stays small");
     assert!(
         closed
             .iter()
-            .all(|(_, _, matrix)| !matrix.is_idempotent() || matrix.descends())
+            .all(|call| !call.matrix.is_idempotent() || call.matrix.descends())
     );
 
     // Without refinement the two nil arms grade their own argument `Unknown`, and the composite is an idempotent matrix with nothing on its diagonal.
@@ -276,49 +285,27 @@ fn mutual_recursion_is_caught_only_by_the_closure() {
     // Neither leg is a cycle on its own; only `a → b → a` is, and it descends.
     let forward = matrix(&[&[LESS]]);
     let backward = matrix(&[&[SAME]]);
-    let closed = close(vec![(0usize, 1usize, forward), (1usize, 0usize, backward)])
-        .expect("the closure stays small");
+    let closed =
+        close(vec![call(0, 1, forward), call(1, 0, backward)]).expect("the closure stays small");
 
     let cycles = closed
         .iter()
-        .filter(|(from, to, matrix)| from == to && matrix.is_idempotent())
+        .filter(|call| call.caller == call.callee && call.matrix.is_idempotent())
         .collect::<Vec<_>>();
     assert!(!cycles.is_empty());
-    assert!(cycles.iter().all(|(_, _, matrix)| matrix.descends()));
+    assert!(cycles.iter().all(|call| call.matrix.descends()));
 }
 
 #[test]
 fn a_peeled_prefix_keeps_its_binder_tail() {
     // The `/big_nat/add/raw_trimmed` pattern: `b[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
     let mut kernel = Probe::default();
-    let f = Free::local(1, Some("f"));
-    let rec = Term::rec(
-        vec![(
-            f.clone(),
-            Term::intrinsic(Intrinsic::NatType),
-            Term::free_var(&f),
-        )],
-        Term::free_var(&f),
-    );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
-        panic!("the fixture changed shape");
-    };
-
     let h = Free::local(2, Some("h"));
     let t = Free::local(3, Some("t"));
-    let arities = vec![0];
-    let mut walk = Walk {
+    let context = SizeContext::default();
+    let mut grader = Grader {
         env: &mut kernel,
-        group,
-        arities: &arities,
-        caller: 0,
-        params: &[],
-        refined: BTreeMap::new(),
-        nonzero: BTreeSet::new(),
-        payloads: BTreeSet::new(),
-        entered: Vec::new(),
-        scopes: Vec::new(),
-        calls: Vec::new(),
+        context: &context,
     };
 
     let single = Term::intrinsic(Intrinsic::BinAppend {
@@ -331,7 +318,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         operands: vec![single, Term::free_var(&t)],
     });
 
-    let shape = walk.shape_of(&cons);
+    let shape = grader.shape_of(&cons);
     assert!(
         shape.same_as(&Shape::elem_run(
             Carriers::Bin,
@@ -378,37 +365,21 @@ fn a_deeply_nested_body_walks_without_native_recursion() {
         arities: &arities,
         caller: 0,
         params: &params,
-        refined: BTreeMap::new(),
-        nonzero: BTreeSet::new(),
-        payloads: BTreeSet::new(),
+        context: SizeContext::default(),
         entered: Vec::new(),
-        scopes: Vec::new(),
         calls: Vec::new(),
     };
     walk.walk(&body);
 
     // The call passes the parameter itself, so it grades `Same` — a grade only a walk that reached the bottom of the nest can record.
     assert_eq!(walk.calls.len(), 1);
-    assert_eq!(walk.calls[0].2.entry(0, 0), SAME);
+    assert_eq!(walk.calls[0].matrix.entry(0, 0), SAME);
 }
 
 #[test]
 fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     // The accessibility shape: `a` refined by an arm to `intro(w, below)`, and the call argument `below(y, r)`. A function-typed payload is a branching node whose children are its applications, so the application reads as the payload it came from and grades below the constructor for the reason the payload does. The control is the same application with `below` bound anywhere but a constructor pattern — outside the set, the head is a stuck binder the reduce-nothing environment cannot move, and the argument stays unread.
     let mut kernel = Probe::default();
-    let f = Free::local(1, Some("f"));
-    let rec = Term::rec(
-        vec![(
-            f.clone(),
-            Term::intrinsic(Intrinsic::NatType),
-            Term::free_var(&f),
-        )],
-        Term::free_var(&f),
-    );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
-        panic!("the fixture changed shape");
-    };
-
     let a = Free::local(2, Some("a"));
     let w = Free::local(3, Some("w"));
     let below = Free::local(4, Some("below"));
@@ -418,29 +389,24 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
         Tag::Variant(Atom::from("intro")),
         vec![Shape::Atom(w), Shape::Atom(below.clone())],
     );
-    let params = [a.clone()];
-    let arities = vec![1];
-    let mut walk = Walk {
-        env: &mut kernel,
-        group,
-        arities: &arities,
-        caller: 0,
-        params: &params,
-        refined: BTreeMap::from([(a.clone(), intro)]),
-        nonzero: BTreeSet::new(),
-        payloads: BTreeSet::from([below.clone()]),
-        entered: Vec::new(),
-        scopes: Vec::new(),
-        calls: Vec::new(),
-    };
+    let mut context = SizeContext::default();
+    context.open(Some((a.clone(), intro)), None, vec![below.clone()]);
     let applied = Term::apply(
         Term::free_var(&below),
         [Term::free_var(&y), Term::free_var(&r)],
     );
 
-    let parameter = walk.expand(&a, EXPAND_FUEL);
-    assert_eq!(walk.shape_of(&applied).against(&parameter), LESS);
+    let mut grader = Grader {
+        env: &mut kernel,
+        context: &context,
+    };
+    let parameter = grader.expand(&a, EXPAND_FUEL);
+    assert_eq!(grader.shape_of(&applied).against(&parameter), LESS);
 
-    walk.payloads.clear();
-    assert_eq!(walk.shape_of(&applied).against(&parameter), Size::Unknown);
+    context.payloads.clear();
+    let mut grader = Grader {
+        env: &mut kernel,
+        context: &context,
+    };
+    assert_eq!(grader.shape_of(&applied).against(&parameter), Size::Unknown);
 }

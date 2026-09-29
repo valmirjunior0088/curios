@@ -13,49 +13,40 @@
 //! # Shared, not duplicated
 //!
 //! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The kernel's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
+//!
+//! # Discovery, grading, and closure are three things
+//!
+//! Finding a group's calls, grading each against its caller's parameters, and closing the graded calls into a verdict are separate here. [`grade`] reads one call's arguments under a [`SizeContext`] — what the arms enclosing it established — and [`decide`] closes a group's calls and demands a descent on every cycle. [`group_totality`] is one way to feed them: the discovery walk, which traverses member bodies for calls on its own. A walk that meets calls another way, while typing the bodies, grades and closes them with the same two functions, so the two differ only in how calls are found.
 
 mod guard;
 use guard::*;
 
 mod matrix;
-use matrix::*;
+pub use matrix::*;
 
 mod shape;
 use shape::*;
+
+mod grade;
+pub use grade::*;
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Env, forceable},
+    crate::Env,
     curios_core::{
-        Advance, Arity, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType,
-        Instance, Intrinsic, Layer, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two,
-        Variant,
+        Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Instance,
+        Intrinsic, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
-    std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Whether shape reading may force `term`.
+/// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
 ///
-/// [`forceable`] answers the two halves every analysis on this seam shares — whether the head could move, and whether the term is closed enough to reduce. This adds totality's own, and it is the whole of what replaced a step count: **a `rec` head is refused.** The group under analysis is the one whose termination is being decided, and a group already in scope may be legitimately partial — `check_rec_group` demands descent only where a member is erased, so `/std/Async`'s scheduler and `/std/Json/decode` classify `Partial` and are still defined. Unfolding either can spin, and refusing makes the read stop on its own terms instead of by exhausting the reduction budget.
-///
-/// Measured inert: across the corpus not one of 288 load-bearing unfoldings had a `rec` head, so this refuses nothing that was being read and is a determinism guarantee rather than a restriction.
-fn readable(term: &Term) -> bool {
-    forceable(term) && !matches!(&**term, Subterm::Rec(_))
-}
-
-/// How deep a refinement chain may be expanded.
-///
-/// Each nested `match` on a binder introduced by an outer arm adds one level — `raw_trimmed` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
-const EXPAND_FUEL: usize = 16;
-
-/// Whether every recursive call path in `group` descends.
-///
-/// This is the whole of size-change termination as this compiler applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
+/// This is the whole of size-change termination as the elaborator applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result — [`decide`]. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
 pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
     curios_profile::profile!("group_totality");
     let mut members = Vec::new();
@@ -72,28 +63,38 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
             arities: &arities,
             caller: index,
             params: &member.params,
-            refined: BTreeMap::new(),
-            nonzero: BTreeSet::new(),
-            payloads: BTreeSet::new(),
+            context: SizeContext::default(),
             entered: Vec::new(),
-            scopes: Vec::new(),
             calls: Vec::new(),
         };
         walk.walk(&member.body);
         calls.extend(walk.calls);
     }
 
+    decide(calls)
+}
+
+/// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease.
+///
+/// The closure and the verdict are shared by every walk that finds a group's calls, whichever walk met them.
+pub fn decide(calls: Vec<Call>) -> Totality {
     match close(calls) {
-        Some(closed) => match closed
-            .iter()
-            .all(|(from, to, matrix)| from != to || !matrix.is_idempotent() || matrix.descends())
-        {
+        Some(closed) => match closed.iter().all(|call| {
+            call.caller != call.callee || !call.matrix.is_idempotent() || call.matrix.descends()
+        }) {
             true => Totality::Total,
             false => Totality::Partial,
         },
         // The closure outgrew its bound; claim nothing.
         None => Totality::Partial,
     }
+}
+
+/// Each member's parameter count, as its leading lambdas bind them — the columns a call to it is graded over.
+pub fn member_arities<E: Env>(env: &mut E, group: &RecGroup) -> Vec<usize> {
+    (0..group.length())
+        .map(|index| Member::of(env, group, index).params.len())
+        .collect()
 }
 
 /// One member of a group, opened for analysis: the parameter binders the size order is measured against, and the body under them.
@@ -123,353 +124,40 @@ impl Member {
     }
 }
 
-/// One member body's traversal: it finds the recursive calls and grades them.
+/// One member body's traversal: it finds the recursive calls, and has [`grade`] grade each under the context its arms built.
 struct Walk<'a, E: Env> {
     env: &'a mut E,
     group: &'a RecGroup,
     arities: &'a Vec<usize>,
     caller: usize,
     params: &'a [Free],
-    /// What each binder has been refined to by the arms enclosing the position being walked. Entries are added on the way into an arm and removed on the way out, so a refinement never escapes the branch that established it.
-    refined: BTreeMap<Free, Shape>,
-    /// The binders an enclosing arm has established are not zero, entered and left exactly like `refined`.
-    ///
-    /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted while looping forever at zero.
-    nonzero: BTreeSet<Free>,
-    /// The binders the enclosing inductive arms bound as constructor payloads, entered and left exactly like `refined`.
-    ///
-    /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as it always did.
-    payloads: BTreeSet<Free>,
-    /// The nested groups whose bodies the walk is currently inside, entered and left exactly like `refined`. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
+    /// What the arms enclosing the position being walked have established, entered on the way into an arm and left on the way out.
+    context: SizeContext,
+    /// The nested groups whose bodies the walk is currently inside, entered and left with them. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
-    /// One entry per scope [`Walk::enter`] has opened and [`Walk::exit`] has yet to close.
-    scopes: Vec<Undo>,
-    calls: Vec<(usize, usize, Matrix)>,
-}
-
-/// What one [`Walk::enter`] changed, so its [`Walk::exit`] puts back exactly that and nothing else.
-///
-/// Recorded on the way in rather than recomputed on the way out, because only the entering side can tell the difference that matters: a binder an outer arm had already refined, or already knew nonzero, must be left standing as that outer arm left it.
-struct Undo {
-    /// The refined binder and what it stood for before, `None` when the scope refined nothing.
-    refined: Option<(Free, Option<Shape>)>,
-    /// The binder this scope added to `nonzero`, `None` when it added none — an already-known binder included.
-    nonzero: Option<Free>,
-    /// The binders this scope added to `payloads`, empty when it added none.
-    payloads: Vec<Free>,
-    /// Whether this scope pushed a group onto `entered`.
-    entered: bool,
+    calls: Vec<Call>,
 }
 
 impl<E: Env> Walk<'_, E> {
-    /// Record a call to member `callee` with `arguments`, grading each argument against each of the caller's parameters.
+    /// Record a call to member `callee` with `arguments`, graded against the caller's parameters under what the enclosing arms established.
     fn call(&mut self, callee: usize, arguments: &[Term]) {
-        let columns = self.arities[callee];
-        let mut matrix = Matrix::unknown(self.params.len(), columns);
-
-        let expanded = self
-            .params
-            .iter()
-            .map(|param| self.expand(param, EXPAND_FUEL))
-            .collect::<Vec<_>>();
-
-        for (column, argument) in arguments.iter().enumerate().take(columns) {
-            let shape = self.shape_of(argument);
-            for (row, parameter) in expanded.iter().enumerate() {
-                matrix.set(row, column, shape.against(parameter));
-            }
-        }
-
-        self.calls.push((self.caller, callee, matrix));
+        let call = grade(
+            self.env,
+            &self.context,
+            self.caller,
+            self.params,
+            callee,
+            self.arities[callee],
+            arguments,
+        );
+        self.calls.push(call);
     }
 
-    /// The value a binder currently stands for, following the refinements the enclosing arms established.
-    fn expand(&self, var: &Free, fuel: usize) -> Shape {
-        if fuel == 0 {
-            return Shape::Atom(var.clone());
-        }
-        match self.refined.get(var) {
-            None => Shape::Atom(var.clone()),
-            Some(shape) => self.expand_shape(shape, fuel - 1),
-        }
-    }
-
-    fn expand_shape(&self, shape: &Shape, fuel: usize) -> Shape {
-        match shape {
-            Shape::Atom(var) => self.expand(var, fuel),
-            // Already relative to a binder; expanding that binder would only lose the identity the claim is stated against.
-            Shape::Smaller(below) => Shape::Smaller(below.clone()),
-            Shape::Opaque => Shape::Opaque,
-            Shape::Node(tag, kids) => Shape::Node(
-                tag.clone(),
-                kids.iter()
-                    .map(|kid| self.expand_shape(kid, fuel))
-                    .collect(),
-            ),
-            // Rebuilt through the constructors so a tail that expands into a run of the same carrier merges back into one canonical run.
-            Shape::UnaryRun { count, tail } => {
-                Shape::unary_run(count.clone(), self.expand_shape(tail, fuel))
-            }
-            Shape::ElemRun {
-                carrier,
-                heads,
-                tail,
-            } => Shape::elem_run(
-                *carrier,
-                heads
-                    .iter()
-                    .map(|head| self.expand_shape(head, fuel))
-                    .collect(),
-                self.expand_shape(tail, fuel),
-            ),
-        }
-    }
-
-    /// Read a term as a constructor tree.
-    ///
-    /// A constructor, a free-monoid layer, and a recognised arithmetic decrease read directly; everything else goes to [`Walk::unfolded_shape`], which sees through the definitions standing between a term and its shape. That fallback carries most of what the size order knows — an operator resolves a witness, so even `n - 1` reaches here as a projection — and it is not bounded by a step count; see [`readable`] for what bounds it instead.
-    fn shape_of(&mut self, term: &Term) -> Shape {
-        match &**term {
-            Subterm::Var(var) => {
-                if let Some(free) = var.as_free() {
-                    return self.expand(free, EXPAND_FUEL);
-                }
-                Shape::Opaque
-            }
-
-            Subterm::Variant(Variant { tag, payload, .. }) => {
-                let kids = payload
-                    .iter()
-                    .map(|argument| self.shape_of(argument))
-                    .collect();
-                Shape::Node(Tag::Variant(tag.clone()), kids)
-            }
-
-            Subterm::Struct(Struct { name, fields, .. }) => {
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
-                Shape::Node(Tag::Struct(name.clone()), kids)
-            }
-
-            Subterm::Tuple(Tuple { fields, .. }) => {
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
-                Shape::Node(Tag::Tuple, kids)
-            }
-
-            Subterm::Intrinsic(Intrinsic::Bool(value)) => {
-                Shape::Node(Tag::Bool(*value), Vec::new())
-            }
-
-            Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term),
-
-            Subterm::Intrinsic(
-                Intrinsic::Bin(grain, _)
-                | Intrinsic::BinAppend { grain, .. }
-                | Intrinsic::BinConcat { grain, .. }
-                | Intrinsic::BinSlice { grain, .. },
-            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
-
-            Subterm::Intrinsic(
-                Intrinsic::List { .. }
-                | Intrinsic::ListAppend { .. }
-                | Intrinsic::ListConcat { .. }
-                | Intrinsic::ListSlice { .. },
-            ) => self.monoid_shape(FreeMonoid::List, term),
-
-            // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
-            Subterm::Intrinsic(Intrinsic::NatDiv {
-                dividend: left,
-                divisor: right,
-                ..
-            }) => self.arithmetic_shape(left, right, &Natural::from(2usize)),
-
-            Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
-                self.arithmetic_shape(left, right, &Natural::from(1usize))
-            }
-
-            // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding, as every application did before.
-            Subterm::Apply(_) => {
-                let (head, _) = flatten(term);
-                if let Subterm::Var(var) = &*head
-                    && let Some(free) = var.as_free()
-                    && self.payloads.contains(free)
-                {
-                    return self.expand(free, EXPAND_FUEL);
-                }
-                self.unfolded_shape(term)
-            }
-
-            _ => self.unfolded_shape(term),
-        }
-    }
-
-    /// Read `left op right` as a decrease on the binder `left` stands for.
-    ///
-    /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread — which is what this term read as before the rule existed.
-    fn arithmetic_shape(&mut self, left: &Term, right: &Term, least: &Natural) -> Shape {
-        let Some(divisor) = right.as_nat().and_then(|nat| nat.to_natural()) else {
-            return Shape::Opaque;
-        };
-        if divisor < *least {
-            return Shape::Opaque;
-        }
-        match self.shape_of(left) {
-            // `n` itself, and an arm has ruled out zero.
-            Shape::Atom(atom) if self.nonzero.contains(&atom) => Shape::Smaller(atom),
-            // Already below `below`, and these operations never grow: dividing or subtracting again keeps it below.
-            Shape::Smaller(below) => Shape::Smaller(below),
-            _ => Shape::Opaque,
-        }
-    }
-
-    /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
-    ///
-    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
-    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Shape {
-        let carriers = match carrier {
-            FreeMonoid::Unary => {
-                return match &**term {
-                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
-                        Shape::Node(Tag::Empty(Carriers::Unary), Vec::new())
-                    }
-                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
-                        Shape::unary_run(spine.clone(), self.shape_of(inner))
-                    }
-                    _ => self.unfolded_shape(term),
-                };
-            }
-            FreeMonoid::Bin(_) => Carriers::Bin,
-            FreeMonoid::List => Carriers::List,
-        };
-
-        let mut heads = Vec::new();
-        let mut rest = Term::unwrap_or_clone(term.clone());
-        loop {
-            match carrier.uncons(rest) {
-                Layer::Empty => {
-                    break Shape::elem_run(
-                        carriers,
-                        heads,
-                        Shape::Node(Tag::Empty(carriers), Vec::new()),
-                    );
-                }
-                Layer::Cons { head, tail } => {
-                    if let Some(head) = head {
-                        heads.push(self.shape_of(&head));
-                    }
-                    rest = Term::unwrap_or_clone(tail);
-                }
-                Layer::Stuck(stuck) => {
-                    let stuck = Term::from(stuck);
-                    let tail = match heads.is_empty() {
-                        // Nothing peeled: the whole term is what stuck, and dispatching it back through `shape_of` would land right here again — force it instead.
-                        true => self.unfolded_shape(&stuck),
-                        // The remainder after a peeled prefix is an arbitrary term — a binder, another literal spelling, an application — and gets the full dispatch, exactly as the tail of every peeled layer did when the layers were nested nodes.
-                        false => self.shape_of(&stuck),
-                    };
-                    break Shape::elem_run(carriers, heads, tail);
-                }
-            }
-        }
-    }
-
-    /// Unfold weak-head steps until the term reads as a shape, or stops moving.
-    ///
-    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/big_nat/mul/small` and `/std/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
-    ///
-    /// There is no step count. Termination rests on what this pass is handed rather than on a budget: `check_rec_group` types every member body *before* asking for a verdict, positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the kernel's own reduction budget (`kernel::whnf`) remains the backstop for anything that still fails to settle.
-    ///
-    /// Removing the count changed no verdict in the corpus, and the reason is worth keeping: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call and the count bounded *re-entries* here rather than unfoldings. Measured, 286 of 288 load-bearing unfoldings re-entered once and none more than twice, against a bound of three. What the removal buys is a stated condition in place of a number, not reach.
-    fn unfolded_shape(&mut self, term: &Term) -> Shape {
-        if !readable(term) {
-            return Shape::Opaque;
-        }
-        let Ok(reduced) = self.env.force(term) else {
-            return Shape::Opaque;
-        };
-        if reduced == *term {
-            return Shape::Opaque;
-        }
-        self.shape_of(&reduced)
-    }
-
-    /// Read a boolean scrutinee as a comparison against a literal.
-    ///
-    /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Walk::shape_of`] uses is what exposes the intrinsic under both.
-    fn guard(&mut self, head: &Term) -> Option<Guard> {
-        if let Some(guard) = Guard::read(head) {
-            return Some(guard);
-        }
-        if !readable(head) {
-            return None;
-        }
-        let reduced = self.env.force(head).ok()?;
-        if reduced == *head {
-            return None;
-        }
-        self.guard(&reduced)
-    }
-
-    /// Apply what one scope establishes, recording its [`Undo`].
-    ///
-    /// The four kinds of scoped knowledge open together because they close together: a boolean arm refines its scrutinee *and* rules out zero, an inductive arm refines its scrutinee *and* binds payloads, and one bracket is one thing to keep balanced instead of four.
-    fn enter(
-        &mut self,
-        refine: Option<(Free, Shape)>,
-        nonzero: Option<Free>,
-        payloads: Vec<Free>,
-        entered: Option<RecGroup>,
-    ) {
-        let refined = refine.map(|(binder, shape)| {
-            let previous = self.refined.insert(binder.clone(), shape);
-            (binder, previous)
-        });
-        let nonzero = match nonzero {
-            Some(atom) if self.nonzero.insert(atom.clone()) => Some(atom),
-            _ => None,
-        };
-        let payloads = payloads
-            .into_iter()
-            .filter(|binder| self.payloads.insert(binder.clone()))
-            .collect();
-        let entered = match entered {
-            Some(group) => {
-                self.entered.push(group);
-                true
-            }
-            None => false,
-        };
-
-        self.scopes.push(Undo {
-            refined,
-            nonzero,
-            payloads,
-            entered,
-        });
-    }
-
-    /// Close the innermost open scope, putting back exactly what its [`Walk::enter`] recorded.
-    fn exit(&mut self) {
-        let undo = self
-            .scopes
-            .pop()
-            .expect("every exit is bracketed with its own enter");
-
-        if let Some((binder, previous)) = undo.refined {
-            match previous {
-                Some(previous) => self.refined.insert(binder, previous),
-                None => self.refined.remove(&binder),
-            };
-        }
-        if let Some(atom) = undo.nonzero {
-            self.nonzero.remove(&atom);
-        }
-        for binder in undo.payloads {
-            self.payloads.remove(&binder);
-        }
-        if undo.entered {
-            self.entered
-                .pop()
-                .expect("an entered group is left by its own Exit");
+    /// The reader of terms as sizes, under the context this walk has built so far.
+    fn grader(&mut self) -> Grader<'_, E> {
+        Grader {
+            env: self.env,
+            context: &self.context,
         }
     }
 
@@ -514,9 +202,8 @@ impl<E: Env> Walk<'_, E> {
         self.walk_term(body);
 
         assert!(
-            self.scopes.is_empty(),
-            "the walk left a scope open: {} unmatched enter(s)",
-            self.scopes.len()
+            self.context.is_balanced() && self.entered.is_empty(),
+            "the walk left a scope open"
         );
     }
 
@@ -537,9 +224,9 @@ impl<E: Env> Walk<'_, E> {
         payloads: Vec<Free>,
         body: &Term,
     ) {
-        self.enter(refine, nonzero, payloads, None);
+        self.context.open(refine, nonzero, payloads);
         self.walk_term(body);
-        self.exit();
+        self.context.exit();
     }
 
     /// Walk each of `terms`, in order.
@@ -615,6 +302,7 @@ impl<E: Env> Walk<'_, E> {
             } => {
                 for (taken, body) in [(false, false_case), (true, true_case)] {
                     let atom = self
+                        .grader()
                         .guard(head)
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
@@ -626,7 +314,7 @@ impl<E: Env> Walk<'_, E> {
             Cases::Switch { cases, default } => {
                 for (value, body) in cases {
                     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
-                    let shape = self.shape_of(&literal);
+                    let shape = self.grader().shape_of(&literal);
                     self.scoped(refine(scrutinee.clone(), shape), None, Vec::new(), body);
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
@@ -805,15 +493,15 @@ impl<E: Env> Walk<'_, E> {
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
             //
-            // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left exactly like `refined`, so a group met twice in sibling positions is still walked under each one's refinements.
+            // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left around the bodies, so a group met twice in sibling positions is still walked under each one's refinements.
             Subterm::Rec(Rec { group, tail }) => {
                 if !self.entered.contains(group) {
-                    self.enter(None, None, Vec::new(), Some(group.clone()));
+                    self.entered.push(group.clone());
                     // One body at a time: each materializes a projection carrying the whole group, so holding them together would hold every member at once.
                     for index in 0..group.length() {
                         self.walk_term(&group.member_body(index));
                     }
-                    self.exit();
+                    self.entered.pop();
                 }
                 self.open_many_walk(tail);
             }
