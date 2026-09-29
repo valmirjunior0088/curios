@@ -22,6 +22,7 @@ fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
 #[test]
 fn a_tuple_literal_synthesizes_when_its_expected_type_never_gains_structure() {
     let source = r#"
+        use /std/{Nat, Bool};
         let y : ? = (1, true);
         /std/print("ok\n")
         "#;
@@ -37,6 +38,7 @@ fn a_tuple_literal_synthesizes_when_its_expected_type_never_gains_structure() {
 #[test]
 fn a_one_field_tuple_literal_synthesizes_against_a_written_goal() {
     let source = r#"
+        use /std/{Nat};
         let y : ? = (1,);
         /std/print("ok\n")
         "#;
@@ -161,6 +163,7 @@ fn a_labeled_literal_synthesizes_with_its_labels() {
 #[test]
 fn a_synthesized_labeled_product_reports_its_labels() {
     let source = r#"
+        use /std/{Nat, Bool};
         let y : ? = (a = 1, b = true);
         /std/print("ok\n")
         "#;

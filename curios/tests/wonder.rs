@@ -327,7 +327,7 @@ fn the_server_publishes_from_the_buffer_and_clears() {
         "{published}"
     );
     assert!(
-        published.contains(r#""message":"goal `?`\n  ? : Nat""#),
+        published.contains(r#""message":"goal `?`\n  ? : /std/Nat""#),
         "{published}"
     );
     assert!(published.contains(r#""severity":3"#), "{published}");
