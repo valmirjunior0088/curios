@@ -25,6 +25,9 @@ pub use division::*;
 mod euclid;
 pub use euclid::*;
 
+mod law;
+pub use law::*;
+
 mod measure;
 pub use measure::*;
 

@@ -19,6 +19,8 @@ pub enum Carrier {
     Float,
     /// A packed sequence of bits or bytes.
     Packed(Grain),
+    /// A sequence of elements.
+    List,
 }
 
 /// An operation this crate's reasoning gives a meaning to.
@@ -40,6 +42,12 @@ pub enum Operation {
     Unequal,
     Less,
     AtMost,
+    /// Two words juxtaposed.
+    Concat,
+    /// A word's length, a natural.
+    Length,
+    /// A word with one element after it.
+    Append,
     /// A value of `from` as a value of the carrier the operation is declared at — a byte's value as a natural, `0..=255` by its carrier; a natural as an integer, ℕ → ℤ; a run regrouped at the other grain. Which conversions undo which is [`Operation::undoes`].
     Conversion {
         from: Carrier,
