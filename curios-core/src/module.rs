@@ -39,26 +39,63 @@ impl Totality {
     }
 }
 
-/// What the certifier concluded about the definitions one of its walks judged: each one's totality, closed over everything it mentions.
+/// What the certifier concluded about the definitions one of its walks judged: each one's totality, closed over everything it mentions, and what judging it read of other items.
 ///
 /// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, where it used to read the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Certification {
-    totality: BTreeMap<Global, Totality>,
+    certified: BTreeMap<Global, Certified>,
+}
+
+/// What the certifier concluded about one definition it judged.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Certified {
+    /// Whether the definition terminates, closed over everything it mentions.
+    pub totality: Totality,
+    /// What judging it read of other items. A recursive group is judged as one item, so each of its members holds the group's reads; a declaration's registry entry is accepted as part of its type former, whose entry holds what that acceptance read.
+    pub reads: Reads,
+}
+
+/// The items one judgment read, and how: its type, or its body.
+///
+/// Recorded where the kernel consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: the name-keyed unfold memo is consulted only after the body it remembers has been asked for. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
+///
+/// A definition's classification also reads the verdict of every name it mentions, which the totality closure runs over. That is not a third kind: typing a mention reads its type, so each such verdict read is already a signature read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Reads {
+    /// The items whose type, universe scheme or registry entry was read.
+    pub signatures: BTreeSet<Global>,
+    /// The definitions whose body was asked for.
+    pub bodies: BTreeSet<Global>,
+}
+
+impl Reads {
+    /// These reads with `other`'s beside them.
+    pub fn extend(&mut self, other: Reads) {
+        self.signatures.extend(other.signatures);
+        self.bodies.extend(other.bodies);
+    }
 }
 
 impl Certification {
-    /// A record classifying each of `definitions`.
-    pub fn of(definitions: impl IntoIterator<Item = (Global, Totality)>) -> Self {
+    /// A record of each of `definitions`.
+    pub fn of(definitions: impl IntoIterator<Item = (Global, Certified)>) -> Self {
         Self {
-            totality: definitions.into_iter().collect(),
+            certified: definitions.into_iter().collect(),
         }
     }
 
     /// The certifier's classification of `name`, when this record covers it.
     pub fn totality(&self, name: &Global) -> Option<Totality> {
-        self.totality.get(name).copied()
+        self.certified.get(name).map(|certified| certified.totality)
+    }
+
+    /// What judging `name` read of other items, when this record covers it.
+    pub fn reads(&self, name: &Global) -> Option<&Reads> {
+        self.certified.get(name).map(|certified| &certified.reads)
     }
 
     /// Whether this record classifies every definition `module` holds.
@@ -67,20 +104,22 @@ impl Certification {
             .items
             .iter()
             .flat_map(Item::definitions)
-            .all(|definition| self.totality.contains_key(&definition.name))
+            .all(|definition| self.certified.contains_key(&definition.name))
     }
 
     /// Every classification this record holds.
     pub fn iter(&self) -> impl Iterator<Item = (&Global, Totality)> {
-        self.totality
+        self.certified
             .iter()
-            .map(|(name, totality)| (name, *totality))
+            .map(|(name, certified)| (name, certified.totality))
     }
 
-    /// This record with `other`'s classifications beside its own, its own winning where both classify a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's.
+    /// This record with `other`'s entries beside its own, its own winning where both hold a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's.
     pub fn extended(mut self, other: &Certification) -> Self {
-        for (name, totality) in other.iter() {
-            self.totality.entry(name.clone()).or_insert(totality);
+        for (name, certified) in &other.certified {
+            self.certified
+                .entry(name.clone())
+                .or_insert_with(|| certified.clone());
         }
         self
     }

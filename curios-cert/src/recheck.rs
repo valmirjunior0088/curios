@@ -27,6 +27,8 @@ mod plicity_tests;
 #[cfg(test)]
 mod proposition_tests;
 #[cfg(test)]
+mod reads_tests;
+#[cfg(test)]
 mod recursion_tests;
 #[cfg(test)]
 mod registry_tests;
@@ -47,12 +49,12 @@ use {
     },
     curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
     curios_core::{
-        Bound, Certification, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module,
-        StructDecl, Term, Totality, UniverseContext, Zonked, derived_binder_floor_outside,
-        rewrite_universe_levels_scoped_shared, universe_metas,
+        Bound, Certification, Certified, Definition, Free, Global, InductDecl, Item, Level,
+        MetavarId, Module, Reads, StructDecl, Term, Totality, UniverseContext, Zonked,
+        derived_binder_floor_outside, rewrite_universe_levels_scoped_shared, universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
-    std::collections::{BTreeSet, HashMap, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
 /// `module`'s items in dependency order: every item after the ones it mentions.
@@ -464,6 +466,10 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
         kernel.declare_struct(name, declaration);
     }
 
+    // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
+    let mut reads: BTreeMap<Global, Reads> = BTreeMap::new();
+    kernel.take_reads();
+
     for index in dependency_order(module, &judged) {
         let item = &module.items[index];
         // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the kernel is read beside its cost in the elaborator by the same key.
@@ -526,6 +532,12 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
             }
         }
 
+        // A group is judged as one item, so each of its members read what the group did.
+        let item_reads = kernel.take_reads();
+        for name in item.declared_names() {
+            reads.insert(name.clone(), item_reads.clone());
+        }
+
         let (drained, failure) = kernel.take_checked();
         positions.push((item_name.clone(), drained));
         if let Some(error) = failure {
@@ -543,6 +555,8 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
         verdicts.push(Verdict { name: None, error });
     }
 
+    // The entrypoint is no definition, and nothing reads what it read: a later unit never names it.
+    kernel.take_reads();
     let (drained, failure) = kernel.take_checked();
     positions.push((None, drained));
     if let Some(error) = failure {
@@ -551,19 +565,6 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
     let (partial, disagreements) = partial_definitions(kernel, module, globals);
-    // The record of what this walk concluded, taken from the closed set the obligations read — every judged definition, so a later walk reading it needs nothing of this one's.
-    let certification = Certification::of(judged.iter().flat_map(|&index| {
-        module.items[index]
-            .definitions()
-            .into_iter()
-            .map(|definition| {
-                let totality = match partial.contains(&definition.name) {
-                    true => Totality::Partial,
-                    false => Totality::Total,
-                };
-                (definition.name, totality)
-            })
-    }));
     for (name, error) in disagreements {
         verdicts.push(Verdict {
             name: Some(name),
@@ -609,6 +610,15 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
             },
         });
     }
+    // Positivity is one judgment over the whole declaration set, so what it read belongs to no one item's record.
+    kernel.take_reads();
+    // A registry entry is accepted as part of its type former, which every declaration has under its own name, so what accepting the entry read joins what typing the former did.
+    let mut accepted = |kernel: &mut Kernel, name: &Global| {
+        let declaration_reads = kernel.take_reads();
+        if let Some(reads) = reads.get_mut(name) {
+            reads.extend(declaration_reads);
+        }
+    };
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_induct_decl(kernel, declaration) {
             verdicts.push(Verdict {
@@ -616,6 +626,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
                 error,
             });
         }
+        accepted(kernel, name);
     }
     for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_struct_decl(kernel, declaration) {
@@ -624,7 +635,23 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
                 error,
             });
         }
+        accepted(kernel, name);
     }
+
+    // The record of what this walk concluded, taken from the closed set the obligations read and the reads each judgment made — every judged definition, so a later walk reading it needs nothing of this one's.
+    let certification = Certification::of(
+        judged
+            .iter()
+            .flat_map(|&index| module.items[index].definitions())
+            .map(|definition| {
+                let totality = match partial.contains(&definition.name) {
+                    true => Totality::Partial,
+                    false => Totality::Total,
+                };
+                let reads = reads.remove(&definition.name).unwrap_or_default();
+                (definition.name, Certified { totality, reads })
+            }),
+    );
 
     Rechecked {
         verdicts,

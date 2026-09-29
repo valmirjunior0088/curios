@@ -4,11 +4,12 @@
 
 use {
     super::*,
+    curios_core::{Certification, Global},
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
     curios_text::Entrypoint,
-    curios_utilities::test_support::Temporary,
-    std::{collections::BTreeMap, path::Path},
+    curios_utilities::{Qualifier, test_support::Temporary},
+    std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
 
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
@@ -137,40 +138,61 @@ fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// The store read through, noting for each unit it hands back whether the certifier's record that came back with it covers the unit's definitions.
+/// The store read and written through, noting the certifier's record of each unit filed into it and of each unit handed back.
 struct Recorded<'a> {
     store: &'a Verdicts,
-    certified: std::cell::RefCell<Vec<bool>>,
+    filed: RefCell<Vec<Certification>>,
+    taken: RefCell<Vec<Certification>>,
 }
 
 impl Cache for Recorded<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let unit = Cache::get(self.store, source)?;
-        self.certified
-            .borrow_mut()
-            .push(unit.certification().covers(unit.core()));
+        self.taken.borrow_mut().push(unit.certification().clone());
         Some(unit)
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
+        self.filed.borrow_mut().push(unit.certification().clone());
         Cache::put(self.store, source, unit, followed);
     }
 }
 
-/// A unit taken back from a slot carries the record the certifier filed beside it, so a later walk reads the verdicts on its definitions from the store rather than from the stamps elaboration wrote.
+/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the store rather than from the stamps elaboration wrote, and the reads a recompile over it invalidates along.
 #[test]
 fn a_reused_unit_brings_its_certification_back() {
     let root = project("certified");
-    assert!(!reused(&root), "nothing is stored for the first compile");
-
-    let store = Verdicts::at(root.to_path_buf());
-    let recorded = Recorded {
-        store: &store,
-        certified: Default::default(),
+    let shape = root.join("shape");
+    // A store per compilation, as every caller opens one: the chain it places is the fold's that used it.
+    let recorded = |store| Recorded {
+        store,
+        filed: Default::default(),
+        taken: Default::default(),
     };
-    assert!(reused_through(&root, &root.join("shape"), &recorded));
+    let (first, second) = (
+        Verdicts::at(root.to_path_buf()),
+        Verdicts::at(root.to_path_buf()),
+    );
+    let (filing, taking) = (recorded(&first), recorded(&second));
 
-    assert_eq!(recorded.certified.into_inner(), vec![true]);
+    assert!(
+        !reused_through(&root, &shape, &filing),
+        "nothing is stored for the first compile"
+    );
+    assert!(reused_through(&root, &shape, &taking));
+
+    let (filed, taken) = (filing.filed.into_inner(), taking.taken.into_inner());
+    assert_eq!(taken, filed);
+    let message = Global::Authored(Qualifier::from(["shape", "message"]));
+    let [record] = &taken[..] else {
+        panic!("one unit taken back, not {}", taken.len());
+    };
+    assert!(
+        record
+            .reads(&message)
+            .is_some_and(|reads| !reads.signatures.is_empty() || !reads.bodies.is_empty()),
+        "the record came back without what judging `message` read"
+    );
 }
 
 /// The point of the thing: source that has not changed is not compiled again.

@@ -4,7 +4,7 @@ use {
     crate::{Globals, KernelError, Verdict},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Certification, Global, Totality},
+    curios_core::{Certification, Certified, Global, Totality},
     curios_utilities::Qualifier,
 };
 
@@ -140,7 +140,13 @@ fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
 /// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — `Globals::of` taking every record as covering — fails this test and no other in this file.
 #[test]
 fn a_record_that_does_not_cover_its_unit_is_not_read() {
-    let forged = Certification::of([(reaches(), Totality::Total)]);
+    let forged = Certification::of([(
+        reaches(),
+        Certified {
+            totality: Totality::Total,
+            ..Certified::default()
+        },
+    )]);
     assert!(!forged.covers(&stamp_trial_module(Totality::Total, false)));
 
     let carried = carried_beneath_the_lie(&forged);

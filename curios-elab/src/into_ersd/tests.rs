@@ -351,12 +351,24 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
     let cases = [
         (
             Totality::Partial,
-            Certification::of([(identity.clone(), Totality::Total)]),
+            Certification::of([(
+                identity.clone(),
+                Certified {
+                    totality: Totality::Total,
+                    ..Certified::default()
+                },
+            )]),
             true,
         ),
         (
             Totality::Total,
-            Certification::of([(identity.clone(), Totality::Partial)]),
+            Certification::of([(
+                identity.clone(),
+                Certified {
+                    totality: Totality::Partial,
+                    ..Certified::default()
+                },
+            )]),
             false,
         ),
         (Totality::Total, Certification::default(), false),

@@ -35,6 +35,9 @@ use positions::Positions;
 mod calls;
 use calls::Calls;
 
+mod reads;
+use reads::ReadRecorder;
+
 mod scope;
 use scope::Scope;
 
@@ -53,8 +56,8 @@ use {
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
-        LevelHead, Module, Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
+        LevelHead, Module, Polarity, Reads, ReduceError, Reducer, Retention, Spelling, StructDecl,
+        Term, UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
@@ -429,6 +432,8 @@ pub struct Kernel {
     positions: Positions,
     /// The recursive calls this walk typed, and each checked group's verdict — an output, not an input.
     calls: Calls,
+    /// What the item being judged has read of other items — an output, not an input.
+    reads: ReadRecorder,
     /// Top-level definitions and the nominal registry.
     globals: Globals,
     /// The registered spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
@@ -453,6 +458,7 @@ impl Kernel {
             retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             positions: Positions::default(),
             calls: Calls::default(),
+            reads: ReadRecorder::default(),
             globals: Globals::default(),
             syntax,
             assumed: Vec::new(),
@@ -679,11 +685,18 @@ impl Kernel {
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        self.reads.signature(name);
         self.globals.induct_decl(name)
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        self.reads.signature(name);
         self.globals.struct_decl(name)
+    }
+
+    /// What the item being judged has read of other items since the last take, leaving nothing behind for the next.
+    pub(crate) fn take_reads(&mut self) -> Reads {
+        self.reads.take()
     }
 
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
@@ -813,7 +826,7 @@ impl Kernel {
             return Ok(Some(local));
         }
 
-        match self.globals.scheme_of(name) {
+        match self.scheme_of(name) {
             None => Ok(None),
             Some((type_, universes)) => match universes.parameter_count {
                 0 => Ok(Some(type_)),
@@ -827,6 +840,9 @@ impl Kernel {
 
     /// The universe scheme `name` was generalized under, for a use that states its own instance.
     pub(crate) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
+        if let Some(global) = name.as_global() {
+            self.reads.signature(global);
+        }
         self.globals.scheme_of(name)
     }
 
@@ -852,11 +868,17 @@ impl Kernel {
 
     /// What `name` unfolds to through a bare occurrence. A definition with universe parameters is withheld.
     pub(crate) fn value(&self, name: &Free) -> Option<&Term> {
+        if let Some(global) = name.as_global() {
+            self.reads.body(global);
+        }
         self.globals.value(name)
     }
 
     /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
     pub(crate) fn value_at(&self, name: &Free) -> Option<&Term> {
+        if let Some(global) = name.as_global() {
+            self.reads.body(global);
+        }
         self.globals.value_at(name)
     }
 
