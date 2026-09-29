@@ -72,6 +72,7 @@ pub fn reduce_closed<H: ClosedHost>(
         stack: Vec::new(),
         peak: 0,
         values: HashMap::new(),
+        forced: HashMap::new(),
     }
     .run(host, term, demand)
 }
@@ -146,9 +147,10 @@ enum Frame {
         index: usize,
         demand: Demand,
     },
-    /// Record the value about to be produced under `key` in the run-scoped memo — pushed under a forced application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
+    /// Record the value about to be produced under `key` in the run-scoped memo, in the table of the `demand` it is produced at — pushed under an application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
     Memo {
         key: Term,
+        demand: Demand,
     },
     /// A `let` run evaluating its bindings left to right; `released` holds the values already in.
     LetK {
@@ -162,7 +164,7 @@ enum Frame {
     Args(Args),
 }
 
-/// The [`Reducer`] a [`Finish::Intrinsic`] hands to [`reduce_intrinsic`]: operand lookups are served from the machine's already-computed values, so the fold sees evaluated operands at constant native depth, and anything it conjures beyond them takes the host's ordinary path.
+/// The [`Reducer`] a [`Finish::Intrinsic`] hands to [`reduce_intrinsic`]: operand lookups are served from the operands the run just evaluated, so the fold sees them at constant native depth, and anything it conjures beyond them takes the host's ordinary path.
 struct Tap<'a, H: Reducer> {
     host: &'a mut H,
     values: &'a HashMap<Term, Term>,
@@ -195,8 +197,10 @@ impl<H: Reducer> Reducer for Tap<'_, H> {
 struct Machine {
     stack: Vec<Frame>,
     peak: usize,
-    /// Run-scoped intrinsic reducts, keyed on the term as focused — see [`Finish::Intrinsic`] for the chain it exists to keep linear. Dropped with the run; each insertion is charged before it is made.
+    /// Run-scoped values produced at the plain demand, keyed on the term as focused — intrinsic reducts among them, see [`Finish::Intrinsic`] for the chain it exists to keep linear. Dropped with the run; each insertion is charged before it is made.
     values: HashMap<Term, Term>,
+    /// Run-scoped values produced at the forced demand. Kept apart because a term's value differs by demand exactly where a recursive call is involved: forced, a call is the value its fold computes; plain, it is the folded call itself. A plain request reads [`Machine::values`] alone, and a forced one either table, since a weak-head value that is not a folded spelling is its own forced form and a folded one is never recorded.
+    forced: HashMap<Term, Term>,
 }
 
 impl Machine {
@@ -290,14 +294,17 @@ impl Machine {
             eprintln!("eval depth={} {}", self.stack.len(), term);
         }
 
-        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so at a plain demand it *is* its own weak-head form.
-        //
-        // Decided from the shape, ahead of the memo, because a projection is the one key whose value differs by demand and the memo does not tag demands. The forced arm below records the member's body under the projection, so a run that forced a bare selection and then asked a plain demand for it — a `let` value at an intrinsic operand, then an ordinary call on the same member — was served that body, and the machine unfolded a recursive call the strategy leaves folded. The guard on [`Frame::Memo`] does not cover this: it tests the recorded *value* for a folded spelling, and here it is the *key* that is one.
+        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so at a plain demand it *is* its own weak-head form, decided from the shape.
         if matches!(demand, Demand::Whnf) && term.as_rec_proj().is_some() {
             return Ok(Step::Value(term));
         }
 
-        if let Some(value) = self.values.get(&term) {
+        // A plain request reads what plain requests produced; a forced one may read either — see [`Machine::forced`]. Keyed on the term alone, a forced call's or a forced match's value answered a later plain request for the same term, where the strategy answers the folded call.
+        let remembered = match demand {
+            Demand::Whnf => self.values.get(&term),
+            Demand::Forced => self.forced.get(&term).or_else(|| self.values.get(&term)),
+        };
+        if let Some(value) = remembered {
             return Ok(Step::Value(value.clone()));
         }
 
@@ -305,7 +312,13 @@ impl Machine {
         if let Some((group, index)) = term.as_rec_proj() {
             let body = group.member_body(index);
             let key = term.clone();
-            self.push(host, Frame::Memo { key })?;
+            self.push(
+                host,
+                Frame::Memo {
+                    key,
+                    demand: Demand::Forced,
+                },
+            )?;
 
             return Ok(Step::Eval(body, Demand::Forced));
         }
@@ -345,7 +358,7 @@ impl Machine {
                 else {
                     unreachable!("rebuilt from the same value")
                 };
-                self.push(host, Frame::Memo { key })?;
+                self.push(host, Frame::Memo { key, demand })?;
                 self.push(
                     host,
                     Frame::MatchK {
@@ -535,7 +548,7 @@ impl Machine {
             } => {
                 // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. The eval arm used to defer the decision on two grounds and only one of them survives: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm alone left unrecorded each level doubled: a `Bits` fold returning a pair cost 7,546,746 units at sixteen bits against a single-value twin's 8,622, and costs 11,829 once this records.
                 if let Some(key) = memo_key {
-                    self.push(host, Frame::Memo { key })?;
+                    self.push(host, Frame::Memo { key, demand })?;
                 }
 
                 if value.as_rec_proj().is_some() {
@@ -691,14 +704,17 @@ impl Machine {
                 self.let_advance(host, released, bindings, next, tail, demand)
             }
 
-            Frame::Memo { key } => {
-                // A folded recursive spelling is a weak-head value that a *forced* probe must not be served, and the memo does not tag demands — so a rec-shaped value is simply not recorded. Every other weak-head value is its own forced form, since forcing only unfolds recursive heads.
+            Frame::Memo { key, demand } => {
+                // A folded recursive spelling is a weak-head value a *forced* probe must not be served, and a forced probe reads the plain table too — so a rec-shaped value is simply not recorded. Every other weak-head value is its own forced form, since forcing only unfolds recursive heads.
                 let folded = value.spine_rec_proj().is_some() || matches!(&*value, Subterm::Rec(_));
 
                 if !folded {
                     // One entry of two `Term` handles, on the buffer row, charged before the write.
                     host.spend(Cost::buffer(2))?;
-                    self.values.insert(key, value.clone());
+                    match demand {
+                        Demand::Whnf => self.values.insert(key, value.clone()),
+                        Demand::Forced => self.forced.insert(key, value.clone()),
+                    };
                 }
 
                 Ok(Step::Value(value))

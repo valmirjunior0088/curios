@@ -236,6 +236,54 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
+    // The same order through a call and through a match rather than a bare selection: the `let` value's operand is forced, so the call — or the match whose arm is the call — is remembered with the value the fold computes, and the tail asks the same term plainly, where the folded call is the answer. Keyed on the term alone, the memo served the forced value; mutation-checked by reading the forced table at a plain demand.
+    let forced_then_plain_through = |through_a_match: bool| {
+        let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
+        let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
+        let motive_b = binder(7, "m");
+        let body = Term::func(
+            [(b.clone(), bin_type.clone())],
+            Term::bin_match_scoped(
+                Grain::X,
+                Term::free_var(&b),
+                motive(),
+                nat(0),
+                &h,
+                &t,
+                &ih,
+                Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
+            ),
+        );
+        let call = Term::apply(Term::free_var(&go), [bytes(vec![1, 2, 3])]);
+        let subject = match through_a_match {
+            true => Term::bool_match(
+                Term::intrinsic(Intrinsic::Bool(true)),
+                Some(&motive_b),
+                nat_type(),
+                nat(0),
+                call,
+            ),
+            false => call,
+        };
+        let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+            [(
+                go.clone(),
+                Term::func_type([(b.clone(), bin_type.clone())], nat_type()),
+                body,
+            )],
+            Term::let_(
+                &x,
+                nat_type(),
+                Term::intrinsic(Intrinsic::nat_add(subject.clone(), nat(1))),
+                subject,
+            ),
+        )) else {
+            unreachable!("built as a rec")
+        };
+
+        unfold_rec(rec)
+    };
+
     // A group whose one member never mentions itself: opening its tail reduces past the projection to
     // the member's own value, so what the head exposes is a `Func` and the application is ordinary
     // beta. The machine takes it from the apply arm; the strategy reaches it through the branch that
@@ -294,7 +342,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
-    // The same call demanded plainly and then forced, in one run: the `let` value is released at the plain demand, where the folded spine is the answer, and the tail's operand is forced. The memo does not tag demands, so its guard must recognize the spine as folded and decline to record it — read one application deep, it recorded the spine and served it to the forced probe, and the sum stuck on it.
+    // The same call demanded plainly and then forced, in one run: the `let` value is released at the plain demand, where the folded spine is the answer, and the tail's operand is forced. A forced probe reads the plain table as well, so the memo's guard must recognize the spine as folded and decline to record it — read one application deep, it recorded the spine and served it to the forced probe, and the sum stuck on it.
     let plain_then_forced = {
         let call = past_parameters.clone();
         let released = binder(6, "released");
@@ -320,6 +368,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         projection,
         induct,
         forced_then_plain,
+        forced_then_plain_through(false),
+        forced_then_plain_through(true),
     ] {
         let mut machined = kernel();
         let mut strategy = strategy_kernel();
