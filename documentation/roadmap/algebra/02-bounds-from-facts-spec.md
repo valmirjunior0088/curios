@@ -14,7 +14,7 @@ It builds on the canonical linear view and the contract of what conversion decid
 
 ## The gap
 
-**A bound that follows from the facts in scope is refused.** `List/get(xs, i)` under `p: Nat/Lt(i, m)` and `q: Nat/Le(m, List/len(xs))` reports `nothing discharged Holds(Nat/lt(i, List/len(@Nat, xs)))`, and so does the same call under a guard `i < m` with only `q` in scope. The author writes the bridge — `Nat/Lt/lt_of_lt_le`, `Nat/Le/trans`, an `Eq/subst` along the equation a hypothesis holds — and passes it with `@`.
+**A bound that follows from the facts in scope is refused.** `List/get(xs, i)` under `p: Nat/Lt(i, m)` and `q: Nat/Le(m, List/len(xs))` reports `nothing discharged Holds(Nat/lt(i, List/len(@Nat, xs)))`, and so does the same call under a guard `i < m` with only `q` in scope. The author writes the bridge — `Nat/Lt/of_lt_le`, `Nat/Le/trans`, an `Eq/subst` along the equation a hypothesis holds — and passes it with `@`.
 
 **Most of the standard library's hand-written arithmetic is that bridge.** Outside `Nat/Le` and `Nat/Lt`, the calls to their order lemmas are linear consequences of facts in scope, except the few inside `Nat/div_mod`'s two proofs, which multiply by a variable divisor. About half of the library's `Eq/subst` transports carry a linear fact across an equation a hypothesis or a proof field holds, as `/std/Vec`'s `get` does along its `counted` field. A chain ends in an `@` bound, in a contradiction arm eliminated by a zero-arm match, or in a proof that hands its fact to another lemma — the last most often, inside `Str`, `Str/Valid`, `Str/At`, `Char` and `Bytes` — which is why the entry points below reach beyond the `@` bound. Stage 1 retakes the census on the tree the work starts from.
 

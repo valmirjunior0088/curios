@@ -193,7 +193,7 @@ pub let balanced(
             choose
             | lo + 1 < hi =>
                 let mid = (lo + hi) / 2;
-                let apart: Nat/Le(lo + 1, hi) = Nat/Lt/le_of_lt(lo + 1, hi, Bool/True/qed());
+                let apart: Nat/Le(lo + 1, hi) = Nat/Le/of_lt(lo + 1, hi, Bool/True/qed());
                 let twice: Nat/Lt(lo + hi, hi * 2) = Nat/Le/add_mono_l(hi, apart);
                 let below: Nat/Lt(mid, hi) = Nat/div_mod/div_lt_of_lt_mul(hi, lo + hi, 2, twice);
                 combine(
@@ -201,9 +201,9 @@ pub let balanced(
                         pred,
                         lo,
                         mid,
-                        Nat/Le/trans(@mid, @hi, @n, Nat/Lt/le_of_lt(mid, hi, below), bounded)),
+                        Nat/Le/trans(@mid, @hi, @n, Nat/Le/of_lt(mid, hi, below), bounded)),
                     go(pred, mid, hi, bounded))
-            | lo < hi => single(lo, Nat/Lt/lt_of_lt_le(lo, hi, n, Bool/True/qed(), bounded))
+            | lo < hi => single(lo, Nat/Lt/of_lt_le(lo, hi, n, Bool/True/qed(), bounded))
             | _ => empty
             end
         end;

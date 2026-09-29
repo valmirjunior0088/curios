@@ -73,7 +73,7 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
         | written < Bytes/len(b) =>
             write_waiting(
                 h,
-                Bytes/drop(b, written, @Nat/Lt/le_of_lt(written, Bytes/len(b), Bool/True/qed())))
+                Bytes/drop(b, written, @Nat/Le/of_lt(written, Bytes/len(b), Bool/True/qed())))
         | _ => Io/pure(Result/success(()))
         end
     | failure(s) =>
@@ -127,7 +127,7 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
             let _ = park_on(h, Interest/writable)!;
             write_parking(
                 h,
-                Bytes/drop(b, written, @Nat/Lt/le_of_lt(written, Bytes/len(b), Bool/True/qed())))
+                Bytes/drop(b, written, @Nat/Le/of_lt(written, Bytes/len(b), Bool/True/qed())))
         | _ => Async/pure(Result/success(()))
         end
     | failure(s) =>

@@ -29,7 +29,7 @@ struct Split(n: Nat): Type {
 
 -- Every number has one, by successor induction.
 --
--- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — `le_of_not_lt` for the half the guard refuted and the carrier's own bound for the other.
+-- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — `Nat/Le/of_not_lt` for the half the guard refuted and the carrier's own bound for the other.
 let split(n: Nat) -> Split(n) =
     match n
     | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
@@ -47,7 +47,7 @@ let split(n: Nat) -> Split(n) =
                     Byte/to_nat(prev.low),
                     255,
                     Bool/True/qed(),
-                    Nat/Lt/le_of_not_lt(Byte/to_nat(prev.low), 255, Bool/True/qed()));
+                    Nat/Le/of_not_lt(Byte/to_nat(prev.low), 255, Bool/True/qed()));
             Split {
                 high = prev.high + 1,
                 low = 0,

@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Option, Eq};
-use /std/Nat/{Le};
+use /std/Nat/{Le, Lt};
 
 --- `n <= n`.
 pub let refl(n: Nat) -> Le(n, n) =
@@ -25,6 +25,37 @@ pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
     match a <= b: (r) => Option(Bool/Holds(r))
     | true => Option/some(Bool/True/qed())
     | false => Option/none()
+    end;
+
+--- `0 < n` gives `1 <= n`.
+pub let one_of_positive(@n: Nat, p: Lt(0, n)) -> Le(1, n) =
+    match n
+    | 0 => match p end
+    | _ + 1 => Bool/True/qed()
+    end;
+
+--- `a < b` gives `a <= b`.
+pub let of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Le(a, b) =
+    match a
+    | 0 => Bool/True/qed()
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 => of_lt(ap, bp, p)
+        end
+    end;
+
+--- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
+---
+--- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
+pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
+    match a
+    | 0 =>
+        match b
+        | 0 => Bool/True/qed()
+        | _ + 1 => match p end
+        end
+    | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => of_not_lt(ap, bp, p) end
     end;
 
 --- Transitivity.

@@ -242,7 +242,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             | cut() =>
                 (
                     events = List/reverse(acc),
-                    rest = Bytes/drop(input, i, @Nat/Lt/le_of_lt(i, Bytes/len(input), inside)))
+                    rest = Bytes/drop(input, i, @Nat/Le/of_lt(i, Bytes/len(input), inside)))
             | emit(event, next) =>
                 match event | some(e) => go(next, [e, ..acc]) | none() => go(next, acc) end
             end

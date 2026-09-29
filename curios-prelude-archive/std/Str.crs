@@ -199,7 +199,7 @@ let scalars_within(
     | true =>
         match max2 < 0xD800
         | true => Bool/True/qed()
-        | false => match Nat/Lt/lt_of_le_lt(max2, max, 0xD800, high, Bool/True/qed()) end
+        | false => match Nat/Lt/of_le_lt(max2, max, 0xD800, high, Bool/True/qed()) end
         end
     | false =>
         match min >= 0xE000
@@ -329,7 +329,7 @@ let begins_below(
             | false =>
                 Eq/subst(
                     (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/Le/antisym(mp, n, Nat/Lt/le_of_not_lt(n, mp, Bool/True/qed()), inside),
+                    Nat/Le/antisym(mp, n, Nat/Le/of_not_lt(n, mp, Bool/True/qed()), inside),
                     Bool/True/qed())
             end
         end
@@ -601,7 +601,7 @@ let meets(
                                     past = met.past,
                                     reach =
                                         Nat/Le/trans(
-                                            Nat/Lt/le_of_lt(
+                                            Nat/Le/of_lt(
                                                 at.offset,
                                                 have.past.offset,
                                                 have.progress),
@@ -644,7 +644,7 @@ pub let span(
                                 @at.offset,
                                 @n.past.offset,
                                 @rest.past.offset,
-                                Nat/Lt/le_of_lt(at.offset, n.past.offset, n.progress),
+                                Nat/Le/of_lt(at.offset, n.past.offset, n.progress),
                                 rest.reach))
                 | false => (past = at, reach = Nat/Le/refl(at.offset))
                 end
@@ -693,7 +693,7 @@ let occurrence(
         Bytes/get(
             needle.bytes,
             0,
-            @Nat/Lt/lt_of_lt_le(
+            @Nat/Lt/of_lt_le(
                 0,
                 first.past.offset,
                 Bytes/len(needle.bytes),
@@ -714,7 +714,7 @@ let occurrence(
                             past = found.past,
                             ordered =
                                 Nat/Le/trans(
-                                    Nat/Lt/le_of_lt(at.offset, onward.past.offset, onward.progress),
+                                    Nat/Le/of_lt(at.offset, onward.past.offset, onward.progress),
                                     found.ordered),
                             progress = found.progress))
                     | none() => Option/none()
@@ -733,7 +733,7 @@ let occurrence(
                                 past = met.past,
                                 ordered = Nat/Le/refl(at.offset),
                                 progress =
-                                    Nat/Lt/lt_of_lt_le(
+                                    Nat/Lt/of_lt_le(
                                         at.offset,
                                         have.past.offset,
                                         met.past.offset,
@@ -759,7 +759,7 @@ let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)})
 
 --- The position past an occurrence found from `from` lies past `from`: what a walk that cuts at each occurrence recurs with.
 let passed(@s: Str, from: At(s), found: Found(s, from)) -> Nat/Lt(from.offset, found.past.offset) =
-    Nat/Lt/lt_of_le_lt(
+    Nat/Lt/of_le_lt(
         from.offset,
         found.start.offset,
         found.past.offset,
@@ -877,7 +877,7 @@ pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
                                 @at.offset,
                                 @n.past.offset,
                                 ordered,
-                                Nat/Lt/le_of_lt(at.offset, n.past.offset, n.progress)))
+                                Nat/Le/of_lt(at.offset, n.past.offset, n.progress)))
                     | some(replacement) =>
                         flatten([
                             between(s, run, at, @ordered),

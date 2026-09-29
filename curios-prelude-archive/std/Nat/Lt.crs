@@ -8,24 +8,6 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     | false => Option/none()
     end;
 
---- `0 < n` gives `1 <= n`.
-pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
-    match n
-    | 0 => match p end
-    | _ + 1 => Bool/True/qed()
-    end;
-
---- `a < b` gives `a <= b`.
-pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
-    match a
-    | 0 => Bool/True/qed()
-    | ap + 1 =>
-        match b
-        | 0 => match p end
-        | bp + 1 => le_of_lt(ap, bp, p)
-        end
-    end;
-
 --- `a < b` gives `0 < b - a`: what lies between a value and a strict bound on it is not empty.
 pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
     match a
@@ -60,25 +42,12 @@ pub let sub_lt_sub(a: Nat, b: Nat, n: Nat, lt: Lt(a, b), le: Nat/Le(b, n)) -> Lt
         end
     end;
 
---- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
----
---- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
-pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b, a) =
-    match a
-    | 0 =>
-        match b
-        | 0 => Bool/True/qed()
-        | _ + 1 => match p end
-        end
-    | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => le_of_not_lt(ap, bp, p) end
-    end;
-
 --- A strict bound composed with a loose one stays strict.
-pub let lt_of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
+pub let of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
     Le/trans(p, q);
 
 --- A loose bound composed with a strict one stays strict.
-pub let lt_of_le_lt(a: Nat, b: Nat, c: Nat, p: Nat/Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
+pub let of_le_lt(a: Nat, b: Nat, c: Nat, p: Nat/Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
     Le/trans(@a + 1, @b + 1, @c, p, q);
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
@@ -92,4 +61,4 @@ pub let add_mul_lt(
     pa: Lt(a, m),
     pb: Lt(b, n),
 ) -> Lt(a * n + b, m * n) =
-    lt_of_lt_le(a * n + b, a * n + n, m * n, pb, Le/mul_mono_r(n, pa));
+    of_lt_le(a * n + b, a * n + n, m * n, pb, Le/mul_mono_r(n, pa));

@@ -40,7 +40,7 @@ let replace_at(
 ) -> List(Toml) =
     let count = List/len(@Toml, items);
     [
-        ..List/slice(@Toml, items, 0, index, @Nat/Lt/le_of_lt(index, count, ok)),
+        ..List/slice(@Toml, items, 0, index, @Nat/Le/of_lt(index, count, ok)),
         value,
         ..List/drop(@Toml, items, index + 1, @ok)];
 

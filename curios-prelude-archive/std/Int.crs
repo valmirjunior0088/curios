@@ -138,7 +138,7 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 pub let abs(n: Int) -> Nat =
     match n >= +0
     | true => to_nat(n, @Bool/True/qed())
-    | false => to_nat(+0 - n, @Lt/le_of_lt(n, +0, Bool/True/qed()))
+    | false => to_nat(+0 - n, @Le/of_lt(n, +0, Bool/True/qed()))
     end;
 
 --- The order of the two.
