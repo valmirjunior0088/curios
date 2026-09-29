@@ -157,7 +157,7 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
 
 #[test]
 fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
-    // The inference spec's defect (a), same root cause as defect (b): checked as a list element, `map`'s result metavariable reaches the lambda body's conversion still spelling solved metavariables whose spines carry out-of-scope binders, and the unmaterialized scope check refused the ground `Option(A)`.
+    // The root cause of `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade`, reached another way: checked as a list element, `map`'s result metavariable reaches the lambda body's conversion still spelling solved metavariables whose spines carry out-of-scope binders, and the unmaterialized scope check refused the ground `Option(A)`.
     let source = r#"
         use /std/{Async, Option};
 
@@ -171,7 +171,7 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
 
 #[test]
 fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
-    // The inference spec's defect (b): `c`'s element type is pinned only by the later `Cell/fill`, and the chain back to the `Cell/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
+    // `c`'s element type is pinned only by the later `Cell/fill`, and the chain back to the `Cell/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
     let source = r#"
         use /std/{Cell, Option, Io, Nat};
         let probe: Io({}) =

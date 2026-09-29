@@ -134,7 +134,7 @@ fn inductive_match_round_trips() {
 
 #[test]
 fn matrix_match_round_trips() {
-    // Nested/tuple/struct match-arm patterns — the matrix pattern compiler's grammar — survive print → re-parse, including the spec's own motivating example (a single tupled head).
+    // Nested/tuple/struct match-arm patterns — the matrix pattern compiler's grammar — survive print → re-parse, a single tupled head included.
     for source in [
         // A constructor nested inside another constructor's payload.
         "match x | some(some(y)) => y | some(none()) => y | none() => y end",

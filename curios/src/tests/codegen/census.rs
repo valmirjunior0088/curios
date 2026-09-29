@@ -137,7 +137,7 @@ fn cont_optm_module(source: &str) -> Module {
     captured.expect("the pipeline observes cont-optm")
 }
 
-/// How one occurrence consumes the value it names, in the spec's classification vocabulary.
+/// How one occurrence consumes the value it names, in the classification the module documentation lists.
 #[derive(Debug, Clone, Copy)]
 enum Consumption {
     /// A field read, at this index. The index is carried because a variant's slot zero is its discriminant, so "is index zero ever read" is a different question from "is anything read".
@@ -272,7 +272,7 @@ impl Region {
         }
     }
 
-    /// Which of the spec's mechanisms reaches this region, if any: continuation splitting alone, splitting plus known-function workers, or neither.
+    /// Which of the design record's two capabilities reaches this region, if any: continuation splitting alone, splitting plus known-function workers, or neither.
     fn bucket(&self) -> &'static str {
         let eligible: BTreeSet<&'static str> = if self.slice_sites.is_empty() {
             [

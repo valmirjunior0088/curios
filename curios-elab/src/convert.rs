@@ -1076,7 +1076,7 @@ impl Convert {
             return Ok(Solved::Postponed);
         }
 
-        // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — the wake-cascade strand this call site's spec records as defect (b)). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
+        // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
         let t = &crate::zonk_solved_term_metas(context, t);
         let metavars = t.metavars();
 

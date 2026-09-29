@@ -9,7 +9,7 @@ use {
     curios_text::{Entrypoint, RootSource},
 };
 
-/// Whether the printed Ersd still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Refusal`'s family line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.
+/// Whether the printed Ersd still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Error`'s product line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.
 fn names_parse_code(ersd: &str) -> bool {
     ersd.lines()
         .filter(|line| line.contains("/std/Parse/"))

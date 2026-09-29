@@ -829,7 +829,7 @@ let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
     let (digits, k) = settled;
     Str/concat(sign, layout(digits_of(digits), k + Nat/to_int(n)));
 
---- The finite half of `of_str`: `s` read as a decimal whose digits begin at `start`.
+--- The finite half of `of_str`: `body`, the text after the sign, read as a decimal, rounded in the direction `r` and of `negative`'s sign; `none` for text that spells no decimal.
 let of_decimal_str(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
     let (mantissa, scaled) = marked(body, "e", "E");
     let (whole, fraction) = pointed(mantissa);

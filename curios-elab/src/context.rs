@@ -1013,7 +1013,6 @@ impl Context {
         }
     }
 
-    /// [`Frames::refine_scrutinee`], with the refinement cache protocol.
     /// Record one guard's equation under every spelling it is met by — each `(canonical, original, alias)` — with the refinement cache protocol run once for all of them rather than once per spelling.
     pub(crate) fn refine_scrutinee_spellings(
         &mut self,
@@ -1082,9 +1081,6 @@ impl Context {
         self.frames.any_refinements_registered()
     }
 
-    /// Run `f` with every refinement registered *so far* suppressed (re-validation). A frame `f` enters keeps its own refinements live: those belong to the term being validated rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
-    ///
-    /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule and [`Caches::invalidate_settlement_boundary`] the cache protocol at each side.
     pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,
@@ -1100,6 +1096,9 @@ impl Context {
         result
     }
 
+    /// Run `f` with every refinement registered *so far* suppressed (re-validation). A frame `f` enters keeps its own refinements live: those belong to the term being validated rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
+    ///
+    /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();
