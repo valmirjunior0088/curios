@@ -27,3 +27,6 @@ pub use recheck::*;
 
 mod kernel;
 pub use kernel::*;
+
+#[cfg(test)]
+mod walk_tests;

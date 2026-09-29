@@ -1530,6 +1530,7 @@ impl Convert {
 
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)` when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
+        curios_profile::profile!("convert::drain");
         while let Some(Problem { type_, this, that }) = self.dequeue(context)? {
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {

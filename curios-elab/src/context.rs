@@ -1739,6 +1739,7 @@ impl Context {
 
     /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term) {
+        curios_profile::profile!("ctx::park");
         let frame = self.freeze_frame();
         self.repark(work, origin, frame);
     }
@@ -1769,6 +1770,7 @@ impl Context {
     }
 
     pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
+        curios_profile::profile!("ctx::wake_parked");
         self.solutions.wake_parked()
     }
 

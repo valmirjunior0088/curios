@@ -886,7 +886,8 @@ fn settle(
     key: Term,
     original: &Term,
 ) -> Result<(), ReduceError> {
-    curios_profile::profile!("reduce::settle");
+    // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again after an invalidation, and the costliest calls name the keys that pay.
+    curios_profile::profile!("reduce::settle", key = %original, frame);
     let settled = context.with_refinements_withheld_from(frame, |context| {
         context.within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
             let reduct = reduce(context, original.clone())?;

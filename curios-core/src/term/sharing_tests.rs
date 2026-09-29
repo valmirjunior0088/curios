@@ -233,3 +233,60 @@ fn the_per_occurrence_level_walk_asks_every_occurrence() {
 
     assert_eq!(asked.get(), 8);
 }
+
+/// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift` and `release` are not rows yet: they prune by `reach` and remember nothing, so over an open shared term they walk every path, which the invariants campaign's part 3 records.
+#[test]
+fn every_walk_answers_a_doubling_term_in_its_own_size() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let meta = UniverseMetaId(0);
+    let base = Term::apply(Term::free_var(&x), [Term::type_at(Level::meta(meta))]);
+    let term = doubled(base.clone(), 60);
+
+    let rows: Vec<(&str, bool)> = vec![
+        ("equality", term == doubled(base.clone(), 60)),
+        (
+            "hashing",
+            term.structural_hash() == doubled(base.clone(), 60).structural_hash(),
+        ),
+        ("free variables", term.free_vars().contains(&x)),
+        ("universe metavariables", term.universe_metas().len() == 1),
+        ("a needle sought", term.mentions_term(&base)),
+        (
+            "a needle replaced",
+            root_operands_shared(&term.replace_term(&base, &Term::free_var(&y))),
+        ),
+        (
+            "universes erased",
+            root_operands_shared(&project_erased_universes(&term)),
+        ),
+        ("capture", root_operands_shared(&term.capture(&[&x]))),
+        (
+            "level differences",
+            term.level_differences(
+                &doubled(
+                    Term::apply(Term::free_var(&x), [Term::type_at(Level::zero())]),
+                    60,
+                ),
+                |_| false,
+            )
+            .is_some_and(|pairs| pairs.len() == 1),
+        ),
+        (
+            "the shared level rewrite",
+            root_operands_shared(
+                &rewrite_universe_levels_scoped_shared(&term, move |_, level| {
+                    level.substitute(|head| match head {
+                        LevelHead::Meta(found) if found == meta => Some(Level::zero()),
+                        _ => None,
+                    })
+                })
+                .expect("substituting a ground level cannot overflow"),
+            ),
+        ),
+    ];
+
+    for (walk, answered) in rows {
+        assert!(answered, "{walk} over a doubling term lost its graph");
+    }
+}

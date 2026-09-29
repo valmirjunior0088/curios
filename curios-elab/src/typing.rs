@@ -461,6 +461,7 @@ impl Context {
         if self.parking_suppressed() {
             return Ok(());
         }
+        curios_profile::profile!("typing::retry_parked");
 
         loop {
             let woken = self.wake_parked();
@@ -538,6 +539,7 @@ impl Context {
 
     /// Drain the parked store: retry everything to a fixpoint, then report any survivor as a mismatch at its origin. Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
+        curios_profile::profile!("typing::drain_parked");
         loop {
             self.retry_parked()?;
 

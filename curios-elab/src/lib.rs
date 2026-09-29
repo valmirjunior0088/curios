@@ -59,6 +59,9 @@ pub use established::*;
 mod elaborate;
 pub use elaborate::*;
 
+#[cfg(test)]
+mod walk_tests;
+
 mod into_ersd;
 pub use into_ersd::*;
 

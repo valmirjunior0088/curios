@@ -672,6 +672,7 @@ fn unfolded_retry(
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
+    curios_profile::profile!("convert::unfolded_retry");
     if rec_instances(kernel, applied_head(this), applied_head(that)) == Some(false) {
         return Ok(false);
     }
