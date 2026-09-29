@@ -187,6 +187,64 @@ fn a_family_with_one_kind_of_argument_prints_in_one_call() {
     assert_eq!(indices.spelled(&spelling).to_string(), "Sign(7)");
 }
 
+/// A lambda over exactly an indexed family's indices is the family at its parameters, which is writable now that the family takes its indices in a call of their own.
+#[test]
+fn a_lambda_over_a_familys_indices_prints_as_the_family_at_its_parameters() {
+    let accessible = Global::Authored(Qualifier::from(["std", "WellFounded", "Accessible"]));
+    let spelling = spelling_of(&[(
+        accessible.clone(),
+        vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
+    )]);
+    let a = Free::local(0, Some("A"));
+    let r = Free::local(1, Some("R"));
+    let x = Free::local(2, Some("x"));
+
+    let lambda = Term::func(
+        [(x.clone(), Term::free_var(&a))],
+        Term::induct_type(
+            accessible,
+            [Term::free_var(&a), Term::free_var(&r)],
+            [Term::free_var(&x)],
+        ),
+    );
+    assert_eq!(lambda.spelled(&spelling).to_string(), "Accessible(@A, R)");
+}
+
+/// A family with no parameters contracts to its bare name.
+#[test]
+fn a_lambda_over_a_parameterless_familys_indices_prints_as_its_name() {
+    let sign = Global::Authored(Qualifier::from(["std", "Sign"]));
+    let spelling = spelling_of(&[(sign.clone(), vec![Plicity::Explicit])]);
+    let i = Free::local(0, Some("i"));
+
+    let lambda = Term::func(
+        [(i.clone(), Term::intrinsic(Intrinsic::IntType))],
+        Term::induct_type(sign, Vec::<Term>::new(), [Term::free_var(&i)]),
+    );
+    assert_eq!(lambda.spelled(&spelling).to_string(), "Sign");
+}
+
+/// A lambda over only some of the indices is no family at its parameters, and prints as the lambda it is.
+#[test]
+fn a_lambda_over_some_of_a_familys_indices_stays_a_lambda() {
+    let eq = Global::Authored(Qualifier::from(["std", "Eq"]));
+    let spelling = spelling_of(&[(
+        eq.clone(),
+        vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
+    )]);
+    let y = Free::local(0, Some("y"));
+
+    let lambda = Term::func(
+        [(y.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::induct_type(
+            eq,
+            [Term::intrinsic(Intrinsic::NatType)],
+            [numeral(1), Term::free_var(&y)],
+        ),
+    );
+    assert_eq!(lambda.spelled(&spelling).to_string(), "y => Eq(@Nat)(1, y)");
+}
+
 /// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `x => x` does not split it in two.
 #[test]
 fn a_short_lambda_body_stays_on_the_arrows_line() {

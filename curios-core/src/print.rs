@@ -688,70 +688,79 @@ fn print_infix(symbol: &'static str, left: Term, right: Term, frame: Frame) -> P
     ])
 }
 
-/// A recognized type-former eta shape: the former's identity and the argument prefix left after stripping the binder.
+/// A recognized type-former eta shape: the former's identity, the arguments left once its binders are stripped, and the former's whole arity, against which those arguments' declared marks are read.
 enum FormerEta {
-    Nominal(Global, Vec<Term>),
+    Nominal(Global, Vec<Term>, usize),
     Intrinsic(&'static str),
 }
 
-/// Recognize `x => T(…, x)` on the *unopened* telescope: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. The binder's plicity is deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binder already mirrors the declaration. The prefix arguments must be closed under the binder (`reach() == 0`), which is what guarantees the binder occurs nowhere else.
+/// Recognize a type-former eta shape on the *unopened* telescope. Two shapes contract. `x => T(…, x)`: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. And `(x₁, …, xₖ) => F(p…)(x₁, …, xₖ)`: one binder per index of an indexed family, in order — the family at its parameters, which is a function of its own because the family takes its indices in a call of their own. The binders' plicities are deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binders already mirror the declaration. The arguments left must be closed under the binders (`reach() == 0`), which is what guarantees the binders occur nowhere else.
 fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
-    if telescope.len() != 1 || plicities.len() != 1 {
+    let binders = telescope.len();
+    if binders == 0 || plicities.len() != binders {
         return None;
     }
-    let Telescope::Cons(_, rest) = telescope else {
-        return None;
-    };
-    let Telescope::Done(body) = rest.body() else {
-        return None;
+
+    let bound = |term: &Term, index: usize| matches!(&**term, Subterm::Var(var) if var.as_bound() == Some(index));
+    let closed = |terms: &[Term]| terms.iter().all(|term| term.reach() == 0);
+    // Outermost binder first: under `binders` binders the first index is bound at `binders - 1` and the last at `0`.
+    let binds_in_order = |terms: &[Term]| {
+        terms.len() == binders
+            && terms
+                .iter()
+                .enumerate()
+                .all(|(position, term)| bound(term, binders - 1 - position))
     };
 
-    let bound_zero =
-        |term: &Term| matches!(&**term, Subterm::Var(var) if var.as_bound() == Some(0));
-    let closed_prefix = |terms: &[Term]| terms.iter().all(|term| term.reach() == 0);
-
-    match &***body {
+    match &**telescope.terminal() {
         Subterm::InductType(InductType {
             name,
             params,
             indices,
             ..
-        }) if indices.is_empty() => {
+        }) if !indices.is_empty() => (binds_in_order(indices) && closed(params)).then(|| {
+            FormerEta::Nominal(name.clone(), params.clone(), params.len() + indices.len())
+        }),
+        _ if binders != 1 => None,
+        Subterm::InductType(InductType { name, params, .. })
+        | Subterm::StructType(StructType { name, params, .. }) => {
             let (last, prefix) = params.split_last()?;
-            (bound_zero(last) && closed_prefix(prefix))
-                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec()))
-        }
-        Subterm::StructType(StructType { name, params, .. }) => {
-            let (last, prefix) = params.split_last()?;
-            (bound_zero(last) && closed_prefix(prefix))
-                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec()))
+            (bound(last, 0) && closed(prefix))
+                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec(), params.len()))
         }
         Subterm::Intrinsic(Intrinsic::IoType(payload)) => {
-            bound_zero(payload).then_some(FormerEta::Intrinsic("Io"))
+            bound(payload, 0).then_some(FormerEta::Intrinsic("Io"))
         }
         Subterm::Intrinsic(Intrinsic::ListType(payload)) => {
-            bound_zero(payload).then_some(FormerEta::Intrinsic("List"))
+            bound(payload, 0).then_some(FormerEta::Intrinsic("List"))
         }
         Subterm::Intrinsic(Intrinsic::ChannelType(payload)) => {
-            bound_zero(payload).then_some(FormerEta::Intrinsic("Channel"))
+            bound(payload, 0).then_some(FormerEta::Intrinsic("Channel"))
         }
         Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
-            bound_zero(payload).then_some(FormerEta::Intrinsic("Cell"))
+            bound(payload, 0).then_some(FormerEta::Intrinsic("Cell"))
         }
         _ => None,
     }
 }
 
-/// Print a recognized former: the name alone when the binder was its only argument, the prefix application otherwise — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
+/// Print a recognized former: the name alone when the binders took every argument, the application to what they left otherwise, each argument marked as the declaration marks it — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
 fn former_doc(former: FormerEta, frame: Frame) -> Printer {
     match former {
         FormerEta::Intrinsic(name) => pure(name),
-        FormerEta::Nominal(name, prefix) => {
+        FormerEta::Nominal(name, prefix, arity) => {
+            let marks = frame.spelling.nominal_marks(&name, arity);
             let reference = Term::var(Var::free(Free::Global(name)));
             let term = if prefix.is_empty() {
                 reference
             } else {
-                Term::apply(reference, prefix)
+                Term::apply_marked(
+                    reference,
+                    prefix.into_iter().enumerate().map(|(index, argument)| {
+                        let mark = marks.and_then(|marks| marks.get(index)).copied();
+                        (mark.unwrap_or(Plicity::Explicit), argument)
+                    }),
+                )
             };
             sub(term, frame)
         }
@@ -1236,7 +1245,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             telescope,
             plicities,
         }) => {
-            // A type-former lambda `x => T(…, x)` — the shape witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binder is its only argument, the prefix application otherwise. Recognition demands the exact eta shape (the binder is the final argument and occurs nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
+            // A type-former lambda `x => T(…, x)`, or one over exactly an indexed family's indices — the shapes witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
             if let Some(former) = former_eta(&telescope, &plicities) {
                 return former_doc(former, frame);
             }
