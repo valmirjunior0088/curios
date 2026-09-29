@@ -226,8 +226,29 @@ fn revalidation_rejects_ill_typed_solution() {
 }
 
 #[test]
-fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
-    // The regression this guards against: Γ = (t : Type) with a counterfactual match-arm refinement `t := Nat` in force (as inside `bool_match b { true => ... }`, where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen* Γ = (t : Type) — its result type depends on the refined head, mirroring `m : T(b)`.
+fn revalidation_withholds_an_arm_a_metavariable_was_not_born_in() {
+    // Γ = (t : Type), and `?0 : t` born *before* the arm's refinement `t := Nat` is registered — outside the arm, as a metavariable of an enclosing call is. Its result type depends on the refined head, mirroring `m : T(b)`.
+    let mut context = context();
+    let t_binder = context.fresh(Some("t"));
+    context.assume(&t_binder, &Term::type_ground());
+    context.birth_metavar(
+        MetavarId(0),
+        vec![(t_binder.clone(), Term::type_ground())],
+        Term::free_var(&t_binder),
+    );
+    context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
+
+    // `?0 ≟ 5` at type `t`. In the arm `t ⇝ Nat` and `5 : t` holds, but re-validation stands under the refinements `?0` was born under — none — leaving `t` abstract, so `5 : t` fails and the solution is rejected: `?0` also stands outside the arm, where `5 : t` is false.
+    let t = Term::free_var(&t_binder);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![t.clone()]);
+    let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
+    assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+#[test]
+fn revalidation_keeps_the_arm_a_metavariable_was_born_in() {
+    // The mirror: `?0 : t` born *after* the refinement `t := Nat` — inside the arm, where all of its occurrences are. Re-validation stands under the arm's refinement, `5 : t` holds there, and the solution commits; withholding it, as re-validation once did, refused a solution resting on the arm's own guard.
     let mut context = context();
     let t_binder = context.fresh(Some("t"));
     context.assume(&t_binder, &Term::type_ground());
@@ -238,26 +259,42 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
         Term::free_var(&t_binder),
     );
 
-    // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds, but re-validation suppresses refinements, leaving `t` abstract, so `5 : t` fails and the solution is rejected — the program is unsound otherwise.
     let t = Term::free_var(&t_binder);
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![t.clone()]);
     let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
-    assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
-    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+    assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(true));
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&five));
+}
+
+#[test]
+fn a_metavariable_born_in_an_arm_is_not_contained_in_one_born_outside_it() {
+    // A `Bool` arm opens no binder, so the two metavariables share one telescope; what tells them apart is the refinement the inner one was born under. Contained by names alone, the inner one could carry a solution resting on the arm's guard into the outer one's.
+    let mut context = context();
+    let b = context.fresh(Some("b"));
+    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
+    context.assume(&b, &bool_type());
+    context.birth_metavar(MetavarId(0), vec![(b.clone(), bool_type())], nat_type());
+    context.with_frame(|context| {
+        context.refine(&b, &Term::intrinsic(Intrinsic::Bool(true)));
+        context.birth_metavar(MetavarId(1), vec![(b.clone(), bool_type())], nat_type());
+    });
+
+    assert!(!context.metavar_context_contained(MetavarId(1), MetavarId(0)));
+    assert!(context.metavar_context_contained(MetavarId(0), MetavarId(1)));
 }
 
 #[test]
 fn revalidation_accepts_a_refinement_independent_solution() {
-    // The mirror case of `revalidation_suppresses_refinements_rejecting_a_refined_solution`. The same refinement `t := Nat` is in force, but `?0`'s result type is `Nat` directly — it does not depend on the refined head. Re-validation checks `5 : Nat` with refinements suppressed (none are needed) and commits.
+    // The mirror of `revalidation_withholds_an_arm_a_metavariable_was_not_born_in`: `?0` is again born before the arm's refinement `t := Nat`, but its result type is `Nat` directly — it does not depend on the refined head. Re-validation checks `5 : Nat` without the arm's refinement, which it does not need, and commits.
     let mut context = context();
     let t = context.fresh(Some("t"));
     context.assume(&t, &Term::type_ground());
-    context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
     context.birth_metavar(
         MetavarId(0),
         vec![(t.clone(), Term::type_ground())],
         Term::intrinsic(Intrinsic::NatType),
     );
+    context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
 
     let nat = Term::intrinsic(Intrinsic::NatType);
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&t)]);
@@ -642,7 +679,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     context.birth_metavar(MetavarId(0), vec![(n.clone(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&n)]);
 
-    // Inside a frame that counterfactually refines `n := 0` (a match arm), the goal `?0[n] ≈ n` still discharges — but the *committed* solution is the refinement-free `n`, not the arm-local `0`: a metavariable must not be pinned to a value that holds only counterfactually inside the arm.
+    // Inside a frame that counterfactually refines `n := 0` (a match arm), the goal `?0[n] ≈ n` still discharges — but the *committed* solution is `n`, not the arm-local `0`: `?0` was born outside the arm, and a metavariable must not be pinned to a value that holds only inside an arm it was not born in.
     let converts = context.with_frame(|context| {
         context.refine(&n, &nat(0));
         conv(context, &occurrence, &Term::free_var(&n))

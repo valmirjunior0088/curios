@@ -366,3 +366,78 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
         b"6"
     );
 }
+
+/// An implicit born inside an arm is solved under the refinements it was born under, so its solution may rest on the arm's guard: `Eq/sym`'s `@x` is `Bytes/get(b, k)`, whose bound `k < Bytes/len(b)` holds only in the arm. Re-validating with every refinement withheld refused the program at `found`, and `/std/Str` spelled such implicits by hand. Mutation-checked: re-validating with every refinement withheld refuses it again.
+#[test]
+fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
+    let output = run(r#"
+        use /std/{Bytes, Byte, Nat, Bool, Eq, print};
+
+        let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
+            match k < Bytes/len(b)
+            | true =>
+                match Bytes/get(b, k) == f
+                | true =>
+                    let found = Byte/eq_of_eql(Bytes/get(b, k), f, Bool/True/qed());
+                    consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
+                | false => fallback
+                end
+            | false => fallback
+            end;
+
+        print(Nat/to_str(probe(x[1, 2], 1, 2, (_) => Nat, 5, 0, (_, n) => n)))
+        "#);
+
+    assert_eq!(output, b"5");
+}
+
+/// An implicit born outside an arm is solved without the arm's refinements, whatever kind of guard opens it: `pick`'s `@b` meets `W(k < n)` read as `W(true)` in one arm and `W(false)` in the other, and is solved to the guard itself. A guard on an application counted as no refinement, so the first arm's literal was committed and the second arm refused; the guard over a variable, `unstuck`, is the control that always passed.
+#[test]
+fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
+    let output = run(r#"
+        use /std/{Bool, Nat, Str, print};
+
+        induct W: (Bool) -> pub Type
+        | mk(b: Bool): (b)
+        end
+
+        let pick(@b: Bool, _: W(b)) -> Bool = b;
+
+        let stuck(k: Nat, n: Nat) -> Bool =
+            pick(match k < n | true => W/mk(k < n) | false => W/mk(k < n) end);
+
+        let unstuck(c: Bool) -> Bool =
+            pick(match c | true => W/mk(c) | false => W/mk(c) end);
+
+        let spelled(b: Bool) -> Str = match b | true => "t" | false => "f" end;
+
+        print(Str/flatten([spelled(stuck(1, 2)), spelled(stuck(2, 1)), spelled(unstuck(true))]))
+        "#);
+
+    assert_eq!(output, b"tft");
+}
+
+/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Nat/Lt(0, Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`, as it refused `/std/Str`'s `occurrence` until its implicits were spelled by hand.
+#[test]
+fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
+    let output = run(r#"
+        use /std/{Bytes, Nat, Bool, Eq, print};
+
+        let hop(@b: Bytes, some: Nat/Lt(0, Bytes/len(b))) -> Nat =
+            match b
+            | x[] => match some end
+            | x[_, .._] => 1
+            end;
+
+        let reach(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b))) -> Nat =
+            k + hop(@Bytes/drop(b, k, @within), Nat/Lt/sub_positive_of_lt(k, Bytes/len(b), here));
+
+        pub let same(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b)))
+            -> Eq(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
+            Eq/refl();
+
+        print(Nat/to_str(reach(x[1, 2], 0, @Bool/True/qed(), @Bool/True/qed())))
+        "#);
+
+    assert_eq!(output, b"1");
+}

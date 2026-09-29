@@ -187,7 +187,9 @@ fn oracle_suppresses_privacy_as_part_of_its_package() {
         "none",
         Vec::<Term>::new(),
     );
-    let admitted = context.with_oracle(|context| elaborate(context, &term, Mode::Infer).is_ok());
+    let admitted = context.with_oracle(&Refinements::default(), |context| {
+        elaborate(context, &term, Mode::Infer).is_ok()
+    });
     assert!(admitted);
 }
 

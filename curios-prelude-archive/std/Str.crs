@@ -601,9 +601,6 @@ let meets(
                                     past = met.past,
                                     reach =
                                         Nat/Le/trans(
-                                            @at.offset,
-                                            @have.past.offset,
-                                            @met.past.offset,
                                             Nat/Lt/le_of_lt(
                                                 at.offset,
                                                 have.past.offset,
@@ -717,9 +714,6 @@ let occurrence(
                             past = found.past,
                             ordered =
                                 Nat/Le/trans(
-                                    @at.offset,
-                                    @onward.past.offset,
-                                    @found.start.offset,
                                     Nat/Lt/le_of_lt(at.offset, onward.past.offset, onward.progress),
                                     found.ordered),
                             progress = found.progress))

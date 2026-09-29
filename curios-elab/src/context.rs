@@ -1096,8 +1096,52 @@ impl Context {
         self.frames.refinements_suppressed()
     }
 
-    pub(crate) fn has_refinements(&self) -> bool {
-        self.frames.has_refinements()
+    /// The refinements a lookup may read now, of every kind — what a metavariable born here is born under.
+    pub(crate) fn refinement_snapshot(&mut self) -> SharedRefinements {
+        self.frames.refinement_snapshot()
+    }
+
+    /// Whether `refinements` are exactly the ones a lookup may read now, so that judging under them needs no bracket.
+    pub(crate) fn refinements_are(&mut self, refinements: &Refinements) -> bool {
+        let current = self.frames.refinement_snapshot();
+        std::ptr::eq(&*current, refinements) || current.same_as(refinements)
+    }
+
+    /// Record `refinements` in the current frame, each with the refinement cache protocol, in order, so an inner one shadows an outer as it did where they were taken.
+    pub(crate) fn install_refinements(&mut self, refinements: &Refinements) {
+        for (name, value) in &refinements.variables {
+            self.refine(name, value);
+        }
+
+        for ((_, index), entry) in &refinements.projections {
+            // Re-registered from the *unerased* base, never the key: the key is what erasing that base produced, and re-erasing it would lose the spelling the read compares against.
+            self.refine_projection(entry.original.clone(), *index, entry.value.clone());
+        }
+
+        for (canonical, entry) in &refinements.scrutinees {
+            self.refine_scrutinee_spellings(
+                vec![(canonical.clone(), entry.original.clone(), entry.alias)],
+                &entry.value,
+            );
+        }
+    }
+
+    /// Run `f` under exactly the refinements `birth` holds — what a metavariable's solution, or a candidate for a written goal, is judged under. At once where they are the ones a lookup reads already, the common case of a term judged in the arm it was born in; otherwise with every refinement registered so far withheld and `birth`'s reinstalled in a frame above them, since a frame a suppression enters keeps its own refinements live.
+    pub(crate) fn with_refinements<R>(
+        &mut self,
+        birth: &Refinements,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if self.refinements_are(birth) {
+            return f(self);
+        }
+
+        self.with_suppressed_refinements(|context| {
+            context.with_frame(|context| {
+                context.install_refinements(birth);
+                f(context)
+            })
+        })
     }
 
     /// Whether any refinement of any kind is registered, suppressed or not — the closed machine's gate. Suppression must not open it: a suppressed scrutinee key is *withheld* by the strategy, and the machine evaluating it would hand out the value the suppression exists to withhold.
@@ -1120,7 +1164,7 @@ impl Context {
         result
     }
 
-    /// Run `f` with every refinement registered *so far* suppressed (re-validation). A frame `f` enters keeps its own refinements live: those belong to the term being validated rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
+    /// Run `f` with every refinement registered *so far* suppressed — the slow half of [`Context::with_refinements`], which reinstalls a birth's refinements above it. A frame `f` enters keeps its own refinements live: those belong to the term being judged rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
     ///
     /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -1342,7 +1386,9 @@ impl Context {
         result: Term,
     ) {
         self.caches.note_write();
-        self.solutions.birth(id, telescope.into(), result);
+        let refinements = self.frames.refinement_snapshot();
+        self.solutions
+            .birth(id, telescope.into(), refinements, result);
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
@@ -1352,7 +1398,9 @@ impl Context {
         self.caches.note_write();
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        self.solutions.birth_rec_slot(id, telescope, result);
+        let refinements = self.frames.refinement_snapshot();
+        self.solutions
+            .birth_rec_slot(id, telescope, refinements, result);
         self.rec_slot_names.insert(id, name.clone());
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
@@ -1470,10 +1518,12 @@ impl Context {
         };
         let outer_names: BTreeSet<&Free> =
             outer_entry.telescope.iter().map(|(name, _)| name).collect();
+        // Refinements as well as names: a `Bool` arm opens no binder, so a metavariable born inside `match k < n | true =>` has the telescope of one born just outside it, and a solution resting on the arm's guard would escape through a containment that read names alone.
         inner_entry
             .telescope
             .iter()
             .all(|(name, _)| outer_names.contains(name))
+            && inner_entry.refinements.within(&outer_entry.refinements)
     }
 
     fn fresh_metavar_with(
@@ -1717,21 +1767,7 @@ impl Context {
             self.define_entry(name.clone(), entry.clone());
         }
 
-        for (name, value) in &frame.refinements {
-            self.refine(name, value);
-        }
-
-        for ((_, index), entry) in &frame.refinement_projections {
-            // Re-registered from the *unerased* base, never the key: the key is what erasing that base produced, and re-erasing it would lose the spelling the read compares against.
-            self.refine_projection(entry.original.clone(), *index, entry.value.clone());
-        }
-
-        for (canonical, entry) in &frame.refinement_scrutinees {
-            self.refine_scrutinee_spellings(
-                vec![(canonical.clone(), entry.original.clone(), entry.alias)],
-                &entry.value,
-            );
-        }
+        self.install_refinements(&frame.refinements);
 
         // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.
         self.frames.extend_witness_scope(&frame.witness_binders);
@@ -1790,11 +1826,15 @@ impl Context {
         self.solutions.parking_suppressed()
     }
 
-    /// Run `f` as a yes/no *oracle* around full elaboration (re-validation): parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — counterfactual refinements are suppressed with it, and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
-    pub(crate) fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
+    pub(crate) fn with_oracle<R>(
+        &mut self,
+        birth: &Refinements,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         self.caches.begin_oracle();
         let result = self.with_suppressed_parking(|context| {
-            context.with_suppressed_refinements(|context| context.with_suppressed_privacy(f))
+            context.with_refinements(birth, |context| context.with_suppressed_privacy(f))
         });
         self.caches.end_oracle();
 

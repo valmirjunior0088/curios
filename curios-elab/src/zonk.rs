@@ -934,15 +934,20 @@ pub(crate) fn collect_goal_reports(
             all_candidates.push(Vec::new());
             continue;
         }
-        let (telescope, result) = {
+        let (telescope, refinements, result) = {
             let entry = context
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
-            (Rc::clone(&entry.telescope), entry.result.clone())
+            (
+                Rc::clone(&entry.telescope),
+                Rc::clone(&entry.refinements),
+                entry.result.clone(),
+            )
         };
         all_candidates.push(super::suggest_candidates(
             context,
             &telescope,
+            &refinements,
             &result,
             module,
             entry,

@@ -716,8 +716,10 @@ pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = 
 pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"
         use /std/{Eq, Nat};
 
-        let f(h : (A : Prop) -> A) -> Eq(h(Eq(0, 0)), h(Eq(0, 0))) =
-            match h(Eq(0, 0)) | refl(@_) => Eq/refl() end;
+        let k(@x: Eq(0, 0), _: Eq(x, x)) -> Nat = 1;
+
+        let f(h : (A : Prop) -> A, w : Eq(h(Eq(0, 0)), h(Eq(0, 0)))) -> Nat =
+            k(match h(Eq(0, 0)) | refl(@_) => w end);
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1654,7 +1656,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The elaborator solved `refl`'s value with the arm's refinements suppressed, and its reducer handed back the refinement's universe-erased key as the reduct, so the solution held a bare `/std/Eq/Eq` the kernel refused as an occurrence stating no universe instance. The reducer now hands back the probe as spelled.
+    // The elaborator solved an implicit born outside an arm, inside it, with the arm's refinements suppressed, and its reducer handed back the refinement's universe-erased key as the reduct, so the solution held a bare `/std/Eq/Eq` the kernel refused as an occurrence stating no universe instance. The reducer now hands back the probe as spelled.
     (
         "an_inferred_value_under_a_refined_proof_keeps_its_universe_instance",
         AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE,

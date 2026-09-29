@@ -399,35 +399,35 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     );
 }
 
-// A late fill is a metavariable solution, which may be spliced past the arm it was minted in, so it is decided without the arm's refinements: a bound true only under `m < 10` is still refused when its subject arrives late. Written first — `need(@m, …)` — the same bound is filled at insertion, inside the arm.
+// A late fill is a metavariable solution, decided under the refinements its slot was born under: a bound true only under `m < 10` is filled when its subject arrives late inside that arm, as it is when written first — `need(@m, …)`. The control is the same bound with its slot born outside the arm, at a call whose witness is the match: the guard is not one the slot was born under, so the bound is refused.
 #[test]
-fn a_late_pinned_bound_that_holds_only_under_a_refinement_is_still_refused() {
-    let error = typecheck(
-        r#"
-        use /std/{Nat, Bool, Eq};
-        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
-        let f(m: Nat) -> Nat =
-            match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
-        /std/print("unreachable")
-        "#,
-    )
-    .expect_err("the refinement is withheld from a late fill");
-
-    assert!(
-        error.contains("nothing discharged Bool/Holds(m < 10)"),
-        "unexpected report: {error}"
-    );
-
+fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     typecheck(
         r#"
         use /std/{Nat, Bool, Eq};
         let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
         let f(m: Nat) -> Nat =
-            match m < 10 | true => need(m, @m, Eq/refl()) | false => 0 end;
+            match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
         /std/print("ok")
         "#,
     )
-    .expect("written first, the bound is filled inside the arm");
+    .expect("the slot was born in the arm, so the arm's guard fills it");
+
+    let error = typecheck(
+        r#"
+        use /std/{Nat, Bool, Eq};
+        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
+        let f(m: Nat) -> Nat =
+            need(m, match m < 10 | true => Eq/refl() | false => Eq/refl() end);
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a slot born outside the arm does not rest on its guard");
+
+    assert!(
+        error.contains("nothing discharged Bool/Holds(m < 10)"),
+        "unexpected report: {error}"
+    );
 }
 
 // A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`; the elaborator's reducer once bound that as a fresh definition per unfolding, so the two lengths came back spelled with differently named `code`s, the sum's cancellation met them as unequal, and `k + w <= k + w + 1` was refused although conversion identifies the two. The reducer substitutes a `let` as the kernel does, and both unfoldings spell one term.
@@ -474,33 +474,34 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     );
 }
 
-// **The retry sees no guard.** A fill made on retry is a metavariable solution, which may travel past the arm it was minted in, so it is decided with the arm's refinements withheld: under `a < b`, a `proved()` whose proposition the annotation pins afterwards is refused. The same call with its proposition written is decided at insertion, inside the arm, and filled there.
+// **The retry sees the guard its slot was born under.** A fill made on retry is a metavariable solution, so it is decided as re-validation decides one: under `a < b`, a `proved()` whose proposition the annotation pins afterwards is filled on retry, as the same call with its proposition written is at insertion. The control is a `proved()` made before the match and pinned inside its arm: its slot was born outside the arm, so the guard does not fill it.
 #[test]
-fn a_bound_pinned_later_under_a_guard_is_refused_and_one_known_at_insertion_is_filled() {
-    let error = typecheck(
-        r#"
-        use /std/{Nat};
-        let proved(@P: Prop, @p: P) -> P = p;
-        let guarded(a : Nat, b : Nat) -> Nat =
-            match a < b | true => let q: Nat/Lt(a, b) = proved(); a | false => b end;
-        /std/print("unreachable")
-        "#,
-    )
-    .expect_err("a retry withholds the arm's refinements");
-
-    assert!(
-        error.contains("nothing discharged Nat/Lt(a, b)"),
-        "expected the undischarged bound, got: {error}"
-    );
-
+fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
     assert_eq!(
         run(r#"
         use /std/{Nat};
         let proved(@P: Prop, @p: P) -> P = p;
         let guarded(a : Nat, b : Nat) -> Nat =
-            match a < b | true => let q: Nat/Lt(a, b) = proved(@Nat/Lt(a, b)); a | false => b end;
+            match a < b | true => let q: Nat/Lt(a, b) = proved(); a | false => b end;
         /std/print("ok")
         "#),
         b"ok"
+    );
+
+    let error = typecheck(
+        r#"
+        use /std/{Nat};
+        let proved(@P: Prop, @p: P) -> P = p;
+        let guarded(a : Nat, b : Nat) -> Nat =
+            let early = proved();
+            match a < b | true => let q: Nat/Lt(a, b) = early; a | false => b end;
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a slot born outside the arm does not rest on its guard");
+
+    assert!(
+        error.contains("nothing discharged"),
+        "expected the undischarged bound, got: {error}"
     );
 }

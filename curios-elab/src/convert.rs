@@ -1132,6 +1132,7 @@ impl Convert {
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
+        let refinements = entry.refinements.clone();
         let result = entry.result.clone();
 
         // Every birthed occurrence carries its full spine: `elaborate_apply` opens telescopes with rebuilt arguments, so no lowered bare copy of a birthed hole survives into compared types. (An empty telescope's identity spine is legitimately empty.)
@@ -1270,25 +1271,27 @@ impl Convert {
             }
         }
 
-        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ, as an *oracle* — counterfactual refinements and constraint parking both suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
+        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
         let revalidated = context.with_frame(|context| {
             for (name, ty) in telescope.iter() {
                 context.assume(name, ty);
             }
 
-            context.with_oracle(|context| match check(context, &inverted, result.clone()) {
-                Ok(_) => Ok(true),
-                // A meta-free, well-scoped candidate that fails to check against the frozen type is not validly typed here — reject the solution. (Under the oracle's suppressed parking an undecided check surfaces as an error too, and likewise rejects.)
-                Err(_error) => {
-                    // The oracle's verdict is a boolean, so this error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
-                    curios_profile::note!(
-                        target: "curios_elab::solve",
-                        meta = id.0,
-                        error = %_error,
-                        "re-validation rejected the candidate",
-                    );
-                    Ok(false)
+            context.with_oracle(&refinements, |context| {
+                match check(context, &inverted, result.clone()) {
+                    Ok(_) => Ok(true),
+                    // A meta-free, well-scoped candidate that fails to check against the frozen type is not validly typed here — reject the solution. (Under the oracle's suppressed parking an undecided check surfaces as an error too, and likewise rejects.)
+                    Err(_error) => {
+                        // The oracle's verdict is a boolean, so this error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
+                        curios_profile::note!(
+                            target: "curios_elab::solve",
+                            meta = id.0,
+                            error = %_error,
+                            "re-validation rejected the candidate",
+                        );
+                        Ok(false)
+                    }
                 }
             })
         })?;
@@ -1439,11 +1442,15 @@ impl Convert {
         let body = mk_body(&full_args);
         let candidate = Term::func_marked(domains.clone(), body);
 
-        // The invariant `solve_refinement_free` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under counterfactual match-arm refinements. When refinements are live and the unrefined spelling differs, the nominal shape may be the refinement's doing — postpone rather than commit.
-        if context.has_refinements() {
-            let suppressed = context
-                .with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
-            if suppressed != rigid {
+        // The invariant `solve_at_birth` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under. Where those are in view and the spelling at its birth differs, the nominal shape may be their doing — postpone rather than commit.
+        if let Some(birth) = context
+            .metavar_entry(metavar.id)
+            .map(|entry| entry.refinements.clone())
+            && !context.refinements_are(&birth)
+        {
+            let at_birth =
+                context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
+            if at_birth != rigid {
                 return self.block(context, problem);
             }
         }
@@ -1468,40 +1475,55 @@ impl Convert {
         Ok(true)
     }
 
-    /// Solve flex–rigid with a *refinement-free* candidate. The drain reduces problems under the live frame, where counterfactual match-arm refinements apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only counterfactually inside an arm (`?k := 0` because the nil arm refined `n := 0`). When refinements are in scope, re-reduce the original rigid term with them suppressed and solve against that spelling; refinements only ever *add* reductions, so a solution found this way still discharges the refined problem. A problem whose verdict changes under suppression is the refinement's doing — nothing is globally forced, so it postpones rather than failing or committing.
-    fn solve_refinement_free(
+    /// Solve flex–rigid with a candidate spelled under the refinements the metavariable was born under. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the rigid side is its spelling, or what it was reduced from where the reduct does not re-check; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
+    fn solve_at_birth(
         &mut self,
         context: &mut Context,
         metavar: &Metavar,
         rigid: &Term,
         rigid_raw: &Term,
     ) -> Result<Solved, ReduceError> {
-        if !context.has_refinements() {
+        let birth = match context.metavar_entry(metavar.id) {
+            Some(entry) => entry.refinements.clone(),
+            // No birth record: `solve` refuses it, as it refuses any.
+            None => return self.solve(context, metavar, rigid),
+        };
+
+        if context.refinements_are(&birth) {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation this decided before is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
-            if stalled_unfolding(rigid_raw, rigid)
-                && let Solved::Done = self.solve(context, metavar, rigid_raw)?
-            {
+            let stalled = stalled_unfolding(rigid_raw, rigid);
+            if stalled && let Solved::Done = self.solve(context, metavar, rigid_raw)? {
                 return Ok(Solved::Done);
             }
+
+            // A reduct need not re-check where what it was reduced from does. Typing a match reads its scrutinee's type as spelled, and a reduct that inlined a definition's absurd arm — `hop`'s `match some end`, typed there because the arm refines the variable `b` — spells that type afresh from the substituted scrutinee, where no equation reaches it, and re-validation refuses it; the kernel reads a match's scrutinee type the same way. A refused reduct is therefore tried as written before the problem fails, unless the rule above already tried that spelling — which can only turn a refusal into a solution. `implicit_tests`' `a_solution_whose_reduct_does_not_recheck_is_committed_as_written` is the program.
+            return Ok(match self.solve(context, metavar, rigid)? {
+                Solved::Failed if !stalled && rigid_raw != rigid => {
+                    match self.solve(context, metavar, rigid_raw)? {
+                        Solved::Done => Solved::Done,
+                        Solved::Postponed | Solved::Failed => Solved::Failed,
+                    }
+                }
+                verdict => verdict,
+            });
+        }
+
+        let at_birth =
+            context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
+
+        // The refinements beyond the birth's made no difference for this term: the unguarded path, hard verdicts included.
+        if at_birth == *rigid {
             return self.solve(context, metavar, rigid);
         }
 
-        let suppressed =
-            context.with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
-
-        // Refinements made no difference for this term: the unguarded path, hard verdicts included.
-        if suppressed == *rigid {
-            return self.solve(context, metavar, rigid);
-        }
-
-        // The unrefined spelling is itself flexible — only the refinement made the side look rigid. Undecided.
-        if as_metavar(&suppressed).is_some() {
+        // The spelling at birth is itself flexible — only the other refinements made the side look rigid. Undecided.
+        if as_metavar(&at_birth).is_some() {
             return Ok(Solved::Postponed);
         }
 
-        Ok(match self.solve(context, metavar, &suppressed)? {
+        Ok(match self.solve(context, metavar, &at_birth)? {
             Solved::Done => Solved::Done,
-            // A verdict the refinement-free spelling cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the refined spelling may still discharge it once the metavariable is pinned elsewhere.
+            // A verdict the spelling at birth cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the spelling in view may still discharge it once the metavariable is pinned elsewhere.
             Solved::Postponed | Solved::Failed => Solved::Postponed,
         })
     }
@@ -1552,7 +1574,7 @@ impl Convert {
                 continue;
             }
 
-            // The unreduced spellings, kept for the flex–rigid case: the reductions below apply counterfactual match-arm refinements, and a candidate *solution* must be derived without them (see `solve_refinement_free`).
+            // The unreduced spellings, kept for the flex–rigid case: the reductions below apply every match-arm refinement in view, and a candidate *solution* must be derived under those its metavariable was born under alone (see `solve_at_birth`).
             let this_raw = this.clone();
             let that_raw = that.clone();
 
@@ -1608,7 +1630,7 @@ impl Convert {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
-                    match self.solve_refinement_free(context, &metavar, &that, &that_raw)? {
+                    match self.solve_at_birth(context, &metavar, &that, &that_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
                             self.blocked.push(raw_problem(&type_));
@@ -1622,7 +1644,7 @@ impl Convert {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
-                    match self.solve_refinement_free(context, &metavar, &this, &this_raw)? {
+                    match self.solve_at_birth(context, &metavar, &this, &this_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
                             self.blocked.push(raw_problem(&type_));

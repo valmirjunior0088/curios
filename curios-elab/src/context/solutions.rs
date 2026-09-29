@@ -3,7 +3,7 @@
 //! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 
 use {
-    super::{FrozenFrame, ItemStamp, SharedTelescope},
+    super::{FrozenFrame, ItemStamp, SharedRefinements, SharedTelescope},
     crate::Problem,
     curios_core::{
         Bound, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term, WitnessOrigin,
@@ -17,6 +17,8 @@ use {
 pub(crate) struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
     pub telescope: SharedTelescope,
+    /// The match-arm refinements in force at birth: what a solution may rest on beyond Γ, and all it may — re-validation runs under exactly these, and containment compares them as it compares Γ.
+    pub refinements: SharedRefinements,
     /// The metavariable's type — the `expected` it was checked against at birth.
     pub result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
@@ -114,8 +116,14 @@ impl Solutions {
     }
 
     /// Materialize a metavariable's birth record. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
-    pub(crate) fn birth(&mut self, id: MetavarId, telescope: SharedTelescope, result: Term) {
-        self.birth_with_kind(id, telescope, result, MetaKind::Inference);
+    pub(crate) fn birth(
+        &mut self,
+        id: MetavarId,
+        telescope: SharedTelescope,
+        refinements: SharedRefinements,
+        result: Term,
+    ) {
+        self.birth_with_kind(id, telescope, refinements, result, MetaKind::Inference);
     }
 
     /// [`Solutions::birth`] for a recursive-elaboration slot, which only `fill_rec_slot` may solve.
@@ -123,15 +131,17 @@ impl Solutions {
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
+        refinements: SharedRefinements,
         result: Term,
     ) {
-        self.birth_with_kind(id, telescope, result, MetaKind::RecSlot);
+        self.birth_with_kind(id, telescope, refinements, result, MetaKind::RecSlot);
     }
 
     fn birth_with_kind(
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
+        refinements: SharedRefinements,
         result: Term,
         kind: MetaKind,
     ) {
@@ -142,6 +152,7 @@ impl Solutions {
         self.next_metavar.seed(id.0 + 1);
         self.entries[id.0] = Some(MetaEntry {
             telescope,
+            refinements,
             result,
             solution: None,
             kind,

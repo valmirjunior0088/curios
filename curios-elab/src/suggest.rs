@@ -12,7 +12,7 @@
 
 use {
     super::{
-        Context, Outcome, Probe, check, convert_outcome, probe_match, reduce_with,
+        Context, Outcome, Probe, Refinements, check, convert_outcome, probe_match, reduce_with,
         zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
@@ -36,10 +36,13 @@ struct Candidate {
     pool: usize,
 }
 
-/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope` and expected `goal_type`), the module and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
+/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope`, the `refinements` of the arms it was written in, and the expected `goal_type`), the module and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
+///
+/// The refinements are reinstalled beside the telescope, so a fit that holds only under the arm's guard — `Eq/refl()` at `Eq(b, true)` in the `true` arm of `match b` — is found and verified as a paste at the goal would be checked.
 pub(crate) fn suggest_candidates(
     context: &mut Context,
     telescope: &[(Free, Term)],
+    refinements: &Refinements,
     goal_type: &Term,
     module: &Module,
     entry: Option<&Entrypoint>,
@@ -49,6 +52,7 @@ pub(crate) fn suggest_candidates(
         for (name, type_) in telescope {
             context.assume(name, type_);
         }
+        context.install_refinements(refinements);
         suggest_in_scope(context, telescope, goal_type, module, entry, owner)
     })
 }
@@ -479,11 +483,13 @@ fn constructor_fits(
     }
 }
 
-/// Whether the fully-spelled `candidate` checks against `goal_type` in the goal's own scope — already the current frame — the definitive fit gate for a hole-free constructor candidate, and what turns the paste-and-recheck promise into a machine guarantee. Runs as an oracle (parking, refinements, and privacy suppressed — `Blocked` is a mismatch) inside a transaction: every solution the attempt lands is rolled back.
+/// Whether the fully-spelled `candidate` checks against `goal_type` in the goal's own scope — already the current frame, its telescope and refinements installed — the definitive fit gate for a hole-free constructor candidate, and what turns the paste-and-recheck promise into a machine guarantee. Runs as an oracle under the goal's refinements (parking and privacy suppressed — `Blocked` is a mismatch) inside a transaction: every solution the attempt lands is rolled back.
 fn verifies(context: &mut Context, candidate: &Term, goal_type: &Term) -> bool {
     let mark = context.solution_mark();
-    let verdict =
-        context.with_oracle(|context| check(context, candidate, goal_type.clone()).is_ok());
+    let birth = context.refinement_snapshot();
+    let verdict = context.with_oracle(&birth, |context| {
+        check(context, candidate, goal_type.clone()).is_ok()
+    });
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     verdict

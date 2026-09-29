@@ -311,7 +311,7 @@ fn an_oracle_elaborates_a_term_that_writes_once() {
     let mut outside = 0;
     elaborate_writing(&mut context, &mut outside);
     elaborate_writing(&mut context, &mut outside);
-    let inside = context.with_oracle(|context| {
+    let inside = context.with_oracle(&Refinements::default(), |context| {
         let mut inside = 0;
         elaborate_writing(context, &mut inside);
         elaborate_writing(context, &mut inside);

@@ -117,7 +117,7 @@ pub(super) fn insert_auto_argument(
     let binder = binder_name(label);
 
     match plicity {
-        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards, and the inhabitant written here sits inside that arm. A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
+        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
         Plicity::Implicit => {
             let provenance = ImplicitOrigin {
                 func: func.clone(),
@@ -169,7 +169,7 @@ pub(super) fn insert_auto_argument(
 
 /// Try a bound standing as the hole `slot` once more: fill the hole if the bound has come to truth, record what it reduced to if it came to anything else, and answer whether it still waits on a metavariable.
 ///
-/// The fill is a metavariable solution, spliced wherever the hole travelled — past the arm it was minted in, when unification carried it out — so the bound is reduced with every live refinement withheld. A bound true only inside an arm stays unfilled and is reported; the eager attempt at insertion, which writes its inhabitant into the arm itself, is the one that may use them.
+/// The fill is a metavariable solution, so the bound is reduced as re-validation judges one: under the refinements the slot was born under and no others ([`Context::with_refinements`]). A bound true under the guard of the arm the call sits in is filled on retry as it would have been at insertion, and the fill cannot leave that arm: a solution for a metavariable born outside it that mentions the unfilled slot is not contained in that metavariable's birth context and waits, and once the slot is filled it is re-validated without the guard. A bound true only under a guard the slot was not born under stays unfilled and is reported.
 pub(crate) fn attempt_discharge(
     context: &mut Context,
     slot: MetavarId,
@@ -179,8 +179,12 @@ pub(crate) fn attempt_discharge(
     if context.metavar_solution(slot).is_some() {
         return Ok(false);
     }
+    let birth = context
+        .metavar_entry(slot)
+        .map(|entry| entry.refinements.clone())
+        .expect("a bound's slot has a birth record");
     let (reduced, inhabitant) = context
-        .with_suppressed_refinements(|context| trivially_inhabited(context, bound))
+        .with_refinements(&birth, |context| trivially_inhabited(context, bound))
         .map_err(|error| bound_exhausted(context, error, bound, provenance))?;
     if let Some(inhabitant) = inhabitant {
         context.solve_metavar(slot, inhabitant);
