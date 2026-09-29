@@ -28,12 +28,13 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
+    curios_analysis::connectives_agree,
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Free, Func, FuncType,
         InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
         Metavar, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        Variant, Visit, decide_bool, instantiate_universe_levels_scoped, is_bool_connective,
+        Variant, Visit, instantiate_universe_levels_scoped,
     },
     curios_utilities::Plicity,
     std::{
@@ -1660,20 +1661,18 @@ impl Convert {
                 }
             }
 
-            // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees. The truth table over the two sides' atoms decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was; the kernel states the same arm.
+            // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was. The kernel asks the same function in its own fallback.
             if !matches!(
                 (&*this, &*that),
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
-            ) && (is_bool_connective(&this) || is_bool_connective(&that))
-                && decide_bool(context, &this, &that)?
+            ) && connectives_agree(context, &this, &that)?
             {
                 continue;
             }
 
-            let syntax = context.syntax();
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
-                    convert_intrinsic(self, context, &syntax, this, that)?
+                    convert_intrinsic(self, context, this, that)?
                 }
                 (Subterm::Type(this), Subterm::Type(that)) => {
                     context

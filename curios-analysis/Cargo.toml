@@ -3,7 +3,7 @@ name = "curios-analysis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The analyses both Curios checkers run: the Env/Judge seam, index inversion, strict positivity, size-change totality, and universe satisfiability"
+description = "The analyses both Curios checkers run: the Env/Judge seam, index inversion, strict positivity, size-change totality, universe satisfiability, and the chain conversion runs when two intrinsics meet"
 
 [lints]
 workspace = true

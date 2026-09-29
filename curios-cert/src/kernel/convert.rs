@@ -34,11 +34,12 @@ mod test_support;
 
 use {
     super::{Counted, Kernel, KernelError, Sort, infer, synth_neutral, unfold_spelling},
+    curios_analysis::connectives_agree,
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
         InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, decide_bool,
-        instantiate_universe_levels_scoped, is_bool_connective,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -497,16 +498,13 @@ fn structural(
             Ok(rec_instances(kernel, this, that) == Some(true))
         }
 
-        // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees. The truth table over the two sides' atoms decides it equal or says nothing, and saying nothing leaves the pair where it was.
-        _ if is_bool_connective(this) || is_bool_connective(that) => {
-            match decide_bool(kernel, this, that)? {
-                true => Ok(true),
-                false => unfolded_retry(kernel, history, this, that),
-            }
-        }
-
-        // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
-        _ => unfolded_retry(kernel, history, this, that),
+        // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair where it was.
+        //
+        // Then two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
+        _ => match connectives_agree(kernel, this, that)? {
+            true => Ok(true),
+            false => unfolded_retry(kernel, history, this, that),
+        },
     }
 }
 

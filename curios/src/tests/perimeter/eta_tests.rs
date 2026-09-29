@@ -101,6 +101,15 @@ fn a_polymorphic_definition_applied_to_two_proofs_converts() {
     );
 }
 
+// An intrinsic carries its proofs as operands, compared at the proposition `Intrinsic::signature` declares for each, so two proofs of one bound meet irrelevance there. The two heads differ, so neither spine rule decides the pair and both sides unfold to the division itself.
+#[test]
+fn an_intrinsic_applied_to_two_proofs_converts_at_their_proposition() {
+    assert_eq!(
+        run(AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION),
+        b"1"
+    );
+}
+
 // The ordinary program the kernel's old order could not finish: a recursive function passing a proof along, unfolded under fresh binders at every round, so the conversion recurrence never saw its goal again and the kernel spent its whole budget before refusing.
 #[test]
 fn a_recursive_function_carrying_a_proof_converts_without_unfolding() {

@@ -625,7 +625,7 @@ impl Nat {
     }
 
     /// Whether two reduced `Nat` terms are certainly one number: syntactic identity first, then the cancellation, which reads every summand up to universe instances — so `len(xs)` is one number at every instance, bare or inside a sum. `false` declines; it never claims the two differ.
-    pub(crate) fn same(left: &Term, right: &Term) -> bool {
+    pub fn same(left: &Term, right: &Term) -> bool {
         if left == right {
             return true;
         }

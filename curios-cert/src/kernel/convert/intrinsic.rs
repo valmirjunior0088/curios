@@ -2,181 +2,65 @@
 //!
 //! Two intrinsics are equal when they are the same operation applied to convertible operands. That is a congruence rule rather than a computation rule — the computation already happened, since both sides arrived in weak-head normal form and a foldable operation would have folded.
 //!
-//! The rule is stated *generically* rather than as one arm per operation. The roster has upwards of a hundred entries, and a hand-written pair match over it is a list that must be extended every time an operation is added — a list whose omissions are silent. Here the shape and the operands are both read through the traversal that already defines what an intrinsic's operands are, so a new operation is covered the moment it is representable.
+//! The rule is stated *generically* rather than as one arm per operation, and it is stated once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands, so a new operation is covered the moment it is representable. What this module keeps is the kernel's own discharge.
 
 use {
     super::{History, compare, ground},
     crate::{Kernel, KernelError},
-    curios_algebra::{Conclusion, Deduction},
-    curios_core::{
-        Intrinsic, Nat, Operand, Subterm, Term, Var, Visit, align_comparisons, decide_bool,
-        int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool, peel_int_pair,
-        peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
-    },
+    curios_analysis::{Congruence, Driver, Obligation, Outcome, convert_intrinsics},
+    curios_core::Intrinsic,
+    curios_utilities::SyntaxRegistry,
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
+///
+/// The chain that decides the pair or leaves what is left to compare is `curios-analysis`'s `convert_intrinsics`, the elaborator's too. What is the kernel's is the discharge: a residual is compared at `Type`, the levels by entailment, and each operand in order at its declared type, all under the active `History`, stopping at the first that fails.
 pub(super) fn convert_intrinsic(
     kernel: &mut Kernel,
     history: &mut History,
     this: &Intrinsic,
     that: &Intrinsic,
 ) -> Result<bool, KernelError> {
-    // **A pair of `Nat`s decides how much of itself to build.** Both sides arrived head-forced, not merged. A literal against a sum with nothing left to force clashes from the head — a stuck symbolic summand is not definitionally a literal — and that is the answer a ten-definition web used to build 1 222 222 monomials to reach. Anything else is forced to its linear combination first, and the peel below reads the pair that produced; an `Undecided` verdict then falls into the operand congruence on those normalized operands rather than back through `ground`, which would re-enter here.
-    // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them, and it is asked for here by name. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so the peel decides those as it always did.
-    let as_intrinsic = |term: &Term| match &**term {
-        Subterm::Intrinsic(intrinsic) => Some(intrinsic.clone()),
-        _ => None,
-    };
-    // `Int` draws the same line at its own product, so the same demand serves both carriers: each normalizer leaves the other carrier's terms untouched.
-    let stuck = |intrinsic: &Intrinsic| {
-        let term = Term::intrinsic(intrinsic.clone());
-        Nat::has_stuck_product(&term) || int_has_stuck_product(&term)
-    };
-    // A literal on either side is the peel's: sums and differences are merged and cancelled by the fold, so a side with a symbolic summand — and a stuck product is one — is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
-    let literal = |intrinsic: &Intrinsic| {
-        matches!(intrinsic, Intrinsic::Nat(value) if value.to_natural().is_some())
-            || matches!(intrinsic, Intrinsic::Int(_))
-    };
-    let (this, that) = match !(literal(this) || literal(that)) && (stuck(this) || stuck(that)) {
-        false => (this.clone(), that.clone()),
-        true => {
-            let this = Nat::normalize(kernel, Term::intrinsic(this.clone()))?;
-            let that = Nat::normalize(kernel, Term::intrinsic(that.clone()))?;
-            let this = int_normalize(kernel, this)?;
-            let that = int_normalize(kernel, that)?;
-            match (as_intrinsic(&this), as_intrinsic(&that)) {
-                (Some(this), Some(that)) => (this, that),
-                _ => return ground(kernel, history, &this, &that),
+    match convert_intrinsics(kernel, this.clone(), that.clone())? {
+        Outcome::Equal => Ok(true),
+        Outcome::Unequal => Ok(false),
+        Outcome::Residual(this, that) => ground(kernel, history, &this, &that),
+        Outcome::Congruence(Congruence {
+            this_levels,
+            that_levels,
+            operands,
+        }) => {
+            if !kernel.levels_eq(&this_levels, &that_levels) {
+                return Ok(false);
             }
-        }
-    };
-    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. Undecided is not unequal, so everything below runs as it did.
-    if decide_bool(
-        kernel,
-        &Term::intrinsic(this.clone()),
-        &Term::intrinsic(that.clone()),
-    )? {
-        return Ok(true);
-    }
-    // **Two `&&` trees, or two `||` trees, are flattened with their leaves forced before they are peeled** — the same demand by name as the stuck product's, because the fold leaves a stuck connective's right operand as written and the peel reads leaves without reducing.
-    let (this, that) = match (
-        normalize_bool(kernel, &this)?,
-        normalize_bool(kernel, &that)?,
-    ) {
-        (Some(this_tree), Some(that_tree)) => {
-            match (as_intrinsic(&this_tree), as_intrinsic(&that_tree)) {
-                (Some(this), Some(that)) => (this, that),
-                _ => return ground(kernel, history, &this_tree, &that_tree),
-            }
-        }
-        // A tree against a `Bool` literal is flattened the same way: what decides it against `true` or `false` is a law on its leaves — an operand beside its own negation — and the fold left those leaves as written.
-        (Some(this_tree), None) if matches!(that, Intrinsic::Bool(_)) => {
-            match as_intrinsic(&this_tree) {
-                Some(this) => (this, that),
-                None => return ground(kernel, history, &this_tree, &Term::intrinsic(that)),
-            }
-        }
-        (None, Some(that_tree)) if matches!(this, Intrinsic::Bool(_)) => {
-            match as_intrinsic(&that_tree) {
-                Some(that) => (this, that),
-                None => return ground(kernel, history, &Term::intrinsic(this), &that_tree),
-            }
-        }
-        _ => (this, that),
-    };
-    // A negated comparison, and a `<=` meeting a `<`, are aligned to one spelling of the family before the peels — probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
-    let (this, that) = match align_comparisons(kernel, &this, &that)? {
-        Some(pair) => pair,
-        None => (this, that),
-    };
-    let (this, that) = (&this, &that);
-    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off, `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves, and two stuck `get`s are one element when they read one position of one root, however many windows either reads it through. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Undecided` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
-    if let Some(conclusion) = peel_monomial(this, that).or_else(|| {
-        peel_nat_pair(this, that)
-            .or_else(|| peel_int_pair(this, that))
-            .or_else(|| peel_bin(this, that))
-            .or_else(|| peel_list(this, that))
-            .or_else(|| peel_bool(this, that))
-            .or_else(|| peel_symmetric(this, that))
-            .or_else(|| peel_position(this, that))
-            .map(Conclusion::from)
-    }) {
-        match conclusion {
-            Conclusion::Equal => return Ok(true),
-            Conclusion::Impossible => return Ok(false),
-            // A sufficient residual is checked exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
-            Conclusion::Equivalent((left, right)) | Conclusion::Sufficient((left, right)) => {
-                return ground(kernel, history, &left, &right);
-            }
-            // **The `Nat` peel's one unforced shape**, retried once with each summand's own arguments forced and its sums put in one order — the elaborator's rule, stated once more here because each checker asks its normalization demands by name. The fold leaves a stuck application's arguments as written, so two summands differing only inside their heads never pair; this arm is reached only when the peel found nothing to cancel, and a retry that still finds nothing falls through to the congruence below on the *original* spelling.
-            Conclusion::Undecided => {
-                if peel_nat_pair(this, that).is_some() {
-                    let forced_this = Nat::normalize_atoms(kernel, Term::intrinsic(this.clone()))?;
-                    let forced_that = Nat::normalize_atoms(kernel, Term::intrinsic(that.clone()))?;
-
-                    if let (Subterm::Intrinsic(forced_this), Subterm::Intrinsic(forced_that)) =
-                        (&*forced_this, &*forced_that)
-                        && (forced_this != this || forced_that != that)
-                        && let Some(peel) = peel_nat_pair(forced_this, forced_that)
-                    {
-                        match peel {
-                            Deduction::Equal => return Ok(true),
-                            Deduction::Impossible => return Ok(false),
-                            Deduction::Equivalent((left, right)) => {
-                                return ground(kernel, history, &left, &right);
-                            }
-                            Deduction::Undecided => {}
-                        }
-                    }
+            let Some(operands) = operands else {
+                return Ok(false);
+            };
+            for Obligation { type_, this, that } in operands {
+                let converted = match type_ {
+                    Some(type_) => compare(kernel, history, &type_, &this, &that)?,
+                    None => ground(kernel, history, &this, &that)?,
+                };
+                if !converted {
+                    return Ok(false);
                 }
             }
+            Ok(true)
         }
     }
-
-    let (mut this_shape, this_operands) = decompose(this);
-    let (mut that_shape, that_operands) = decompose(that);
-
-    // The shapes carry everything that is *not* a term: which operation, which grain, which literal, which successor floor. Comparing them settles the whole of the operation's identity in one derived equality.
-    if !kernel.levels_eq(this.result_universes(), that.result_universes()) {
-        return Ok(false);
-    }
-    if let Some(levels) = this_shape.result_universes_mut() {
-        levels.clear();
-    }
-    if let Some(levels) = that_shape.result_universes_mut() {
-        levels.clear();
-    }
-    if this_shape != that_shape || this_operands.len() != that_operands.len() {
-        return Ok(false);
-    }
-
-    // Each operand compares at the type its operation declares for it, not at a flat one — the same discipline `convert`'s variant, struct and tuple comparisons already follow, and the reason it matters here is the bounds: a proof compares at its *proposition*, where definitional proof irrelevance discharges the goal without looking at either side. Two differently-derived proofs of one bound are therefore convertible, rather than convertible only when both happen to be the canonical inhabitant.
-    //
-    // Reading the demand off `Intrinsic::signature` is what keeps that from being a rule about bounds. There is no proof-shaped case here; irrelevance fires through the ordinary gate because the goal carries a proposition, exactly as it would for any other operand whose type is one.
-    let signature = this.signature(&kernel.syntax());
-
-    for (index, (left, right)) in this_operands.iter().zip(&that_operands).enumerate() {
-        let converted = match signature.operands.get(index) {
-            Some(Operand::At(type_)) => compare(kernel, history, type_, left, right)?,
-            // A type operand and a function operand keep the flat comparison: the first is compared *as* a type, and the second would need a binder minted here to state its own.
-            _ => ground(kernel, history, left, right)?,
-        };
-
-        if !converted {
-            return Ok(false);
-        }
-    }
-
-    Ok(true)
 }
 
-/// Split an intrinsic into its shape — itself, with every term operand stood down to one placeholder — and those operands in traversal order.
-///
-/// Both halves come from `Intrinsic::traverse`, which is the single definition of what an intrinsic's term operands are. Nothing here enumerates operations, so nothing here can forget one.
-fn decompose(intrinsic: &Intrinsic) -> (Intrinsic, Vec<Term>) {
-    let mut visit = Visit::masking(|_, _: &Var| None, Term::type_ground());
-    let shape = intrinsic.traverse(&mut visit);
+/// The kernel is handed finished terms, so it prepares nothing, and it has no packed-literal view: the elaborator's view only proposes solutions, and once they are committed the two spellings agree by reduction.
+impl Driver for Kernel {
+    fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
+        intrinsic
+    }
 
-    (shape, visit.take_masked_children())
+    fn packed_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
+        None
+    }
+
+    fn syntax(&self) -> SyntaxRegistry {
+        Kernel::syntax(self)
+    }
 }

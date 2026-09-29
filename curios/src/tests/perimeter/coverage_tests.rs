@@ -112,7 +112,7 @@ fn the_matrix_tallies_as_recorded() {
     assert_eq!(
         tally,
         Tally {
-            both_accept: 29,
+            both_accept: 30,
             both_refuse: 9,
             the_kernel_refuses_alone: 0,
             unasked_with_a_twin: 19,

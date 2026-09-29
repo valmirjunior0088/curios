@@ -9,7 +9,7 @@
 use {
     super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{
-        Cancelled, Combination, Progress, Recombination, Summand, Wanted, distribute,
+        Cancelled, Combination, Deduction, Progress, Recombination, Summand, Wanted, distribute,
         distribution_size,
     },
     curios_num::Integer,
@@ -436,6 +436,11 @@ fn int_normalize_within(
 /// Sound for every reader because ℤ under `+` is a group: every order relation and equality reads through `a ⋈ b` iff `a - b ⋈ 0`, and splitting the difference by sign is only adding one term to both sides of that. The mathematics is `curios-algebra`'s `Combination::cancel_common`; what is decided here is which terms are one atom, and which terms the residuals are rebuilt from.
 pub fn int_cancel_common(left: &Term, right: &Term) -> (Term, Term) {
     int_rebuild_cancelled(int_cancellation(left, right), left, right)
+}
+
+/// Whether two reduced `Int` terms are certainly one number — [`Nat::same`] over the group: syntactic identity first, then the cancellation, which reads every summand up to universe instances. `false` declines; it never claims the two differ.
+pub fn int_same(left: &Term, right: &Term) -> bool {
+    left == right || matches!(int_cancellation(left, right).deduction(), Deduction::Equal)
 }
 
 /// `left` against `right` read over one table of atoms, with what they share split off by sign.

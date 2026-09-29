@@ -340,3 +340,45 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
     assert_eq!(conv(&mut context, &b, &absorbed), Ok(true));
     assert_eq!(conv(&mut context, &or(b.clone(), c), &b), Ok(false));
 }
+
+/// Two applications of one `Nat`-valued operation that differ only in a universe instance are one number: `len(n<0>)` and `len(n<1>)` meet before their congruence, which would compare the two instances' levels and refuse. The control is two different operands at one instance, which stay apart. The kernel's twin of this proposition shares the name.
+#[test]
+fn one_operation_at_two_universe_instances_is_one_number() {
+    let mut context = context();
+    let length = |operand: &Free, level: u32| {
+        Term::intrinsic(Intrinsic::bin_len(
+            Grain::X,
+            Term::instance(
+                InstanceHead::Var(Var::free(operand.clone())),
+                vec![Level::constant(level)],
+            ),
+        ))
+    };
+    let (n, m) = (context.fresh(Some("n")), context.fresh(Some("m")));
+
+    assert_eq!(conv(&mut context, &length(&n, 0), &length(&n, 1)), Ok(true));
+    assert_eq!(
+        conv(&mut context, &length(&n, 0), &length(&m, 0)),
+        Ok(false)
+    );
+}
+
+/// The levels a result carries are compared before its operands: two polls of one cell whose results are the cell's family at two ground levels are two terms, though every operand agrees — which the elaborator reports as an inconsistency of its universe context, since its level comparison is a constraint. The control is the same poll at one level. The kernel's twin of this proposition shares the name.
+#[test]
+fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
+    let mut context = context();
+    let cell = Term::free_var(&context.fresh(Some("cell")));
+    let poll = |level: u32| {
+        Term::intrinsic(Intrinsic::CellPoll {
+            element: Term::intrinsic(Intrinsic::NatType),
+            cell: cell.clone(),
+            universes: vec![Level::constant(level)],
+        })
+    };
+
+    assert!(matches!(
+        conv(&mut context, &poll(0), &poll(1)),
+        Err(ReduceError::Universe(_))
+    ));
+    assert_eq!(conv(&mut context, &poll(0), &poll(0)), Ok(true));
+}

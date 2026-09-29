@@ -2,6 +2,7 @@
 
 use super::test_support::*;
 use {
+    super::{History, convert_intrinsic},
     crate::{Kernel, convert},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -334,5 +335,32 @@ fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
             &Term::apply(group, [Term::free_var(&x), Term::free_var(&right)]),
         ),
         Ok(true),
+    );
+}
+
+/// A peel's residual is compared under the recursion history of the goal that produced it, not from a fresh one. With `a ≡ b` already in progress, `x + a` against `x + b` peels to that residual, which the recurrence rule then assumes — two distinct variables that no comparison would otherwise equate, which is what makes the history observable here. A residual handed to a fresh top-level comparison would meet the goal as new and refuse it; on a genuine cycle through a peel, it would unfold until the budget ran out.
+#[test]
+fn a_peel_residual_is_compared_under_the_active_history() {
+    let mut kernel = kernel();
+    let (x, a, b) = (
+        Term::free_var(&binder(40, "x")),
+        Term::free_var(&binder(41, "a")),
+        Term::free_var(&binder(42, "b")),
+    );
+    let mut history = History::default();
+    let _in_progress = history
+        .enter(&kernel, &Term::type_ground(), &a, &b)
+        .expect("the goal is new");
+
+    let sum = |summand: &Term| Intrinsic::nat_add(x.clone(), summand.clone());
+    assert_eq!(
+        convert_intrinsic(&mut kernel, &mut history, &sum(&a), &sum(&b)),
+        Ok(true),
+        "the residual `a ≡ b` was not compared under the goal in progress",
+    );
+    assert_eq!(
+        convert_intrinsic(&mut kernel, &mut History::default(), &sum(&a), &sum(&b)),
+        Ok(false),
+        "the control: from an empty history, `x + a` and `x + b` differ",
     );
 }

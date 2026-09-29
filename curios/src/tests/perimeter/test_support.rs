@@ -647,6 +647,16 @@ pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
+        use /std/{Eq, Nat};
+
+        let halve(a : Nat, b : Nat, @p : Nat/Lt(0, b)) -> Nat = Nat/div(a, b, @p);
+
+        let same(a : Nat, b : Nat, p : Nat/Lt(0, b), q : Nat/Lt(0, b)) -> Eq(halve(a, b, @p), Nat/div(a, b, @q)) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str = r#"
         use /std/{Eq, Nat};
 
@@ -1609,6 +1619,13 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "a_polymorphic_definition_applied_to_two_proofs_converts",
         A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    // An intrinsic carries its proofs as operands, and both checkers compare each at the proposition the operation declares for it. The two heads differ, so no spine rule decides the pair: both sides unfold to the division itself, and the two proofs meet irrelevance at its bound.
+    (
+        "an_intrinsic_applied_to_two_proofs_converts_at_their_proposition",
+        AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION,
         Expect::Accepts,
         Expect::Accepts,
     ),
