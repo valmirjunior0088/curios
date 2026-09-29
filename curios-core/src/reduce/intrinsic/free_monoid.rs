@@ -6,7 +6,8 @@
 
 use {
     super::*,
-    crate::{Intrinsic, Nat, Piece, ReduceError, Reducer, Subterm, Term},
+    crate::{Intrinsic, Nat, Piece, ReduceError, Reducer, Sequence, Subterm, Term, Words},
+    curios_algebra::{Alphabet, Seam, seam_window},
     curios_num::{Binary, Grain},
 };
 
@@ -283,7 +284,7 @@ impl FreeMonoid {
 ///
 /// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. It carries the bounds it read as well as the total, because only that strategy has them as indices and the refusal names all three.
 ///
-/// `Inside` is the symbolic strategy's, and it is the one answer that names an operand *without* covering it whole: the caller rebuilds its own operation over that operand at `start`, with the same count and the same bound. The bound is reused, not derived — see [`seam_window`] for why it proves the narrowed proposition.
+/// `Inside` is the symbolic strategy's, and it is the one answer that names an operand *without* covering it whole: the caller rebuilds its own operation over that operand at `start`, with the same count and the same bound. The bound is reused, not derived — `curios-algebra`'s `seam_window` states why it proves the narrowed proposition.
 pub(super) enum Windowed {
     Parts(Vec<Term>),
     Inside {
@@ -304,15 +305,15 @@ impl FreeMonoid {
     ///
     /// **The concrete strategy runs first and spends nothing**, which is what keeps a measurable value off the budget: `FreeMonoid::segments` reads each operand's length rather than reducing a `len` term for it. Only the fallback charges, one measure per operand, and only once the first has declined.
     ///
-    /// `piece` and `measure` are the two things the carrier does not itself hold — a narrowed piece must restate a `List`'s element type, and a measure is spelled in the carrier's own `len`.
-    pub(super) fn window(
+    /// `piece` and `words` are the two things the carrier does not itself hold — a narrowed piece must restate a `List`'s element type, and a measure is spelled in the carrier's own `len`, which the words' alphabet builds.
+    pub(super) fn window<S: Sequence>(
         self,
         reducer: &mut impl Reducer,
         value: &Term,
         start: &Term,
         count: &Term,
         piece: impl Fn(Piece<'_>) -> Term,
-        measure: impl Fn(&Term) -> Intrinsic,
+        words: &Words<S>,
     ) -> Result<Option<Windowed>, ReduceError> {
         // Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read. A narrowed edge is narrowed *here* rather than rebuilt as a bounded node for the next pass to fold into exactly this, which is also what leaves this arm constructing no bounded node at all.
         if let (Some(start), Some(count)) = (as_index(start), as_index(count)) {
@@ -334,81 +335,21 @@ impl FreeMonoid {
             }
         }
 
-        // A window on the seams of a symbolic concatenation, or inside its last operand. An append is one of those concatenations, which `FreeMonoid::concatenated` is what says.
-        if let Some(operands) = self.concatenated(value)
-            && let Some(windowed) = seam_window(reducer, &operands, start, count, measure)?
-        {
-            return Ok(Some(windowed));
-        }
-
-        Ok(None)
+        // A window on the seams of a symbolic concatenation, or inside its last operand — `curios-algebra`'s `seam_window`, each operand measured by reducing its `len` as the walk reaches it, one measure per operand and nothing else. An append is one of those concatenations, which `FreeMonoid::concatenated` is what says.
+        let Some(operands) = self.concatenated(value) else {
+            return Ok(None);
+        };
+        let seam = seam_window(words, &operands, start, count, |operand| {
+            reducer.reduce_forced(words.measure(operand))
+        })?;
+        Ok(seam.map(|seam| match seam {
+            Seam::Parts(range) => Windowed::Parts(operands[range].to_vec()),
+            Seam::Inside { operand, start } => Windowed::Inside {
+                operand: operands[operand].clone(),
+                start,
+            },
+        }))
     }
-}
-
-/// A window aligned to the seams of a concatenation is the run of operands between those seams: `slice([..xs, ..ys], 0, len(xs)) = xs` and `slice([..xs, ..ys], len(xs), len(ys)) = ys`, over *symbolic* operands — the case the literal-run locators above decline. Sound for every value of the symbolic operands: a window whose start is exactly a prefix's length and whose end is exactly a longer prefix's length covers exactly the operands between, whatever those lengths are. `None` where no seam matches; the operands of the matched run otherwise, for the caller to concatenate.
-///
-/// **The walk consumes a distance rather than growing a prefix.** Each operand's measure is *cancelled off* the distance still to cover by [`Nat::cancel_common`], which reads that operand's own summands rather than every summand before it. What the walk spends is one measure per operand and nothing else: the accumulation no longer re-enters the reducer, and the window's end — a sum of the start and the count — is never built at all. This is a charge against the budget rather than an asymptotic win, and the distinction is worth keeping because it was once claimed the other way: a window written over a long prefix sum spends the bulk of its time normalizing that sum where it is *written*, in `NatAdd`'s own fold, and only a small remainder here.
-///
-/// **What a surviving measure means.** [`consume`] hands back whatever neither side absorbed, and a measure carrying a summand the distance lacks is an overshoot: the seam is already behind, and since a prefix only ever grows no later operand can bring it back. Declining there is exact rather than conservative, which is why the walk can stop at the first one. What cancellation sees through that whole-term equality did not is a universe instance, [`Nat::cancel_common`] keying its summands through `project_erased_universes` — the admitting direction, on the licence the carrier already gives its other readers, recorded in `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`. Two spellings of one length that cancellation does not pair still decline, which is the refusing direction and the incompleteness this rule keeps.
-///
-/// **An overshoot on the *last* operand is not a decline but a narrowing.** A window that has consumed every operand before the last and still has distance to cover lies inside the last one, at whatever distance remains: `get([..xs, ..ys], len(xs) + i) = get(ys, i)` and `slice([..xs, ..ys], len(xs), n) = slice(ys, 0, n)`. What makes this the one operand a walk may stop inside is the bound. The caller holds `start + count <= len(whole)`, and `len(whole)` is the sum of every operand's measure, so cancelling the consumed prefix off both sides leaves exactly `rest + count <= len(last)` — the proposition the narrowed operation states, reached by the same cancellation that placed the window, so the caller's own proof term proves it and nothing is derived. Stopping inside an earlier operand would leave the later operands' measures standing on the right, a proposition no term in hand proves, which is why that case still declines.
-pub(super) fn seam_window(
-    reducer: &mut impl Reducer,
-    operands: &[Term],
-    start: &Term,
-    length: &Term,
-    measure: impl Fn(&Term) -> Intrinsic,
-) -> Result<Option<Windowed>, ReduceError> {
-    let mut remaining = start.clone();
-    let mut begin = None;
-
-    for (index, operand) in operands.iter().enumerate() {
-        if begin.is_none() && Nat::is_zero(&remaining) {
-            begin = Some(index);
-            remaining = length.clone();
-        }
-        if let Some(begin) = begin
-            && Nat::is_zero(&remaining)
-        {
-            return Ok(Some(Windowed::Parts(operands[begin..index].to_vec())));
-        }
-        let measured = reducer.reduce_forced(Term::intrinsic(measure(operand)))?;
-        match consume(&remaining, &measured) {
-            Some(rest) => remaining = rest,
-            None if index + 1 == operands.len() => {
-                return Ok(match begin {
-                    // The window begins at this operand's seam and ends inside it.
-                    Some(begin) if begin == index => Some(Windowed::Inside {
-                        operand: operand.clone(),
-                        start: Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
-                    }),
-                    // The window begins and ends inside this operand, `remaining` into it.
-                    None => Some(Windowed::Inside {
-                        operand: operand.clone(),
-                        start: remaining,
-                    }),
-                    // The window began at an earlier seam and ends inside this operand: its tail would need a bound no term in hand proves once the run before it is taken whole.
-                    Some(_) => None,
-                });
-            }
-            None => return Ok(None),
-        }
-    }
-
-    Ok(match begin {
-        Some(begin) if Nat::is_zero(&remaining) => {
-            Some(Windowed::Parts(operands[begin..].to_vec()))
-        }
-        _ => None,
-    })
-}
-
-/// `remaining` with `measured` taken off it, or `None` where `measured` carries a summand `remaining` does not — the overshoot [`seam_window`] declines on.
-///
-/// [`Nat::cancel_common`] is the whole of it because a distance and a measure are two `Nat`s in one cancellative monoid: what it leaves on the left is the distance still to cover, and what it leaves on the right is what the measure had and the distance did not. Clamping each shared coefficient with a minimum is what keeps the subtraction total — `Natural`'s own panics on underflow — so the overshoot arrives as a residual to read rather than as a difference to guard.
-fn consume(remaining: &Term, measured: &Term) -> Option<Term> {
-    let (rest, unmatched) = Nat::cancel_common(remaining, measured);
-    Nat::is_zero(&unmatched).then_some(rest)
 }
 
 /// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.

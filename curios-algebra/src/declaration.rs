@@ -1,8 +1,8 @@
 //! What an operation is, algebraically: the kinds of operation this crate gives a meaning to, and what that meaning says about each one's operands.
 //!
-//! A caller maps each of its concrete operations to an [`Operation`] over a [`Carrier`] — or to nothing, which is opaque — and reads what it needs from the mapping: which operands bound the result, which operands the result never exceeds. The mapping is the caller's; what each kind means is this module's, stated once for every operation of that kind.
+//! A caller maps each of its concrete operations to an [`Operation`] over a [`Carrier`] — or to nothing, which is opaque — and reads what it needs from the mapping: which operands bound the result, which operands the result never exceeds, which conversion undoes which. The mapping is the caller's; what each kind means is this module's, stated once for every operation of that kind.
 
-use curios_num::Natural;
+use curios_num::{Grain, Natural};
 
 /// The carrier an operation is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -13,6 +13,12 @@ pub enum Carrier {
     Integer,
     /// The two-element Boolean algebra.
     Boolean,
+    /// The 256 values of a byte.
+    Byte,
+    /// binary64.
+    Float,
+    /// A packed sequence of bits or bytes.
+    Packed(Grain),
 }
 
 /// An operation this crate's reasoning gives a meaning to.
@@ -34,10 +40,10 @@ pub enum Operation {
     Unequal,
     Less,
     AtMost,
-    /// A byte's value as a natural: `0..=255` by its carrier.
-    FromByte,
-    /// A natural as an integer, ℕ → ℤ.
-    Widening,
+    /// A value of `from` as a value of the carrier the operation is declared at — a byte's value as a natural, `0..=255` by its carrier; a natural as an integer, ℕ → ℤ; a run regrouped at the other grain. Which conversions undo which is [`Operation::undoes`].
+    Conversion {
+        from: Carrier,
+    },
 }
 
 /// What one operand of an operation was observed to be: an upper bound on every value it takes, and its value when it is a literal. A caller observes only what [`Operation::bound_reads`] asks for; anything else may be left `None`.
@@ -69,7 +75,9 @@ impl Operation {
         let bound = |at: usize| operands.get(at).and_then(|operand| operand.bound.clone());
         let literal = |at: usize| operands.get(at).and_then(|operand| operand.literal.clone());
         match self {
-            Operation::FromByte => Some(Natural::from(u8::MAX)),
+            Operation::Conversion {
+                from: Carrier::Byte,
+            } => Some(Natural::from(u8::MAX)),
             Operation::Remainder => {
                 let divisor = literal(1)?;
                 (!divisor.is_zero()).then(|| divisor - Natural::one())
@@ -136,6 +144,18 @@ impl Operation {
         }
     }
 
+    /// Whether this operation, declared at `carrier`, applied to the result of `inner`, declared at `inner_carrier`, is `inner`'s operand: a conversion undoing the conversion it is applied to. That holds where the two convert between one pair of carriers in opposite directions and the round trip through `inner` is the identity on its source — [`round_trip`]'s table.
+    ///
+    /// A carrier pair names one conversion in each direction, which is what lets a round trip be read off the carriers alone.
+    pub fn undoes(self, carrier: Carrier, inner: Operation, inner_carrier: Carrier) -> bool {
+        match (self, inner) {
+            (Operation::Conversion { from }, Operation::Conversion { from: source }) => {
+                from == inner_carrier && carrier == source && round_trip(source, inner_carrier)
+            }
+            _ => false,
+        }
+    }
+
     /// The operands the result of this operation over ℕ never exceeds, by position, each with whether it is exceeded strictly: a result antitone in one operand is at most its other, so the minuend, the dividend, either operand of `and` and the shifted value each bound their result, and a remainder is below its divisor outright.
     ///
     /// Every pair is unconditional, as [`Operation::upper_bound`]'s arms are, and for the same reason: a caller turns a dominator into a verdict.
@@ -146,5 +166,21 @@ impl Operation {
             Operation::And => &[(0, false), (1, false)],
             _ => &[],
         }
+    }
+}
+
+/// Whether converting a value of `source` into `target` and back gives the value again, as far as the rule reading it takes it.
+///
+/// - **`Nat` and `Byte`, both ways.** A byte's value is a natural below 256, and the narrowing states `n < 256` of the natural it is handed, so each direction is the other's inverse on what it accepts.
+/// - **`Nat` and `Int`, both ways.** ℕ embeds in ℤ, and the narrowing states `0 <= i`.
+/// - **A run and its regrouping at the other grain, both ways.** Regrouping moves no bit, and the alignment the inner regrouping demanded is what makes the composite well formed.
+/// - **`Flt` through its eight little-endian bytes, one way.** Every one of the 2⁶⁴ bit patterns is a distinct float, so decoding what encoding wrote is the float it was given, NaNs and both zeros included. The other direction holds of the model as well, since no pattern is merged; it is not taken, and a symbolic eight-byte run is not inverted.
+pub fn round_trip(source: Carrier, target: Carrier) -> bool {
+    match (source, target) {
+        (Carrier::Natural, Carrier::Byte) | (Carrier::Byte, Carrier::Natural) => true,
+        (Carrier::Natural, Carrier::Integer) | (Carrier::Integer, Carrier::Natural) => true,
+        (Carrier::Packed(grain), Carrier::Packed(other)) => grain != other,
+        (Carrier::Float, Carrier::Packed(Grain::X)) => true,
+        _ => false,
     }
 }

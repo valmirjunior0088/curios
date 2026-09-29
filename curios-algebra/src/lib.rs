@@ -25,6 +25,9 @@ pub use division::*;
 mod euclid;
 pub use euclid::*;
 
+mod measure;
+pub use measure::*;
+
 mod order;
 pub use order::*;
 
@@ -39,3 +42,6 @@ pub use view::*;
 
 mod word;
 pub use word::*;
+
+#[cfg(test)]
+mod test_support;

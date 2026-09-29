@@ -2,6 +2,7 @@
 
 use {
     super::{test_support::*, *},
+    crate::{Free, InstanceHead, Level, Var},
     curios_num::Grain,
 };
 
@@ -251,8 +252,8 @@ fn a_word_number_is_one_number_across_a_universe_instance() {
     let (xs, l) = (sym(0, "xs"), sym(1, "l"));
     let n = |level: u32| {
         Term::instance(
-            crate::InstanceHead::Var(crate::Var::free(crate::Free::local(2, Some("n")))),
-            vec![crate::Level::constant(level)],
+            InstanceHead::Var(Var::free(Free::local(2, Some("n")))),
+            vec![Level::constant(level)],
         )
     };
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));

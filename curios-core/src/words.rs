@@ -67,6 +67,12 @@ impl<S: Sequence> Alphabet for Words<S> {
         Nat::same(left, right)
     }
 
+    /// [`Nat::cancel_common`] is the whole of it, because a distance and a measure are two `Nat`s in one cancellative monoid: what it leaves on the left is the distance still to cover, and anything it leaves on the right is what the measure had and the distance did not. Clamping each shared coefficient is what keeps the subtraction total, so a measure the distance cannot absorb arrives as a residual to read rather than a difference to guard.
+    fn difference(&self, minuend: &Term, subtrahend: &Term) -> Option<Term> {
+        let (rest, unmatched) = Nat::cancel_common(minuend, subtrahend);
+        Nat::is_zero(&unmatched).then_some(rest)
+    }
+
     fn measure(&self, chunk: &Term) -> Term {
         self.sequence.measure(chunk)
     }

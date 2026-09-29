@@ -41,7 +41,7 @@ pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     })
 }
 
-/// A symmetric operation — `==`, `!=`, the `xor` that `!=` on `Bool` lowers through, and the bitwise `and`, `or` and `xor` on ℕ — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Undecided` otherwise, never `Impossible`. `None` for any other pair.
+/// A symmetric operation — an equality or an inequality at any carrier the algebra declares one of, the `xor` that `!=` on `Bool` lowers through, and the bitwise `and`, `or` and `xor` on ℕ — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Undecided` otherwise, never `Impossible`. `None` for any other pair.
 ///
 /// Decided here rather than by spelling the operands in one order at the fold, because a comparison is what a `choose` guard refines on, and a refinement is recorded under the guard's *written* spelling: both checkers canonicalize a probe's operands and never its node, so a fold that swapped them would take `rem == 1` past its own refinement inside `Str/step`. The peel changes no spelling, so every key stays where it was written.
 pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
@@ -53,22 +53,13 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
         } if operation.commutes() => Some(((carrier, operation), a.clone(), b.clone())),
         _ => None,
     };
-    let swapped = match (commuting(left), commuting(right)) {
-        (Some((this, a, b)), Some((that, c, d))) if this == that => Some(a == d && b == c),
-        _ => match (left, right) {
-            // The equalities of carriers the algebra declares nothing of yet — `Flt`'s, and `Bin`'s at one grain — commute as the declared ones do.
-            (Intrinsic::FltEql(a, b), Intrinsic::FltEql(c, d))
-            | (Intrinsic::FltNeq(a, b), Intrinsic::FltNeq(c, d)) => Some(a == d && b == c),
-            (Intrinsic::BinEql(this, a, b), Intrinsic::BinEql(that, c, d)) if this == that => {
-                Some(a == d && b == c)
-            }
-            _ => None,
-        },
-    };
-    swapped.map(|swapped| match swapped {
-        true => Deduction::Equal,
-        false => Deduction::Undecided,
-    })
+    match (commuting(left), commuting(right)) {
+        (Some((this, a, b)), Some((that, c, d))) if this == that => Some(match a == d && b == c {
+            true => Deduction::Equal,
+            false => Deduction::Undecided,
+        }),
+        _ => None,
+    }
 }
 
 /// Two monomials of one carrier — two `Nat` products or two `Int` products — with their factors paired by identity before anything reads them in order: one coefficient and one multiset of factors is `Equal`, and one factor left on each side is `Sufficient` over that pair. `None` for anything else, so the caller's shape congruence decides as it did.

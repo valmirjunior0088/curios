@@ -25,10 +25,10 @@ pub use truth::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, Declaration, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Operands, Subterm,
-        Telescope, Term, int_cancel_common, int_negate, int_of_nat, int_preimage, int_product,
-        int_split_by_sign, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
-        peel_first_elem, project_erased_universes,
+        Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Operands,
+        Subterm, Telescope, Term, Words, int_cancel_common, int_negate, int_of_nat, int_preimage,
+        int_product, int_split_by_sign, int_sum, int_terms, normalize_concat, peel_bin,
+        peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
@@ -393,15 +393,15 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::ByteType => Ok(Subterm::Intrinsic(Intrinsic::ByteType)),
         Intrinsic::Byte(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(*value))),
-        // Inversion of the constructor, not an equation about arithmetic: `Nat/to_byte` states `nat < 256`, so the byte it builds *is* that number and reading it back is the number again. This is the half that makes `Byte` transparent to the bounds oracle — a bound established in `Nat` survives the round trip, where before the trip erased it.
+        // A round trip through `Nat/to_byte` is the number it was handed — `Intrinsic::undone`, which is what makes `Byte` transparent to the bounds oracle: a bound established in `Nat` survives the trip, where before the trip erased it.
         Intrinsic::ByteToNat(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
+            if let Some(operand) = intrinsic.undone(&inner) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
+            }
             Ok(Subterm::Intrinsic(match &*inner {
                 Subterm::Intrinsic(Intrinsic::Byte(value)) => {
                     Intrinsic::Nat(Nat::new(usize::from(*value)))
-                }
-                Subterm::Intrinsic(Intrinsic::NatToByte { nat, .. }) => {
-                    return reducer.reduce(nat.clone()).map(Term::unwrap_or_clone);
                 }
                 _ => Intrinsic::ByteToNat(inner),
             }))
@@ -409,8 +409,8 @@ pub fn reduce_intrinsic(
         // A closed operand past the carrier is *refused* rather than masked. Masking made this total by changing a value, which is the one thing a narrowing may not do, and it was the only such row on a numeric carrier; the `below` field is what replaces it, so a program that cannot prove its operand small no longer compiles rather than silently computing a different byte.
         Intrinsic::NatToByte { nat, below } => {
             let nat = reducer.reduce_forced(nat.clone())?;
-            if let Subterm::Intrinsic(Intrinsic::ByteToNat(byte)) = &*nat {
-                return reducer.reduce(byte.clone()).map(Term::unwrap_or_clone);
+            if let Some(operand) = intrinsic.undone(&nat) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
             let span = nat.span();
@@ -914,9 +914,9 @@ pub fn reduce_intrinsic(
         Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
 
-            // Inversion of the constructor: decoding what `Flt/to_le_bytes` wrote is the float it was given, NaNs and both zeros included. The other direction holds of the model as well, since no pattern is merged, and folds on a literal; a symbolic one is not inverted here.
-            if let Subterm::Intrinsic(Intrinsic::FltToLeBytes(flt)) = &*bin {
-                return reducer.reduce(flt.clone()).map(Term::unwrap_or_clone);
+            // Decoding what `Flt/to_le_bytes` wrote is the float it was given — `Intrinsic::undone`. The other direction holds of the model as well and folds on a literal; a symbolic one is not inverted.
+            if let Some(operand) = intrinsic.undone(&bin) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
             let folded = match &*bin {
@@ -938,9 +938,9 @@ pub fn reduce_intrinsic(
         Intrinsic::NatToInt(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
 
-            // Inversion of the constructor, as `ByteToNat`'s arm states for its own pair: `Int/to_nat` demands `0 <= int`, so the natural it builds *is* that number and widening it back is the number again. Without it a bound established in `Int` is erased by the round trip, which is what `/std/Map`'s `Key(Int)` has to reconstruct an operand across.
-            if let Subterm::Intrinsic(Intrinsic::IntToNat { int, .. }) = &*inner {
-                return reducer.reduce(int.clone()).map(Term::unwrap_or_clone);
+            // A round trip through `Int/to_nat` is the integer it was handed — `Intrinsic::undone`. Without it a bound established in `Int` is erased by the trip, which is what `/std/Map`'s `Key(Int)` has to reconstruct an operand across.
+            if let Some(operand) = intrinsic.undone(&inner) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
             // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
@@ -963,9 +963,9 @@ pub fn reduce_intrinsic(
             let span = int.span();
             let int = reducer.reduce_forced(int.clone())?;
 
-            // The other half of the inversion: ℕ embeds in ℤ, so a natural widened to `Int` is non-negative and narrows back to itself whatever proof the narrowing was handed — and so does any non-negative combination of widened naturals, which is the image of its preimage. `int_preimage` reads it; a single widened atom is its one-summand case.
-            if let Subterm::Intrinsic(Intrinsic::NatToInt(nat)) = &*int {
-                return reducer.reduce(nat.clone()).map(Term::unwrap_or_clone);
+            // The other half of the round trip: ℕ embeds in ℤ, so a natural widened to `Int` narrows back to itself whatever proof the narrowing was handed — `Intrinsic::undone` — and so does any non-negative combination of widened naturals, which is the image of its preimage. `int_preimage` reads it; a single widened atom is its one-summand case.
+            if let Some(operand) = intrinsic.undone(&int) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
             if int.as_int().is_none()
                 && let Some(preimage) = int_preimage(&int)
@@ -1159,7 +1159,7 @@ pub fn reduce_intrinsic(
                 &index_reduced,
                 &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                 |piece| bin_piece(grain, piece),
-                |operand| Intrinsic::bin_len(grain, operand.clone()),
+                &Words::new(grain),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     if let [only] = parts.as_slice()
@@ -1271,7 +1271,7 @@ pub fn reduce_intrinsic(
                 &start_reduced,
                 &length_reduced,
                 |piece| bin_piece(grain, piece),
-                |operand| Intrinsic::bin_len(grain, operand.clone()),
+                &Words::new(grain),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     return reducer
@@ -1455,15 +1455,9 @@ pub fn reduce_intrinsic(
             let bin = reducer.reduce_forced(bin.clone())?;
             let aligned = reducer.reduce(aligned.clone())?;
 
-            // Reading a run at the other grain and back is the run: regrouping moves no bit, and the alignment the inner reinterpretation demanded is what makes the composite well formed at all. Both directions hold, because each is the other's inverse — unlike the float pair above, where only one side starts from a canonical value.
-            if let Subterm::Intrinsic(Intrinsic::BinReinterp {
-                grain: inner_grain,
-                bin: inner,
-                ..
-            }) = &*bin
-                && inner_grain.other() == grain
-            {
-                return reducer.reduce(inner.clone()).map(Term::unwrap_or_clone);
+            // Reading a run at the other grain and back is the run — `Intrinsic::undone`, both directions, each regrouping the other's inverse.
+            if let Some(operand) = intrinsic.undone(&bin) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
             // One condition serves both directions: a byte run's bit length is eight times its count and so always passes, while a bit run's is exactly what the bound at `B` states. A run that fails it declines to fold rather than answering, for `reduce_bin_pointwise`'s reason — the bound is the checker's to enforce, and there is no byte to answer with besides.
@@ -1639,7 +1633,7 @@ pub fn reduce_intrinsic(
                 &index_reduced,
                 &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                 |piece| list_piece(&type_, piece),
-                |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+                &Words::new(Element(type_.clone())),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     if let [only] = parts.as_slice()
@@ -1757,7 +1751,7 @@ pub fn reduce_intrinsic(
                 &start_reduced,
                 &length_reduced,
                 |piece| list_piece(&type_, piece),
-                |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+                &Words::new(Element(type_.clone())),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     return reducer

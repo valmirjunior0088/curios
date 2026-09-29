@@ -154,7 +154,9 @@ fn side(
                 .collect::<Vec<_>>();
             Combination::collect(constant, summands).without_zeros()
         }
-        Carrier::Boolean => unreachable!("a view is read only of a `Nat` or `Int` comparison"),
+        Carrier::Boolean | Carrier::Byte | Carrier::Float | Carrier::Packed(_) => {
+            unreachable!("a view is read only of a `Nat` or `Int` comparison")
+        }
     }
 }
 

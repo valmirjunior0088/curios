@@ -45,3 +45,16 @@ fn a_metavariable_is_solved_through_the_packed_literal_view() {
         b"true"
     );
 }
+
+// The concatenation twin: `x[h, ..t]` is the one-byte `append(x[], ?h)` followed by `?t`. A symbolic head stops the prefix strip at once, so the view cuts the literal at the head's known length, the unknown tail taking the rest, and solves `?h` as `1` and `?t` as `x[2, 3]`.
+#[test]
+fn a_metavariable_is_solved_as_the_rest_of_a_split_packed_literal() {
+    assert_eq!(
+        run(r#"
+        use /std/{Byte, Bytes, Eq, Nat};
+        let tail(@h: Byte, @t: Bytes, p: Eq(x[1, 2, 3], x[h, ..t])) -> Bytes = t;
+        /std/print(Nat/to_str(Bytes/len(tail(Eq/refl()))))
+        "#),
+        b"2"
+    );
+}

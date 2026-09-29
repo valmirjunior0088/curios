@@ -7,7 +7,7 @@
 use {
     super::Convert,
     crate::Context,
-    curios_algebra::{Conclusion, Deduction},
+    curios_algebra::{Conclusion, Cut, Deduction, split},
     curios_core::{
         Intrinsic, Nat, Operand, ReduceError, Subterm, Term, Var, Visit, align_comparisons,
         decide_bool, int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool,
@@ -292,39 +292,27 @@ fn split_against(cmp: &mut Convert, grain: Grain, lit: &Binary, spine: &Intrinsi
             );
             Some(true)
         }
-        // `concat` splits at its segments' known lengths, consumed left to right; one trailing unknown-length segment takes the remainder. An unknown-length segment anywhere else abstains — the split is not determined.
+        // `concat` splits at its segments' known lengths, consumed left to right, one trailing unknown-length segment taking the remainder — `curios-algebra`'s `split`. Each segment is related to its range of the literal as the split reaches it, so a split that clashes or abstains has already related the segments before where it stopped.
         Intrinsic::BinConcat {
             grain: found,
             operands,
         } if *found == grain => {
-            let mut offset = 0usize;
-            for (index, operand) in operands.iter().enumerate() {
-                match known_len(grain, operand) {
-                    Some(segment) => {
-                        if offset + segment > len {
-                            return Some(false);
-                        }
-                        cmp.enqueue(
-                            Term::type_ground(),
-                            operand.clone(),
-                            literal_slice(grain, lit, offset, offset + segment),
-                        );
-                        offset += segment;
-                    }
-                    None if index == operands.len() - 1 => {
-                        cmp.enqueue(
-                            Term::type_ground(),
-                            operand.clone(),
-                            literal_slice(grain, lit, offset, len),
-                        );
-                        return Some(true);
-                    }
-                    None => return None,
-                }
+            let lengths = operands
+                .iter()
+                .map(|operand| known_len(grain, operand))
+                .collect::<Vec<_>>();
+            let split = split(&lengths, len);
+            for (operand, range) in operands.iter().zip(split.ranges) {
+                cmp.enqueue(
+                    Term::type_ground(),
+                    operand.clone(),
+                    literal_slice(grain, lit, range.start, range.end),
+                );
             }
-            match offset == len {
-                true => Some(true),
-                false => Some(false),
+            match split.cut {
+                Cut::Whole => Some(true),
+                Cut::Clash => Some(false),
+                Cut::Undetermined => None,
             }
         }
         _ => None,

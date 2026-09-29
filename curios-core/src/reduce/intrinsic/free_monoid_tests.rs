@@ -2,7 +2,7 @@
 
 use {
     super::reduce_intrinsic,
-    crate::{Free, Intrinsic, Nat, Subterm, Term},
+    crate::{FUSION_CAP, Free, Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Grain},
 };
 
@@ -103,6 +103,47 @@ fn an_index_into_a_spine_reads_the_same_byte() {
             );
         }
     }
+}
+
+/// **A window across operands too large to fuse is located across them.** Below [`FUSION_CAP`] a spine of literals fuses into one run before any window reads it, so only runs past the cap reach the window located over several operands: it takes an operand it covers whole as it stands, narrows the two at its edges, and keeps the concatenation, since the covered operand is itself past the cap.
+#[test]
+fn a_window_across_runs_past_the_fusion_cap_is_the_window_over_their_bytes() {
+    let length = FUSION_CAP + 6;
+    let runs = (0..3u8)
+        .map(|run| {
+            (0..length)
+                .map(|index| run.wrapping_mul(100).wrapping_add(index as u8))
+                .collect::<Vec<u8>>()
+        })
+        .collect::<Vec<_>>();
+    let bytes = |values: &[u8]| {
+        Term::intrinsic(Intrinsic::Bin(
+            Grain::X,
+            Binary::from_bytes(values.to_vec()),
+        ))
+    };
+    let operands = runs.iter().map(|run| bytes(run)).collect::<Vec<_>>();
+    let spine = Term::intrinsic(Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: operands.clone(),
+    });
+
+    let (start, count) = (length - 10, length + 20);
+    let window = Intrinsic::bin_slice(Grain::X, spine, lit(start as u32), lit(count as u32), qed());
+    let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
+
+    assert_eq!(
+        sliced,
+        Subterm::Intrinsic(Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: vec![
+                bytes(&runs[0][start..]),
+                operands[1].clone(),
+                bytes(&runs[2][..10]),
+            ],
+        }),
+        "the ten bytes before the seam, the middle run whole, and the ten after",
+    );
 }
 
 #[test]

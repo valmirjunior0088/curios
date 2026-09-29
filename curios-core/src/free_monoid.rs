@@ -8,6 +8,7 @@
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
+    curios_algebra::{Concatenated, Joining, Span, join, locate, total},
     curios_num::{Binary, Grain},
 };
 
@@ -561,7 +562,7 @@ impl FreeMonoid {
     pub(crate) fn measure(self, value: &Term) -> Option<usize> {
         match self {
             FreeMonoid::Bin(grain) => bin_measure(grain, value),
-            _ => measure(&self.segments(value)?),
+            _ => total(&lengths(&self.segments(value)?)),
         }
     }
 
@@ -609,10 +610,9 @@ fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     Some(total)
 }
 
-fn measure(segments: &[(&Term, usize)]) -> Option<usize> {
-    segments
-        .iter()
-        .try_fold(0usize, |total, (_, length)| total.checked_add(*length))
+/// The lengths of `segments`, in order, as `curios-algebra`'s measures read them.
+fn lengths(segments: &[(&Term, usize)]) -> Vec<usize> {
+    segments.iter().map(|(_, length)| *length).collect()
 }
 
 /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
@@ -628,33 +628,19 @@ fn window(
     start: usize,
     count: usize,
 ) -> Option<Result<Vec<Piece<'_>>, usize>> {
-    let total = measure(&segments)?;
-
-    // No reversed-range case to reject: a window is a start and a *count*, so `start > end` is not a shape this can be handed. Only running past the end remains, and an end that overflows `usize` has certainly done so.
-    let Some(end) = start.checked_add(count).filter(|end| *end <= total) else {
-        return Some(Err(total));
-    };
-
-    let mut pieces = Vec::new();
-    let mut offset = 0usize;
-
-    for (operand, length) in segments {
-        let (from, to) = (offset, offset + length);
-        offset = to;
-
-        // Half-open overlap: an operand entirely before the window or entirely after it contributes nothing, and an empty overlap is not a piece.
-        let (lo, hi) = (start.max(from), end.min(to));
-        if lo >= hi {
-            continue;
-        }
-
-        pieces.push(match (lo - from, hi - from) {
-            (0, upper) if upper == length => Piece::Whole(operand),
-            (lower, upper) => Piece::Part(operand, lower, upper),
-        });
-    }
-
-    Some(Ok(pieces))
+    locate(&lengths(&segments), start, count).map(|located| {
+        located.map(|spans| {
+            spans
+                .into_iter()
+                .map(|span| match span {
+                    Span::Whole(at) => Piece::Whole(segments[at].0),
+                    Span::Part { operand, range } => {
+                        Piece::Part(segments[operand].0, range.start, range.end)
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+    })
 }
 
 /// The largest literal operand reduction will fuse, in the carrier's own generators — bits at [`Grain::B`], bytes at [`Grain::X`], elements for `List`.
@@ -693,7 +679,7 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///
@@ -701,21 +687,34 @@ impl Run for Vec<Term> {
 ///
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the word strip's job when *deciding equality* (`curios-algebra`'s `Word::push`); reduction only needs a normal form, and conversion closes any residual gap.
 pub(crate) fn normalize_concat<C: Run, E>(
-    operands: Vec<Term>,
+    mut operands: Vec<Term>,
     literal: impl Fn(&Term) -> Option<&C>,
     merge: impl FnOnce(Vec<&C>) -> Result<Subterm, E>,
     into_concat: impl FnOnce(Vec<Term>) -> Subterm,
 ) -> Result<Subterm, E> {
-    let mut kept: Vec<Term> = operands
-        .into_iter()
-        .filter(|operand| !matches!(literal(operand), Some(run) if run.is_empty()))
-        .collect();
-
-    // Every surviving operand literal ⇒ the runs fuse into one; the first symbolic chunk stops the collection, leaving the concatenation (a lone operand collapses to itself).
-    match kept.iter().map(&literal).collect::<Option<Vec<&C>>>() {
-        Some(runs) => merge(runs),
-        None if kept.len() == 1 => Ok(Term::unwrap_or_clone(kept.pop().unwrap())),
-        None => Ok(into_concat(kept)),
+    let joining = operands
+        .iter()
+        .map(|operand| match literal(operand) {
+            Some(run) if run.is_empty() => Joining::Empty,
+            Some(_) => Joining::Fusible,
+            None => Joining::Standing,
+        })
+        .collect::<Vec<_>>();
+    match join(&joining) {
+        Concatenated::Fused(kept) => merge(
+            kept.iter()
+                .map(|&at| literal(&operands[at]).expect("a fused operand is a literal"))
+                .collect(),
+        ),
+        Concatenated::Lone(at) => Ok(Term::unwrap_or_clone(operands.swap_remove(at))),
+        Concatenated::Kept(kept) => {
+            let mut operands = operands.into_iter().map(Some).collect::<Vec<_>>();
+            Ok(into_concat(
+                kept.iter()
+                    .map(|&at| operands[at].take().expect("each operand is kept once"))
+                    .collect(),
+            ))
+        }
     }
 }
 

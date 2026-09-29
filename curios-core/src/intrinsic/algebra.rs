@@ -1,11 +1,12 @@
 //! What each intrinsic is algebraically: the operation `curios-algebra` gives it a meaning as, over the operands that meaning reads — or opaque.
 //!
-//! **The match is exhaustive and states opacity outright**, as [`Intrinsic::signature`]'s does: a new intrinsic has to say what it is to the algebra, possibly nothing, before it compiles, so an operation can neither gain a law by being forgotten nor lose one by being added. What each [`Operation`] means — which operands bound it, which it never exceeds — is `curios-algebra`'s; this is only which intrinsic is which, and where its operands are. Only the implemented reasoning is declared: an intrinsic is declared where some rule reads it at its carrier, and declaring one never enables an identity nothing implements — which is why `Int`'s bitwise operations are opaque, no identity of theirs being implemented.
+//! **The match is exhaustive and states opacity outright**, as [`Intrinsic::signature`]'s does: a new intrinsic has to say what it is to the algebra, possibly nothing, before it compiles, so an operation can neither gain a law by being forgotten nor lose one by being added. What each [`Operation`] means — which operands bound it, which it never exceeds, which conversion undoes which — is `curios-algebra`'s; this is only which intrinsic is which, and where its operands are. Only the implemented reasoning is declared: an intrinsic is declared where some rule reads it at its carrier, and declaring one never enables an identity nothing implements — which is why `Int`'s bitwise operations are opaque, no identity of theirs being implemented.
 
 use {
     super::Intrinsic,
-    crate::Term,
+    crate::{Subterm, Term},
     curios_algebra::{Carrier, Operation},
+    curios_num::Grain,
 };
 
 /// An intrinsic as the algebra reads it.
@@ -146,13 +147,74 @@ impl Intrinsic {
             ),
             Intrinsic::ByteToNat(operand) => declared(
                 Carrier::Natural,
-                Operation::FromByte,
+                Operation::Conversion {
+                    from: Carrier::Byte,
+                },
                 Operands::One([operand]),
+            ),
+            Intrinsic::NatToByte { nat, below: _ } => declared(
+                Carrier::Byte,
+                Operation::Conversion {
+                    from: Carrier::Natural,
+                },
+                Operands::One([nat]),
             ),
             Intrinsic::NatToInt(operand) => declared(
                 Carrier::Integer,
-                Operation::Widening,
+                Operation::Conversion {
+                    from: Carrier::Natural,
+                },
                 Operands::One([operand]),
+            ),
+            Intrinsic::IntToNat { int, non_neg: _ } => declared(
+                Carrier::Natural,
+                Operation::Conversion {
+                    from: Carrier::Integer,
+                },
+                Operands::One([int]),
+            ),
+            Intrinsic::FltToLeBytes(operand) => declared(
+                Carrier::Packed(Grain::X),
+                Operation::Conversion {
+                    from: Carrier::Float,
+                },
+                Operands::One([operand]),
+            ),
+            Intrinsic::FltOfLeBytes {
+                bin,
+                eight_bytes: _,
+            } => declared(
+                Carrier::Float,
+                Operation::Conversion {
+                    from: Carrier::Packed(Grain::X),
+                },
+                Operands::One([bin]),
+            ),
+            Intrinsic::BinReinterp {
+                grain,
+                bin,
+                aligned: _,
+            } => declared(
+                Carrier::Packed(grain.other()),
+                Operation::Conversion {
+                    from: Carrier::Packed(*grain),
+                },
+                Operands::One([bin]),
+            ),
+            Intrinsic::FltEql(left, right) => declared(
+                Carrier::Float,
+                Operation::Equal,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::FltNeq(left, right) => declared(
+                Carrier::Float,
+                Operation::Unequal,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::BinEql(grain, left, right) => declared(
+                Carrier::Packed(*grain),
+                Operation::Equal,
+                Operands::Two([left, right]),
             ),
             Intrinsic::IntAdd(left, right) => declared(
                 Carrier::Integer,
@@ -219,7 +281,6 @@ impl Intrinsic {
             | Intrinsic::Nat { .. }
             | Intrinsic::ByteType
             | Intrinsic::Byte { .. }
-            | Intrinsic::NatToByte { .. }
             | Intrinsic::IntType
             | Intrinsic::IntAnd { .. }
             | Intrinsic::IntOr { .. }
@@ -233,8 +294,6 @@ impl Intrinsic {
             | Intrinsic::FltDiv { .. }
             | Intrinsic::FltFma { .. }
             | Intrinsic::FltRem { .. }
-            | Intrinsic::FltEql { .. }
-            | Intrinsic::FltNeq { .. }
             | Intrinsic::FltLt { .. }
             | Intrinsic::FltLe { .. }
             | Intrinsic::FltMin { .. }
@@ -245,18 +304,14 @@ impl Intrinsic {
             | Intrinsic::FltRoundIntegral { .. }
             | Intrinsic::FltCopysign { .. }
             | Intrinsic::NatToFlt { .. }
-            | Intrinsic::IntToNat { .. }
             | Intrinsic::IntToFlt { .. }
             | Intrinsic::FltToNat { .. }
-            | Intrinsic::FltToLeBytes { .. }
-            | Intrinsic::FltOfLeBytes { .. }
             | Intrinsic::FltToInt { .. }
             | Intrinsic::FltMantissa { .. }
             | Intrinsic::FltExponent { .. }
             | Intrinsic::BinType { .. }
             | Intrinsic::Bin { .. }
             | Intrinsic::BinLen { .. }
-            | Intrinsic::BinEql { .. }
             | Intrinsic::BinGet { .. }
             | Intrinsic::BinSlice { .. }
             | Intrinsic::BinAppend { .. }
@@ -265,7 +320,6 @@ impl Intrinsic {
             | Intrinsic::BinAnd { .. }
             | Intrinsic::BinOr { .. }
             | Intrinsic::BinXor { .. }
-            | Intrinsic::BinReinterp { .. }
             | Intrinsic::ListType { .. }
             | Intrinsic::List { .. }
             | Intrinsic::ListLen { .. }
@@ -292,6 +346,29 @@ impl Intrinsic {
             | Intrinsic::IoType { .. }
             | Intrinsic::IoPure { .. }
             | Intrinsic::IoBind { .. } => Declaration::Opaque,
+        }
+    }
+
+    /// Where `operand` — this conversion's operand, reduced — is the result of a conversion this one undoes, that conversion's own operand: `Nat/to_byte(Byte/to_nat(b))` is `b`, and `Flt/of_le_bytes(Flt/to_le_bytes(x))` is `x`. Which conversions undo which is `curios-algebra`'s `Operation::undoes`; this reads the two declarations. `None` for anything else.
+    ///
+    /// **A round trip is the inversion of a constructor, not an equation about arithmetic.** A narrowing states the bound that makes its operand a value of the narrower carrier, so the value it builds *is* that operand, and reading it back is the operand again. That is what keeps a bound established on one side of a round trip standing after it.
+    pub(crate) fn undone<'a>(&self, operand: &'a Term) -> Option<&'a Term> {
+        let Declaration::Operation {
+            carrier, operation, ..
+        } = self.algebra()
+        else {
+            return None;
+        };
+        let Subterm::Intrinsic(inner) = &**operand else {
+            return None;
+        };
+        match inner.algebra() {
+            Declaration::Operation {
+                carrier: inner_carrier,
+                operation: inner_operation,
+                operands: Operands::One([inner_operand]),
+            } if operation.undoes(carrier, inner_operation, inner_carrier) => Some(inner_operand),
+            _ => None,
         }
     }
 

@@ -2,7 +2,7 @@
 
 The carriers' algebra over abstract atoms: what conversion decides about `Nat` and `Int` — linear combinations, their cancellation, and the strength of what a comparison concludes — stated without the terms it is decided over. Both checkers reach it through `curios-core`, which decides which terms are one atom and rebuilds results from the terms it was given; the algorithms and their contracts belong to the crate rustdoc.
 
-The consolidation that is moving the rest of the carriers' reasoning here — comparison facts, the Boolean laws and the truth table, words and positions — is [Algebra, part 1](../documentation/roadmap/algebra/01-one-owner-spec.md), whose baseline inventory records what has moved and what has not.
+The consolidation that moved the carriers' reasoning here, and is still to generate the law grid from the declarations and align comparisons through one view, is [Algebra, part 1](../documentation/roadmap/algebra/01-one-owner-spec.md), whose baseline inventory records what has moved and what has not.
 
 ## Design
 
@@ -28,7 +28,7 @@ The consolidation that is moving the rest of the carriers' reasoning here — co
 
 ### An operation's meaning is stated once, and its mapping is Core's
 
-**Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, a byte's value, the widening of ℕ into ℤ — and what that meaning says is stated here, once per operation: which operands bound its result (`bound_reads`, `upper_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match.
+**Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, and the conversions between carriers — and what that meaning says is stated here, once per operation: which operands bound its result (`bound_reads`, `upper_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`), and which conversion undoes which (`undoes`, over the `round_trip` table). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match.
 
 **Rationale.** The bound criterion — an operand is read where the result is not antitone in it — used to live in one function's arms, beside the terms it read, so an arm could not be checked against the criterion without reading the term plumbing too. Stated per operation, each arm is a fact about the operation, and an intrinsic joins a law by being declared an operation of that kind rather than by gaining an arm. An intrinsic is declared only where some implemented rule reads it at its carrier — `Int`'s bitwise operations stay opaque, since no identity of theirs is implemented — so declaring membership never enables an identity nothing implements.
 

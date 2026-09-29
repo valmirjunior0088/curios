@@ -30,6 +30,9 @@ pub trait Alphabet {
     fn sum(&self, left: &Self::Number, right: &Self::Number) -> Self::Number;
     /// Whether two numbers are certainly one. `false` declines; it never claims they differ.
     fn same(&self, left: &Self::Number, right: &Self::Number) -> bool;
+    /// `minuend - subtrahend` where the subtrahend is certainly part of the minuend, or `None` where it is not certainly: the distance still to cover once a measure is taken off it.
+    fn difference(&self, minuend: &Self::Number, subtrahend: &Self::Number)
+    -> Option<Self::Number>;
     /// The length of an opaque chunk.
     fn measure(&self, chunk: &Self::Symbol) -> Self::Number;
     /// `position` in `base`, read through every window `base` is itself cut from: the root those windows were cut from, and the position counted from the root's start.
