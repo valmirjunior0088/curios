@@ -209,19 +209,19 @@ fn solving(index: usize, row: &Row) -> Option<String> {
 fn distinct_constructors_stay_distinct() {
     let refuted = [
         "x: Nat",
-        "Eq(0, 1)",
-        "Eq(x + 1, 0)",
-        "Eq(+0, +1)",
-        "Eq(true, false)",
+        "Eq()(0, 1)",
+        "Eq()(x + 1, 0)",
+        "Eq()(+0, +1)",
+        "Eq()(true, false)",
     ]
     .to_vec();
     let (binders, equations) = refuted.split_first().unwrap();
     let words = [
-        ("a: Nat, xs: List(Nat)", "Eq([a, ..xs], [])"),
-        ("k: Byte, bs: Bytes", "Eq(x[k, ..bs], x[])"),
-        ("v: Bool, ts: Bits", "Eq(b[v, ..ts], b[])"),
-        ("bs: Bytes, cs: Bytes", "Eq(x[0, ..bs], x[1, ..cs])"),
-        ("ts: Bits, us: Bits", "Eq(b[0, ..ts], b[1, ..us])"),
+        ("a: Nat, xs: List(Nat)", "Eq()([a, ..xs], [])"),
+        ("k: Byte, bs: Bytes", "Eq()(x[k, ..bs], x[])"),
+        ("v: Bool, ts: Bits", "Eq()(b[v, ..ts], b[])"),
+        ("bs: Bytes, cs: Bytes", "Eq()(x[0, ..bs], x[1, ..cs])"),
+        ("ts: Bits, us: Bits", "Eq()(b[0, ..ts], b[1, ..us])"),
     ];
     let items = equations
         .iter()
@@ -246,8 +246,9 @@ fn distinct_constructors_stay_distinct() {
         panic!("{}\n{error}", failures.join("\n"));
     }
 
-    let control =
-        format!("{IMPORTS}\nlet unrefuted(x: Nat, p: Eq(x, 1)) -> Nat = match p end;\nIo/pure(())");
+    let control = format!(
+        "{IMPORTS}\nlet unrefuted(x: Nat, p: Eq()(x, 1)) -> Nat = match p end;\nIo/pure(())"
+    );
     assert!(
         typecheck(&control).is_err(),
         "an equation that may hold still demands its arm"

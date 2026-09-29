@@ -150,7 +150,7 @@ fn consumer(suffix: &str, consumed: Consumed) -> String {
             "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(7): (_) => Str | true => \"y\" | false => \"n\" end;\n\n"
         ),
         Consumed::Proved => format!(
-            "let probe{suffix}(n: Nat, e: Eq(top{suffix}(n), true)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n"
+            "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n"
         ),
     }
 }
@@ -498,7 +498,7 @@ fn numerics(rules: usize) -> String {
 
     let _ = writeln!(source, "\nlet top: Fn = r{};\n", rules - 1);
     source.push_str(
-        "let probe(n: Nat, e: Eq(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
+        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
     );
     source.push_str(TAIL);
     source

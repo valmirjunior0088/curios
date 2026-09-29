@@ -289,7 +289,7 @@ fn a_concept_field_may_reference_a_preceding_field() {
          end
          pub concept Idem(A : Type) : pub Type {
              op(A) -> A,
-             law(x : A) -> Eq(op(op(x)), op(x)),
+             law(x : A) -> Eq()(op(op(x)), op(x)),
          }
          Idem",
     );
@@ -306,7 +306,7 @@ fn a_superclass_does_not_shift_a_dependent_field_reference() {
          pub concept Idem(A : Type) : pub Type {
              use Base(A),
              op(A) -> A,
-             law(x : A) -> Eq(op(op(x)), op(x)),
+             law(x : A) -> Eq()(op(op(x)), op(x)),
          }
          Idem",
     );

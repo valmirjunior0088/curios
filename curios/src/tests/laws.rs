@@ -16,7 +16,7 @@ mod semantics;
 mod written;
 
 /// The last goal of every program the goal test states: trivially closed by `refl`, so its candidate line is evidence that the search still had budget when the refused rows before it were answered.
-const SENTINEL: &str = "Eq(0, 0)";
+const SENTINEL: &str = "Eq()(0, 0)";
 
 const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Flt, Eq, Io};";
 

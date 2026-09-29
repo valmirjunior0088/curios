@@ -592,7 +592,7 @@ fn cost_row(label: &str, source: &str) {
 fn a_literal_mentioned_in_several_types_is_folded_once() {
     let literal = "0123456789".repeat(30);
     let program = |uses: usize| {
-        let types = vec![format!("Eq(Str/len(\"{literal}\"), 300)"); uses].join(", ");
+        let types = vec![format!("Eq()(Str/len(\"{literal}\"), 300)"); uses].join(", ");
         let proofs = vec!["Eq/refl()"; uses].join(", ");
         format!(
             "use /std/{{Str, Eq, Nat}};\n\nlet q: {{{types}}} = ({proofs},);\n\n/std/print(\"ok\")\n"
@@ -1090,7 +1090,7 @@ fn a_packed_fold_costs_linearly_in_its_length() {
     let program = |bytes: usize| {
         let literal = "0123456789".repeat(bytes / 10);
         format!(
-            "use /std/{{Str, Bytes, Nat, Eq}};\n\nlet counted: Eq(Bytes/fold(Str/to_bytes(\"{literal}\"), 0, (_, n) => n + 1), {bytes}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+            "use /std/{{Str, Bytes, Nat, Eq}};\n\nlet counted: Eq()(Bytes/fold(Str/to_bytes(\"{literal}\"), 0, (_, n) => n + 1), {bytes}) = Eq/refl();\n\n/std/print(\"ok\")\n"
         )
     };
 

@@ -78,7 +78,7 @@ fn by_carrier(rows: &[Row]) -> Vec<(String, Vec<(String, String)>)> {
 pub(super) fn spell(law: &Law) -> (String, String) {
     let mut spelling = Spelling::default();
     let claim = format!(
-        "Eq({}, {})",
+        "Eq()({}, {})",
         spelling.expr(&law.left),
         spelling.expr(&law.right)
     );
