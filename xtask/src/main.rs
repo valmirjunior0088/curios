@@ -6,7 +6,7 @@
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
-//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile`, `rust-docs` and `std-docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
+//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile` and `docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
@@ -125,12 +125,7 @@ enum Recipe {
     #[command(
         about = "Build the launcher, then the workspace's Rust documentation under target/doc, with a root redirect to the compiler's"
     )]
-    RustDocs,
-
-    #[command(
-        about = "Build the compiler, then the standard library's pages under curios-prelude-archive/.artifacts/documentation from the prelude it embeds"
-    )]
-    StdDocs,
+    Docs,
 
     #[command(
         about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
@@ -236,8 +231,7 @@ fn main() -> ExitCode {
         }
         Recipe::Js => js(),
         Recipe::JsTest => js_test(),
-        Recipe::RustDocs => rust_docs(),
-        Recipe::StdDocs => std_docs(),
+        Recipe::Docs => docs(),
         Recipe::Installer { version } => installer(&version),
         Recipe::Release { bump } => release(bump.as_deref()),
         Recipe::Profile { source } => profile(&source),

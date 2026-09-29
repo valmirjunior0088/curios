@@ -140,7 +140,7 @@ cd curios
 cargo x build
 ```
 
-The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo x build` runs both in order. The documentation a release ships is built the same way: `cargo x rust-docs` renders the crates' own under `target/doc`, and `cargo x std-docs` renders the standard library's pages under `curios-prelude-archive/.artifacts/documentation`, read off the prelude the compiler embeds.
+The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo x build` runs both in order. The documentation a release ships is built the same way: `cargo x docs` renders the crates' own under `target/doc`. The standard library's pages come from the compiler itself: `curios document --std site` writes them under `site`, read off the prelude it embeds.
 
 ## Go deeper
 

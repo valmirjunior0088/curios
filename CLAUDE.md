@@ -116,8 +116,7 @@ cargo x fmt-check
 cargo x clippy
 cargo x test
 cargo x doctest
-cargo x rust-docs
-cargo x std-docs
+cargo x docs
 cargo x js-test
 cargo x grammar-install
 cargo x grammar-test

@@ -6,9 +6,7 @@ use {
     crate::{
         commands::{ask, bindgen_web, cargo, run},
         filing::file_with_inputs,
-        places::{
-            BROWSER_TRIPLE, HOST_TRIPLE, artifact, built, inputs, modified, root, target_directory,
-        },
+        places::{BROWSER_TRIPLE, HOST_TRIPLE, artifact, built, inputs, root, target_directory},
     },
     std::{fs, path::Path, process::Command},
 };
@@ -100,7 +98,7 @@ pub(crate) fn js_test() -> Result<(), String> {
 }
 
 /// The one spelling of the rustdoc build: the gate's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
-pub(crate) fn rust_docs() -> Result<(), String> {
+pub(crate) fn docs() -> Result<(), String> {
     runtime()?;
 
     cargo(&[
@@ -117,35 +115,6 @@ pub(crate) fn rust_docs() -> Result<(), String> {
         "<!DOCTYPE html><meta http-equiv=\"refresh\" content=\"0; url=curios/index.html\">\n",
     )
     .map_err(|error| format!("{}: {error}", landing.display()))?;
-
-    Ok(())
-}
-
-/// The standard library's pages, rendered by the compiler from the prelude it embeds — no sources are read and nothing is compiled, since the prelude already carries the library's record. `build` is what produces the compiler, and costs nothing when nothing changed; the render is skipped the same way, when the landing page is newer than the compiler that renders it, so a repeated run touches nothing. `cargo x clean` removes the pages with every other filed product.
-pub(crate) fn std_docs() -> Result<(), String> {
-    build()?;
-
-    let pages = root()
-        .join("curios-prelude-archive")
-        .join(".artifacts")
-        .join("documentation");
-    let compiler = target_directory().join("release").join("curios");
-
-    if let (Some(rendered), Some(compiler_at)) =
-        (modified(&pages.join("index.html")), modified(&compiler))
-        && rendered >= compiler_at
-    {
-        println!(
-            "{} is newer than the compiler; nothing to render",
-            pages.display()
-        );
-        return Ok(());
-    }
-
-    run(
-        Command::new(&compiler),
-        &["document", "--std", &pages.to_string_lossy()],
-    )?;
 
     Ok(())
 }
