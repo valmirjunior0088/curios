@@ -19,6 +19,8 @@ mod budget_tests;
 #[cfg(test)]
 mod elimination_tests;
 #[cfg(test)]
+mod entry_tests;
+#[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod occurrence_tests;
@@ -549,10 +551,14 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
     }
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
-    if let Some(entry) = &module.entry
-        && let Err(error) = check_entrypoint(kernel, &entry.body, entry.type_.as_ref())
-    {
-        verdicts.push(Verdict { name: None, error });
+    if let Some(entry) = &module.entry {
+        let checked = match &entry.type_ {
+            Some(type_) => check_entrypoint(kernel, &entry.body, type_),
+            None => Err(KernelError::UntypedEntry),
+        };
+        if let Err(error) = checked {
+            verdicts.push(Verdict { name: None, error });
+        }
     }
 
     // The entrypoint is no definition, and nothing reads what it read: a later unit never names it.

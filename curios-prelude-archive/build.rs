@@ -11,8 +11,8 @@ use {
     curios_core::Item,
     curios_core::{Global, Sharing, Zonked, derived_binder_floor, validate_stored_identities},
     curios_elab::{
-        Context, ErasedArena, Established, Mode, Resumed, Tail, elaborate_and_zonk_unit,
-        erase_unit, validate_lowered_universe_seeds, validate_universes,
+        Context, ErasedArena, Established, Resumed, Tail, elaborate_and_zonk_unit, erase_unit,
+        validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{PreparedText, prepare_prelude},
     curios_unit::{Record, Uncertified, framed},
@@ -117,7 +117,6 @@ fn archive(
             &lowered,
             prepared.metavariable_floor(),
             prepared.universe_floor(),
-            Mode::Infer,
             Tail::Written,
         )
     });
@@ -136,7 +135,7 @@ fn archive(
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
-    let (core, _body_type) = elaborated.unwrap_or_else(|error| {
+    let core = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
             error.format_with(&lowered, scope, &SYNTAX)
@@ -161,7 +160,6 @@ fn archive(
         &mut Context::with_default_budget(SYNTAX),
         Resumed::of(scope, arena),
         &zonked,
-        None,
     )
     .unwrap_or_else(|error| {
         panic!(

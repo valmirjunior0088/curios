@@ -8,7 +8,7 @@ use {
         Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Subterm,
         Telescope, Term, emitted, intrinsic, reduce_with,
     },
-    crate::{validate_bound_universes, validate_universes},
+    crate::validate_universes,
     curios_core::{
         Certification, ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item,
         Module, Operand, StructDecl, Zonked, foreign_operands, project_erased_universes,
@@ -49,13 +49,6 @@ pub(super) struct UniverseErased<T>(T);
 impl<T> UniverseErased<T> {
     pub(super) fn into_inner(self) -> T {
         self.0
-    }
-}
-
-impl UniverseErased<Term> {
-    fn project(term: &Term) -> Result<Self, Error> {
-        validate_bound_universes(term, 0, "erasure expected type")?;
-        Ok(Self(project_erased_universes(term)))
     }
 }
 
@@ -177,7 +170,7 @@ fn project_module(module: &Module) -> Module {
     }
 }
 
-/// Seed the erasure context's registries with `module`'s declarations — the re-derived types every item consults. The shared head of all three erasure entry points.
+/// Seed the erasure context's registries with `module`'s declarations — the re-derived types every item consults — for each scope unit and then the unit being erased.
 fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> {
     for (name, induct_decl) in &module.induct_decls {
         context.register_induct(name, induct_decl.clone())?;
@@ -188,7 +181,7 @@ fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> 
     Ok(())
 }
 
-/// Erase the entrypoint body into the entry block and finalize the arena — the shared tail of both whole-program entry points. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed arena is an erasure fault, which the verifier panics on rather than returning here.
+/// Erase the entrypoint body into the entry block and finalize the arena — [`erase_unit`]'s tail for the unit that is the entry. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed arena is an erasure fault, which the verifier panics on rather than returning here.
 fn seal_entry(
     mut lowering: Lowering,
     context: &mut Context,
@@ -218,45 +211,9 @@ fn seal_entry(
     })
 }
 
-/// Erase a whole meta-free [`Module`] into a verified arena [`Module`]. Top-level items are erased in dominance order as the module's item chain; the entrypoint body becomes the entry block, checked against `expected`.
-pub fn erase_module(
-    context: &mut Context,
-    module: &Zonked<Module>,
-    expected: &Term,
-) -> Result<curios_ersd::Module, Error> {
-    curios_profile::profile!("erase_module");
-    grown(|| erase_module_within(context, module, expected))
-}
-
-fn erase_module_within(
-    context: &mut Context,
-    module: &Zonked<Module>,
-    expected: &Term,
-) -> Result<curios_ersd::Module, Error> {
-    let module = UniverseErased::<Zonked<Module>>::project(module)?
-        .into_inner()
-        .into_module();
-    let expected = UniverseErased::<Term>::project(expected)?.into_inner();
-    // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
-    context.with_suppressed_privacy(|context| {
-        // Erasure runs with its own `Context`; seed the registries the re-derived types consult before any item does.
-        seed_registries(context, &module)?;
-
-        let mut lowering = Lowering::default();
-        lowering.erase_items(context, &module)?;
-
-        let entry = module
-            .entry
-            .as_ref()
-            .expect("erase_module is for a whole module with an entrypoint");
-
-        Ok(seal_entry(lowering, context, &entry.body, &expected)?.module)
-    })
-}
-
 /// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
 ///
-/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail still erases as it always did — the `erase_module` unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
+/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail still erases as it always did — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
 fn force_entry(
     lowering: &mut Lowering,
     context: &mut Context,
@@ -533,38 +490,30 @@ impl ErasedArena {
 ///
 /// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every reference into the scope is already bound.
 ///
-/// **`expected` is `Some` exactly when `module` has a body, and that is the whole of what used to be two functions.** One erased the fixed prelude's item chain with no entry to seal; the other erased a program and sealed one. Being the entry *is* having an entrypoint, so the two spellings differed by a condition rather than by a procedure, and a caller could pair a body with no expectation or an expectation with no body with nothing to say so.
+/// **A unit with an entrypoint is sealed at the type its entry states, and one without is left open — and that is the whole of what used to be two functions.** One erased the fixed prelude's item chain with no entry to seal; the other erased a program and sealed one. Being the entry *is* having an entrypoint, and the type the body was judged at is part of it, which [`Zonked`] holds: so the entry is read off the module, and no caller can pair a body with no type or a type with no body.
 ///
 /// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the scope's Core and its erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
 pub fn erase_unit(
     context: &mut Context,
     resumed: Resumed<'_>,
     module: &Zonked<Module>,
-    expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
     curios_profile::profile!("erase_unit");
-    grown(|| erase_unit_within(context, resumed, module, expected))
+    grown(|| erase_unit_within(context, resumed, module))
 }
 
 fn erase_unit_within(
     context: &mut Context,
     resumed: Resumed<'_>,
     module: &Zonked<Module>,
-    expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
-    assert_eq!(
-        module.as_module().entry.is_some(),
-        expected.is_some(),
-        "an entrypoint body and the type it is checked against arrive together or not at all",
-    );
     let scope = resumed.projected_cores();
-    let module = UniverseErased::<Zonked<Module>>::project(module)?
-        .into_inner()
-        .into_module();
-    let expected = expected
-        .map(|expected| Ok::<_, Error>(UniverseErased::<Term>::project(expected)?.into_inner()))
-        .transpose()?;
-    // Re-derivation, not surface elaboration (see `erase_module`).
+    let module = UniverseErased::<Zonked<Module>>::project(module)?.into_inner();
+    let entry = module
+        .entry()
+        .map(|(body, type_)| (body.clone(), type_.clone()));
+    let module = module.into_module();
+    // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
         // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
         for unit in &scope {
@@ -617,10 +566,10 @@ fn erase_unit_within(
         };
         lowering.erase_items(context, &module)?;
 
-        match (&module.entry, &expected) {
-            (Some(entry), Some(expected)) => seal_entry(lowering, context, &entry.body, expected),
+        match entry {
+            Some((body, type_)) => seal_entry(lowering, context, &body, &type_),
             // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
-            _ => Ok(ErasedArena {
+            None => Ok(ErasedArena {
                 module: lowering
                     .builder
                     .into_module()

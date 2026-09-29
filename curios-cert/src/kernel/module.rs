@@ -15,7 +15,7 @@ use {
     super::{
         Counted, Kernel, KernelError, Sort, carries_information,
         convert::convert,
-        infer::{check, infer, infer_type},
+        infer::{check, infer_type},
     },
     curios_analysis::yields_a_sort,
     curios_core::{
@@ -456,21 +456,16 @@ fn check_signature<B: Bound + Clone>(
     })
 }
 
-/// Check a term that closes the program — an entrypoint body, with no name to export. `expected` is its declared type when it has one.
+/// Check a term that closes the program — an entrypoint body, with no name to export — against the type its entry states: the program contract a compile supplies, or whatever the builder of the entry stated instead, so the kernel holds a program to its contract itself rather than taking elaboration's word that it was.
 pub(crate) fn check_entrypoint(
     kernel: &mut Kernel,
     body: &Term,
-    expected: Option<&Term>,
+    type_: &Term,
 ) -> Result<(), KernelError> {
     curios_profile::profile!("check_entrypoint");
     kernel.restore_budget();
     kernel.assume_universes(&UniverseContext::empty());
 
-    match expected {
-        Some(type_) => {
-            infer_type(kernel, type_)?;
-            check(kernel, body, type_)
-        }
-        None => infer(kernel, body).map(|_| ()),
-    }
+    infer_type(kernel, type_)?;
+    check(kernel, body, type_)
 }

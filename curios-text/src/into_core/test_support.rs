@@ -154,15 +154,8 @@ pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
     )
     .unwrap();
     let mut context = curios_elab::Context::with_default_budget(SYNTAX);
-    curios_elab::elaborate_and_zonk_module(
-        &mut context,
-        &module,
-        metavar_floor,
-        universe_floor,
-        curios_elab::Mode::Infer,
-    )
-    .unwrap()
-    .0
+    curios_elab::elaborate_and_zonk_module(&mut context, &module, metavar_floor, universe_floor)
+        .unwrap()
 }
 
 pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
@@ -190,31 +183,25 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
         &lowered_prefix,
         metavar_floor,
         universe_floor,
-        curios_elab::Mode::Infer,
     )
-    .unwrap()
-    .0;
+    .unwrap();
 
     let full = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered,
         metavar_floor,
         universe_floor,
-        curios_elab::Mode::Infer,
     )
-    .unwrap()
-    .0;
+    .unwrap();
     let cached = curios_elab::elaborate_and_zonk_unit(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         curios_elab::Established::over(std::slice::from_ref(&&prelude)),
         &lowered,
         metavar_floor,
         universe_floor,
-        curios_elab::Mode::Infer,
         curios_elab::Tail::Written,
     )
-    .unwrap()
-    .0;
+    .unwrap();
     (full, cached)
 }
 

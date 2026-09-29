@@ -89,10 +89,10 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
 
 /// Elaborate `source` to its meta-free Core module and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
-/// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
+/// It used to erase *fresh*, passing the whole module to an erasure entry of its own, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
-    let (module, core_type, _foreigns, _records) = with_prelude(|prelude| {
+    let (module, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
@@ -111,7 +111,6 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
             &mut Context::with_default_budget(SYNTAX),
             Resumed::of(&scope.cores(), scope.arena()),
             &module,
-            Some(&core_type),
         )
     })
     .expect("the elaborated module erases into a verified erased module")

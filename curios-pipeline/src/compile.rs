@@ -9,7 +9,7 @@ use {
     },
     curios_core::{Certification, Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
-        Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
+        Context, Established, FinalizedModule, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_emit::into_wasm,
@@ -263,15 +263,6 @@ pub fn typecheck_measured(
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let core_mode = match lowered
-        .entry
-        .as_ref()
-        .and_then(|entry| entry.type_.as_ref())
-    {
-        Some(type_) => Mode::Check(type_.clone()),
-        None => Mode::Infer,
-    };
-
     let mut context = Context::new(budget, *syntax);
     context.set_imports(imports.clone());
     context.set_broken(
@@ -292,7 +283,6 @@ pub fn typecheck_measured(
             &lowered,
             metavars,
             universe_floor,
-            core_mode,
             Tail::Written,
         )
         .map_err(|error| {
@@ -398,7 +388,7 @@ pub(crate) fn elaborate_and_zonk<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(curios_core::Module, Term, ForeignStore, Vec<TestRecord>), CompileError>
+) -> Result<(curios_core::Module, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -432,7 +422,7 @@ fn elaborate_lowered<O>(
     lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(curios_core::Module, Term, ForeignStore, Vec<TestRecord>), CompileError>
+) -> Result<(curios_core::Module, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -451,7 +441,7 @@ where
         broken,
     } = lowered;
 
-    // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; `type_: None` on the synthesized entry routes it into the `Io({})` expectation below like an authored tail without an annotation. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
+    // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
         EntryTail::Authored => Vec::new(),
         EntryTail::Tests => scheduled_tests(&lowered.tests, &lowered.items),
@@ -468,20 +458,17 @@ where
 
     observe(Stage::Core(&lowered));
 
-    // The entrypoint contract, as an ordinary expectation rather than a judgment after the fact: a program *is* a description of doing something and yielding nothing. An embedder that states its own type still gets it — that is how the typecheck-only fixtures reach both checkers with deliberately odd tails. A test program's tail replaces the written entry, annotation included, so only the authored policy reads one.
+    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry that states no type of its own states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An embedder that states its own type keeps it; that is how the typecheck-only fixtures reach both checkers with deliberately odd tails. A test program's tail replaces the written entry, annotation included, and the elaborator that synthesizes it states its type.
     //
-    // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
-    let written_annotation = match tail {
-        EntryTail::Authored => lowered
-            .entry
-            .as_ref()
-            .and_then(|entry| entry.type_.as_ref()),
-        EntryTail::Tests | EntryTail::LastUnitTests => None,
-    };
-    let core_mode = match written_annotation {
-        Some(type_) => Mode::Check(type_.clone()),
-        None => Mode::Check(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
-    };
+    // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
+    let mut lowered = lowered;
+    if let EntryTail::Authored = tail
+        && let Some(entry) = &mut lowered.entry
+    {
+        entry
+            .type_
+            .get_or_insert_with(|| Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())));
+    }
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(imports.clone());
@@ -491,7 +478,7 @@ where
             .filter_map(|item| item.declares.clone())
             .collect(),
     );
-    let (module, core_type) = with_broken(
+    let module = with_broken(
         &broken,
         elaborate_and_zonk_unit(
             &mut context,
@@ -499,7 +486,6 @@ where
             &lowered,
             metavars,
             universe_floor,
-            core_mode,
             elab_tail,
         )
         .map_err(|error| {
@@ -511,10 +497,7 @@ where
 
     observe(Stage::CoreElab(&module));
 
-    // The entry is the unit with an entrypoint, and `elaborate_and_zonk` is only ever asked for one.
-    let core_type = core_type.expect("the entrypoint's type comes back with its body");
-
-    Ok((module, core_type, user_foreigns, records))
+    Ok((module, user_foreigns, records))
 }
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
@@ -543,10 +526,8 @@ pub fn check_entrypoint(
 
 /// An entry lowered, elaborated, zonked and accepted by the kernel: what [`erase_checked`] erases, with what the lowering after it needs of the entry.
 struct Judged {
-    /// The entry's module, zonked, every item the kernel judged accepted.
+    /// The entry's module, zonked, every item the kernel judged accepted — its entry stating the type the body was checked against, which erasure seals it at.
     module: curios_core::Zonked<curios_core::Module>,
-    /// The type the entry's body was checked against, which erasure seals it at.
-    core_type: Term,
     /// The `foreign` rows the entry declares.
     foreigns: ForeignStore,
     /// One per scheduled test, when the entry is compiled as a test program.
@@ -570,7 +551,6 @@ fn erase_checked(
         &mut Context::new(budget, *syntax),
         Resumed::of(&cores, scope.arena()),
         &judged.module,
-        Some(&judged.core_type),
     )
     .map_err(|error| {
         CompileError::Failure(error.reports_with(judged.module.as_module(), &cores, syntax))
@@ -583,7 +563,7 @@ fn erase_checked(
     Ok(arena.into_module())
 }
 
-/// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
+/// [`check_entrypoint`] with the stages it passes observed, and the entry's foreign rows kept for the lowering that follows it.
 fn check_observed<O>(
     budget: u64,
     scope: Prefix<'_>,
@@ -612,7 +592,7 @@ fn check_lowered<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let (module, core_type, foreigns, records) =
+    let (module, foreigns, records) =
         elaborate_lowered(budget, scope, syntax, lowered, tail, observe)?;
 
     // The zonk evidence the kernel and erasure consume, established where the module is final. A refusal here is a compiler invariant — `zonk_module` just enforced the same claim — surfacing as a failure rather than a panic.
@@ -637,7 +617,6 @@ where
 
     Ok(Judged {
         module,
-        core_type,
         foreigns,
         records,
         certification,
@@ -692,7 +671,7 @@ pub fn compile_unit(
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let (core, _body_type) = with_broken(
+    let core = with_broken(
         lowered.broken(),
         elaborate_and_zonk_unit(
             &mut context,
@@ -700,7 +679,6 @@ pub fn compile_unit(
             lowered.core(),
             lowered.metavariable_floor(),
             lowered.universe_floor(),
-            Mode::Infer,
             Tail::Written,
         )
         .map_err(|error| {
@@ -728,7 +706,6 @@ pub fn compile_unit(
         &mut Context::new(budget, *syntax),
         Resumed::of(&cores, scope.arena()),
         &core,
-        None,
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 

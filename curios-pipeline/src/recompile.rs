@@ -12,8 +12,7 @@ use {
         Term, Zonked, derived_binder_floor,
     },
     curios_elab::{
-        Context, Established, Mode, Recompile, Resumed, Tail, elaborate_and_zonk_unit_over,
-        erase_unit,
+        Context, Established, Recompile, Resumed, Tail, elaborate_and_zonk_unit_over, erase_unit,
     },
     curios_text::{UnitSource, into_core_unit},
     curios_unit::{Prefix, Uncertified, Unit},
@@ -50,7 +49,7 @@ pub fn compile_unit_over(
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let (core, _body_type) = with_broken(
+    let core = with_broken(
         lowered.broken(),
         elaborate_and_zonk_unit_over(
             &mut context,
@@ -62,7 +61,6 @@ pub fn compile_unit_over(
             },
             lowered.metavariable_floor(),
             lowered.universe_floor(),
-            Mode::Infer,
             Tail::Written,
         )
         .map_err(|error| {
@@ -92,7 +90,6 @@ pub fn compile_unit_over(
         &mut Context::new(budget, *syntax),
         Resumed::of(&cores, scope.arena()),
         &core,
-        None,
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 

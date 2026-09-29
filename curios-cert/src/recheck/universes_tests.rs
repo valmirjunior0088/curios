@@ -4,8 +4,8 @@ use {
     crate::{Globals, KernelError},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Entrypoint, Free, Global, Intrinsic, Item, Level, Module, Nat,
-        Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
+        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
+        Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseMetaId, UniverseParam,
     },
     curios_utilities::Qualifier,
@@ -51,10 +51,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     };
 
     assert!(
@@ -98,10 +95,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     };
 
     assert!(
@@ -337,10 +331,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     };
 
     assert_eq!(
@@ -420,10 +411,7 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     };
 
     assert_eq!(

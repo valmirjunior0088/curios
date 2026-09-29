@@ -62,8 +62,33 @@ fn zonked(module: &Module) -> Zonked<Module> {
     Zonked::project(module).expect("the fixture is zonked")
 }
 
-fn erase(context: &mut Context, module: &Module, expected: Term) -> curios_ersd::Module {
-    erase_module(context, &zonked(module), &expected).expect("the module erases")
+/// `module` with its entry stating `type_`, which is what the entry's body is sealed at.
+fn stating(module: &Module, type_: Term) -> Module {
+    let mut module = module.clone();
+    module
+        .entry
+        .as_mut()
+        .expect("the fixture has an entry")
+        .type_ = Some(type_);
+    module
+}
+
+/// `module` erased as the one unit of a program, its entry stating `type_`.
+fn try_erase(
+    context: &mut Context,
+    module: &Module,
+    type_: Term,
+) -> Result<curios_ersd::Module, Error> {
+    erase_unit(
+        context,
+        Resumed::of(&[], ErasedArena::default()),
+        &zonked(&stating(module, type_)),
+    )
+    .map(ErasedArena::into_module)
+}
+
+fn erase(context: &mut Context, module: &Module, type_: Term) -> curios_ersd::Module {
+    try_erase(context, module, type_).expect("the module erases")
 }
 
 /// The recorded payload row — field hint and carrier shape — of the one constructor of the single-constructor family whose debug name ends in `name`. The arena is what erasure wrote; the header the printer renders from it is a second spelling, and a test that scraped that spelling would pass by matching nothing if it moved.
@@ -318,8 +343,7 @@ fn identity_arena(stamp: Totality) -> ErasedArena {
     erase_unit(
         &mut context,
         Resumed::of(&[], ErasedArena::default()),
-        &zonked(&module(items, body)),
-        Some(&nat),
+        &zonked(&stating(&module(items, body), nat)),
     )
     .expect("the module erases")
 }
@@ -478,9 +502,12 @@ fn universe_erasure_is_a_validated_structural_projection() {
             Vec::<Term>::new(),
         ),
     };
-    let source = module(
-        vec![Item::Let(definition)],
-        Term::instance_of(&global("poly"), vec![Level::constant(2)]),
+    let source = stating(
+        &module(
+            vec![Item::Let(definition)],
+            Term::instance_of(&global("poly"), vec![Level::constant(2)]),
+        ),
+        Term::type_at(Level::constant(3)),
     );
 
     let projected = super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&source))
@@ -501,7 +528,10 @@ fn universe_erasure_is_a_validated_structural_projection() {
         Some(&Term::free_var(&global("poly")))
     );
 
-    let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
+    let invalid = stating(
+        &module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0)))),
+        Term::type_at(Level::constant(1)),
+    );
     assert!(super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid)).is_err());
 }
 
@@ -676,8 +706,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };
-    let erased =
-        erase_module(&mut context, &zonked(&fixture), &opt_type()).expect("the module erases");
+    let erased = erase(&mut context, &fixture, opt_type());
     assert_eq!(
         shape(&erased),
         "\
@@ -972,12 +1001,7 @@ fn a_variant_match_binds_payload_without_projections() {
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };
-    let erased = erase_module(
-        &mut context,
-        &zonked(&fixture),
-        &Term::intrinsic(Intrinsic::NatType),
-    )
-    .expect("the module erases");
+    let erased = erase(&mut context, &fixture, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1136,7 +1160,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
         ],
         Term::free_var(&a),
     );
-    let error = erase_module(&mut context, &zonked(&module(Vec::new(), body)), &type_)
+    let error = try_erase(&mut context, &module(Vec::new(), body), type_)
         .expect_err("the value-level cycle is rejected");
     assert!(matches!(error, Error::EvaluationCycle { .. }), "{error:?}");
 }
@@ -1296,8 +1320,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };
-    let erased =
-        erase_module(&mut context, &zonked(&fixture), &expected).expect("the module erases");
+    let erased = erase(&mut context, &fixture, expected);
 
     assert_eq!(
         payload(&erased, "/Wrapped"),

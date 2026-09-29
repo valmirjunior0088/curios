@@ -17,9 +17,10 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
-        Global, InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl,
-        Subterm, Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
+        Global, InductDecl, InductParam, Intrinsic, Item, Level, Module, RecItem, SelfReference,
+        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
+        stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Plicity, Qualifier, grown},
     std::{
@@ -1207,19 +1208,17 @@ fn check_witness_cycles(context: &mut Context, items: &[&Item]) -> Result<(), Er
     Ok(())
 }
 
-/// What one unit's elaboration produced, before anything is finalized: the module itself, the type its entry inferred, and the refusals it recovered from.
+/// What one unit's elaboration produced, before anything is finalized: the module itself and the refusals it recovered from.
 struct ElaboratedSuffix {
-    /// The items that elaborated, with the registry entries, witness markers and tests of those alone; the entry when it elaborated and nothing depends on a refusal.
+    /// The items that elaborated, with the registry entries, witness markers and tests of those alone; the entry, stating the type it was judged at, when it elaborated and nothing depends on a refusal.
     module: Module,
-    /// The entry's inferred type — `None` for a library, which has no entry to infer one from, and for an entry that was refused or withheld.
-    body_type: Option<Term>,
     /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
     /// Every name an item this run produced no item for: withheld before it elaborated, refused, or retracted after the fact. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
     dropped: BTreeSet<Global>,
 }
 
-/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
+/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
 ///
@@ -1232,7 +1231,6 @@ fn elaborate_module_suffix(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
@@ -1314,9 +1312,10 @@ fn elaborate_module_suffix(
                 .filter(|test| !poison.holds(&test.name))
                 .cloned()
                 .collect::<Vec<_>>();
+            // A test program is a program, so its tail is judged at the program contract, which `Test/main` is written to meet.
             synthesized = Entrypoint {
                 body: test_program_tail(context, &scheduled),
-                type_: None,
+                type_: Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
             };
             // Choosing each test's discharge reduces bodies under their telescopes; that is spent on the declarations' behalf, so the tail itself still checks on a full budget.
             context.restore_budget();
@@ -1324,18 +1323,17 @@ fn elaborate_module_suffix(
         }
     };
 
-    // The entry is checked as an item is — under its own stamp, undone when refused, withheld when it reaches a poisoned name — except that nothing depends on it, so its refusal poisons nothing. The expected type is the driver's and is read with it: a written annotation naming a refused declaration makes the entry that declaration's dependent.
-    let withheld = entry.is_some_and(|entry| poison.reaches_entry(entry))
-        || matches!(&mode, Mode::Check(expected) if poison.touches(expected));
+    // The entry is checked as an item is — under its own stamp, undone when refused, withheld when it reaches a poisoned name — except that nothing depends on it, so its refusal poisons nothing. The type it states is part of it: an annotation naming a refused declaration makes the entry that declaration's dependent.
+    let withheld = entry.is_some_and(|entry| poison.reaches_entry(entry));
     let mark = ItemMark::begin(context, entry_stamp);
-    let (mut entry, mut body_type) = match withheld {
-        true => (None, None),
-        false => match elaborate_entry(context, entry, mode) {
+    let mut entry = match withheld {
+        true => None,
+        false => match elaborate_entry(context, entry) {
             Ok(elaborated) => elaborated,
             Err(error) => {
                 mark.undo(context, &[]);
                 survivors.refuse(entry_stamp, error);
-                (None, None)
+                None
             }
         },
     };
@@ -1344,28 +1342,32 @@ fn elaborate_module_suffix(
         Ok(late) => {
             if survivors.retract(context, &mut poison, late) {
                 entry = None;
-                body_type = None;
             }
         }
         Err(error) => {
             survivors.refuse(entry_stamp, error);
             entry = None;
-            body_type = None;
         }
     }
     if let Err(error) = context.drain_parked() {
         survivors.refuse(entry_stamp, error);
         entry = None;
-        body_type = None;
     }
-    let body_type = match body_type
-        .map(|body_type| reduce_with(context, &body_type))
+    // The type the entry states from here on is its judged type reduced through the unit's definitions, the spelling every later stage reads it in.
+    let entry = match entry
+        .map(|Entrypoint { body, type_ }| {
+            let type_ = type_.expect("elaboration states the type the entry was judged at");
+            let type_ = reduce_with(context, &type_)?;
+            Ok::<_, Error>(Entrypoint {
+                body,
+                type_: Some(type_),
+            })
+        })
         .transpose()
     {
-        Ok(body_type) => body_type,
+        Ok(entry) => entry,
         Err(error) => {
             survivors.refuse(entry_stamp, error);
-            entry = None;
             None
         }
     };
@@ -1420,54 +1422,39 @@ fn elaborate_module_suffix(
 
     Ok(ElaboratedSuffix {
         module,
-        body_type,
         refusals,
         dropped,
     })
 }
 
-/// Elaborate the entry under `mode`: the expected type first, then the body against it.
+/// Elaborate the entry at the type it states — first the type, then the body against it — or, where it states none, infer the body's; either way the rebuilt entry states the type its body was judged at.
 ///
-/// The annotation is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it stayed exactly as lowered, so `List(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
+/// A stated type is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it stayed exactly as lowered, so `List(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
 ///
-/// The rebuilt module carries the elaborated spelling, because the entry's annotation is what the kernel rechecks the entrypoint against and what `zonk` walks: a raw annotation would put the two checkers on different terms and hand zonk one that never passed through elaboration. Only a *written* annotation is kept, so a synthesized expectation leaves the annotation as absent as the program wrote it.
+/// The rebuilt entry carries the type it was judged at whether it was stated or inferred, because every stage after this one reads it there: the kernel rechecks the body against it, `zonk` walks it, and erasure seals the entry at it. Keeping only a written annotation left the program contract a compile supplies nowhere in the module, so the kernel inferred the body's type rather than checking it, and erasure took the type from a second channel.
 fn elaborate_entry(
     context: &mut Context,
     entry: Option<&Entrypoint>,
-    mode: Mode,
-) -> Result<(Option<Entrypoint>, Option<Term>), Error> {
-    let (mode, annotation) = match mode {
-        Mode::Check(expected) => {
-            let elaborated = check_is_sort(context, &expected)?.0;
-            let annotation = entry
-                .is_some_and(|entry| entry.type_.is_some())
-                .then(|| elaborated.clone());
-            (Mode::Check(elaborated), annotation)
-        }
-        Mode::Infer => (Mode::Infer, None),
-    };
-
+) -> Result<Option<Entrypoint>, Error> {
     // A unit with no entrypoint has none to elaborate and no type for one — the `Entrypoint` carries both, which is what keeps them one fact from here to the kernel.
-    match entry {
-        Some(entry) => {
-            let (body, body_type) = elaborate(context, &entry.body, mode)?;
-            Ok((
-                Some(Entrypoint {
-                    body,
-                    type_: annotation,
-                }),
-                Some(body_type),
-            ))
-        }
-        None => Ok((None, None)),
-    }
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    let mode = match &entry.type_ {
+        Some(stated) => Mode::Check(check_is_sort(context, stated)?.0),
+        None => Mode::Infer,
+    };
+    let (body, type_) = elaborate(context, &entry.body, mode)?;
+
+    Ok(Some(Entrypoint {
+        body,
+        type_: Some(type_),
+    }))
 }
 
-/// A finalized module and what finalizing it decided: the module, the type its entry inferred, and the erasure obligations this checker decides but does not always raise — see [`elaborate_and_zonk_unit_reporting`] for why they are reported rather than thrown.
+/// A finalized module and what finalizing it decided: the module, its entry stating the type it was judged at, and the erasure obligations this checker decides but does not always raise — see [`elaborate_and_zonk_unit_reporting`] for why they are reported rather than thrown.
 pub struct FinalizedModule {
     pub module: Module,
-    /// The entry's inferred type — `None` for a library, which has no entry to infer one from.
-    pub body_type: Option<Term>,
     /// The (T) and (V) obligations, reported rather than raised. Empty when the module carries none.
     pub obligations: Vec<Error>,
 }
@@ -1486,34 +1473,23 @@ pub struct FinalizedModule {
 fn finalize_and_check(
     context: &mut Context,
     mut module: Module,
-    body_type: Option<Term>,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<FinalizedModule, Error> {
     curios_profile::profile!("finalize_and_check");
     let mut entry_terms = Vec::new();
-    let has_annotation = module
-        .entry
-        .as_ref()
-        .is_some_and(|entry| entry.type_.is_some());
     if let Some(entry) = &module.entry {
         entry_terms.push(entry.body.clone());
-        if let Some(type_) = &entry.type_ {
-            entry_terms.push(type_.clone());
-        }
-    }
-    if let Some(body_type) = body_type {
-        entry_terms.push(body_type);
+        entry_terms.extend(entry.type_.clone());
     }
     let mut entry_terms = context
         .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
         .into_iter();
     if let Some(entry) = &mut module.entry {
         entry.body = entry_terms.next().expect("entry body was finalized");
-        if has_annotation {
-            entry.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
+        if entry.type_.is_some() {
+            entry.type_ = Some(entry_terms.next().expect("entry type was finalized"));
         }
     }
-    let body_type = entry_terms.next();
 
     // Written goals report as one complete batch before zonking: collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`collect_goal_reports`).
     let goal_reports = collect_goal_reports(context, &module);
@@ -1522,9 +1498,6 @@ fn finalize_and_check(
     }
 
     let mut module = zonk_module(context, &module)?;
-    let body_type = body_type
-        .map(|body_type| zonk(context, &body_type))
-        .transpose()?;
     context.restore_budget();
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
@@ -1544,20 +1517,18 @@ fn finalize_and_check(
 
     Ok(FinalizedModule {
         module,
-        body_type,
         obligations,
     })
 }
 
 /// The erasure-obligation verdicts, as one error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
-fn raise(outcome: FinalizedModule) -> Result<(Module, Option<Term>), Error> {
+fn raise(outcome: FinalizedModule) -> Result<Module, Error> {
     let FinalizedModule {
         module,
-        body_type,
         obligations,
     } = outcome;
     match obligations.is_empty() {
-        true => Ok((module, body_type)),
+        true => Ok(module),
         false => Err(Error::batch(obligations)),
     }
 }
@@ -1574,17 +1545,14 @@ fn refused(refusals: Vec<Error>, finalized: Result<FinalizedModule, Error>) -> E
 }
 
 /// Elaborate a whole [`Module`] with no cached prefix, then zonk and check it.
-///
-/// The paired operation exists so a cached module and its body type can never come from different metavariable stores.
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
-) -> Result<(Module, Option<Term>), Error> {
+) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
-    grown(|| elaborate_and_zonk_module_within(context, module, metavar_floor, universe_floor, mode))
+    grown(|| elaborate_and_zonk_module_within(context, module, metavar_floor, universe_floor))
 }
 
 fn elaborate_and_zonk_module_within(
@@ -1592,19 +1560,17 @@ fn elaborate_and_zonk_module_within(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
-) -> Result<(Module, Option<Term>), Error> {
+) -> Result<Module, Error> {
     let suffix = elaborate_module_suffix(
         context,
         Established::nothing(),
         module,
         metavar_floor,
         universe_floor,
-        mode,
         Tail::Written,
     )?;
     // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
-    let finalized = finalize_and_check(context, suffix.module, suffix.body_type, &BTreeMap::new());
+    let finalized = finalize_and_check(context, suffix.module, &BTreeMap::new());
     if !suffix.refusals.is_empty() {
         return Err(refused(suffix.refusals, finalized));
     }
@@ -1634,16 +1600,14 @@ pub fn elaborate_and_zonk_unit(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
-) -> Result<(Module, Option<Term>), Error> {
+) -> Result<Module, Error> {
     raise(elaborate_and_zonk_unit_reporting(
         context,
         established,
         module,
         metavar_floor,
         universe_floor,
-        mode,
         tail,
     )?)
 }
@@ -1657,7 +1621,6 @@ pub fn elaborate_and_zonk_unit_reporting(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
 ) -> Result<FinalizedModule, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
@@ -1668,7 +1631,6 @@ pub fn elaborate_and_zonk_unit_reporting(
             module,
             metavar_floor,
             universe_floor,
-            mode,
             tail,
         )
     })
@@ -1680,7 +1642,6 @@ fn elaborate_and_zonk_unit_reporting_within(
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
 ) -> Result<FinalizedModule, Error> {
     let elaborated = elaborate_module_suffix(
@@ -1689,19 +1650,16 @@ fn elaborate_and_zonk_unit_reporting_within(
         module,
         metavar_floor,
         universe_floor,
-        mode,
         tail,
     )?;
     // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
     let inherited = established.recorded_totality();
-    let finalized =
-        finalize_and_check(context, elaborated.module, elaborated.body_type, &inherited);
+    let finalized = finalize_and_check(context, elaborated.module, &inherited);
     if !elaborated.refusals.is_empty() {
         return Err(refused(elaborated.refusals, finalized));
     }
     let FinalizedModule {
         module: suffix,
-        body_type,
         obligations,
     } = finalized?;
 
@@ -1715,7 +1673,6 @@ fn elaborate_and_zonk_unit_reporting_within(
 
     Ok(FinalizedModule {
         module,
-        body_type,
         obligations,
     })
 }
@@ -1740,9 +1697,8 @@ pub fn elaborate_and_zonk_unit_over(
     recompile: Recompile<'_>,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
-) -> Result<(Module, Option<Term>), Error> {
+) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
     grown(|| {
         elaborate_and_zonk_unit_over_within(
@@ -1751,7 +1707,6 @@ pub fn elaborate_and_zonk_unit_over(
             recompile,
             metavar_floor,
             universe_floor,
-            mode,
             tail,
         )
     })
@@ -1763,9 +1718,8 @@ fn elaborate_and_zonk_unit_over_within(
     recompile: Recompile<'_>,
     metavar_floor: usize,
     universe_floor: usize,
-    mode: Mode,
     tail: Tail<'_>,
-) -> Result<(Module, Option<Term>), Error> {
+) -> Result<Module, Error> {
     let mut scope = established.modules().to_vec();
     scope.push(recompile.reused);
     let extended = Established::over(&scope);
@@ -1776,18 +1730,15 @@ fn elaborate_and_zonk_unit_over_within(
         recompile.closure,
         metavar_floor,
         universe_floor,
-        mode,
         tail,
     )?;
     let inherited = extended.recorded_totality();
-    let finalized =
-        finalize_and_check(context, elaborated.module, elaborated.body_type, &inherited);
+    let finalized = finalize_and_check(context, elaborated.module, &inherited);
     if !elaborated.refusals.is_empty() {
         return Err(refused(elaborated.refusals, finalized));
     }
     let FinalizedModule {
         module: closure,
-        body_type,
         obligations,
     } = finalized?;
 
@@ -1807,7 +1758,6 @@ fn elaborate_and_zonk_unit_over_within(
 
     raise(FinalizedModule {
         module,
-        body_type,
         obligations,
     })
 }

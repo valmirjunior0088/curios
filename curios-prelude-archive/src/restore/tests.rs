@@ -422,7 +422,6 @@ fn stored_prelude_measurements() {
                 &mut erasure_context,
                 Resumed::of(&cores, arena.clone()),
                 &zonked,
-                None,
             )
             .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();

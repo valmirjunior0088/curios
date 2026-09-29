@@ -358,12 +358,12 @@ impl Item {
     }
 }
 
-/// A unit's entrypoint: the expression, with the optional annotation it is checked against. One type rather than two module fields, so an annotation without an entry — a type for no expression — is unspellable rather than asserted away; a unit that is not the entry simply carries no `Entry` at all.
+/// A unit's entrypoint: the expression, with the type it is judged at. One type rather than two module fields, so a type without an entry — a type for no expression — is unspellable rather than asserted away; a unit that is not the entry simply carries no `Entry` at all.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct Entrypoint {
     pub body: Term,
-    /// The written annotation, when there is one: optional before elaboration, and the elaborated expectation after.
+    /// The type the body is judged at. Before elaboration it is what whoever built the entry states — a written annotation, or the program contract a compile supplies — and absent only where nothing is stated, for elaboration to infer. Elaboration writes the type the body was judged at either way, so every stage after it reads the entry's type off the entry: [`Zonked::project`] refuses an entry without one, and [`Zonked::entry`] hands it back beside the body.
     pub type_: Option<Term>,
 }
 
@@ -646,7 +646,7 @@ impl Term {
 }
 
 impl Entrypoint {
-    /// The top-level names the entry reaches, through its body and its annotation.
+    /// The top-level names the entry reaches, through its body and the type it states.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = term_reaches(&self.body);
         names.extend(self.type_.iter().flat_map(term_reaches));
@@ -975,7 +975,7 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
     highest.map_or(0, |index| index as usize + 1)
 }
 
-/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, and the lowering-time `universe_seeds` are cleared. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
+/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, the lowering-time `universe_seeds` are cleared, and an entrypoint states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -992,6 +992,17 @@ impl Zonked<Module> {
 
     pub fn as_module(&self) -> &Module {
         &self.0
+    }
+
+    /// The entrypoint's body and the type it was judged at — `None` for a unit that is not the entry.
+    pub fn entry(&self) -> Option<(&Term, &Term)> {
+        self.0.entry.as_ref().map(|entry| {
+            let type_ = entry
+                .type_
+                .as_ref()
+                .expect("projection refuses an entry that states no type");
+            (&entry.body, type_)
+        })
     }
 
     pub fn into_module(self) -> Module {
@@ -1021,7 +1032,7 @@ impl fmt::Display for ZonkedRefusal {
     }
 }
 
-/// The four term-bearing places elaboration and zonk are answerable for — a definition's type and body, the entrypoint, and the two registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
+/// The four term-bearing places elaboration and zonk are answerable for — a definition's type and body, the entrypoint and the type elaboration wrote beside it, and the two registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
     fn unfinished(term: &Term) -> bool {
         term.has_metavar() || term.has_transient()
@@ -1048,10 +1059,13 @@ fn zonked_refusal(module: &Module) -> Option<String> {
             ));
         }
     }
-    if module.entry.as_ref().is_some_and(|entry| {
-        unfinished(&entry.body) || entry.type_.as_ref().is_some_and(unfinished)
-    }) {
-        return Some("elaboration-only syntax survives in the entrypoint".to_owned());
+    if let Some(entry) = &module.entry {
+        let Some(type_) = &entry.type_ else {
+            return Some("the entrypoint states no type it was judged at".to_owned());
+        };
+        if unfinished(&entry.body) || unfinished(type_) {
+            return Some("elaboration-only syntax survives in the entrypoint".to_owned());
+        }
     }
     for (name, decl) in &module.induct_decls {
         if unfinished_bound(&decl.arity)

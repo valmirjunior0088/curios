@@ -684,7 +684,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
     if let Some(entry) = &module.entry {
         validate_bound_universes(&entry.body, 0, "module body")?;
         if let Some(type_) = &entry.type_ {
-            validate_bound_universes(type_, 0, "module body annotation")?;
+            validate_bound_universes(type_, 0, "module body type")?;
         }
     }
     if !module.universe_seeds.is_empty() {

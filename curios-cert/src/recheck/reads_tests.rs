@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::Globals,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Entrypoint, Free, Global, Intrinsic, Module, Nat, Reads, Term},
+    curios_core::{Free, Global, Intrinsic, Module, Nat, Reads, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -50,10 +50,7 @@ fn reading_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 

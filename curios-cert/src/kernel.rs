@@ -166,6 +166,8 @@ pub enum KernelError {
     },
     /// A field of a `Prop`-sorted structure that is not a proof. Irrelevance identifies every inhabitant of a proposition, while projection reads a field back out without meeting any elimination guard, so an informative field hands two convertible values to the same projection — a type-valued field included.
     Informative { field: Box<Term> },
+    /// An entrypoint that states no type to judge it at. Elaboration writes the type it judged the body at, so an entry without one did not come through it; inferring one here would accept a program against a contract nobody checked.
+    UntypedEntry,
     /// A declaration whose universe constraints name something the declaration does not have: a parameter past its own count, or a metavariable elaboration should have solved. Either way the context cannot be instantiated, so assuming it means assuming something with no meaning.
     UnclosedUniverses,
     /// A declaration whose own universe constraints have no solution. The kernel *assumes* an item's constraints while checking it, so an unsatisfiable set is a hypothesis set from which everything follows: level questions stop being answered by the hierarchy and start being answered by the contradiction.
@@ -320,6 +322,9 @@ impl fmt::Display for Displayed<'_> {
                     formatter,
                     "a recursive proof or type at `{type_}` does not descend",
                 )
+            }
+            KernelError::UntypedEntry => {
+                write!(formatter, "the entrypoint states no type to judge it at")
             }
             KernelError::UnclosedUniverses => write!(
                 formatter,

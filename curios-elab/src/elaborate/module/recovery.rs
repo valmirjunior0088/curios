@@ -10,7 +10,7 @@
 
 use {
     crate::{Context, DeferredRefusal, Error, ItemStamp, check_is_sort, read_witness_signature},
-    curios_core::{Entrypoint, Free, Global, Item, Module, Term},
+    curios_core::{Entrypoint, Free, Global, Item, Module},
     std::{collections::BTreeSet, rc::Rc},
 };
 
@@ -55,11 +55,6 @@ impl Poison {
     /// Whether the entry reaches a poisoned name, through its body or its annotation.
     pub(super) fn reaches_entry(&self, entry: &Entrypoint) -> bool {
         !self.names.is_empty() && self.any(&entry.reaches())
-    }
-
-    /// Whether a term reaches a poisoned name — the expected type the driver hands in, which is no part of the module.
-    pub(super) fn touches(&self, term: &Term) -> bool {
-        !self.names.is_empty() && self.any(&term.reaches())
     }
 
     /// Whether `item`, as elaborated, reaches a poisoned name: its definitions and the registry entries it declares as the context now holds them — the form that shows a witness resolved late.

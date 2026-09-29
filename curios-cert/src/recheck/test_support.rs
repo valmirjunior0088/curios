@@ -390,10 +390,7 @@ pub(super) fn indexed_module(target: Term) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -419,10 +416,7 @@ pub(super) fn level_definition(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -449,10 +443,7 @@ pub(super) fn level_registry(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -507,10 +498,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -682,10 +670,7 @@ pub(super) fn relevant_index_control() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -772,10 +757,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -804,10 +786,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -837,10 +816,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -891,10 +867,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -934,10 +907,7 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -987,10 +957,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1064,10 +1031,7 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1153,10 +1117,7 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1227,10 +1188,7 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1294,10 +1252,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1352,10 +1307,7 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1379,10 +1331,7 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     };
 
     // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
@@ -1477,10 +1426,7 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1523,10 +1469,7 @@ pub(super) fn rec_apply_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1659,10 +1602,7 @@ pub(super) fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1680,10 +1620,7 @@ pub(super) fn carried_proof_module() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1763,10 +1700,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1822,10 +1756,7 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -1979,10 +1910,7 @@ pub(super) fn index_forgery() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -2026,10 +1954,7 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     };
 
     vec![
@@ -2279,10 +2204,7 @@ pub(super) fn computed_field_forgery() -> Module {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -2349,10 +2271,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 0,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -2527,10 +2446,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::intrinsic(Intrinsic::NatType),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 
@@ -2558,10 +2474,7 @@ pub(super) fn collision_module(
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     }
 }
 

@@ -4,8 +4,8 @@ use {
     crate::{Globals, KernelError},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Entrypoint, Global, InductDecl, Intrinsic, Item, Level, Module,
-        Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
+        Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
+        Telescope, Term, Totality, UniverseContext, UniverseParam,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -177,10 +177,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
         binder_floor: 1_000,
-        entry: Some(Entrypoint {
-            body: Term::tuple(Vec::<Term>::new()),
-            type_: None,
-        }),
+        entry: None,
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
