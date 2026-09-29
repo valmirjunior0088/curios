@@ -8,9 +8,17 @@
 
 use {super::KernelError, curios_analysis::Erased, curios_core::Term, std::collections::HashMap};
 
+/// One erased position an item's check recorded.
+pub(crate) struct Position {
+    pub(crate) term: Term,
+    pub(crate) erased: Erased,
+    /// Whether typing `term` closed a group that does not descend — noted where the group was typed, since the group is typed with the binders around it opened and `term` holds it closed.
+    pub(crate) encloses_partial: bool,
+}
+
 #[derive(Default)]
 pub(super) struct Positions {
-    recorded: Vec<(Term, Erased)>,
+    recorded: Vec<Position>,
     /// Sort-hood per distinct type. Keyed on terms whose binders are the item's own, which is what makes an entry meaningful only within the item that made it — cleared with the drain.
     memo: HashMap<Term, Option<Erased>>,
     /// The first classification that could not be decided.
@@ -57,14 +65,28 @@ impl Positions {
         erased
     }
 
-    pub(super) fn push(&mut self, term: &Term, erased: Erased) {
-        self.recorded.push((term.clone(), erased));
+    /// Record `term` at `erased`, handing back where it was recorded for [`Positions::enclose_partial`].
+    pub(super) fn push(&mut self, term: &Term, erased: Erased) -> usize {
+        self.recorded.push(Position {
+            term: term.clone(),
+            erased,
+            encloses_partial: false,
+        });
+
+        self.recorded.len() - 1
+    }
+
+    /// The position recorded at `index` enclosed a group that does not descend.
+    pub(super) fn enclose_partial(&mut self, index: usize) {
+        if let Some(position) = self.recorded.get_mut(index) {
+            position.encloses_partial = true;
+        }
     }
 
     /// Take this item's positions and any classification that could not be decided, leaving both empty for the next item.
     ///
     /// The memo goes with them: its keys mention the item's own binders, so an entry means nothing once they are retracted.
-    pub(super) fn drain(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
+    pub(super) fn drain(&mut self) -> (Vec<Position>, Option<KernelError>) {
         self.memo.clear();
 
         (std::mem::take(&mut self.recorded), self.failure.take())

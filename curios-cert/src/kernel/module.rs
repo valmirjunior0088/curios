@@ -17,7 +17,7 @@ use {
         convert::convert,
         infer::{check, infer, infer_type},
     },
-    curios_analysis::{group_totality, yields_a_sort},
+    curios_analysis::yields_a_sort,
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext,
@@ -53,7 +53,7 @@ pub(crate) fn check_definition(
 ///
 /// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
 ///
-/// Totality is not decided for the group as a whole. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
+/// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `kernel::calls`) — which is the verdict obligations (T) and (V) read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
@@ -79,9 +79,14 @@ pub(crate) fn check_group<R>(
             kernel.assume(name, &group.member_type(index));
         }
 
+        // Whether each member's signature or body encloses a group of its own that does not descend — what obligations (T) and (V) read the member by, since a group is typed here with its enclosing binders opened and the member's term holds it closed.
+        let mut enclosing = vec![false; group.length()];
+
         let mut erased_member: Option<Term> = None;
         for (index, member) in group.iter().enumerate() {
+            let before = kernel.partial_groups();
             let sort = infer_type(kernel, &member.type_.open(&refs))?;
+            enclosing[index] |= kernel.partial_groups() > before;
 
             // Erasure asks about the member as the rest of the kernel spells it, and `yields_a_sort` decides by reduction rather than inference — so it never re-enters, and reads the folded type.
             let folded = group.member_type(index);
@@ -90,12 +95,18 @@ pub(crate) fn check_group<R>(
             }
         }
 
+        // The bodies are where the group's calls are: each one the walk types is recorded, graded under the arms around it, against the parameters the body's leading lambdas bind (see `kernel::calls`).
+        kernel.open_group(group, &names);
         for (index, member) in group.iter().enumerate() {
+            let before = kernel.partial_groups();
+            kernel.begin_member(index);
             check(kernel, &member.body.open(&refs), &group.member_type(index))?;
+            enclosing[index] |= kernel.partial_groups() > before;
         }
+        let totality = kernel.close_group(group, enclosing);
 
         if let Some(type_) = erased_member
-            && group_totality(kernel, group) != Totality::Total
+            && totality != Totality::Total
         {
             return Err(KernelError::NotDescending {
                 type_: Box::new(type_),

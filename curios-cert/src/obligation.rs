@@ -13,33 +13,46 @@
 //! A compile judges only the user's items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
 
 use {
-    super::{Globals, Kernel, KernelError, Sort},
-    curios_analysis::{Erased, group_totality},
-    curios_core::{Enter, Global, Item, Module, Rec, Reducer, Subterm, Term, Totality},
+    super::{Globals, Kernel, KernelError, Position, Sort},
+    curios_analysis::Erased,
+    curios_core::{Enter, Free, Global, Item, Module, RecGroup, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
-/// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or a call to a host row that diverges.
+/// Whether `group`'s calls, as this walk typed them, close to a descent on every cycle — the verdict `check_group` recorded.
+///
+/// A group this walk never checked has no verdict and does not descend: its calls were never typed here, and nothing else is a source of them. That is the case for the items of a unit mounted without a covering record, whose bodies this walk does not judge, and it is the refusing direction.
+fn descends(kernel: &Kernel, group: &RecGroup) -> bool {
+    kernel.group_verdict(group) == Some(Totality::Total)
+}
+
+/// Whether a term calls a host row that diverges — partial in itself, with no name to blame.
 ///
 /// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
-fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
-    let mut state = (kernel, memo);
+///
+/// The other way a term is partial in itself, an inline group that does not descend, is not read here: the walk notes it where it typed the group, against the definition and the positions that enclosed it, because the group is typed with the binders around it opened and a term holds it closed — the two spellings meet in no lookup.
+fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
     term.walk(
-        &mut state,
-        |state, term| match state.1.get(term) {
-            Some(&partial) => Enter::Skip(partial),
+        memo,
+        |memo, term| match memo.get(term) {
+            Some(&diverges) => Enter::Skip(diverges),
             None => Enter::Descend,
         },
-        |state, term, mut children| {
-            let mut partial =
-                matches!(&**term, Subterm::Foreign(function, _) if function.diverges());
-            if let Subterm::Rec(Rec { group, .. }) = &**term {
-                partial = partial || group_totality(state.0, group) == Totality::Partial;
-            }
-            let partial = partial || children.any(|child| child);
-            state.1.insert(term.clone(), partial);
-            partial
+        |memo, term, mut children| {
+            let diverges = matches!(&**term, Subterm::Foreign(function, _) if function.diverges())
+                || children.any(|child| child);
+            memo.insert(term.clone(), diverges);
+            diverges
         },
+    )
+}
+
+/// Whether a term holds a `rec` group anywhere — which, for an item this walk did not type, is a group with no verdict here, and so one that does not descend.
+fn holds_a_group(term: &Term) -> bool {
+    term.walk(
+        &mut (),
+        |_, _| Enter::Descend,
+        |_, term, mut children| matches!(&**term, Subterm::Rec(_)) || children.any(|child| child),
     )
 }
 
@@ -64,17 +77,26 @@ pub(crate) fn partial_definitions(
     let mut partial: BTreeSet<Global> = globals.partial().clone();
     let mut stamped_total: Vec<Global> = Vec::new();
     let mut memo = HashMap::new();
-    let mut classify = |item: &Item| {
+    // `typed` says this walk checked `item`, so what its check enclosed was noted as it went; an item it did not check — one of a unit mounted without a covering record — is read from its terms instead, every group in them one with no verdict here.
+    let mut classify = |item: &Item, typed: bool| {
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
-            Item::Rec(rec) => group_totality(kernel, &rec.group) == Totality::Partial,
+            Item::Rec(rec) => !descends(kernel, &rec.group),
             Item::Let(_) => false,
         };
 
-        for definition in item.definitions() {
+        for (index, definition) in item.definitions().into_iter().enumerate() {
+            let encloses = match (typed, item) {
+                (true, Item::Rec(rec)) => kernel.member_encloses_partial(&rec.group, index),
+                (true, Item::Let(_)) => {
+                    kernel.definition_encloses_partial(&Free::from(&definition.name))
+                }
+                (false, _) => holds_a_group(&definition.body) || holds_a_group(&definition.type_),
+            };
             if rejected
-                || locally_partial(kernel, &definition.body, &mut memo)
-                || locally_partial(kernel, &definition.type_, &mut memo)
+                || encloses
+                || calls_a_diverging_row(&definition.body, &mut memo)
+                || calls_a_diverging_row(&definition.type_, &mut memo)
             {
                 partial.insert(definition.name.clone());
             }
@@ -83,7 +105,7 @@ pub(crate) fn partial_definitions(
     };
 
     for item in globals.unclassified() {
-        classify(item);
+        classify(item, false);
     }
     for item in &module.items {
         let names = item.declared_names();
@@ -96,7 +118,7 @@ pub(crate) fn partial_definitions(
                 .filter(|definition| definition.totality.is_total())
                 .map(|definition| definition.name),
         );
-        classify(item);
+        classify(item, true);
     }
 
     loop {
@@ -137,29 +159,29 @@ pub(crate) fn partial_definitions(
     (partial, disagreements)
 }
 
-/// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself.
+/// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 pub(crate) fn check_positions(
-    kernel: &mut Kernel,
-    positions: &[(Term, Erased)],
+    positions: &[Position],
     partial: &BTreeSet<Global>,
     memo: &mut HashMap<Term, bool>,
 ) -> Result<(), KernelError> {
     curios_profile::profile!("check_positions");
-    for (term, erased) in positions {
-        if let Some(reached) = term
+    for position in positions {
+        if let Some(reached) = position
+            .term
             .free_vars()
             .iter()
             .filter_map(|free| free.as_global())
             .find(|name| partial.contains(name))
         {
             return Err(KernelError::NotTotal {
-                erased: *erased,
+                erased: position.erased,
                 reached: Some(reached.clone()),
             });
         }
-        if locally_partial(kernel, term, memo) {
+        if position.encloses_partial || calls_a_diverging_row(&position.term, memo) {
             return Err(KernelError::NotTotal {
-                erased: *erased,
+                erased: position.erased,
                 reached: None,
             });
         }

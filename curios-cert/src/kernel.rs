@@ -29,7 +29,11 @@ mod module;
 pub(crate) use module::*;
 
 mod positions;
+pub(crate) use positions::Position;
 use positions::Positions;
+
+mod calls;
+use calls::Calls;
 
 mod scope;
 use scope::Scope;
@@ -423,6 +427,8 @@ pub struct Kernel {
     retention: Retention,
     /// The erased positions this walk recorded — an output, not an input.
     positions: Positions,
+    /// The recursive calls this walk typed, and each checked group's verdict — an output, not an input.
+    calls: Calls,
     /// Top-level definitions and the nominal registry.
     globals: Globals,
     /// The registered spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
@@ -446,6 +452,7 @@ impl Kernel {
             memos: Memos::new(true),
             retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             positions: Positions::default(),
+            calls: Calls::default(),
             globals: Globals::default(),
             syntax,
             assumed: Vec::new(),
@@ -698,7 +705,10 @@ impl Kernel {
     /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and this is their only caller anywhere, which is what makes that true. A judgment that opened a binder and returned early would leak it into the conversion history, where the local context is part of the goal key, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Kernel` throughout, and a guard holding the borrow would leave them nothing to be called with.
     pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
         let mark = self.scope.mark();
+        // What the call recorder learned inside the bracket — an arm's refinements, a group opened for its bodies — is about the binders the bracket opened, so it retracts with them.
+        let calls = self.calls.mark();
         let outcome = walk(self);
+        self.calls.retract(calls);
         // Retracting an equation changes what a local-bearing term reduces to, so the reducts remembered under it go with it. A bracket that assumed none leaves the tables alone — most do, and what they remembered is still true.
         if self.scope.retract(mark) {
             self.memos.begin_equations();
@@ -853,9 +863,9 @@ impl Kernel {
     /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.
     ///
     /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The orchestration lives here rather than on [`Positions`] because the middle of it — `erased_half` — needs the whole kernel; see `Positions::begin` on why that bracket cannot be a closure.
-    pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
+    pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) -> Option<usize> {
         if self.positions.suppressed() {
-            return;
+            return None;
         }
 
         let erased = match self.positions.remembered(type_) {
@@ -868,13 +878,18 @@ impl Kernel {
             }
         };
 
-        if let Some(erased) = erased {
-            self.positions.push(term, erased);
+        erased.map(|erased| self.positions.push(term, erased))
+    }
+
+    /// The position recorded at `position`, where there is one, enclosed a group that does not descend.
+    pub(crate) fn enclose_partial(&mut self, position: Option<usize>) {
+        if let Some(index) = position {
+            self.positions.enclose_partial(index);
         }
     }
 
     /// Take this item's recorded positions and any classification that could not be decided, leaving both empty for the next item.
-    pub(crate) fn take_checked(&mut self) -> (Vec<(Term, Erased)>, Option<KernelError>) {
+    pub(crate) fn take_checked(&mut self) -> (Vec<Position>, Option<KernelError>) {
         self.positions.drain()
     }
 

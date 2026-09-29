@@ -78,6 +78,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
 ///
 /// The closure and the verdict are shared by every walk that finds a group's calls, whichever walk met them.
 pub fn decide(calls: Vec<Call>) -> Totality {
+    curios_profile::profile!("decide");
     match close(calls) {
         Some(closed) => match closed.iter().all(|call| {
             call.caller != call.callee || !call.matrix.is_idempotent() || call.matrix.descends()
@@ -408,7 +409,7 @@ impl<E: Env> Walk<'_, E> {
             }
 
             Subterm::Apply(apply) => {
-                let (spine_head, arguments) = flatten(term);
+                let (spine_head, arguments) = spine(term);
                 if let Some((group, index)) = spine_head.as_rec_proj()
                     && group == self.group
                 {
@@ -514,8 +515,8 @@ fn refine(scrutinee: Option<Free>, shape: Shape) -> Option<(Free, Shape)> {
     scrutinee.map(|scrutinee| (scrutinee, shape))
 }
 
-/// An application spine as its head and its arguments in order, so an over-applied or curried call is graded as the one call it is.
-fn flatten(term: &Term) -> (Term, Vec<Term>) {
+/// An application spine as its head and its arguments in order, so an over-applied or curried call is graded as the one call it is — whichever walk meets it.
+pub fn spine(term: &Term) -> (Term, Vec<Term>) {
     let mut arguments = Vec::new();
     let mut head = term.clone();
     loop {

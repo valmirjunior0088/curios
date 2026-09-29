@@ -3,7 +3,7 @@
 //! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the kernel's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
-    super::{Call, Carriers, Guard, Matrix, Shape, Tag, flatten},
+    super::{Call, Carriers, Guard, Matrix, Shape, Tag, spine},
     crate::{Env, forceable},
     curios_core::{Free, FreeMonoid, Intrinsic, Layer, Nat, Struct, Subterm, Term, Tuple, Variant},
     curios_num::Natural,
@@ -127,6 +127,18 @@ impl SizeContext {
     pub fn is_balanced(&self) -> bool {
         self.scopes.is_empty()
     }
+
+    /// How many scopes are open — a mark [`SizeContext::exit_to`] returns to.
+    pub fn depth(&self) -> usize {
+        self.scopes.len()
+    }
+
+    /// Close every scope opened since `depth` was the [`SizeContext::depth`], innermost first — for a walk that brackets scopes by marks rather than pairing each entry with its exit.
+    pub fn exit_to(&mut self, depth: usize) {
+        while self.scopes.len() > depth {
+            self.exit();
+        }
+    }
 }
 
 /// Grade a call from the member whose parameters are `params` to a member taking `callee_arity` parameters, with `arguments`, under `context`: each argument against each parameter, as strictly smaller, equal, or unrelated.
@@ -139,6 +151,7 @@ pub fn grade<E: Env>(
     callee_arity: usize,
     arguments: &[Term],
 ) -> Call {
+    curios_profile::profile!("grade");
     let mut grader = Grader { env, context };
     let mut matrix = Matrix::unknown(params.len(), callee_arity);
 
@@ -285,7 +298,7 @@ impl<E: Env> Grader<'_, E> {
 
             // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding, as every application did before.
             Subterm::Apply(_) => {
-                let (head, _) = flatten(term);
+                let (head, _) = spine(term);
                 if let Subterm::Var(var) = &*head
                     && let Some(free) = var.as_free()
                     && self.context.payloads.contains(free)

@@ -1687,8 +1687,18 @@ pub(super) fn carried_proof_module() -> Module {
     }
 }
 
-/// `induct Held : Prop | qed(u : Io({}))`, with `bad : Held` built either from `exit(@{}, 0)` or from `Io/pure(())`.
-pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
+/// What `proof_carrying_unit`'s proof carries at `Io({})`.
+pub(super) enum Carried {
+    /// `exit(@{}, 0)`: a host row that diverges.
+    Exit,
+    /// `Io/pure(())`: nothing that fails to terminate.
+    Pure,
+    /// `rec wait : Io({}) = wait; wait`: a group that never descends, at a type relevant enough that its own gate lets it stand.
+    Wait,
+}
+
+/// `induct Held : Prop | qed(u : Io({}))`, with `bad : Held` built from what `carried` names.
+pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
@@ -1714,15 +1724,26 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
         polarities: Vec::new(),
     };
 
-    let payload = match exiting {
-        true => Term::foreign(
+    let payload = match carried {
+        Carried::Exit => Term::foreign(
             Arc::new(ForeignFunction::Builtin(HostOp::ProcExit)),
             vec![Term::tuple_type_unit(), Term::intrinsic(Intrinsic::Byte(0))],
         ),
-        false => Term::intrinsic(Intrinsic::io_pure(
+        Carried::Pure => Term::intrinsic(Intrinsic::io_pure(
             Term::tuple_type_unit(),
             Term::tuple(Vec::<Term>::new()),
         )),
+        Carried::Wait => {
+            let wait = Free::local(911, Some("wait"));
+            Term::rec(
+                [(
+                    wait.clone(),
+                    Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
+                    Term::free_var(&wait),
+                )],
+                Term::free_var(&wait),
+            )
+        }
     };
 
     let mut induct_decls = BTreeMap::new();

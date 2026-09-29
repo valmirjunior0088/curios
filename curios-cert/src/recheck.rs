@@ -41,10 +41,11 @@ mod universes_tests;
 
 use {
     super::{
-        Globals, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
-        check_positions, check_rec_group, check_struct_decl, partial_definitions, satisfiable,
+        Globals, Kernel, KernelError, Position, check_definition, check_entrypoint,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        partial_definitions, satisfiable,
     },
-    curios_analysis::{Coverage, Declarations, Erased, PositivityRefusal, positivity_vectors},
+    curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
     curios_core::{
         Bound, Certification, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module,
         StructDecl, Term, Totality, UniverseContext, Zonked, derived_binder_floor_outside,
@@ -235,7 +236,7 @@ pub fn recheck_module_measured(
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.
-type ItemPositions = (Option<Global>, Vec<(Term, Erased)>);
+type ItemPositions = (Option<Global>, Vec<Position>);
 
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
 fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
@@ -471,6 +472,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
 
         match item {
             Item::Let(definition) => {
+                let before = kernel.partial_groups();
                 let outcome = check_definition(
                     kernel,
                     &Free::from(&definition.name),
@@ -478,6 +480,10 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
                     &definition.body,
                     &definition.universe_context,
                 );
+                // Whether the definition holds a group that does not descend, noted where the group was typed — see `Kernel::definition_encloses_partial`.
+                if kernel.partial_groups() > before {
+                    kernel.note_enclosing_partial(&Free::from(&definition.name));
+                }
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
@@ -566,7 +572,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> R
     }
     let mut local_memo = HashMap::new();
     for (name, item_positions) in &positions {
-        if let Err(error) = check_positions(kernel, item_positions, &partial, &mut local_memo) {
+        if let Err(error) = check_positions(item_positions, &partial, &mut local_memo) {
             verdicts.push(Verdict {
                 name: name.clone(),
                 error,

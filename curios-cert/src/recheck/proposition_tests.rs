@@ -28,7 +28,7 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
     );
 }
 
-/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks [`super::locally_partial`], which blames nothing: a term is partial in itself when it carries a non-descending `rec` group or a call to a host row that diverges.
+/// (V) has two routes to a refusal and only one of them has ever fired. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
 ///
 /// Instrumented across a kernel walk of the whole prelude and every program in `curios`'s test corpus, the named route refused 9 times — 8 at a proof position, 1 at a type position — and the anonymous route refused **zero**, with no test in this crate asserting a `NotTotal` verdict at all. The reason is the one this module documents: every surface spelling that would reach it is refused during elaboration, so no module carries it here. `rec b : False = b; b`, the shape three of `curios`'s `tests::soundness` fixtures use, never arrives.
 ///
@@ -38,7 +38,7 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
     let verdicts = fixture_verdicts(
-        &proof_carrying_unit(true),
+        &proof_carrying_unit(Carried::Exit),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -56,12 +56,36 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
     );
 }
 
-/// The control for the fixture above: the same proposition built from a description that does nothing stays accepted.
+/// The anonymous route's other trigger: a group that never descends, enclosed by a proof. `wait` is at `Io({})`, a relevant type, so `check_group`'s own gate lets it stand, and nothing else refuses it but the proof around it.
+///
+/// The walk types the group with the binders around it opened, and notes the verdict against every position and definition it was typed within — the only place the two can be joined, since the term holding the group spells it closed. Mutation-checked: a group closing without that note leaves the proof accepted.
+#[test]
+fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
+    let verdicts = fixture_verdicts(
+        &proof_carrying_unit(Carried::Wait),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            KernelError::NotTotal {
+                erased: Erased::Proof,
+                reached: None,
+            }
+        )),
+        "the kernel certified a proof enclosing a group that never descends: {verdicts:?}",
+    );
+}
+
+/// The control for the fixtures above: the same proposition built from a description that does nothing stays accepted.
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(
         fixture_verdicts(
-            &proof_carrying_unit(false),
+            &proof_carrying_unit(Carried::Pure),
             1_000_000,
             &Globals::default(),
             SYNTAX

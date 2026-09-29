@@ -36,13 +36,14 @@ use {
         Counted, Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort,
         sort::infer_sort, synth_neutral,
     },
+    curios_analysis::spine,
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
-        Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Produced, Proj, Rec, Reducer, Scope,
-        Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
-        foreign_signature,
+        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
+        InstanceHead, Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Produced, Proj, Rec,
+        Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Variant, foreign_signature,
     },
-    curios_num::{Binary, Grain},
+    curios_num::{Binary, Grain, Natural},
     curios_utilities::recurse,
 };
 
@@ -55,23 +56,38 @@ use {
 /// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a type is checked by reducing it and typing the reduct, and a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the one before it four times — so typing it per path made a three-character claim in a type cost 677,246 inferences. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     recurse(|| {
+        // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a local-free term names no member.
+        let spine_head = kernel.calls.take_spine_head();
+        // Whether a group that does not descend is typed inside this term, read off the count before and after. A hit types nothing, so it counts again what the term's first typing closed.
+        let before = kernel.partial_groups();
         let inferred = match kernel.infer_hit(term) {
-            Some(inferred) => inferred,
+            Some(inferred) => {
+                kernel.calls.recall_partial(term);
+
+                inferred
+            }
             None => {
-                let inferred = infer_within(kernel, term)?;
+                let inferred = infer_within(kernel, term, spine_head)?;
+                if kernel.partial_groups() > before {
+                    kernel.calls.remember_partial(term);
+                }
                 kernel.infer_store(term.clone(), inferred.clone());
 
                 inferred
             }
         };
         // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
-        kernel.record_checked(term, &inferred);
+        let position = kernel.record_checked(term, &inferred);
+        if kernel.partial_groups() > before {
+            kernel.enclose_partial(position);
+        }
 
         Ok(inferred)
     })
 }
 
-fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
+/// [`infer`]'s rules, one per term form. `spine_head` says `term` is the head of an application spine, whose call the spine records whole.
+fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Term, KernelError> {
     kernel.spend(Cost::STEP)?;
 
     match &**term {
@@ -103,24 +119,46 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         }
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.
-        Subterm::Var(var) => kernel
-            .type_of(var.unwrap())?
-            .cloned()
-            .ok_or_else(|| KernelError::Unbound(var.unwrap().clone())),
+        //
+        // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
+        Subterm::Var(var) => {
+            if !spine_head && let Some(free) = var.as_free() {
+                kernel.record_call(free, &[]);
+            }
+
+            kernel
+                .type_of(var.unwrap())?
+                .cloned()
+                .ok_or_else(|| KernelError::Unbound(var.unwrap().clone()))
+        }
 
         // A type former is a type, at the universe its parts join to — computed by the judgment role, which types those parts, rather than by the lookup, which only classifies them.
         Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(infer_sort(kernel, term)?.term()),
 
         // λ: check each domain is a type, then the body under those binders. The result is the Π over the same telescope.
-        Subterm::Func(func) => {
-            let telescope = infer_telescope(kernel, func.telescope.clone())?;
-
-            Ok(Subterm::FuncType(FuncType::new(telescope, func.plicities().to_vec())).into())
-        }
+        Subterm::Func(func) => infer_lambda(kernel, func, &[]),
 
         // Application: the head must be a function of matching arity, each argument checks against its domain, and the result is the codomain with the arguments substituted — which is where dependency lives.
+        //
+        // A lambda applied on the spot, inside a group's body, is typed with each binder standing for its argument, for the call recorder alone: a call inside reads its arguments as what they are rather than as fresh binders nothing is below, which is what keeps an arm generalized over a hypothesis and applied back to it from hiding the descent it carries. Outside every group there is no call to read, and the lambda takes the ordinary route, memo included. Every other head is typed as the head of this spine, whose call is recorded here whole once the arguments are typed.
         Subterm::Apply(apply) => {
-            let head_type = infer(kernel, &apply.head)?;
+            let head_type = match &*apply.head {
+                Subterm::Func(func) if kernel.recording() => {
+                    let arguments = apply.params().cloned().collect::<Vec<_>>();
+                    let before = kernel.partial_groups();
+                    let head_type = infer_lambda(kernel, func, &arguments)?;
+                    let position = kernel.record_checked(&apply.head, &head_type);
+                    if kernel.partial_groups() > before {
+                        kernel.enclose_partial(position);
+                    }
+
+                    head_type
+                }
+                _ => {
+                    kernel.calls.set_spine_head();
+                    infer(kernel, &apply.head)?
+                }
+            };
 
             let Subterm::FuncType(FuncType { telescope, .. }) =
                 Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?)
@@ -142,6 +180,15 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
                 check(kernel, param, &domain)?;
                 cursor.advance(param.clone());
+            }
+
+            if !spine_head {
+                let (head, arguments) = spine(term);
+                if let Subterm::Var(var) = &*head
+                    && let Some(free) = var.as_free()
+                {
+                    kernel.record_call(free, &arguments);
+                }
             }
 
             Ok(cursor.body().expect("arity was checked above"))
@@ -519,8 +566,10 @@ fn check_cases(
         let expected = result.at(scrutinee, &[], &[], &value);
 
         kernel.scoped(|kernel| {
+            kernel.assume_guard(scrutinee, &value);
             let mut solutions = Vec::new();
             eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
+            kernel.assume_arm(scrutinee, &value, &solutions);
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -577,9 +626,18 @@ fn check_cases(
                 at(kernel, literal, body)?;
             }
 
-            // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing.
+            // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing. Enumerating zero is what rules zero out of it, which a call inside may descend on.
             let expected = result.of(scrutinee, &[]);
-            check(kernel, default, &expected)
+            kernel.scoped(|kernel| {
+                if let Subterm::Var(var) = &**scrutinee
+                    && let Some(binder) = var.as_free()
+                    && cases.iter().any(|(key, _)| key.is_zero())
+                {
+                    kernel.assume_nonzero(binder.clone());
+                }
+
+                check(kernel, default, &expected)
+            })
         }
 
         Cases::FreeMonoid { carrier } => {
@@ -625,9 +683,12 @@ fn check_free_monoid(
     let hypothesis = |tail: &Term| motive.map(|motive| motive.open(&[tail]));
 
     // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
+    //
+    // `size_value` is the cons value as the call recorder reads a size: the same value, spelled as the carrier's layered form where the typing's spelling is an operation the size order does not read through.
     let cons = |kernel: &mut Kernel,
                 binders: Vec<(&Free, Term)>,
                 cons_value: Term,
+                size_value: Term,
                 body: &Term|
      -> Result<(), KernelError> {
         kernel.scoped(|kernel| {
@@ -639,6 +700,7 @@ fn check_free_monoid(
 
             let mut solutions = Vec::new();
             eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
+            kernel.assume_arm(scrutinee, &size_value, &solutions);
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -673,10 +735,15 @@ fn check_free_monoid(
             ));
             let body = cons_case.open(&[&pred_occurrence, &Term::free_var(&ih)]);
 
+            // `pred + 1` as one successor layer over `pred`, which is how the size order reads a `Nat`.
+            let size_value = Term::intrinsic(Intrinsic::Nat(Nat::Succ(
+                Natural::from(1usize),
+                pred_occurrence.clone(),
+            )));
             let mut binders = vec![(&pred, Term::intrinsic(Intrinsic::NatType))];
             binders.extend(hypothesis(&pred_occurrence).map(|type_| (&ih, type_)));
 
-            cons(kernel, binders, succ_value, &body)
+            cons(kernel, binders, succ_value, size_value, &body)
         }
 
         Carrier::List {
@@ -729,7 +796,7 @@ fn check_free_monoid(
             ];
             binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
 
-            cons(kernel, binders, cons_value, &body)
+            cons(kernel, binders, cons_value.clone(), cons_value, &body)
         }
 
         Carrier::Bin {
@@ -774,16 +841,35 @@ fn check_free_monoid(
             ];
             binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
 
-            cons(kernel, binders, cons_value, &body)
+            cons(kernel, binders, cons_value.clone(), cons_value, &body)
         }
     }
 }
 
 /// Verify that `term` has type `expected`.
 pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), KernelError> {
-    // Seed for the erasure obligations, recorded before the rules below dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. A memo keyed on the type keeps that to one question per distinct type.
-    kernel.record_checked(term, expected);
+    // Whether this check opens a member body's leading lambdas — taken first, so it holds for this term alone and the λ rule is the one reader that carries it on.
+    let parameters = kernel.calls.take_parameters();
 
+    // Seed for the erasure obligations, recorded before the rules dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. A memo keyed on the type keeps that to one question per distinct type.
+    let before = kernel.partial_groups();
+    let position = kernel.record_checked(term, expected);
+    let checked = check_rules(kernel, term, expected, parameters);
+    // Whether a group that does not descend was typed inside this term — noted on the position, since the group was typed with the binders around it opened and the position's term holds it closed.
+    if kernel.partial_groups() > before {
+        kernel.enclose_partial(position);
+    }
+
+    checked
+}
+
+/// [`check`]'s rules, past the position it records: `let`'s descent, Π- and Σ-introduction, and inference for the rest.
+fn check_rules(
+    kernel: &mut Kernel,
+    term: &Term,
+    expected: &Term,
+    parameters: bool,
+) -> Result<(), KernelError> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
     if let Subterm::Let(Let { bindings, tail }) = &**term {
         let mut values = Vec::with_capacity(bindings.len());
@@ -812,7 +898,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
         {
             let lambda = func.telescope.clone();
             let against = expected_func.telescope.clone();
-            return kernel.scoped(|kernel| check_lambda(kernel, lambda, against));
+            return kernel.scoped(|kernel| check_lambda(kernel, lambda, against, parameters));
         }
         // Anything else — a non-Π expectation, a plicity or arity mismatch — falls through, so the refusal keeps its ordinary inferred-versus-expected shape.
     }
@@ -849,10 +935,13 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
 }
 
 /// The telescope walk of the lambda rule above, under [`Kernel::scoped`]'s retraction bracket: the guards on plicity and arity ran at the dispatch, so the two telescopes are structurally parallel by construction.
+///
+/// `parameters` says this λ leads a member body, so each binder it opens is one of that member's parameters to the call recorder, and so is each binder a λ leading its body opens in turn.
 fn check_lambda(
     kernel: &mut Kernel,
     lambda: Telescope<Term>,
     against: Telescope<Term>,
+    parameters: bool,
 ) -> Result<(), KernelError> {
     let mut walk = Lockstep::new(&lambda, &against);
 
@@ -870,9 +959,17 @@ fn check_lambda(
                         expected: Box::new(theirs),
                     });
                 }
-                kernel.advance_assumed(&mut walk, &theirs);
+                let binder = kernel.advance_assumed(&mut walk, &theirs);
+                if parameters {
+                    kernel.bind_parameter(&binder);
+                }
             }
-            Step::Bodies(body, codomain) => return check(kernel, &body, &codomain),
+            Step::Bodies(body, codomain) => {
+                if parameters {
+                    kernel.calls.continue_parameters();
+                }
+                return check(kernel, &body, &codomain);
+            }
             Step::Mismatch => unreachable!("the dispatch guarded the arities equal"),
         }
     }
@@ -967,12 +1064,22 @@ fn subsumes_telescope(
     }
 }
 
+/// The Π a λ inhabits, with each binder standing for the corresponding one of `arguments` where the λ is applied on the spot.
+fn infer_lambda(kernel: &mut Kernel, func: &Func, arguments: &[Term]) -> Result<Term, KernelError> {
+    let telescope = infer_telescope(kernel, func.telescope.clone(), arguments)?;
+
+    Ok(Subterm::FuncType(FuncType::new(telescope, func.plicities().to_vec())).into())
+}
+
 /// Check that every domain of a λ's telescope is a type, then its body under those binders, rebuilding the telescope as the Π the λ inhabits.
 ///
 /// One walk under one retraction bracket, each domain opened once at the binders before it and the Π built in one pass at the end — where recursing into the reopened rest and re-closing each level rewrote the whole inner telescope once per binder.
+///
+/// A binder with an argument in `arguments` stands for it within the bracket, to the call recorder alone — a size fact, never an equation the typing sees, so the Π built is the λ's own.
 fn infer_telescope(
     kernel: &mut Kernel,
     telescope: Telescope<Term>,
+    arguments: &[Term],
 ) -> Result<Telescope<Term>, KernelError> {
     kernel.scoped(|kernel| {
         let mut entries = Vec::new();
@@ -982,6 +1089,9 @@ fn infer_telescope(
             infer_type(kernel, &domain)?;
 
             let binder = kernel.advance_assumed(&mut cursor, &domain);
+            if let Some(argument) = arguments.get(entries.len()) {
+                kernel.refine_size(&binder, argument);
+            }
             entries.push((binder, domain));
         }
 

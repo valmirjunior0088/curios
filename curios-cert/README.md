@@ -68,7 +68,7 @@ The reduction inside `infer_type` is what makes the two mechanisms interlock: ty
 
 - **per item:** `certify_declaration`, grouped by `Item::describe` as the elaborator's `declaration` span is, so one item's cost in each checker is found under one key;
 - **per stage of the walk:** `universe_verdict`; `partial_definitions` and `check_positions` for obligations (T) and (V); `check_entrypoint`; `check_induct_decl` and `check_struct_decl`; and the shared `positivity_vectors`. What no span covers — the residue and escape checks — is `recheck_module`'s own self time;
-- **per judgment:** `convert`; `reduce` and `reduce_forced`, reduction entered from outside reduction, the second past its memo so a hit costs no row; `Sort::of`; `entails`; and the shared analyses' `group_totality` and `invert_with`. Typing is `certify_declaration`'s self time.
+- **per judgment:** `convert`; `reduce` and `reduce_forced`, reduction entered from outside reduction, the second past its memo so a hit costs no row; `Sort::of`; `entails`; and the shared analyses' `grade`, once per recursive call the walk types, `decide`, once per group it closes, and `invert_with`. Typing — what each arm enters into the size context a call is graded under included — is `certify_declaration`'s self time.
 
 **To retake.** Run `cargo x clippy`, then fold the stream with `cargo run --all-features --package curios -- profile curios-prelude/.artifacts/profile.tsv`. Read the self columns: a fold attributes each nanosecond and each byte to the innermost span entered, so judgment rows that re-enter one another add up where their inclusive totals do not. The stream is an instrumented debug build script's, so a duration is inflated — the spans themselves cost the walk about ten seconds — while call counts and allocation are the stable figures. An item's cost in the kernel is read beside its cost in the elaborator by summing each stream's per-item span by group and joining the two:
 
@@ -127,3 +127,11 @@ The heaviest items in the kernel, beside their elaboration:
 | the witnesses in `/std/Try` | 9 504 ms | 229 ms |
 
 A program declaring the same lift between two `Try`s on its own, compiled by `wonder stage core-elab -` under `--profile`, went from 15.0 s to 4.6 s, its kernel walk from 11.0 s to 0.44 s, and its 628 entailments from 10.6 s to 43 ms.
+
+**After the kernel recorded its own calls**, retaken the same way: the walk no longer asks the shared discovery for a group's calls, so `group_totality` has no row in its stream, and the two halves of the shared analysis it drove take its place.
+
+| Span | Calls | Total | Self | Allocated |
+| --- | --- | --- | --- | --- |
+| `group_totality`, before | 1 146 | 0.37 s | 0.18 s | 52 MB |
+| `grade` | 450 | 0.17 s | 0.01 s | 24 MB |
+| `decide` | 951 | 0.01 s | 0.01 s | 0.5 MB |
