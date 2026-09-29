@@ -152,7 +152,7 @@ fn dual_of_negated(
 
 /// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against a NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
 ///
-/// Its readers: [`align_comparisons`], which spells a negated probe as its dual; the Boolean laws and the truth table, which read a comparison beside its dual as one value and its negation; and both reducers' refinement probes, which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
+/// Its readers: [`align_comparisons`], which spells a negated probe as its dual; the Boolean laws and the truth table, which read a comparison beside its dual as one value and its negation; and both reducers' refinement probes, through [`probe_spellings`], which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
 ///
 /// Read through `curios-algebra`'s `Operation::negation`, the operands swapped where it says so. A `Bool` comparison with a literal operand is left out: a `xor` with a literal is a negation itself and not a comparison, and an equality against a literal the fold has already answered.
 pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
@@ -175,9 +175,53 @@ pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     Intrinsic::comparison(carrier, negation, left.clone(), right.clone())
 }
 
+/// The other spellings of `comparison` a refinement probe asks a case equation under when its written spelling misses, in the order both reducers ask them, each with whether the guard's literal is negated on the way: its dual, negated; its successor spelling, kept; and the dual of its successor spelling, negated. The last is also the successor spelling of the dual, so the three are every other way one order fact is written on either side of the `<`/`<=` seam: under the false arm of `x <= 4`, the probe `4 < x` meets the guard through its dual, and the probe `5 <= x` through the dual of its successor spelling. Empty for anything that is no comparison.
+///
+/// Lookup only: a guard stays recorded as written. Each spelling is computed only once the one before it has missed, and the successor spelling once for the two that read it — it cancels a floor, where a dual swaps operands.
+pub fn probe_spellings(comparison: &Intrinsic) -> ProbeSpellings<'_> {
+    ProbeSpellings {
+        comparison,
+        asked: 0,
+        successor: None,
+    }
+}
+
+/// [`probe_spellings`], as it is asked.
+pub struct ProbeSpellings<'a> {
+    comparison: &'a Intrinsic,
+    asked: u8,
+    successor: Option<Intrinsic>,
+}
+
+impl Iterator for ProbeSpellings<'_> {
+    type Item = (Intrinsic, bool);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let spelling = match self.asked {
+                0 => dual_comparison(self.comparison).map(|dual| (dual, true)),
+                1 => {
+                    self.successor = successor_comparison(self.comparison);
+                    self.successor.clone().map(|successor| (successor, false))
+                }
+                2 => self
+                    .successor
+                    .as_ref()
+                    .and_then(dual_comparison)
+                    .map(|dual| (dual, true)),
+                _ => return None,
+            };
+            self.asked += 1;
+            if spelling.is_some() {
+                return spelling;
+            }
+        }
+    }
+}
+
 /// The comparison that is true exactly when `comparison` is, spelled across the `<`/`<=` seam: `a < b` is `a + 1 <= b` and `a <= b` is `a < b + 1` on `Nat` and on `Int`, where the successor is exact in both directions, with the floor the step shares with the other operand cancelled. `None` for every comparison that is not an ordering on those two carriers.
 ///
-/// Two readers cross the seam by this one identity. Both reducers' refinement probes ask it for the key a guard actually recorded: `match i < len(l)` records `i < len(l)`, and an obligation reaching the probe as `i + 1 <= len(l)` would miss it over a spelling rather than over a fact. [`align_comparisons`] asks it for the spelling a `<=` meets a `<` in, so the judgment reads `x + 1 <= y` as the `x < y` it is at `Nat` as at `Int`.
+/// Its readers are both reducers' refinement probes, which ask it for the key a guard actually recorded: `match i < len(l)` records `i < len(l)`, and an obligation reaching the probe as `i + 1 <= len(l)` would miss it over a spelling rather than over a fact. They ask its dual as well ([`probe_spellings`]), for a guard whose false arm states the obligation. The judgment reads the seam through the comparisons' linear views instead (`crate::LinearViews::align`), which needs no spelling a key could miss.
 ///
 /// **The literal is carried across unchanged**, where [`dual_comparison`]'s is negated: these two comparisons have one truth value rather than opposite ones, so the arm that refined the guard refines this obligation to the same `Bool`.
 pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {

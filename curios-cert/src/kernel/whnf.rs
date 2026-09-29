@@ -25,8 +25,8 @@ use {
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
-        accelerable, dual_comparison, instantiate_universe_levels_scoped, reduce_closed,
-        reduce_intrinsic, successor_comparison,
+        accelerable, instantiate_universe_levels_scoped, probe_spellings, reduce_closed,
+        reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -131,11 +131,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             term = refined;
             continue;
         }
-        if let Some(refined) = refined_dual(kernel, &term) {
-            term = refined;
-            continue;
-        }
-        if let Some(refined) = refined_successor(kernel, &term) {
+        if let Some(refined) = refined_spelling(kernel, &term) {
             term = refined;
             continue;
         }
@@ -183,24 +179,17 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     }
 }
 
-/// A stuck comparison under a guard recorded on its dual spelling: the false arm of `n < m` records `n < m` alone, and `m <= n` is that fact read the other way, so a miss on a comparison's written spelling is retried on its dual with the literal negated. Lookup only — the equation stays recorded as written.
-fn refined_dual(kernel: &Kernel, term: &Term) -> Option<Term> {
+/// A stuck comparison under a guard recorded on another spelling of it, asked under each of [`probe_spellings`] in turn. The false arm of `n < m` records `n < m` alone, and `m <= n` is that fact read the other way, so the dual answers with the literal negated. A bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, one fact on `Nat` and on `Int`, so the successor spelling answers with the literal carried across — not negated, these being the same proposition rather than opposite ones. And the two compose: the false arm of `x <= 4` is the fact `5 <= x`, which the dual of the successor spelling answers. Lookup only — nothing is recorded under any of them, so a guard still refines exactly what it was written as.
+fn refined_spelling(kernel: &Kernel, term: &Term) -> Option<Term> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
-    let dual = Term::intrinsic(dual_comparison(intrinsic)?);
-    let literal = kernel.refinement_of(&dual)?.as_bool()?;
-    Some(Term::intrinsic(Intrinsic::Bool(!literal)))
-}
-
-/// The same miss across the `<`/`<=` seam: a bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, and the two are one fact on `Nat` and on `Int`. So a miss on a comparison's written spelling is retried on its successor spelling with the literal carried across — not negated, these being the same proposition rather than opposite ones. Lookup only, as [`refined_dual`] is: nothing is recorded under the second spelling, so a guard still refines exactly what it was written as.
-fn refined_successor(kernel: &Kernel, term: &Term) -> Option<Term> {
-    let Subterm::Intrinsic(intrinsic) = &**term else {
-        return None;
-    };
-    let spelling = Term::intrinsic(successor_comparison(intrinsic)?);
-    let literal = kernel.refinement_of(&spelling)?.as_bool()?;
-    Some(Term::intrinsic(Intrinsic::Bool(literal)))
+    probe_spellings(intrinsic).find_map(|(spelling, negated)| {
+        let literal = kernel
+            .refinement_of(&Term::intrinsic(spelling))?
+            .as_bool()?;
+        Some(Term::intrinsic(Intrinsic::Bool(literal != negated)))
+    })
 }
 
 /// The refinement probe at a stuck reduct: the written spelling first, then the reduced one, settling reduced spellings until one answers or none is left to settle.
@@ -214,10 +203,7 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     if let Some(refined) = kernel.refinement_of(value) {
         return Ok(Some(refined));
     }
-    if let Some(refined) = refined_dual(kernel, value) {
-        return Ok(Some(refined));
-    }
-    if let Some(refined) = refined_successor(kernel, value) {
+    if let Some(refined) = refined_spelling(kernel, value) {
         return Ok(Some(refined));
     }
 
@@ -226,48 +212,31 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     }
 
     let canonical = canonical_operands(kernel, value)?;
-    // The dual under the reduced spelling too: a guard whose operands the probe presents folded — the dispatch's resolved spelling carries them as written — answers only once its reduct is settled, so the dual is asked of the settled reducts exactly as the written and resolved spellings were asked of the record.
-    let dual = match &*canonical {
-        Subterm::Intrinsic(intrinsic) => dual_comparison(intrinsic).map(Term::intrinsic),
-        _ => None,
-    };
-    // And the successor spelling for the same reason, which is the one the `<`/`<=` seam actually needs: a guard records the call its author wrote, `i < List/len(l)`, while the bound arrives with that call folded to its intrinsic, so the two meet only once the key's own reduct is settled. Nothing is recorded under this spelling either — it is a second place to look, and the elaborator looks in the same two.
-    let successor = match &*canonical {
-        Subterm::Intrinsic(intrinsic) => successor_comparison(intrinsic).map(Term::intrinsic),
-        _ => None,
+    // The other spellings under the reduced spelling too, for the reason the written pass asks them: a guard whose operands the probe presents folded — the dispatch's resolved spelling carries them as written, and a guard `i < List/len(l)` records the call its author wrote while the bound arrives with that call folded to its intrinsic — answers only once its reduct is settled, so every spelling is asked of the settled reducts exactly as the written and resolved spellings were asked of the record. Nothing is recorded under any of them, and the elaborator looks in the same places.
+    let spellings = match &*canonical {
+        Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
+            .map(|(spelling, negated)| (Term::intrinsic(spelling), negated))
+            .collect(),
+        _ => Vec::new(),
     };
 
     loop {
         if let Some(refined) = kernel.refinement_of_reduct(&canonical) {
             return Ok(Some(refined));
         }
-        if let Some(dual) = &dual
-            && let Some(literal) = kernel
-                .refinement_of_reduct(dual)
-                .and_then(|refined| refined.as_bool())
-        {
-            return Ok(Some(Term::intrinsic(Intrinsic::Bool(!literal))));
-        }
-        // The literal stands as the guard left it: these are one proposition, where the dual's are opposite ones.
-        if let Some(successor) = &successor
-            && let Some(literal) = kernel
-                .refinement_of_reduct(successor)
-                .and_then(|refined| refined.as_bool())
-        {
-            return Ok(Some(Term::intrinsic(Intrinsic::Bool(literal))));
+        // A dual's literal is the guard's negated, and the successor spelling's is the guard's own: one proposition, where the dual's are opposite ones.
+        if let Some(answer) = spellings.iter().find_map(|(spelling, negated)| {
+            let literal = kernel.refinement_of_reduct(spelling)?.as_bool()?;
+            Some(Term::intrinsic(Intrinsic::Bool(literal != *negated)))
+        }) {
+            return Ok(Some(answer));
         }
 
-        let unasked = kernel
-            .unasked_refinement(&canonical)
-            .or_else(|| {
-                dual.as_ref()
-                    .and_then(|dual| kernel.unasked_refinement(dual))
-            })
-            .or_else(|| {
-                successor
-                    .as_ref()
-                    .and_then(|successor| kernel.unasked_refinement(successor))
-            });
+        let unasked = kernel.unasked_refinement(&canonical).or_else(|| {
+            spellings
+                .iter()
+                .find_map(|(spelling, _)| kernel.unasked_refinement(spelling))
+        });
         let Some((index, key)) = unasked else {
             return Ok(None);
         };

@@ -175,6 +175,58 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
     assert_eq!(run(source), b"7");
 }
 
+// The false arm proves its dual across the `<`/`<=` seam as well. The false arm of `n <= 4` is the fact `4 < n`, and `5 <= n` is that fact spelled with the successor, so the reducer asks the dual of the successor spelling with the literal negated — at `Nat` and at `Int`, in both checkers, since the program certifies. `/std/Str/Valid`'s decoder narrows a quotient's range this way.
+#[test]
+fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
+    let source = r#"
+        use /std/{Nat, Int, Option, Bool};
+
+        let above(n : Nat) -> Option(Nat/Le(5, n)) =
+            match n <= 4
+            | true => Option/none()
+            | false => Option/some(Bool/True/qed())
+            end;
+
+        let below(i : Int) -> Option(Bool/Holds(i <= +4)) =
+            match +5 <= i
+            | true => Option/none()
+            | false => Option/some(Bool/True/qed())
+            end;
+
+        let shown(n : Nat, i : Int) -> Nat =
+            match above(n)
+            | some(_) => match below(i) | some(_) => n | none() => 0 end
+            | none() => 0
+            end;
+
+        /std/print(Nat/to_str(shown(7, +3)))
+        "#;
+    assert_eq!(run(source), b"7");
+}
+
+// The control: one step past the dual is another fact, not another spelling. `n <= 4` failing leaves `n` at 5, so `6 <= n` does not follow, and a retry that answered it would be deciding a proposition rather than looking one up.
+#[test]
+fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
+    let source = r#"
+        use /std/{Nat, Option, Bool};
+
+        let past(n : Nat) -> Option(Nat/Le(6, n)) =
+            match n <= 4
+            | true => Option/none()
+            | false => Option/some(Bool/True/qed())
+            end;
+
+        let shown(n : Nat) -> Nat = match past(n) | some(_) => n | none() => 0 end;
+
+        /std/print(Nat/to_str(shown(7)))
+        "#;
+    let message = error(source);
+    assert!(
+        message.contains("type mismatch") && message.contains("Nat/Le(6, n)"),
+        "the probe decided a fact one step past the guard's dual:\n{message}"
+    );
+}
+
 // The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying. The kernel used to meet the resolved spelling only as the reduct of the written one, after the fold, and refused what the elaborator had accepted. `/std/Str/Valid`'s three-byte decoding is this shape.
 #[test]
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {

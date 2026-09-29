@@ -296,7 +296,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         0x20,
                         c.code / 0x40,
                         0x20,
-                        Nat/Lt/le_succ_of_lt(0x1F, c.code / 0x40, Bool/True/qed()),
+                        Bool/True/qed(),
                         Nat/div_mod/div_lt_of_lt_mul(0x20, c.code, 0x40, Bool/True/qed()))
                     end
                 end
@@ -311,7 +311,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         0x10,
                         c.code / 0x1000,
                         0x10,
-                        Nat/Lt/le_succ_of_lt(0xF, c.code / 0x1000, Bool/True/qed()),
+                        Bool/True/qed(),
                         Nat/div_mod/div_lt_of_lt_mul(0x10, c.code, 0x1000, Bool/True/qed()))
                     end
                 | true =>
@@ -365,10 +365,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                                     0x20,
                                     c.code % 0x1000 / 0x40,
                                     0x20,
-                                    Nat/Lt/le_succ_of_lt(
-                                        0x1F,
-                                        c.code % 0x1000 / 0x40,
-                                        Bool/True/qed()),
+                                    Bool/True/qed(),
                                     Nat/div_mod/div_lt_of_lt_mul(0x20, c.code % 0x1000, 0x40, high))
                                 end
                             end
@@ -385,7 +382,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         5,
                         c.code / 0x40000,
                         5,
-                        Nat/Lt/le_succ_of_lt(4, c.code / 0x40000, Bool/True/qed()),
+                        Bool/True/qed(),
                         Nat/div_mod/div_lt_of_lt_mul(
                             5,
                             c.code,
@@ -442,10 +439,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                                     0x10,
                                     c.code % 0x40000 / 0x1000,
                                     0x10,
-                                    Nat/Lt/le_succ_of_lt(
-                                        0xF,
-                                        c.code % 0x40000 / 0x1000,
-                                        Bool/True/qed()),
+                                    Bool/True/qed(),
                                     Nat/div_mod/div_lt_of_lt_mul(
                                         0x10,
                                         c.code % 0x40000,

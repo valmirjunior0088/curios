@@ -16,9 +16,8 @@ use {
         FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
         InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Proj, Rec, RecGroup,
         ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Var, Variant, Visit, accelerable, dual_comparison,
-        instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
-        reduce_intrinsic, successor_comparison,
+        TupleType, Var, Variant, Visit, accelerable, instantiate_universe_levels_scoped,
+        probe_spellings, project_erased_universes, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -677,34 +676,25 @@ fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<T
     Ok(canonical)
 }
 
-/// A stuck comparison under a guard recorded on its dual spelling: the false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so a miss on a comparison key is retried on its dual with the literal negated. Lookup only — the store keeps every key as written, which is what the comparison record protects.
-fn refined_dual(context: &Context, term: &Term) -> Option<Term> {
+/// A stuck comparison under a guard recorded on another spelling of it, asked at the shallow key under each of [`probe_spellings`] in turn. The false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so the dual answers with the literal negated. A bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, one fact on `Nat` and on `Int`, so the successor spelling answers with the literal carried across — these are the same proposition, where a dual's are opposite ones. And the two compose: the false arm of `x <= 4` is the fact `5 <= x`, which the dual of the successor spelling answers. Lookup only — the store keeps every key as written, which is what the comparison record protects and what keeps this the kernel's rule too.
+fn refined_spelling(context: &Context, term: &Term) -> Option<Term> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
-    let dual = Term::intrinsic(dual_comparison(intrinsic)?);
-    if !context.scrutinee_head_refined(dual.head_key()?) {
-        return None;
-    }
-    let literal = context
-        .scrutinee_reduct(&shallow_scrutinee(context, &dual), &dual)?
-        .as_bool()?;
-    Some(Term::intrinsic(Intrinsic::Bool(!literal)))
+    probe_spellings(intrinsic).find_map(|(spelling, negated)| {
+        shallow_answer(context, &Term::intrinsic(spelling), negated)
+    })
 }
 
-/// The same miss across the `<`/`<=` seam: a bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, and the two are one fact on `Nat` and on `Int`. So a miss on a comparison key is retried on its successor spelling, with the literal carried across rather than negated — these are the same proposition, where a dual's are opposite ones. Lookup only, as [`refined_dual`] is: the record still holds exactly what the guard was written as, which is what keeps this the kernel's rule too.
-fn refined_successor(context: &Context, term: &Term) -> Option<Term> {
-    let Subterm::Intrinsic(intrinsic) = &**term else {
-        return None;
-    };
-    let spelling = Term::intrinsic(successor_comparison(intrinsic)?);
+/// What the shallow key of `spelling` holds, as the answer for the probe it spells: the guard's literal, negated where `spelling` is a dual of the probe.
+fn shallow_answer(context: &Context, spelling: &Term, negated: bool) -> Option<Term> {
     if !context.scrutinee_head_refined(spelling.head_key()?) {
         return None;
     }
     let literal = context
-        .scrutinee_reduct(&shallow_scrutinee(context, &spelling), &spelling)?
+        .scrutinee_reduct(&shallow_scrutinee(context, spelling), spelling)?
         .as_bool()?;
-    Some(Term::intrinsic(Intrinsic::Bool(literal)))
+    Some(Term::intrinsic(Intrinsic::Bool(literal != negated)))
 }
 
 /// The refinement probe for an intrinsic the loop has just folded — the second look every *other* arm of the dispatch gets for free.
@@ -725,16 +715,20 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
         return Ok(Some(value));
     }
 
-    if let Some(value) = refined_dual(context, folded) {
-        return Ok(Some(value));
-    }
-
-    // The successor spelling through the same two steps, and it needs them for the same reason the written one does: a guard `i < List/len(l)` records its operand as the call the author wrote, while the bound `i + 1 <= List/len(l)` arrives with that call folded to its `ListLen` intrinsic. The shallow probe therefore misses on the seam exactly where it misses on a spelling, and only the escalation brings the two together. The literal is the key's own, this being one proposition spelled twice rather than a negation.
-    if let Some(spelling) = successor_spelling(folded)
-        && let Some(head) = spelling.head_key()
-        && let Some(value) = refined_by_spelling(context, &spelling, head)?
-    {
-        return Ok(Some(value));
+    let Subterm::Intrinsic(intrinsic) = &**folded else {
+        return Ok(None);
+    };
+    // The other spellings, in the order the kernel asks them. A dual is asked at its shallow key alone. The successor spelling goes through the same two steps the written one does, and needs them for the same reason: a guard `i < List/len(l)` records its operand as the call the author wrote, while the bound `i + 1 <= List/len(l)` arrives with that call folded to its `ListLen` intrinsic, so the shallow probe misses on the seam exactly where it misses on a spelling, and only the escalation brings the two together. Its literal is the key's own, this being one proposition spelled twice rather than a negation.
+    for (spelling, negated) in probe_spellings(intrinsic) {
+        let spelling = Term::intrinsic(spelling);
+        let answer = match (negated, spelling.head_key()) {
+            (true, _) => shallow_answer(context, &spelling, true),
+            (false, Some(head)) => refined_by_spelling(context, &spelling, head)?,
+            (false, None) => None,
+        };
+        if answer.is_some() {
+            return Ok(answer);
+        }
     }
 
     Ok(None)
@@ -792,24 +786,17 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     curios_profile::profile!("reduce::refined_reduct");
 
     let probe = reduct_spelling(context, value)?;
-    // The three spellings a settled entry can answer, each with whether its literal is negated on the way: the probe itself and its successor spelling are the entry's proposition, the dual is its negation.
-    let intrinsic = match &*probe {
-        Subterm::Intrinsic(intrinsic) => Some(intrinsic),
-        _ => None,
+    // The spellings a settled entry can answer, each with whether its literal is negated on the way: the probe itself and its successor spelling are the entry's proposition, the duals its negation.
+    let others = match &*probe {
+        Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
+            .map(|(spelling, negated)| (Term::intrinsic(spelling), negated))
+            .collect(),
+        _ => Vec::new(),
     };
-    let spellings = [
-        Some((probe.clone(), false)),
-        intrinsic
-            .and_then(dual_comparison)
-            .map(|dual| (Term::intrinsic(dual), true)),
-        intrinsic
-            .and_then(successor_comparison)
-            .map(|successor| (Term::intrinsic(successor), false)),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|(spelling, negated)| (project_erased_universes(&spelling), negated))
-    .collect::<Vec<_>>();
+    let spellings = std::iter::once((probe.clone(), false))
+        .chain(others)
+        .map(|(spelling, negated)| (project_erased_universes(&spelling), negated))
+        .collect::<Vec<_>>();
 
     loop {
         match scan_settled(context, value, &probe, &spellings)? {
@@ -946,14 +933,6 @@ fn could_reduce_to(key: &Term, candidate: &Term) -> bool {
         .all(|name| allowed.contains(name))
 }
 
-/// A comparison's spelling across the `<`/`<=` seam, as a term.
-fn successor_spelling(term: &Term) -> Option<Term> {
-    match &**term {
-        Subterm::Intrinsic(intrinsic) => successor_comparison(intrinsic).map(Term::intrinsic),
-        _ => None,
-    }
-}
-
 /// Reduce `term` until its head constructor is stable.
 ///
 /// Reduction re-enters itself once per operand of a nested intrinsic, once per link of a spine peel, and once per level of a match tower, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
@@ -1029,16 +1008,9 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 }
             }
 
-            // The dual spelling, when the written one has no key: the false arm of `n < m` recorded `n < m` alone, and `m <= n` is the same fact read the other way. Lookup only — every key stays as written.
+            // Another spelling, when the written one has no key: the false arm of `n < m` recorded `n < m` alone, and `m <= n` is the same fact read the other way; a bound arriving as `i + 1 <= len(l)` under a guard written `i < len(l)` is one fact spelled twice; and the false arm of `x <= 4` is `5 <= x`, the two readings composed. Lookup only — every key stays as written.
             if context.has_scrutinee_refinements()
-                && let Some(value) = refined_dual(context, &term)
-            {
-                break 'step Reduce::Continue(value);
-            }
-
-            // And the successor spelling, for the seam between `<` and `<=`: a bound arriving as `i + 1 <= len(l)` under a guard written `i < len(l)` is one fact spelled twice.
-            if context.has_scrutinee_refinements()
-                && let Some(value) = refined_successor(context, &term)
+                && let Some(value) = refined_spelling(context, &term)
             {
                 break 'step Reduce::Continue(value);
             }
