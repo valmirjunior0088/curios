@@ -26,7 +26,7 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
         "the refusal names the bound nothing discharged:\n{refused}"
     );
     assert!(
-        refused.contains("which reduces to False"),
+        refused.contains("which reduces to /std/Bool/False"),
         "and says what the bound came to:\n{refused}"
     );
 }

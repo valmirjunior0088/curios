@@ -1149,6 +1149,7 @@ fn elaborate_module_item(
     context.set_island(item_module);
 
     let item_names = item.describe();
+    let owner = item.declared_names().first().copied();
     // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is 1079 declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
     curios_profile::profile!("declaration", group = %item_names);
 
@@ -1160,7 +1161,7 @@ fn elaborate_module_item(
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
     }
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
-    .map_err(|error| error.in_declaration(&item_names))?;
+    .map_err(|error| error.in_declaration(&item_names, owner))?;
 
     let late = retry_deferred_witnesses(context)?;
     context.drain_parked()?;

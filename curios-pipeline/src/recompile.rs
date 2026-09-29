@@ -68,7 +68,7 @@ pub fn compile_unit_over(
                     &cores,
                     syntax,
                     lowered.unbound(),
-                    lowered.imports(),
+                    lowered.spellings(),
                 )
             })
         }),

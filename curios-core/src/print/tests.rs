@@ -8,7 +8,10 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
 
     let binder = Free::local(0, Some("helper"));
     let names = BTreeSet::from([Free::Global(global), binder.clone()]);
-    let rename = build_rename(&names, &shorten);
+    let rename = build_rename(
+        &names,
+        &Spelling::default().with_short_names(Rc::new(shorten)),
+    );
     assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
 }
 

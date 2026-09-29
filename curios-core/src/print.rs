@@ -2,15 +2,15 @@ use {
     super::{
         Apply, Argument, Arity, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Enter, Field,
         Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Let, Level, Match, MatchResult,
-        Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
+        Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Spellings, Struct, StructType,
+        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{InfixOp, Plicity, Qualifier, recurse},
     std::{
-        cell::Cell,
+        cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
@@ -37,9 +37,9 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
-// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — the axis-(b) shortened form where that map shortens it — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
+// axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals: a *shorten map* (built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Used by error rendering *and* `Module` display. A render that knows which module its reader stands in builds it through `build_shorten_layered` instead, so the declarations that reader wrote settle their own spelling before what surrounds them competes for it.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — and in full where none reaches it. A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — `Module` display, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Module::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/toolchain/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -60,7 +60,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 pub struct Spelling {
     /// axis (a) — local binders to their source-style names.
     pretty: Option<Rc<HashMap<Free, String>>>,
-    /// axis (b) — global qualified names to their shortest in-scope spelling.
+    /// axis (b) without a reader — global qualified names to their shortest unambiguous suffix.
     shorten: Option<Rc<HashMap<Global, String>>>,
     /// axis (c) — whether to suppress universe instances and metavariable-headed levels.
     erase_universes: bool,
@@ -74,14 +74,53 @@ pub struct Spelling {
     grouped: bool,
     /// axis (h) — the concepts and witnesses a witness is spelled against, so it reads as resolution would restore it.
     witnesses: Option<Rc<WitnessSpelling>>,
-    /// Where the reader stands (axis (h)): the witness binders in scope around the rendered term.
+    /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a kernel refusal — spells by.
+    names: Option<Rc<ReaderNames>>,
+    /// Where the reader stands (axes (b) and (h)).
     reader: ReaderPosition,
 }
 
-/// Where a reader stands when they read a rendered term: the witness binders in scope there, outermost first, which resolution searches before the global table.
+/// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which resolution searches before the global table.
 #[derive(Clone, Debug, Default)]
 pub struct ReaderPosition {
+    pub owner: Option<Global>,
     pub witnesses: Rc<[(Free, Term)]>,
+}
+
+/// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, with the spellings already asked for.
+pub struct ReaderNames {
+    spellings: Spellings,
+    islands: BTreeMap<Global, Qualifier>,
+    memo: RefCell<Asked>,
+}
+
+/// The spellings a render already asked for, keyed by the definition the reader stands in and the global spelled — `None` where the reader can reach it by none.
+type Asked = HashMap<(Option<Global>, Global), Option<String>>;
+
+impl ReaderNames {
+    pub fn new(spellings: Spellings, islands: BTreeMap<Global, Qualifier>) -> Self {
+        Self {
+            spellings,
+            islands,
+            memo: RefCell::default(),
+        }
+    }
+
+    fn spell(&self, reader: &ReaderPosition, global: &Global) -> Option<String> {
+        let key = (reader.owner.clone(), global.clone());
+        if let Some(spelled) = self.memo.borrow().get(&key) {
+            return spelled.clone();
+        }
+        let island = reader
+            .owner
+            .as_ref()
+            .and_then(|owner| self.islands.get(owner))
+            .cloned()
+            .unwrap_or_else(Qualifier::empty);
+        let spelled = self.spellings.spell(&island, reader.owner.as_ref(), global);
+        self.memo.borrow_mut().insert(key, spelled.clone());
+        spelled
+    }
 }
 
 /// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::witness_spelling`](crate::Module::witness_spelling) and merged across a render's scope, as the plicity marks are.
@@ -220,10 +259,35 @@ impl Spelling {
         self
     }
 
-    /// Render for a reader standing at `position` (axis (h)'s witness scope).
+    /// Render for a reader standing at `position` (axis (b)'s owner and axis (h)'s witness scope).
     pub fn for_reader(mut self, position: ReaderPosition) -> Self {
         self.reader = position;
         self
+    }
+
+    /// Where this render's reader stands.
+    pub fn reader(&self) -> &ReaderPosition {
+        &self.reader
+    }
+
+    /// Spell every global as resolution would find it from the reader's position (axis (b) for a reader).
+    pub fn with_reader_names(mut self, names: Rc<ReaderNames>) -> Self {
+        self.names = Some(names);
+        self
+    }
+
+    /// A built-in type or operation, named by the path under `/sys` its printer spells it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise, as a dump reads it.
+    fn intrinsic_symbol(&self, path: &str) -> String {
+        let reader = self.names.as_ref().and_then(|names| {
+            let mut segments = std::iter::once("sys")
+                .chain(path.split('/'))
+                .collect::<Vec<_>>();
+            if segments.len() == 2 {
+                segments.push(segments[1]);
+            }
+            names.spell(&self.reader, &Global::Authored(Qualifier::from(segments)))
+        });
+        reader.unwrap_or_else(|| path.to_string())
     }
 
     /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_utilities::SyntaxRegistry)'s, since this crate may not spell it.
@@ -232,19 +296,19 @@ impl Spelling {
         self
     }
 
-    /// The axis-(b) map this spelling renders globals under, or an empty map when none was set — what a consumer hands [`build_rename`] to derive a narrower axis (a) for one fragment of a render, so the narrower map reserves the same displayed global spellings the wider one did.
-    pub fn short_names(&self) -> Rc<HashMap<Global, String>> {
-        self.shorten.clone().unwrap_or_default()
-    }
-
     /// Mark a nominal family's implicit parameters (axis (d)), from `Module::nominal_plicities`.
     pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
         self.nominal_plicities = Some(plicities);
         self
     }
 
-    /// The display spelling of a global — shortened against the module's other symbols (axis (b)) when that is unambiguous, and rendered in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
+    /// The display spelling of a global (axis (b)) — for a reader, as resolution would find it from where they stand, and in full where it cannot, since a suffix nothing resolves is a different program; without one, shortened against the module's other symbols when that is unambiguous, and in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
     pub fn symbol(&self, name: &Global) -> String {
+        if let Some(names) = &self.names {
+            return names
+                .spell(&self.reader, name)
+                .unwrap_or_else(|| name.to_string());
+        }
         self.shorten
             .as_ref()
             .and_then(|map| map.get(name).cloned())
@@ -422,13 +486,10 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
 
 /// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's displayed rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
 ///
-/// `shorten` is the axis-(b) map the same render will apply: a global is reserved under the rendering it actually displays, since a full path — never a bare identifier — is unshadowable by construction, while a single-segment shortening is exactly what a binder hint can read like.
+/// `spelling` is the one the same render will apply, standing where its reader does: a global is reserved under the rendering it actually displays ([`Spelling::symbol`]), since a full path — never a bare identifier — is unshadowable by construction, while a bare label a reader reaches is exactly what a binder hint can read like.
 ///
 /// A hintless entry's `x` is consulted only where something references the binder — the label sites spell an unreferenced unnameable binder `_` (or elide it) without the map. Hinted names are assigned first, so a synthesized `x` can never steal the spelling from a binder actually written `x`.
-pub fn build_rename(
-    names: &BTreeSet<Free>,
-    shorten: &HashMap<Global, String>,
-) -> HashMap<Free, String> {
+pub fn build_rename(names: &BTreeSet<Free>, spelling: &Spelling) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
     let (literal, prettifiable): (Vec<_>, Vec<_>) =
         names.iter().partition(|name| name.as_global().is_some());
@@ -436,12 +497,10 @@ pub fn build_rename(
     // Globals reserve the spelling they will display under.
     let mut used = literal
         .into_iter()
-        .map(
-            |name| match name.as_global().and_then(|global| shorten.get(global)) {
-                Some(short) => short.clone(),
-                None => name.to_string(),
-            },
-        )
+        .map(|name| match name.as_global() {
+            Some(global) => spelling.symbol(global),
+            None => name.to_string(),
+        })
         .collect::<BTreeSet<_>>();
 
     let (hinted, hintless): (Vec<_>, Vec<_>) = prettifiable
@@ -470,7 +529,7 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
 
 /// [`build_shorten`] for a render a reader looks at from inside `own`'s unit: a declaration sitting directly in that unit takes its bare label before anything around it may compete for the suffix.
 ///
-/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, and then [`Imports::spellings`](crate::Imports::spellings) overrides this table with what was written. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
+/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
 ///
 /// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one spelled a goal candidate — `? ≈ nil()` — that the reader could not paste.
 pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global, String> {
@@ -903,8 +962,19 @@ fn print_flt(flt: Floating) -> Printer {
     pure(string)
 }
 
-/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. Every operation here is declared by `/sys` under its carrier's module and re-exported by `/std` under the same name, so the path is the one a reader wrote; it is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`print_former`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
+/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. `path` is where `/sys` declares it, under its carrier's module; `/std` re-exports it under the same name, so for a reader the call is spelled as that declaration resolves from where they stand (`Spelling::intrinsic_symbol`) and a dump reads the path. It is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`print_former`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
 fn print_call(
+    path: impl AsRef<str>,
+    implicits: Vec<Term>,
+    explicits: Vec<Term>,
+    frame: Frame,
+) -> Printer {
+    let name = frame.spelling.intrinsic_symbol(path.as_ref());
+    print_named_call(name, implicits, explicits, frame)
+}
+
+/// [`print_call`] under a name already spelled — a host call's, which names its own subject.
+fn print_named_call(
     name: impl Into<String>,
     implicits: Vec<Term>,
     explicits: Vec<Term>,
@@ -1288,7 +1358,7 @@ fn print_operand(term: Term, frame: Frame) -> Printer {
 
 fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
     match intrinsic {
-        Intrinsic::BoolType => pure("Bool"),
+        Intrinsic::BoolType => pure(frame.spelling.intrinsic_symbol("Bool")),
         Intrinsic::Bool(false) => pure("false"),
         Intrinsic::Bool(true) => pure("true"),
         Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, frame),
@@ -1296,7 +1366,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::BoolXor(l, r) => print_call("Bool/xor", vec![], vec![l, r], frame),
         Intrinsic::BoolEql(l, r) => print_infix("==", l, r, frame),
         Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, frame),
-        Intrinsic::NatType => pure("Nat"),
+        Intrinsic::NatType => pure(frame.spelling.intrinsic_symbol("Nat")),
         Intrinsic::Nat(Nat::Zero) => pure("0"),
         // A successor over a symbolic tail is that tail plus its literal floor — spelled infix (`n + 1`, `(n + m) + 3`) to match the operator intrinsics, its tail parenthesized when it too is an operator. A successor over `0` is a plain numeral (`{spine}`).
         Intrinsic::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
@@ -1328,11 +1398,11 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::NatXor(l, r) => print_call("Nat/xor", vec![], vec![l, r], frame),
         Intrinsic::NatShl(l, r) => print_call("Nat/shl", vec![], vec![l, r], frame),
         Intrinsic::NatShr(l, r) => print_call("Nat/shr", vec![], vec![l, r], frame),
-        Intrinsic::ByteType => pure("Byte"),
+        Intrinsic::ByteType => pure(frame.spelling.intrinsic_symbol("Byte")),
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
         Intrinsic::ByteToNat(i) => print_call("Byte/to_nat", vec![], vec![i], frame),
         Intrinsic::NatToByte { nat, .. } => print_call("Nat/to_byte", vec![], vec![nat], frame),
-        Intrinsic::IntType => pure("Int"),
+        Intrinsic::IntType => pure(frame.spelling.intrinsic_symbol("Int")),
         Intrinsic::Int(value) => pure(format!("{value:+}")),
         Intrinsic::IntEql(l, r) => print_infix("==", l, r, frame),
         Intrinsic::IntNeq(l, r) => print_infix("!=", l, r, frame),
@@ -1356,7 +1426,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::IntXor(l, r) => print_call("Int/xor", vec![], vec![l, r], frame),
         Intrinsic::IntShl(l, r) => print_call("Int/shl", vec![], vec![l, r], frame),
         Intrinsic::IntShr(l, r) => print_call("Int/shr", vec![], vec![l, r], frame),
-        Intrinsic::FltType => pure("Flt"),
+        Intrinsic::FltType => pure(frame.spelling.intrinsic_symbol("Flt")),
         Intrinsic::Flt(flt) => print_flt(flt),
         Intrinsic::FltAdd(Rounding::TiesToEven, l, r) => print_infix("+", l, r, frame),
         Intrinsic::FltSub(Rounding::TiesToEven, l, r) => print_infix("-", l, r, frame),
@@ -1418,7 +1488,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::FltToInt { flt: i, .. } => print_call("Flt/to_int", vec![], vec![i], frame),
         Intrinsic::FltMantissa { flt: i, .. } => print_call("Flt/mantissa", vec![], vec![i], frame),
         Intrinsic::FltExponent { flt: i, .. } => print_call("Flt/exponent", vec![], vec![i], frame),
-        Intrinsic::BinType(Grain::X) => pure("Bytes"),
+        Intrinsic::BinType(Grain::X) => pure(frame.spelling.intrinsic_symbol("Bytes")),
         Intrinsic::Bin(Grain::X, bytes) => print_packed(Grain::X, bin_atoms(Grain::X, &bytes)),
         Intrinsic::BinLen(Grain::X, b) => print_call("Bytes/len", vec![], vec![b], frame),
         Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
@@ -1440,7 +1510,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             bin: b,
             element: byte,
         } => print_call("Bytes/append", vec![], vec![b, byte], frame),
-        Intrinsic::BinType(Grain::B) => pure("Bits"),
+        Intrinsic::BinType(Grain::B) => pure(frame.spelling.intrinsic_symbol("Bits")),
         Intrinsic::Bin(Grain::B, bits) => print_packed(Grain::B, bin_atoms(Grain::B, &bits)),
         Intrinsic::BinLen(Grain::B, b) => print_call("Bits/len", vec![], vec![b], frame),
         Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
@@ -1589,11 +1659,11 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             vec![list, init, function],
             frame,
         ),
-        Intrinsic::HandleType => pure("Handle"),
+        Intrinsic::HandleType => pure(frame.spelling.intrinsic_symbol("Handle")),
         // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
-        Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
-        Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
-        Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
+        Intrinsic::Handle(stdio::STDIN) => pure(frame.spelling.intrinsic_symbol("Handle/stdin")),
+        Intrinsic::Handle(stdio::STDOUT) => pure(frame.spelling.intrinsic_symbol("Handle/stdout")),
+        Intrinsic::Handle(stdio::STDERR) => pure(frame.spelling.intrinsic_symbol("Handle/stderr")),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
         Intrinsic::ChannelType(elem) => print_former("Channel", elem, frame),
@@ -1721,7 +1791,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 Some(subject) => format!("{subject}/{}", function.label()),
                 None => function.label().to_string(),
             };
-            print_call(name, vec![], args, frame)
+            print_named_call(name, vec![], args, frame)
         }
         Subterm::FuncType(FuncType {
             telescope,

@@ -46,7 +46,7 @@ fn impossible_constructors_are_not_suggested() {
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(
-        error.contains("? \u{2248} /Vec/nil()"),
+        error.contains("? \u{2248} Vec/nil()"),
         "unexpected error: {error}"
     );
     assert!(!error.contains("cons"), "unexpected error: {error}");

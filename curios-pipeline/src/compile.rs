@@ -257,14 +257,14 @@ pub fn typecheck_measured(
         metavariable_floor: metavars,
         universe_floor,
         unbound,
-        imports,
+        spellings,
         broken,
         ..
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let mut context = Context::new(budget, *syntax);
-    context.set_imports(imports.clone());
+    context.set_imports(spellings.imports.clone());
     context.set_broken(
         broken
             .iter()
@@ -287,14 +287,14 @@ pub fn typecheck_measured(
         )
         .map_err(|error| {
             CompileError::of(&error, |member| {
-                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &imports)
+                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings)
             })
         }),
     )?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| error.format_with_hints(&lowered.module, &cores, syntax, &unbound, &imports))
+        .map(|error| error.format_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings))
         .collect();
 
     Ok((
@@ -441,7 +441,7 @@ where
         universe_floor,
         foreigns: user_foreigns,
         unbound,
-        imports,
+        spellings,
         lints: _,
         reached: _,
         broken,
@@ -475,7 +475,7 @@ where
     };
 
     let mut context = Context::new(budget, *syntax);
-    context.set_imports(imports.clone());
+    context.set_imports(spellings.imports.clone());
     context.set_broken(
         broken
             .iter()
@@ -494,7 +494,7 @@ where
         )
         .map_err(|error| {
             CompileError::of(&error, |member| {
-                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &imports)
+                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings)
             })
         }),
     )?;
@@ -700,7 +700,7 @@ pub fn compile_unit(
                     &cores,
                     syntax,
                     lowered.unbound(),
-                    lowered.imports(),
+                    lowered.spellings(),
                 )
             })
         }),

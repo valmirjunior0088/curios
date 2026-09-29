@@ -26,12 +26,11 @@ pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String 
     // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
     const WIDTH: usize = 100;
 
-    let shorten = spelling.short_names();
     let spelling = Rc::new(
         spelling
             .as_ref()
             .clone()
-            .with_pretty_names(report.rename_map(&shorten)),
+            .with_pretty_names(report.rename_map(spelling)),
     );
     let clause = |term: &Term| {
         term.spelled(&spelling)
@@ -877,10 +876,12 @@ impl fmt::Display for Displayed<'_> {
                 solution,
             } => {
                 // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence span or candidates of its own.
-                // Its witness scope is the enclosing `InScope`'s, which the spelling handed here already carries.
+                // Its reader position is the enclosing `InDeclaration`'s and `InScope`'s, which the spelling handed here already stands at.
+                let reader = spelling.reader();
                 let report = GoalReport {
                     span: None,
-                    witnesses: Rc::default(),
+                    owner: reader.owner.clone(),
+                    witnesses: Rc::clone(&reader.witnesses),
                     scope: scope.clone(),
                     goal: (**goal).clone(),
                     solution: solution.as_deref().cloned(),
@@ -895,13 +896,10 @@ impl fmt::Display for Displayed<'_> {
                     if index > 0 {
                         write!(f, "\n\n")?;
                     }
-                    let spelling = if report.witnesses.is_empty() {
-                        Rc::clone(spelling)
-                    } else {
-                        Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
-                            witnesses: Rc::clone(&report.witnesses),
-                        }))
-                    };
+                    let spelling = Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
+                        owner: report.owner.clone(),
+                        witnesses: Rc::clone(&report.witnesses),
+                    }));
                     f.write_str(&goal_text(report, &spelling))?;
                     if let Some(span) = &report.span {
                         write!(f, "\n\n{}", span.render_snippet())?;
@@ -1139,7 +1137,7 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "a witness a refused declaration held was needed")
             }
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
-            Error::InDeclaration { name, error } => {
+            Error::InDeclaration { name, error, .. } => {
                 writeln!(f, "while elaborating {name}:")?;
                 Displayed(error, Rc::clone(spelling)).fmt(f)
             }

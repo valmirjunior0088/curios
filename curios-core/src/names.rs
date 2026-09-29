@@ -334,18 +334,56 @@ impl Imports {
             .iter()
             .map(|index| &self.entries[*index])
     }
+}
 
-    /// Each imported global's shortest spelling across the unit — the display spelling a report uses for it, since a report's spelling is shared by every goal in the batch.
-    pub fn spellings(&self) -> BTreeMap<Global, &str> {
-        let mut spellings: BTreeMap<Global, &str> = BTreeMap::new();
-        for import in &self.entries {
-            match spellings.get(&import.global) {
-                Some(existing) if existing.len() <= import.spelling.len() => {}
-                _ => {
-                    spellings.insert(import.global.clone(), &import.spelling);
-                }
+/// How a unit's names can be written, and where: what each definition's `use` lines brought into scope, and every absolute path the unit may write for each global — its declaration path and each re-export, with the subtrees whose modules may name it. The text stage builds it, because only the text stage sees re-exports and visibility; a report reads it to spell a global the way resolution would find it from where the reader stands ([`Spellings::spell`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Spellings {
+    pub imports: Imports,
+    /// Each canonical global's absolute paths, the prefixes the unit may not name already dropped.
+    pub paths: BTreeMap<Global, Vec<WritablePath>>,
+}
+
+/// One absolute path reaching a global, and who may write it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct WritablePath {
+    pub path: Qualifier,
+    /// The subtree roots whose modules may name the path — a non-`pub` declaration's own module, a `pub` one's module's audience.
+    pub audience: Vec<Qualifier>,
+    /// Whether the path lies in the unit's own mounts, where a module may also reach it relatively, through its own declarations.
+    pub own: bool,
+}
+
+impl Spellings {
+    /// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; or an absolute path whose audience includes the reader. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
+    pub fn spell(
+        &self,
+        island: &Qualifier,
+        owner: Option<&Global>,
+        global: &Global,
+    ) -> Option<String> {
+        let paths = self.paths.get(global).into_iter().flatten();
+        let reachable =
+            paths.filter(|written| written.audience.iter().any(|root| island.is_within(root)));
+
+        let mut candidates = Vec::new();
+        for written in reachable {
+            if written.own && written.path.is_within(island) && written.path != *island {
+                candidates.push(written.path.segments()[island.segments().len()..].join("/"));
             }
+            candidates.push(written.path.join());
         }
-        spellings
+        candidates.extend(
+            self.imports
+                .in_scope_at(owner)
+                .filter(|import| import.global == *global)
+                .map(|import| import.spelling.clone()),
+        );
+
+        candidates
+            .into_iter()
+            .min_by_key(|spelling| (spelling.split('/').count(), spelling.len()))
     }
 }

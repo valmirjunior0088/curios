@@ -966,13 +966,14 @@ pub(crate) fn collect_goal_reports(
     goal_sites
         .iter()
         .zip(all_candidates)
-        .map(|((id, span, _), candidates)| {
+        .map(|((id, span, owner), candidates)| {
             // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
             let entry = context
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
             GoalReport {
                 span: span.clone(),
+                owner: owner.clone(),
                 witnesses: entry.witnesses.clone().unwrap_or_default(),
                 scope: entry
                     .telescope

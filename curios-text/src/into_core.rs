@@ -121,6 +121,57 @@ impl<'a> Reach<'a> {
     }
 }
 
+/// Every absolute path this unit may write for each global — each declaration at its own path, each export at the path its module gives it — with who may write it and whether it lies in the unit's own mounts; a path into a prefix the unit may not name is dropped. What a report spells a name by, through [`curios_core::Spellings::spell`].
+fn writable_paths(
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
+    reach: &Reach<'_>,
+    own: &[Mount],
+) -> BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> {
+    let audiences = Audiences::compute(public, table);
+    // Own, and not inside a predecessor's mount: the entry claims the empty prefix, under which every other unit's names also lie.
+    let owned = |path: &Qualifier| {
+        own.iter().any(|mount| path.is_within(&mount.prefix))
+            && !reach
+                .mounts()
+                .iter()
+                .filter(|mount| !mount.prefix.is_root() && !own.contains(mount))
+                .any(|mount| path.is_within(&mount.prefix))
+    };
+
+    let mut paths: BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> = BTreeMap::new();
+    let mut record = |target: &Qualifier, path: Qualifier, audience: Vec<Qualifier>| {
+        if reach.guard(&Qualifier::empty(), path.segments()).is_err() {
+            return;
+        }
+        let own = owned(&path);
+        paths
+            .entry(curios_core::Global::Authored(target.clone()))
+            .or_default()
+            .push(curios_core::WritablePath {
+                path,
+                audience,
+                own,
+            });
+    };
+
+    for (module, info) in table.iter() {
+        for (label, _) in info.bindings() {
+            let path = module.with(label);
+            record(&path, path.clone(), audiences.binding(&path));
+        }
+    }
+    for (module, interface) in public.iter() {
+        for (label, entry) in &interface.bindings {
+            let path = module.with(label);
+            if path != entry.target {
+                record(&entry.target, path, audiences.module(module));
+            }
+        }
+    }
+    paths
+}
+
 // Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code. Asked of the mount itself rather than of the name it owns, because only a whole mount is internal — a module inside one is reachable exactly as far as its mount is.
 fn is_internal_root(mounts: &[Mount], label: &str) -> bool {
     let prefix = Qualifier::from([label]);
@@ -183,8 +234,8 @@ pub struct PreparedText {
     universe_floor: usize,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
-    /// Every binding a `use` brought into scope in this unit, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and the spelling each such candidate is displayed under.
-    imports: curios_core::Imports,
+    /// How this unit's names can be written: every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports` — and every absolute path the unit may write for each global. What a goal report's candidate pool reaches beyond the names the program already mentions, and what every report spells a name by.
+    spellings: curios_core::Spellings,
     /// Every lint the lowering found, in reading order — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
     lints: Vec<Lint>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
@@ -268,7 +319,12 @@ impl PreparedText {
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
     pub fn imports(&self) -> &curios_core::Imports {
-        &self.imports
+        &self.spellings.imports
+    }
+
+    /// How this unit's names can be written, where — what every report spells a name by.
+    pub fn spellings(&self) -> &curios_core::Spellings {
+        &self.spellings
     }
 }
 
@@ -1741,6 +1797,7 @@ fn into_core_unit_within(
         )
     });
 
+    let paths = writable_paths(&public, &table, &reach, &own);
     let unit = PreparedText {
         mounts: own.clone(),
         foreigns,
@@ -1761,7 +1818,10 @@ fn into_core_unit_within(
         binder_floor: binders.count(),
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
-        imports: imports.into_inner(),
+        spellings: curios_core::Spellings {
+            imports: imports.into_inner(),
+            paths,
+        },
         broken,
         lints: ordered(
             unused_imports(sites.into_inner())
@@ -1815,8 +1875,8 @@ pub struct LoweredEntry {
     pub foreigns: ForeignStore,
     /// See [`PreparedText::unbound`].
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
-    /// See [`PreparedText::imports`].
-    pub imports: curios_core::Imports,
+    /// See [`PreparedText::spellings`].
+    pub spellings: curios_core::Spellings,
     /// See [`PreparedText::lints`].
     pub lints: Vec<Lint>,
     /// See [`PreparedText::broken`].
@@ -1855,7 +1915,7 @@ pub fn into_core_with_prelude(
         universe_floor: unit.universe_floor,
         foreigns: unit.foreigns,
         unbound: unit.unbound,
-        imports: unit.imports,
+        spellings: unit.spellings,
         lints: unit.lints,
         reached: unit.reached,
         broken: unit.broken,

@@ -26,7 +26,9 @@ pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<()
             refusal.type_,
             refusal.polarity,
         ),
-        PositivityRefusal::Exhausted { name, error } => error.in_declaration(&name.symbol()),
+        PositivityRefusal::Exhausted { name, error } => {
+            error.in_declaration(&name.symbol(), Some(&name))
+        }
     })?;
 
     for (name, vector) in vectors {

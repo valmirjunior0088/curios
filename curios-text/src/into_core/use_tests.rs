@@ -512,7 +512,7 @@ fn glob_on_dual_existence_imports_once() {
 
 #[test]
 fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
-    // The table goal suggestions draw imported candidates from, and spell them by. A module import spells the module's bindings through its label; a named binding import and a glob spell theirs bare; and when one binding arrives twice the shorter spelling is a second entry, so the display takes it while an item between the two still sees only the first.
+    // The table goal suggestions draw imported candidates from, and spell them by. A module import spells the module's bindings through its label; a named binding import and a glob spell theirs bare; and when one binding arrives twice the shorter spelling is a second entry, so a position seeing both writes it while an item between the two still sees only the first.
     //
     // Scope is point-of-use, per body: `before` was written above every import and sees none; `after` sees the module import but not the binding import below it; the tail sees both; and `Outer/M/inner`, inside its own body, sees what that body imported and nothing the root did.
     let src = r#"
@@ -540,8 +540,15 @@ fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
     )
     .unwrap();
     let imports = unit.imports();
-    let spellings = imports.spellings();
-    let spelling = |path: &str| spellings.get(&global_name(path)).copied();
+    let spelling = |path: &str| {
+        let global = global_name(path);
+        imports
+            .entries
+            .iter()
+            .filter(|import| import.global == global)
+            .map(|import| import.spelling.as_str())
+            .min_by_key(|spelling| spelling.len())
+    };
     let in_scope = |owner: Option<&str>| {
         imports
             .in_scope_at(owner.map(global_name).as_ref())

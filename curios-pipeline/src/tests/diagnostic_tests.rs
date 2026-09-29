@@ -196,7 +196,7 @@ fn a_mismatch_marks_an_implicit_nominal_parameter() {
 fn a_mismatch_leaves_an_explicit_nominal_parameter_unmarked() {
     // The other side of the same rule: `Option(A : Type)` declares its parameter explicit, so `Option(Nat)` is already what a use site writes and gains no mark. A blanket "parameters are implicit" rule would have spelled this `Option(@Nat)`.
     let source = r#"
-        use /std/{Nat, Option};
+        use /std/{Nat, Option, Bool};
         let o : Option(Nat) = Option/some(true);
         0
     "#;

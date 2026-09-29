@@ -46,7 +46,7 @@ fn a_batch_is_neither_located_nor_attributed() {
         refusal().at(span(&source, 2, 3)),
     ]);
 
-    let wrapped = batch.at(span(&source, 0, 3)).in_declaration("outer");
+    let wrapped = batch.at(span(&source, 0, 3)).in_declaration("outer", None);
 
     assert!(matches!(wrapped, Error::Batch(_)));
 }
@@ -55,7 +55,9 @@ fn a_batch_is_neither_located_nor_attributed() {
 fn a_batch_renders_one_report_per_member() {
     let source = Source::inline("a b");
     let batch = Error::batch(vec![
-        refusal().at(span(&source, 0, 1)).in_declaration("first"),
+        refusal()
+            .at(span(&source, 0, 1))
+            .in_declaration("first", None),
         refusal().at(span(&source, 2, 3)),
     ]);
 

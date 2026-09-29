@@ -337,7 +337,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Diagnostics
 
 - [x] Span-based error quality across all stages
-- [x] Diagnostic terms printed with names in scope
+- [x] [Diagnostic terms printed as their reader could write them](design/toolchain/a-diagnostic-spells-what-its-reader-can-write.md): each name as resolution reaches it from where the reader stands, each witness left out where resolution restores it
 - [x] A self-referential value reports rather than asserts, naming the path
 - [x] A bound whose subject does not terminate is refused by name, as a declared type is
 - [x] [A failing program names what failed](design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md) (one sentence per class; no program can spell it)

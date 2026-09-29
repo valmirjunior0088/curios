@@ -248,7 +248,10 @@ impl Survivors {
             let described = item.describe();
             retract_one(context, poison, stamp, &item);
             self.drop_item(&item);
-            self.refuse(stamp, error.in_declaration(&described));
+            self.refuse(
+                stamp,
+                error.in_declaration(&described, item.declared_names().first().copied()),
+            );
             self.retract_dependents(context, poison);
         }
 

@@ -7,8 +7,8 @@ mod tests;
 use {
     super::{Erased, WitnessKey},
     curios_core::{
-        Atom, CalleeId, Free, Global, Imports, Level, Module, Polarity, ReaderPosition,
-        ReduceError, Spelling, Subterm, Term, UniverseConstraintOrigin, UniverseError,
+        Atom, CalleeId, Free, Global, Item, Level, Module, Polarity, ReaderNames, ReaderPosition,
+        ReduceError, Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError,
         build_rename, build_shorten_layered, display_names,
     },
     curios_num::{Grain, Integer, Natural},
@@ -24,7 +24,8 @@ use {
 #[derive(Debug)]
 pub struct GoalReport {
     pub span: Option<Span>,
-    /// The witness binders in scope where the goal was written, outermost first: the reader position its report is spelled for.
+    /// The definition the goal was written in (the entrypoint's final term when `None`) and the witness binders in scope there, outermost first: the reader position its report is spelled for.
+    pub owner: Option<Global>,
     pub witnesses: Rc<[(Free, Term)]>,
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
@@ -37,7 +38,7 @@ pub struct GoalReport {
 
 impl GoalReport {
     /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — renamed the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
-    fn rename_map(&self, shorten: &HashMap<Global, String>) -> Rc<HashMap<Free, String>> {
+    fn rename_map(&self, spelling: &Spelling) -> Rc<HashMap<Free, String>> {
         let mut names = BTreeSet::new();
         for (name, type_) in &self.scope {
             names.extend(display_names(name));
@@ -50,7 +51,7 @@ impl GoalReport {
             names.extend(display_names(that));
         }
         names.extend(self.candidates.iter().flat_map(display_names));
-        Rc::new(build_rename(&names, shorten))
+        Rc::new(build_rename(&names, spelling))
     }
 }
 
@@ -569,6 +570,8 @@ pub enum Error {
     /// A sibling of [`Error::Located`] rather than a message prefix: the context is structured, so a consumer can still match on the underlying error, and every failure gains a name without each raising site formatting one.
     InDeclaration {
         name: String,
+        /// The definition `name` describes, where there is one: the reader position a report about it is spelled for, since its module and the imports in scope there decide what reaches a name.
+        owner: Option<Global>,
         error: Box<Error>,
     },
     /// An arm whose guard is always a case other than the arm's raised `error`: the arm is dead, which the report says beside what failed, since a proof resting on the guard fails there — no checker records an equation under a spelling that mentions no local.
@@ -1240,11 +1243,12 @@ impl Error {
     }
 
     /// Name the declaration this error arose in. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution, and a batch's members already carry theirs.
-    pub(crate) fn in_declaration(self, name: &str) -> Self {
+    pub(crate) fn in_declaration(self, name: &str, owner: Option<&Global>) -> Self {
         match self {
             Self::InDeclaration { .. } | Self::Batch(_) => self,
             error => Self::InDeclaration {
                 name: name.to_string(),
+                owner: owner.cloned(),
                 error: Box::new(error),
             },
         }
@@ -1256,6 +1260,17 @@ impl Error {
             guard: Box::new(guard),
             case: Box::new(case),
             error: Box::new(self),
+        }
+    }
+
+    /// The definition the innermost declaration wrapper names — where the reader of this error stands.
+    fn owner(&self) -> Option<Global> {
+        match self {
+            Self::InDeclaration { owner, error, .. } => error.owner().or_else(|| owner.clone()),
+            Self::Located { error, .. }
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.owner(),
+            _ => None,
         }
     }
 
@@ -1312,8 +1327,8 @@ impl Error {
         }
     }
 
-    /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. The axis-(b) shorten map rides along so globals are reserved under the rendering they actually display.
-    fn rename_map(&self, shorten: &HashMap<Global, String>) -> Rc<HashMap<Free, String>> {
+    /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. Globals are reserved under the spelling `spelling` displays them by, which stands where this error's reader does.
+    fn rename_map(&self, spelling: &Spelling) -> Rc<HashMap<Free, String>> {
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 
@@ -1322,10 +1337,10 @@ impl Error {
             names.extend(display_names(term));
         }
 
-        Rc::new(build_rename(&names, shorten))
+        Rc::new(build_rename(&names, spelling))
     }
 
-    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(
         &self,
         module: &Module,
@@ -1342,19 +1357,22 @@ impl Error {
         scope: &[&Module],
         syntax: &SyntaxRegistry,
     ) -> Vec<Report> {
-        self.reports_with_hints(module, scope, syntax, &BTreeMap::new(), &Imports::default())
+        self.reports(
+            &Rc::new(report_spelling(module, scope, syntax)),
+            &BTreeMap::new(),
+        )
     }
 
-    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `imports` is what the unit's `use` declarations brought into scope, with the spelling each resolves under; a global the table knows displays under its shortest such spelling rather than its shortest unambiguous suffix, since the suffix is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported) while the written path is by construction — which is what makes a suggested imported candidate pasteable. Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
+    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `spellings` is how each of the unit's names can be written and where — the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them — so a global displays as resolution would find it from where the report's reader stands rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
     pub fn format_with_hints(
         &self,
         module: &Module,
         scope: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        imports: &Imports,
+        spellings: &Spellings,
     ) -> String {
-        Report::render_all(&self.reports_with_hints(module, scope, syntax, unbound, imports))
+        Report::render_all(&self.reports_with_hints(module, scope, syntax, unbound, spellings))
     }
 
     /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost span, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
@@ -1364,41 +1382,18 @@ impl Error {
         scope: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        imports: &Imports,
+        spellings: &Spellings,
     ) -> Vec<Report> {
-        // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
-        //
-        // Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
-        //
-        // The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
-        let own = module.module_symbols();
-        let mut symbols = Vec::new();
-        let mut plicities = module.nominal_plicities();
-        let mut witnesses = module.witness_spelling(syntax);
-        for unit in scope {
-            symbols.extend(unit.module_symbols());
-            for (name, marks) in unit.nominal_plicities() {
-                plicities.entry(name).or_insert(marks);
-            }
-            witnesses.merge(unit.witness_spelling(syntax));
-        }
-
-        let mut shorten = build_shorten_layered(&own, &symbols);
-        for (global, spelling) in imports.spellings() {
-            shorten.insert(global, spelling.to_string());
-        }
-        let shorten = Rc::new(shorten);
-        let spelling = Rc::new(
-            Spelling::default()
-                .with_pretty_names(self.rename_map(&shorten))
-                .with_short_names(shorten)
-                .with_nominal_plicities(Rc::new(plicities))
-                .with_witness_spelling(Rc::new(witnesses))
-                .with_erased_universes()
-                .with_anonymous_metavars()
-                .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
-        );
-        self.reports(&spelling, unbound)
+        // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
+        let islands = module
+            .items
+            .iter()
+            .flat_map(Item::definitions)
+            .map(|definition| (definition.name, definition.island))
+            .collect();
+        let names = ReaderNames::new(spellings.clone(), islands);
+        let spelling = report_spelling(module, scope, syntax).with_reader_names(Rc::new(names));
+        self.reports(&Rc::new(spelling), unbound)
     }
 
     /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
@@ -1438,30 +1433,21 @@ impl Error {
         spelling: &Rc<Spelling>,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
     ) -> Vec<Report> {
+        // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
         if let Self::Batch(errors) = self {
-            // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
-            let shorten = spelling.short_names();
             return errors
                 .iter()
-                .flat_map(|error| {
-                    let spelling = Rc::new(
-                        spelling
-                            .as_ref()
-                            .clone()
-                            .with_pretty_names(error.rename_map(&shorten)),
-                    );
-                    error.reports(&spelling, unbound)
-                })
+                .flat_map(|error| error.reports(spelling, unbound))
                 .collect();
         }
 
-        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else where its innermost witness scope was recorded.
-        let for_reader = |witnesses: Rc<[(Free, Term)]>| {
+        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and witness scope.
+        let for_reader = |owner: Option<Global>, witnesses: Rc<[(Free, Term)]>| {
             Rc::new(
                 spelling
                     .as_ref()
                     .clone()
-                    .for_reader(ReaderPosition { witnesses }),
+                    .for_reader(ReaderPosition { owner, witnesses }),
             )
         };
 
@@ -1469,17 +1455,23 @@ impl Error {
             let prefix = self.declaration_prefix();
             return goals
                 .iter()
-                .map(|goal| Report {
-                    span: goal.span.clone(),
-                    message: format!(
-                        "{prefix}{}",
-                        goal_text(goal, &for_reader(Rc::clone(&goal.witnesses)))
-                    ),
+                .map(|goal| {
+                    let spelling = for_reader(goal.owner.clone(), Rc::clone(&goal.witnesses));
+                    Report {
+                        span: goal.span.clone(),
+                        message: format!("{prefix}{}", goal_text(goal, &spelling)),
+                    }
                 })
                 .collect();
         }
 
-        let spelling = &for_reader(self.witness_scope());
+        let spelling = for_reader(self.owner(), self.witness_scope());
+        let spelling = &Rc::new(
+            spelling
+                .as_ref()
+                .clone()
+                .with_pretty_names(self.rename_map(&spelling)),
+        );
         let mut body = self.render_body(spelling);
         if let Some(suggestion) = self.unbound_suggestion(unbound, spelling) {
             body.push('\n');
@@ -1508,7 +1500,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InScope { error, .. } => error.declaration_prefix(),
-            Self::InDeclaration { name, error } => {
+            Self::InDeclaration { name, error, .. } => {
                 format!("while elaborating {name}:\n{}", error.declaration_prefix())
             }
             _ => String::new(),
@@ -1521,7 +1513,7 @@ impl Error {
             Self::Located { error, .. } | Self::InScope { error, .. } => {
                 error.render_body(spelling)
             }
-            Self::InDeclaration { name, error } => {
+            Self::InDeclaration { name, error, .. } => {
                 format!("while elaborating {name}:\n{}", error.render_body(spelling))
             }
             Self::InUnreachableArm { guard, case, error } => format!(
@@ -1675,6 +1667,33 @@ impl From<UniverseError> for Error {
 }
 
 /// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
+/// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
+///
+/// Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
+///
+/// The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
+fn report_spelling(module: &Module, scope: &[&Module], syntax: &SyntaxRegistry) -> Spelling {
+    let own = module.module_symbols();
+    let mut symbols = Vec::new();
+    let mut plicities = module.nominal_plicities();
+    let mut witnesses = module.witness_spelling(syntax);
+    for unit in scope {
+        symbols.extend(unit.module_symbols());
+        for (name, marks) in unit.nominal_plicities() {
+            plicities.entry(name).or_insert(marks);
+        }
+        witnesses.merge(unit.witness_spelling(syntax));
+    }
+
+    Spelling::default()
+        .with_short_names(Rc::new(build_shorten_layered(&own, &symbols)))
+        .with_nominal_plicities(Rc::new(plicities))
+        .with_witness_spelling(Rc::new(witnesses))
+        .with_erased_universes()
+        .with_anonymous_metavars()
+        .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Displayed(self, Rc::new(Spelling::default())).fmt(f)
