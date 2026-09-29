@@ -1,6 +1,6 @@
 # Verdicts, part 7: checked evidence and trusted reasoning
 
-**Not refined yet.** This specification preserves the broader certifier design: checked evidence for reasoning performed outside the kernel, explicit requirements on trusted implementations, and the corresponding soundness account. The certifier's profile is [recorded](../../../curios-cert/README.md#measuring-the-certifier), and [part 4](04-certifier-record-spec.md) owns its independent verdict record and kernel call-site discovery. Those changes can retire independently; they do not establish the stronger implementation restrictions proposed here.
+**Not refined yet.** This specification preserves the broader certifier design: checked evidence for reasoning performed outside the kernel, explicit requirements on trusted implementations, and the corresponding soundness account. The certifier's profile is [recorded](../../../curios-cert/README.md#measuring-the-certifier), and so are [its own verdict record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp) and [the calls it takes from its own typing](../../../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types). Neither establishes the stronger implementation restrictions proposed here.
 
 The requirements below retain the earlier design direction. Their precise grade definitions, dependency transitions and delivery order need refinement; the certificate format needs it with [algebra part 4](../algebra/04-relational-layer-spec.md), which reserves the relational layer whose certificates the certifier would check. In particular, [algebra part 1](../../design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) preserved today's comparison retries, so it does not satisfy a blanket prohibition on retrying or first-answer chains, and [algebra part 2](../algebra/02-bounds-from-facts-spec.md) needs no evidence at all: its search writes ordinary proofs, which the certifier checks as it checks any term.
 
@@ -14,7 +14,7 @@ The requirements below retain the earlier design direction. Their precise grade 
 
 ## The gap
 
-**The certifier depends on code written for reasons other than being checked.** Its closure includes the symbolic algebra — normal forms kept lazy for cost, peels chained first-answer-wins, a truth table capped for cost — a 945-line closed-term evaluator that exists to make evaluation cheaper, and shared analyses whose trusted contracts need review. Sharing avoids a second copy but does not establish which implementations the certifier should depend on. Part 4 separately replaces shared call-site discovery for the kernel.
+**The certifier depends on code written for reasons other than being checked.** Its closure includes the symbolic algebra — normal forms kept lazy for cost, peels chained first-answer-wins, a truth table capped for cost — a 945-line closed-term evaluator that exists to make evaluation cheaper, and shared analyses whose trusted contracts need review. Sharing avoids a second copy but does not establish which implementations the certifier should depend on. The kernel already finds a group's calls itself; what it shares of size-change totality is the grading and the closure.
 
 **Several statements about the boundary are not what the code does.**
 
@@ -28,7 +28,7 @@ The requirements below retain the earlier design direction. Their precise grade 
 
 **The certifier believes no input.** A verdict is derived from the term, from the certifier's own record, or from evidence the certifier checks. Elaborator metadata — totality stamps, polarity vectors, witness and concept lists, universe seeds, the binder floor — is never an input to a verdict. The binder floor is already derived rather than read, and the polarity vectors already re-derived.
 
-The certifier-owned record and its reuse are specified by part 4; this work adds checked evidence without reintroducing elaborator metadata as authority.
+The certifier-owned record is [the certifier's](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp) and its reuse [cached verdicts'](../../soundness/admission-without-judgment/cached-verdicts.md); this work adds checked evidence without reintroducing elaborator metadata as authority.
 
 **Trust flows from simple code to complex code, never the reverse.** Code is *certifier-grade* when:
 
@@ -55,7 +55,7 @@ These are the recorded target treatments, subject to the grade and evidence refi
 | The carriers' theory | Decided in both checkers by `curios-algebra`'s reference implementation; the search moves to the elaborator |
 | Linear integer arithmetic | In conversion, if [algebra part 4](../algebra/04-relational-layer-spec.md) is opened: Farkas certificates as evidence, checked by a certifier-grade checker in `curios-algebra`. In elaboration, [algebra part 2](../algebra/02-bounds-from-facts-spec.md)'s proofs, checked as ordinary terms |
 | Inversion | Shared and certifier-grade; its intrinsic cases read freeness from the reference implementation |
-| Size-change totality | Part 4 supplies kernel-derived call sites; review the shared graph closure against the refined trusted-code requirements |
+| Size-change totality | The kernel derives its own call sites; review the shared grading and closure against the refined trusted-code requirements |
 | Positivity | Shared, reviewed to certifier grade |
 | The closed machine | A trusted evaluator, named as one and held to the strategy by its differential. Whether the certifier gets an evaluator of its own is decided once it is profiled |
 
@@ -73,12 +73,12 @@ Each implementation updates the affected soundness and design claims when it lan
 
 Each is revised in the change that makes it true.
 
-- [An independent kernel re-checks what the elaborator accepts](../../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md): its sharing paragraphs are restated against the refined trusted-code requirements; part 4 owns the totality correction.
+- [An independent kernel re-checks what the elaborator accepts](../../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md): its sharing paragraphs are restated against the refined trusted-code requirements.
 - [Evaluating a closed term is representation, not judgment](../../design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md): relabelled as a trusted evaluator, held by its differential.
 - [The soundness perimeter](../../design/language/the-soundness-perimeter.md): the trusted base becomes the certifier's closure, and the elaborator's checker leaves it, with the rules only it runs.
 - [`curios-analysis`'s README](../../../curios-analysis/README.md) decision *These rules are shared rather than duplicated* is restated: they are shared because they are certifier-grade.
-- `curios-cert`'s module documentation: the representation claim; part 4 owns the elaborator dev-dependency correction.
-- Perimeter entries: [The closed machine](../../soundness/per-term-rules/the-closed-machine.md) is re-graded as a trusted evaluator; [Witness coherence and the orphan rule](../../soundness/per-term-rules/witness-coherence-and-the-orphan-rule.md) leaves the perimeter for a decision on concepts; an entry is added for the certificate checker. Part 4 owns the verdict-record entry and retirement of the carried-totality account.
+- `curios-cert`'s module documentation: the representation claim.
+- Perimeter entries: [The closed machine](../../soundness/per-term-rules/the-closed-machine.md) is re-graded as a trusted evaluator; [Witness coherence and the orphan rule](../../soundness/per-term-rules/witness-coherence-and-the-orphan-rule.md) leaves the perimeter for a decision on concepts; an entry is added for the certificate checker.
 
 ## Rejected
 
@@ -106,4 +106,4 @@ Certifying anything below Core; a verified certifier; a certifier runnable apart
 - The perimeter's trusted base is the certifier's closure.
 - Refinement must give the targets above concrete contracts and acceptance evidence. Before this specification is deleted, the certifier's contracts are recorded in `curios-cert`'s README and rustdoc, the decision and its rejected alternatives are a design decision replacing the ones corrected above, the roadmap entry is a checked summary, and no reference to this filename remains.
 
-When part 4 retires, link to its permanent record and call-site contracts. Retire this document only after the retained evidence and trusted-reasoning work is complete or explicitly rescoped, with all remaining filename references updated.
+Retire this document only after the retained evidence and trusted-reasoning work is complete or explicitly rescoped, with all remaining filename references updated.

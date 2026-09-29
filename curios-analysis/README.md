@@ -6,7 +6,7 @@ The rules both Curios checkers run, and the seam they run behind: index inversio
 
 ### These rules are shared rather than duplicated, and that costs the second opinion
 
-**Decision.** Each analysis here is a total function of post-zonk terms and declarations. Both checkers call the same function, and neither writes its own copy.
+**Decision.** Each analysis here is a total function of post-zonk terms and declarations. Both checkers call the same function, and neither writes its own copy. Size-change totality is shared as two of its three parts — grading a call against its caller's parameters, and closing a group's calls to a verdict — and not the third: the discovery walk that finds a group's calls is the elaborator's, and the kernel takes its calls from the applications it types ([`curios-cert`'s README](../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types)).
 
 **Rationale.** A second implementation of a pure function of the same input is a second *run*, not a second opinion. It would agree whenever the first was right and agree whenever it was wrong, so the disagreement the two-checker design is built to surface cannot arise — which makes duplication pure cost with no evidential return.
 
