@@ -2,7 +2,7 @@
 
 Working specification for making the compiler principled about what one declaration may read of another. A compilation becomes a graph of items over an environment that is only ever added to; each item's output is a function of the inputs it declares, and every read of another item goes through one interface that records it. The same record schedules the work [part 6](06-item-tasks-spec.md) parallelizes, orders the kernel, and makes invalidation precise, and it is what makes a verdict independent of the order items were elaborated in. Items still run one at a time here, in source order.
 
-It needs [part 2](02-no-history-spec.md)'s caching rule, [part 3](03-no-minted-identity-spec.md)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it follows the invariants campaign's change to the solver, which has landed, rather than landing beside it.
+It needs [the rule that no memo outlives its declaration](../../design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md), [part 3](03-no-minted-identity-spec.md)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it follows the invariants campaign's change to the solver, which has landed, rather than landing beside it.
 
 ## What this builds on
 
@@ -35,12 +35,12 @@ It needs [part 2](02-no-history-spec.md)'s caching rule, [part 3](03-no-minted-i
 
 | Component | Treatment |
 | --- | --- |
-| Elaboration context | Per item: its metavariables, universe solver, caches, budget and identities. Zonked when the item finishes |
+| Elaboration context | Per item: its metavariables, universe solver, caches, budget and identities. Zonked when the item finishes. A witness goal an item defers is retried after each later item today, under that item's budget, so what an item can afford depends on the goals earlier items left open; a retry is charged to the item that raised it |
 | Witness resolution | Against a complete key index built from every `satisfy` head in scope before any body elaborates; choosing a witness requests its cells. The deferred-goal sweeps and the retraction of finished items are deleted |
 | Refusal recovery | An item whose request reaches a refused declaration is withheld, as today, by the graph rather than the order |
 | Registries | A structure, inductive or concept is published by the item that declares it, elaborated |
 | Kernel | `certify` per published declaration, run as soon as elaboration publishes it, its verdict filed in the declaration's cell; `dependency_order` is deleted |
-| Whole-module passes | Concept-registry checks, positivity, the erasure obligations, the witness-cycle report and the final zonk run as a barrier after the items. Per-item passes over summaries of published declarations are later work, taken if the barrier is on the measured critical path |
+| Whole-module passes | Concept-registry checks, positivity, the erasure obligations, the witness-cycle report and the final zonk run as a barrier after the items. They spend one budget today, restored once before them, so what a pass can afford on one item depends on the items it met first; the barrier restores the budget for each item's share of them. Per-item passes over summaries of published declarations are later work, taken if the barrier is on the measured critical path |
 
 ## Stages
 

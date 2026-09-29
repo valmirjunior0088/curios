@@ -1,6 +1,6 @@
 # Verdicts, part 6: a compilation is a graph of item tasks
 
-Working specification for multithreaded compilation, the payoff of the parts before it. Once every read goes through [part 5](05-one-environment-spec.md)'s environment, no artifact carries a minted identity ([part 3](03-no-minted-identity-spec.md)) and no verdict depends on history ([part 2](02-no-history-spec.md)), the items of a compilation can run on as many workers as the product supplies, and the determinism the earlier parts established is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
+Working specification for multithreaded compilation, the payoff of the parts before it. Once every read goes through [part 5](05-one-environment-spec.md)'s environment, no artifact carries a minted identity ([part 3](03-no-minted-identity-spec.md)) and no verdict depends on history ([no memo outlives its declaration](../../design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md)), the items of a compilation can run on as many workers as the product supplies, and the determinism the earlier parts established is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
 It needs every earlier part but [part 7](07-checked-evidence-spec.md), and [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
@@ -40,7 +40,7 @@ It needs every earlier part but [part 7](07-checked-evidence-spec.md), and [Cran
 
 Each lands alone and passes the gate.
 
-1. **Erasure per item, linked by name.** The cumulative arena is deleted, and stored units are addressed over their dependency closure.
+1. **Erasure per item, linked by name.** The cumulative arena is deleted, and stored units are addressed over their dependency closure. Each item is erased under a budget of its own: erasure walks a whole unit under one today, so whether an item erases depends on what was erased before it.
 2. **A term representation that crosses threads.** Needs part 3's interned names, so that the measurement includes what interning removes. Measured: the prelude build's wall time and the compile time of the corpus in `programs/`, on a release build without `profile`, before and after. Kontroli's 28.2% is the figure to expect and not the figure to report.
 3. **The executor, and the gate holding one worker and many to the same bytes.** The seam and the two executors land first, with the differential; then, each switched on alone and measured: the kernel behind elaboration, elaboration by item, parsing and lowering by file and module, erasure by item, and the independent jobs — `curios test`'s library and executables, `format` and `lint` over their files, and `wonder`'s analysts.
 
