@@ -25,7 +25,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations), with independent nominal/representation visibility and opaque construction
   - [x] Constructor registry & dependent eliminators
-  - [x] Indexed families (e.g. `std/Tui/Layout/Sizes`)
+  - [x] Indexed families (e.g. `/std/Tui/Layout/Sizes`)
   - [x] Variant arity checking
   - [x] Exhaustiveness/coverage checking (index inversion)
   - [x] Large-elimination guard (restricts `Prop` → `Type` elimination; erasure reads a payload the guard admits as pinned back from the scrutinee's index)
@@ -265,12 +265,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Streams: `Async/Read` and `Async/Write` over every host handle, never a raw one
 - [x] Non-blocking IO: every peer-facing handle is non-blocking and never waits on a peer
 - [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
-- [x] Terminal, with raw mode and window size (`/sys/tty`, wrapped by `std/Tty` with a restoring bracket; the terminal rows in `std/Io`)
-- [x] File, and the filesystem over `Path` (`std/fs` in `Try` over `Io`; the browser denies every row)
-- [x] Clock & randomness (`std/time`, `std/rand`)
-- [x] Process IO (`std/proc`) and subprocesses (`std/Command`: `spawn`, `run` and `status`, a child's pipes as streams)
+- [x] Terminal, with raw mode and window size (`/sys/tty`, wrapped by `/std/Tty` with a restoring bracket; the terminal rows in `/std/Io`)
+- [x] File, and the filesystem over `Path` (`/std/fs` in `Try` over `Io`; the browser denies every row)
+- [x] Clock & randomness (`/std/time`, `/std/rand`)
+- [x] Process IO (`/std/proc`) and subprocesses (`/std/Command`: `spawn`, `run` and `status`, a child's pipes as streams)
 - [x] Client and server network (TCP), with TLS (https) for both
-- [x] Serial ports (`/sys/serial`, wrapped by `std/Serial`: opened raw at a required speed and frame, DTR, RTS and the input discard, Linux enumeration)
+- [x] Serial ports (`/sys/serial`, wrapped by `/std/Serial`: opened raw at a required speed and frame, DTR, RTS and the input discard, Linux enumeration)
 
 ### Concurrency
 
@@ -295,33 +295,33 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ### Foundations
 
 - [x] Canonicalized module layout and registration
-- [x] Foundational proof/logic types (`std/Bool/True`, `std/Bool/False`), and equality and ordering (`std/Eq`, `std/Ordering`)
-- [x] Foundational sum types (`std/Option`, `std/Result`), with `std/Result` its own monad, error first, and `!` as checked early return
-- [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
-- [x] The error channel over any monad (`std/Try`: `raise`, `rescue`, `attempt` and `run`)
-- [x] The host's failure vocabulary (`std/Io/Error`) and paths as host bytes (`std/Path`)
+- [x] Foundational proof/logic types (`/std/Bool/True`, `/std/Bool/False`), and equality and ordering (`/std/Eq`, `/std/Ordering`)
+- [x] Foundational sum types (`/std/Option`, `/std/Result`), with `/std/Result` its own monad, error first, and `!` as checked early return
+- [x] Pure state threading (`/std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
+- [x] The error channel over any monad (`/std/Try`: `raise`, `rescue`, `attempt` and `run`)
+- [x] The host's failure vocabulary (`/std/Io/Error`) and paths as host bytes (`/std/Path`)
 
 ### Collections — the tier every one of nine surveyed peers ships
 
-- [x] Core collections (`std/List` and its helpers, and `std/Vec`, which counts a list in its type)
-- [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys), with `Key(Nat)`, `Key(Byte)` and `Key(Bool)` over the encodings `/std/Hash` already gave them
+- [x] Core collections (`/std/List` and its helpers, and `/std/Vec`, which counts a list in its type)
+- [x] Key-value map (`/std/Map`: a canonical crit-bit trie over `Bytes` keys), with `Key(Nat)`, `Key(Byte)` and `Key(Bool)` over the encodings `/std/Hash` already gave them
 - [ ] The certified sort, deferred to a consumer
 - [ ] The `Ord`-keyed tree, deferred to a consumer
 
 ### Text and formats
 
-- [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)
+- [x] Proof-carrying UTF-8 string storage and decoding (`/std/Str`, over packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)
 - [x] Character literals realize as numerals (`Char` by default, `Nat`/`Byte`/`Int` from context)
-- [x] Parser-combinator library (`std/Parse`) and typed format strings (`std/Fmt`)
+- [x] Parser-combinator library (`/std/Parse`) and typed format strings (`/std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
-- [x] JSON codec (`std/Json`; numbers are binary64 `Flt`, which is RFC 8259's interoperability recommendation, so only integers past 2⁵³ fail to round-trip)
-- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`std/Toml`; conforming on floats and on the full 64-bit integer range)
+- [x] JSON codec (`/std/Json`; numbers are binary64 `Flt`, which is RFC 8259's interoperability recommendation, so only integers past 2⁵³ fail to round-trip)
+- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`/std/Toml`; conforming on floats and on the full 64-bit integer range)
 - [x] HTML as a tree (`/std/Html`, rendered escaped and read back as a browser reads it)
 
 ### Applications
 
-- [x] HTTP client and server (`std/http` over `tcp` + `Async`; a handler answers each connection)
+- [x] HTTP client and server (`/std/http` over `tcp` + `Async`; a handler answers each connection)
 - [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
 
