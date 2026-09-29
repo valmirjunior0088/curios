@@ -157,6 +157,14 @@ enum Recipe {
             help = "Path to the .crs entrypoint file"
         )]
         source: PathBuf,
+
+        #[arg(
+            long,
+            value_enum,
+            default_value_t = BuildProfile::Debug,
+            help = "The cargo profile the compiler is built under"
+        )]
+        profile: BuildProfile,
     },
 
     #[command(about = "Build the benchmark image and run it")]
@@ -234,7 +242,10 @@ fn main() -> ExitCode {
         Recipe::Docs => docs(),
         Recipe::Installer { version } => installer(&version),
         Recipe::Release { bump } => release(bump.as_deref()),
-        Recipe::Profile { source } => profile(&source),
+        Recipe::Profile {
+            source,
+            profile: build,
+        } => profile(&source, build),
         Recipe::Benchmarks { tag } => benchmarks(&tag),
         Recipe::GrammarInstall => grammar(&["clean-install"]),
         Recipe::GrammarTest => grammar(&["test"]),

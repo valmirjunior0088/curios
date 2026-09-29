@@ -119,44 +119,49 @@ pub(crate) fn docs() -> Result<(), String> {
     Ok(())
 }
 
+/// The cargo profile [`profile`] builds the compiler under.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub(crate) enum BuildProfile {
+    /// The build iterating already has, so a question about a change costs no second compile of the workspace, and a slowdown reproduces in the build it was found in.
+    Debug,
+    /// The shipped compiler's, whose timings are the ones a specification quotes.
+    Release,
+}
+
+impl BuildProfile {
+    fn flags(self) -> &'static [&'static str] {
+        match self {
+            Self::Debug => &[],
+            Self::Release => &["--release"],
+        }
+    }
+}
+
 /// Run `source` under a profiling build, then ask that same build to read back the stream it filed.
 ///
 /// **The compiler is not asked to profile anything.** A `profile` build files every span and event it makes, whatever subcommand ran, so this recipe selects a subject rather than a mode.
 ///
 /// **Two invocations of one binary, and this recipe knows only the path.** Folding is not the profiled run's last step, because a stream is worth reading exactly when the run did not finish and such a run never reaches its last step — so the read is a separate pass. It is a pass the *compiler* makes rather than this crate, because which files one rotated stream occupies is the writer's decision, and restating it here would be a second spelling of a convention nothing checks. What this crate spells is the destination, once, and hands it to both halves.
-pub(crate) fn profile(source: &Path) -> Result<(), String> {
+///
+/// **Debug unless asked otherwise.** `curios` has no feature but `profile`, so the debug build is the one `--all-features` already made while iterating, and a question asked of a change costs the change; `--profile release` is for a figure a specification quotes, which is the shipped compiler's.
+pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> {
     runtime()?;
 
     // The one place the stream's location is spelled. The compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift — and it is derived here the way every other path in this crate is.
     let stream = root().join("curios/.artifacts/profile.tsv");
+    let stream = stream.to_string_lossy();
+    let compiler = |arguments: &[&str]| {
+        let mut command = vec!["run"];
+        command.extend(build.flags());
+        command.extend(["--package", "curios", "--features", "profile", "--"]);
+        command.extend(arguments);
+        cargo(&command)
+    };
 
-    cargo(&[
-        "run",
-        "--release",
-        "--package",
-        "curios",
-        "--features",
-        "profile",
-        "--",
-        "--profile",
-        &stream.to_string_lossy(),
-        "run",
-        &source.to_string_lossy(),
-    ])?;
+    compiler(&["--profile", &stream, "run", &source.to_string_lossy()])?;
+    compiler(&["profile", &stream])?;
 
-    cargo(&[
-        "run",
-        "--release",
-        "--package",
-        "curios",
-        "--features",
-        "profile",
-        "--",
-        "profile",
-        &stream.to_string_lossy(),
-    ])?;
-
-    println!("\nstream: {}", stream.display());
+    println!("\nstream: {stream}");
 
     Ok(())
 }

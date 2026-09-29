@@ -4,7 +4,7 @@ Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` 
 
 ## Taking a profile
 
-The instrumentation is compiled in by the `profile` feature; `--profile <PATH>` is what makes something listen to it. `cargo x profile <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what that run filed:
+The instrumentation is compiled in by the `profile` feature; `--profile <PATH>` is what makes something listen to it. `cargo x profile <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what that run filed. It builds in debug, the build iterating already has, so a question about a change costs the change; `--profile release` builds the shipped compiler, whose timings are the ones a specification quotes:
 
 ```sh
 cargo x profile programs/hello_world.crs

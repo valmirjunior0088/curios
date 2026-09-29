@@ -136,7 +136,7 @@ Why the gate holds these steps and no others — what each is the sole check for
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint.
 - Changes to runtime dependencies must rebuild through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
-- Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` builds the compiler with its `profile` feature, runs the program with `--profile <PATH>`, and folds what that run filed. The feature instruments; the flag is what makes something listen, and it takes the destination — so a build with the feature on and no flag records nothing, which is what keeps `--all-features` harmless across the gate.
+- Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` builds the compiler with its `profile` feature — in debug, the build iterating already has, unless `--profile release` asks for the shipped compiler's timings — runs the program with `--profile <PATH>`, and folds what that run filed. The feature instruments; the flag is what makes something listen, and it takes the destination — so a build with the feature on and no flag records nothing, which is what keeps `--all-features` harmless across the gate.
 
 ## Repository conventions
 
