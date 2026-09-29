@@ -1,4 +1,4 @@
-//! What a reduction is charged, and what happens when the budget or the retention quota runs out.
+//! What a reduction is charged, and what happens when the budget runs out.
 
 use {
     crate::{Kernel, whnf},
@@ -79,50 +79,5 @@ fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
             }
         ),
         "expected a depth refusal, got {refusal:?}"
-    );
-}
-
-/// The retention quota degrades the cache rather than refusing the program: an allowance too small for any entry leaves every reduction correct and every one of them cold.
-///
-/// Correctness is the assertion, and what the allowance withholds is what makes it worth making: the name-keyed unfold table, which is what an exhausted allowance leaves cold across declarations. The term-keyed tables are not the allowance's to withhold — see the test below — so within one declaration the second reduction here is a hit either way, and what this pins is that a kernel with no allowance at all still answers what a warm one does.
-#[test]
-fn an_exhausted_retention_quota_leaves_the_answer_alone() {
-    let mut warm = kernel();
-    let mut cold = Kernel::with_retention(1_000_000, 0, SYNTAX);
-    cold.set_local_floor(1_000);
-
-    let term = chain(64);
-    let expected = warm.reduce_forced(term.clone()).expect("reduces");
-
-    assert_eq!(cold.reduce_forced(term.clone()), Ok(expected.clone()));
-    assert_eq!(cold.reduce_forced(term), Ok(expected));
-    assert_eq!(cold.retained(), 0, "nothing was admitted, so nothing spent");
-}
-
-/// The retention allowance does not reach the term-keyed tables: a kernel with *no* allowance still hands a term's second reduction back for nothing within the declaration, exactly as one with the default does. Those tables live as long as the budget that built their entries and are bounded by it; what the allowance prices is the name-keyed table that outlives a declaration.
-///
-/// This used to assert the opposite — that a zero allowance made the second reduction re-derive — and that was the rule under which a thirteen-definition proof spent a third of the whole compilation's allowance on entries that died with its declaration.
-#[test]
-fn the_allowance_does_not_decide_a_second_reduction_within_a_declaration() {
-    let term = chain(64);
-
-    let mut warm = kernel();
-    spent(&mut warm, term.clone());
-    let warm_again = spent(&mut warm, term.clone());
-
-    let mut unallowed = Kernel::with_retention(1_000_000, 0, SYNTAX);
-    unallowed.set_local_floor(1_000);
-    spent(&mut unallowed, term.clone());
-    let unallowed_again = spent(&mut unallowed, term);
-
-    assert_eq!(warm_again, 0, "a remembered reduct is hit for nothing");
-    assert_eq!(
-        unallowed_again, 0,
-        "and no allowance was needed to remember it"
-    );
-    assert_eq!(
-        unallowed.retained(),
-        0,
-        "the term-keyed tables charge the allowance nothing"
     );
 }

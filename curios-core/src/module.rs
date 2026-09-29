@@ -60,7 +60,7 @@ pub struct Certified {
 
 /// The items one judgment read, and how: its type, or its body.
 ///
-/// Recorded where the kernel consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: the name-keyed unfold memo is consulted only after the body it remembers has been asked for. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
+/// Recorded where the kernel consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: every memo lives one declaration, so the bodies a remembered reduct unfolds were asked for within the judgment that hits it. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
 ///
 /// A definition's classification also reads the verdict of every name it mentions, which the totality closure runs over. That is not a third kind: typing a mention reads its type, so each such verdict read is already a signature read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 //! What a judgment consumes: reduction steps, and binder identities minted.
 //!
-//! The two are one component because replaying a remembered computation has to settle both, and they settle differently. A remembered reduct's hit advances the entropy counter as if every eta probe had run, so it mints exactly the identities a recomputation would have and every later one lands where it would have. The budget does not: a term-keyed hit is *free*, and only the name-keyed `unfold` replay is charged. [`Spend::charge`] and [`Spend::charge_nothing`] are that split, and [`Memos`](super::Memos) states which table reaches which.
+//! The two are one component because replaying a remembered computation has to settle both, and they settle differently. A remembered reduct's hit advances the entropy counter as if every eta probe had run, so it mints exactly the identities a recomputation would have and every later one lands where it would have. The budget does not: a hit is *free*. [`Spend::charge_nothing`] is that replay, and [`Memos`](super::Memos) states why a free hit decides nothing that another declaration left behind.
 //!
 //! **This module used to claim the opposite, and the claim was the defect.** Charging a hit what a memo-free evaluator would have spent prices work the kernel did not perform, and recorded costs *compound*: if computing `Aₙ` hits the memo for `Aₙ₋₁` twice, `S(n) = 2·S(n−1) + c`. A structure cheap to evaluate with memos was expensive to charge, measured at a 262 144-step budget declared exhausted after 6 547 actual reduction steps. The floors in `curios`' `kernel_memo_charge_measurements` are what that cost a user: this kernel refused at 8–16× the budget the elaborator — whose hits were already free — needed for the same program.
 //!
@@ -10,7 +10,7 @@
 //!
 //! Termination is unaffected, and the reason is structural rather than budgetary: a [`Replay`] is built *after* its reduct exists, so a divergent reduction never completes, never stores, and can never be hit. Every step of one is charged.
 //!
-//! **What remains is a residue this states rather than claims away.** An `unfold` record is measured over a computation that may itself have taken free term-keyed hits, so it can record less than the same body costs cold, and which declaration first unfolds a name therefore decides what every later declaration is charged for it. That is a dependence on check order, and it survives here because the direction is safe: it can only *undercharge*, so it can only accept, and free hits are monotone against the design they replaced for the same reason. Removing it needs the replay record to carry a priced cost of its own, which is the work of the milestone that prices construction rather than of this one.
+//! **Nothing is charged at a recorded price.** A name-keyed table of definition unfolds was, at what the first computation of a name had spent — and that computation could take free hits of its own, so which declaration unfolded a name first decided what every later one was charged for it. The table is gone with the rule that no memo outlives the declaration that filled it; `documentation/design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md` carries why it was removed rather than priced exactly.
 //!
 //! [`Memos`](super::Memos) deliberately cannot reach this: it stores [`Replay`]s and hands them back, and applying one is this component's job. A store that could also charge would be a store that could charge twice.
 
@@ -19,21 +19,11 @@ use {
     curios_utilities::Entropy,
 };
 
-/// One remembered reduction: the reduct, and everything computing it consumed — the identities so that every hit mints what a recomputation would have, and the steps so that a charged hit costs what a recomputation would.
+/// One remembered reduction: the reduct, and the identities computing it minted, so that every hit mints what a recomputation would have.
 #[derive(Debug, Clone)]
 pub(crate) struct Replay {
     pub(super) reduct: Term,
-    steps: u64,
     mints: usize,
-}
-
-impl Replay {
-    /// What retaining this record costs the compilation's allowance: the entry itself, and the logical footprint of the reduct whose lifetime storing it extends.
-    ///
-    /// The recorded `steps` and `mints` are two words and ride in the entry's fixed cost. The reduct is the part that can be arbitrarily large, and is read off its own cached summary in O(1) rather than walked — see [`Term::footprint`].
-    pub(super) fn retention(&self) -> Cost {
-        Cost::collection(2).saturating_add(Cost::units(self.reduct.footprint()))
-    }
 }
 
 pub(super) struct Spend {
@@ -152,32 +142,17 @@ impl Spend {
         (self.remaining, self.minted.count())
     }
 
-    /// The [`Replay`] for `reduct`, measured against the snapshot taken before the computation ran.
-    pub(super) fn replay_since(&self, reduct: Term, (budget, minted): (u64, usize)) -> Replay {
+    /// The [`Replay`] for `reduct`, measured against the snapshot taken before the computation ran. Only the identities are recorded: a hit spends no steps, so the steps a computation took are nothing a replay needs.
+    pub(super) fn replay_since(&self, reduct: Term, (_, minted): (u64, usize)) -> Replay {
         Replay {
             reduct,
-            steps: budget - self.remaining,
             mints: self.minted.count() - minted,
         }
     }
 
-    /// Charge a replayed computation's whole consumption at once, or **decline** when it does not fit.
+    /// Replay a remembered computation and spend nothing for it: the recorded identities are minted exactly as a recomputation would have minted them, and no steps are taken.
     ///
-    /// Reached by the name-keyed `unfold` replay alone. That table outlives a declaration, so a hit whose price varied with what was already in scope would make a verdict depend on check order — and its entries are what make certifying a whole module affordable, so they are not the ones to make free.
-    ///
-    /// **Declining is not a refusal.** A caller that cannot afford the replay evaluates the body directly under the actual remaining budget instead, which reaches the same first failing charge and advances exactly the identities reached before it — where refusing from the aggregate would manufacture a diagnostic about a total rather than about the charge that could not be paid. So the declining path spends nothing and mints nothing: the budget is checked before either is touched, and an entry that does not fit leaves the counter exactly as it found it.
-    pub(super) fn charge(&mut self, replay: Replay) -> Option<Term> {
-        let remaining = self.remaining.checked_sub(replay.steps)?;
-
-        self.remaining = remaining;
-        self.minted.seed(self.minted.count() + replay.mints);
-
-        Some(replay.reduct)
-    }
-
-    /// Replay a remembered computation and spend nothing for it: the recorded identities are minted exactly as a recomputation would have minted them, and the recorded steps are not taken.
-    ///
-    /// It cannot fail, and that is the whole of what it concedes — a term-keyed hit can no longer be the point a judgment runs out. Reached by the `whnf`/`forced` tables alone, which [`Memos::begin_declaration`](super::Memos::begin_declaration) clears wherever [`Spend::restore_budget`] fires, so *which* entries are present is a function of the declaration under judgment rather than of the module walk that reached it.
+    /// It cannot fail, and that is the whole of what it concedes — a hit can no longer be the point a judgment runs out. Reached by every reduct table, all of which [`Memos::begin_declaration`](super::Memos::begin_declaration) clears wherever [`Spend::restore_budget`] fires, so *which* entries are present is a function of the declaration under judgment rather than of the module walk that reached it.
     pub(super) fn charge_nothing(&mut self, replay: Replay) -> Term {
         self.minted.seed(self.minted.count() + replay.mints);
 

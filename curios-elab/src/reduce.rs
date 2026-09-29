@@ -197,7 +197,7 @@ fn is_folded(term: &Term) -> bool {
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
-    // The forced value is stored in the compilation-scoped reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator re-ran the machine for every position that demanded the same closed value — checking, conversion, and re-validation each paid a `Str` literal's full scan while the kernel replayed its memo — and the two checkers' costs for one literal drifted to a multiple.
+    // The forced value is stored in the declaration's reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator re-ran the machine for every position that demanded the same closed value — checking, conversion, and re-validation each paid a `Str` literal's full scan while the kernel replayed its memo — and the two checkers' costs for one literal drifted to a multiple.
     if machine_admissible(context, &term) {
         // The store below is what a later demand for the same value hits, and this is where it hits: a probe that finds an unfolded value answers without a run, while one that finds the folded spelling — a plain reduct stored under itself — has nothing to serve and runs.
         if let Some(cached) = context.cached_reduced(&term)

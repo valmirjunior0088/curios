@@ -542,14 +542,12 @@ fn bytes_literal(n: usize) -> String {
     )
 }
 
-/// What both checkers spend on `source`, each reporting its own heaviest declaration, beside what the kernel's walk retained.
+/// What both checkers spend on `source`, each reporting its own heaviest declaration.
 ///
 /// Reported rather than bisected. A budget floor found from outside costs one whole compile per probe, reports only the larger of the two checkers, and cannot separate depth from the rest at all — which is the separation that matters, because depth is the one row whose size is set by the reduction *strategy* rather than by the term.
-///
-/// Retention rides along because the two are coupled from one side: a memo that cannot be stored is re-derived against the *work* budget, so a program large enough to exhaust the compilation's retention allowance stops being linear in what it spends. That coupling is invisible in the work figures alone, and reading them without it is how a cliff gets mistaken for a cost model.
-fn declaration_cost(source: &str) -> (Consumption, u64, Consumption, u64) {
+fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-    let (module, _obligations, elaborator, elaborator_retained) =
+    let (module, _obligations, elaborator) =
         typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
             .expect("the program elaborates within the default budget");
     let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
@@ -557,32 +555,25 @@ fn declaration_cost(source: &str) -> (Consumption, u64, Consumption, u64) {
 
     assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
 
-    (
-        elaborator,
-        elaborator_retained,
-        kernel.heaviest_declaration(),
-        kernel.retained(),
-    )
+    (elaborator, kernel.heaviest_declaration())
 }
 
 /// One row of the table below: what a program cost each checker, split into depth and everything else.
 fn cost_row(label: &str, source: &str) {
-    let (elaborator, elaborator_retained, kernel, retained) = declaration_cost(source);
+    let (elaborator, kernel) = declaration_cost(source);
     let divergence = match elaborator.units() {
         0 => 0.0,
         units => kernel.units() as f64 / units as f64,
     };
 
     println!(
-        "  {label:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>6.1}x",
+        "  {label:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>6.1}x",
         elaborator.units(),
         elaborator.peak_depth(),
         elaborator.other_units(),
-        elaborator_retained,
         kernel.units(),
         kernel.peak_depth(),
         kernel.other_units(),
-        retained,
         divergence,
     );
 }
@@ -607,6 +598,71 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
         "one mention costs {} units and four cost {}",
         one.units(),
         four.units()
+    );
+}
+
+/// An item's verdict is the same compiled alone and after its neighbours. Item `_a` states one type-level claim over a literal; item `_b` states the same claim and a second one, so a reduct `_a` left behind would answer half of `_b`'s work for nothing. `_b` is the heaviest declaration either way; each checker spends the same on it in both programs, and one unit short of that, each refuses it in both.
+///
+/// **A guard on this tree rather than a regression test.** Every item's finalization rewrites its universe levels and clears the reducts with them, so `_b` met a cold table after `_a` even while the table outlived a declaration. What keeps it from outliving one is held where it is kept: `curios-elab`'s `a_closed_reduct_does_not_outlive_its_declaration`, and in each checker `what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it`.
+#[test]
+fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
+    let claim = |literal: String| format!("Eq()(Str/len(\"{literal}\"), 300)");
+    let (first, second) = (
+        claim("0123456789".repeat(30)),
+        claim("abcdefghij".repeat(30)),
+    );
+    let neighbour = format!("let _a: {first} = Eq/refl();\n\n");
+    let program = |neighbours: &str| {
+        format!(
+            "use /std/{{Str, Eq}};\n\n{neighbours}let _b: {{{first}, {second}}} = (Eq/refl(), Eq/refl(),);\n\n/std/print(\"ok\")\n"
+        )
+    };
+    let (alone, after) = (program(""), program(&neighbour));
+
+    let elaborated = |source: &str, budget: u64| {
+        let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+        typecheck_with_prelude_measured(budget, &entrypoint, &RootSource::none())
+            .map(|(module, _, heaviest)| (module, heaviest.units()))
+    };
+    let (alone_module, alone_units) =
+        elaborated(&alone, DEFAULT_STEP_BUDGET).expect("`_b` elaborates alone");
+    let (after_module, after_units) =
+        elaborated(&after, DEFAULT_STEP_BUDGET).expect("`_b` elaborates after `_a`");
+
+    assert_eq!(
+        after_units, alone_units,
+        "the elaborator spends the same on `_b`"
+    );
+    assert!(
+        elaborated(&alone, alone_units - 1).is_err(),
+        "one unit short, the elaborator refuses `_b` alone"
+    );
+    assert!(
+        elaborated(&after, alone_units - 1).is_err(),
+        "and after `_a`"
+    );
+
+    let certified = |module: &curios_core::Program, budget: u64| {
+        let module = curios_core::Zonked::project(module).expect("the checked module is zonked");
+        let (verdicts, kernel) = recheck_with_prelude_measured(&module, budget);
+        (verdicts.is_empty(), kernel.heaviest_declaration().units())
+    };
+    let (accepted, alone_units) = certified(&alone_module, DEFAULT_STEP_BUDGET);
+    assert!(accepted, "the kernel accepts `_b` alone");
+    let (accepted, after_units) = certified(&after_module, DEFAULT_STEP_BUDGET);
+    assert!(accepted, "the kernel accepts `_b` after `_a`");
+
+    assert_eq!(
+        after_units, alone_units,
+        "the kernel spends the same on `_b`"
+    );
+    assert!(
+        !certified(&alone_module, alone_units - 1).0,
+        "one unit short, the kernel refuses `_b` alone"
+    );
+    assert!(
+        !certified(&after_module, alone_units - 1).0,
+        "and after `_a`"
     );
 }
 
@@ -737,7 +793,7 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// **The kernel's retention is flat across the ladder** — 184K to 203K units from n=250 to n=8000, where it was 3.2M rising quadratically to 774M and a quota cliff. The quadratic's recorded cause, the scan's unreduced accumulator chain, is gone with the machine's eager substitution, and the kernel's side went with it entirely.
 ///
-/// **The elaborator's did not, and the chain was therefore never most of its story.** Its retention still grew as roughly 37·n² units — about three-quarters of its pre-machine figure — and saturated [`DEFAULT_RETENTION_QUOTA`](curios_core::DEFAULT_RETENTION_QUOTA) near n ≈ 5 200. What the same table shows is that saturating cost this program nothing: the n=8000 row's units were linear on trend, so the refused entries were not ones this walk re-needed. The source was the conversion stepping above, and the section at the top is where it went.
+/// **The elaborator's did not, and the chain was therefore never most of its story.** Its retention still grew as roughly 37·n² units — about three-quarters of its pre-machine figure — and saturated the retention quota the compilation then held near n ≈ 5 200. What the same table shows is that saturating cost this program nothing: the n=8000 row's units were linear on trend, so the refused entries were not ones this walk re-needed. The source was the conversion stepping above, and the section at the top is where it went.
 ///
 /// # What it printed before the closed machine
 ///
@@ -760,17 +816,8 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 #[ignore = "measurement: reports what a Str literal costs rather than asserting"]
 fn str_literal_cost_measurements() {
     println!(
-        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>7}",
-        "program",
-        "units",
-        "depth",
-        "other",
-        "retained",
-        "units",
-        "depth",
-        "other",
-        "retained",
-        "kernel/elab",
+        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
+        "program", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
     );
 
     for n in [250, 500, 1000, 2000, 4000, 8000] {
@@ -828,22 +875,13 @@ fn str_literal_cost_measurements() {
 ///
 /// The heaviest declaration is the same one in every row, and that is what the flatness is *about*: it is `probe`, the declaration holding the `match`, and what it costs no longer has anything to do with the web it scrutinizes. Before the key moved to the written spelling this row grew by a factor of two per definition and refused at fourteen; the wall clocks and the refusals are in `curios`' `scrutinee_refinement_measurements`.
 ///
-/// Retention is the one column that still separates the rows, linearly in the web: an equation is now *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm.
+/// Retention was the one column that still separated the rows, linearly in the web: an equation is *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm. The column went with the retention allowance, once no memo outlived the declaration that filled it.
 #[test]
 #[ignore = "measurement: reports what a combinator web costs each checker rather than asserting"]
 fn combinator_web_cost_measurements() {
     println!(
-        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>7}",
-        "program",
-        "units",
-        "depth",
-        "other",
-        "retained",
-        "units",
-        "depth",
-        "other",
-        "retained",
-        "kernel/elab",
+        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
+        "program", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
     );
 
     for rules in [8usize, 12, 13, 14, 20] {
@@ -867,8 +905,8 @@ fn combinator_web_cost_measurements() {
 /// The bound is stated against [`Cost::FRAME`] rather than as a literal because the quantity asserted is *that no per-character native frame is being paid at all*: a per-character price within even a quarter of the frame row means closed evaluation has fallen off the machine and back onto the recursive strategy, which is the silent cliff this guard exists to catch.
 #[test]
 fn a_str_literal_costs_transitions_rather_than_frames() {
-    let (elaborator_small, _, kernel_small, _) = declaration_cost(&str_literal(500, 0));
-    let (elaborator_large, _, kernel_large, _) = declaration_cost(&str_literal(1000, 0));
+    let (elaborator_small, kernel_small) = declaration_cost(&str_literal(500, 0));
+    let (elaborator_large, kernel_large) = declaration_cost(&str_literal(1000, 0));
 
     // The literal's scan runs on the machine's explicit stack, so doubling the literal moves guarded depth not at all — where it used to move it by exactly the added byte count.
     assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
@@ -891,7 +929,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
     );
 
     // Flat in use count: what spec 01's first milestone bought, and the defect this line of work was opened on.
-    let (_, _, kernel_used, _) = declaration_cost(&str_literal(500, 3));
+    let (_, kernel_used) = declaration_cost(&str_literal(500, 3));
     assert_eq!(kernel_used.units(), kernel_small.units());
 }
 
@@ -925,8 +963,8 @@ fn ascii_refinement(n: usize) -> String {
 /// **The fixture the closed machine's acceptance asks for: a refinement that is not `Str`.** The machine fires on closedness, not on anything about strings, so a user's fold over a packed carrier gets the same flat depth and sub-frame per-element price a `Str` literal gets — asserted with the same two bounds as [`a_str_literal_costs_transitions_rather_than_frames`], so this cannot quietly hold for the prelude's type and not for a user's.
 #[test]
 fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
-    let (_, _, kernel_small, _) = declaration_cost(&ascii_refinement(500));
-    let (_, _, kernel_large, _) = declaration_cost(&ascii_refinement(1000));
+    let (_, kernel_small) = declaration_cost(&ascii_refinement(500));
+    let (_, kernel_large) = declaration_cost(&ascii_refinement(1000));
 
     assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
 
@@ -1056,7 +1094,7 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     let units = |width: usize, paired: bool| {
         let source = paired_fold(width, paired);
         let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-        let (_, _, consumption, _) =
+        let (_, _, consumption) =
             typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
                 .expect("the fold elaborates within the default budget");
 

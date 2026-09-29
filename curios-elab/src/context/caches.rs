@@ -1,6 +1,8 @@
-//! The kernel's three memo tables and the write stamps that police them.
+//! The kernel's memo tables and the write stamps that police them.
 //!
 //! The reduction, elaboration and canonical-key caches are sound only under an explicit invalidation protocol: every store write that could change a cached answer must either bump a stamp (so a pending insert is refused), clear a cache, or retain selectively. Those combinations used to be hand-rolled at each mutation site; here each one is a named method carrying its own justification, so a new mutation site chooses a protocol instead of improvising one.
+//!
+//! **Every table lives one declaration**, and that is what lets a hit on it be free: [`Caches::begin_declaration`] clears them where the budget is restored, so which entries are present is a fact about the declaration under judgment rather than about the ones compiled before it. `documentation/design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md` states the rule for both checkers.
 //!
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
@@ -44,12 +46,12 @@ pub(crate) struct Settled {
 /// The reduction, elaboration and canonical-key caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
 pub(crate) struct Caches {
-    /// Reducts of terms mentioning no local binder — the table that survives item boundaries, so closed reducts stay warm across the definitions reduction and erasure mint, and the one the retention allowance prices.
+    /// Reducts, for the declaration in progress: [`Caches::begin_declaration`] clears the table where the budget is restored, so every node it holds was built under that budget, a hit on it is free, and nothing charges an insertion.
+    ///
+    /// **It used to outlive the declaration**, for its closed terms, and a hit on it was free all the same. Every item's finalization rewrote the item's universe levels and cleared it, so what crossed an item boundary was what the work after finalization reduced — the witness goals retried and the parked ones drained — and whether a declaration could afford its reductions could depend on that. A local-bearing term's entry was declaration-scoped already, a binder being minted once and never recurring; the two lived in separate tables for that difference in lifetime and in price, and with it gone they are one.
     reduction: HashMap<Term, Term>,
-    /// The closed table's second door: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
+    /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
     reduction_erased: HashMap<Term, Term>,
-    /// Reducts of terms mentioning a local binder. Declaration-scoped by nature — a binder is minted once and never recurs, so no later declaration can ask about one — and therefore bounded by the work budget that built every node it holds rather than by the retention allowance: [`Caches::begin_declaration`] clears it where the budget is restored, and nothing charges an insertion. Apart from the closed table so the clear is one operation rather than a walk.
-    reduction_local: HashMap<Term, Term>,
     /// A registered refinement key against the canonical form the escalation compares it at (`reduce::canonical_scrutinee`: head verbatim, arguments and operands in weak-head normal form).
     ///
     /// **Per *key*, where the escalation is per *probe*.** A store entry is recorded as the guard was written and every occurrence the reducer meets has been reduced, so the two meet only through a canonical form — which nothing but reduction produces. Recomputing it at each probe re-derives one guard's subject once per node of that operation in the declaration, and a subject that reduces to a *stuck* form is not held by the reduction table either, since that one caches reducts rather than the walks that failed to settle. Filled on the first escalation that needs it, so a guard whose fact is never probed against still costs nothing to register — the property `reduce::shallow_scrutinee` exists to keep.
@@ -107,15 +109,15 @@ impl Caches {
     }
 
     pub(crate) fn reduction_get(&self, term: &Term) -> Option<Term> {
-        if term.has_local_free() {
-            return self.reduction_local.get(term).cloned();
-        }
         if let Some(reduct) = self.reduction.get(term) {
             return Some(reduct.clone());
         }
+        if term.has_local_free() {
+            return None;
+        }
         let key = self.reduction_erased.get(&term.erased_universes())?;
         let reduct = self.reduction.get(key)?;
-        // An entry recording that a term is its own weak-head form says the same of every spelling the door equates with it, and the asking spelling is the one to hand back: the stored one is another declaration's, and a Π-type served in its place carried that declaration's binder names into a report about this one.
+        // An entry recording that a term is its own weak-head form says the same of every spelling the door equates with it, and the asking spelling is the one to hand back: the stored one was written elsewhere, and a Π-type served in its place carried that spelling's binder names into a report about this one.
         if reduct == key {
             curios_profile::sample!("reduction::across_levels", 1);
             return Some(term.clone());
@@ -126,28 +128,26 @@ impl Caches {
     }
 
     pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term) {
-        if term.has_local_free() {
-            self.reduction_local.insert(term, reduct);
-            return;
+        if !term.has_local_free() {
+            self.reduction_erased
+                .entry(term.erased_universes())
+                .or_insert_with(|| term.clone());
         }
-        self.reduction_erased
-            .entry(term.erased_universes())
-            .or_insert_with(|| term.clone());
         self.reduction.insert(term, reduct);
     }
 
-    /// Every reduct, whichever table holds it. The two tables differ in lifetime and in what prices them, never in what invalidates them: a write that could change a reduct changes a local-bearing one exactly as it changes a closed one, so every protocol below that clears reducts clears both through this, and [`Caches::retain_reductions_without`] retains on both.
+    /// Every reduct, and the second door indexing them.
     fn clear_reductions(&mut self) {
         self.reduction.clear();
         self.reduction_erased.clear();
-        self.reduction_local.clear();
     }
 
-    /// A new declaration: the tables whose entries cannot outlive one are discarded. The local-bearing reducts, whose keys name binders no later declaration can mention, and the canonical refinement keys, which are facts about one declaration's arms.
+    /// A new declaration: every table is discarded — the reducts, the canonical and settled refinement keys, and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
-        self.reduction_local.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
+        self.clear_elaborations();
     }
 
     pub(crate) fn canonical_key_get(&self, key: &Term) -> Option<Term> {
@@ -283,8 +283,6 @@ impl Caches {
         let reduction = &self.reduction;
         self.reduction_erased
             .retain(|_, key| reduction.contains_key(key));
-        self.reduction_local
-            .retain(|_, reduct| !reduct.mentions_free(name));
         // A canonical key is a reduct of the same kind, retained by the same test, and so is a settled one.
         self.canonical_keys
             .retain(|_, canonical| !canonical.mentions_free(name));
@@ -328,10 +326,7 @@ impl Caches {
     /// A refinement-suppression boundary is being crossed with refinements registered: refinement-applied and refinement-suppressed reducts must never contaminate each other's cache, so both clear — on both sides of the bracket, unstamped (the flag flip itself writes nothing).
     pub(crate) fn invalidate_suppression_boundary(&mut self) {
         // How many reducts the clear throws away.
-        curios_profile::sample!(
-            "caches::suppression_dropped",
-            (self.reduction.len() + self.reduction_local.len()) as u64
-        );
+        curios_profile::sample!("caches::suppression_dropped", self.reduction.len() as u64);
         self.clear_reductions();
         self.canonical_keys.clear();
         self.settled_keys.clear();
@@ -349,10 +344,7 @@ impl Caches {
     /// Solutions were rolled back — the one *un*-monotonic store transition. Reducts may have been cached through the unwound solutions, so both caches clear and both stamps tick.
     pub(crate) fn invalidate_for_rollback(&mut self) {
         // How many reducts the clear throws away.
-        curios_profile::sample!(
-            "caches::rollback_dropped",
-            (self.reduction.len() + self.reduction_local.len()) as u64
-        );
+        curios_profile::sample!("caches::rollback_dropped", self.reduction.len() as u64);
         self.note_write();
         self.note_universe_write();
         self.clear_reductions();

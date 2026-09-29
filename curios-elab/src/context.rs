@@ -20,11 +20,10 @@ use {
     },
     curios_core::ReduceError,
     curios_core::{
-        Advance, Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind,
-        Free, Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId,
-        MetavarOrigin, RecGroup, Retention, StructDecl, Subterm, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
+        ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, RecGroup,
+        StructDecl, Subterm, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
@@ -43,9 +42,9 @@ use {
 ///
 /// # What it is set against
 ///
-/// **The prelude floor.** The heaviest declaration the fixed prelude held — in `/std/BigNat/add`, now the corpus fixture `/big_nat/add`, which the corpus still compiles under this constant — measured between 2 500 000 and 3 000 000 units by bisecting this constant against the prelude build, where it was about 91 000 *steps* before. Thirty million keeps roughly the tenfold margin the previous figure held over the worst real declaration, which is the property that figure was chosen for. That bisection predates the closed machine and has not been retaken: the whole prelude still builds and certifies under this constant with the machine live, which is the fact the margin exists to protect, and the machine moves closed-fold costs down by an order of magnitude while moving some memo-amortized certifications up.
+/// **The prelude floor**, read rather than bisected. Both checkers sample each declaration's consumption as `budget::consumed` where the budget is restored, so the prelude build's profiles carry the floor as that sample's maximum. Taken 2026-09-29, with no memo outliving the declaration that filled it, the heaviest declaration `/std` holds spends **1 712 446 units on the elaborator** — the figure it read while its closed reducts still outlived a declaration — and **212 852 on the kernel**, which read 214 925 while it kept its unfold table. Thirty million keeps a seventeenfold margin over the elaborator's, and the constant was chosen to keep roughly ten over the worst real declaration. The figure it was chosen against was bisected instead — between 2 500 000 and 3 000 000 units, in what was then `/std/BigNat/add` and is now the corpus fixture `/big_nat/add`, about 91 000 *steps* before construction was priced — and the sample replaces that bisection, which predated the closed machine.
 ///
-/// That is the *elaborator's* floor, which is the one this bisection reaches. The kernel's is readable directly rather than by bisection — `curios-prelude-archive`'s `stored_prelude_measurements` reports the heaviest declaration a whole-unit certification makes, **512 455 units at a peak depth of 6**, taken 2026-08-16 with the closed machine live and `/std/BigNat` still in the prelude (189 294 before it: the machine re-derives within a run where the strategy's memo hits were free, and buys that back a thousandfold on closed folds). The two floors are not comparable as a ratio: the elaborator solves metavariables, resolves witnesses and zonks where the kernel rechecks a finished term.
+/// The two floors are not comparable as a ratio: the elaborator solves metavariables, resolves witnesses and zonks where the kernel rechecks a finished term. `curios-prelude-archive`'s `stored_prelude_measurements` still reports the kernel's per unit, which read **512 455 units at a peak depth of 6** on 2026-08-16, with the closed machine live and `/std/BigNat` still in the prelude.
 ///
 /// **What a unit costs in bytes.** Measured on the same machine, a payload-heavy program costs about **28 bytes of process memory per unit** — the logical unit is eight, and the rest is copies and term traffic the price list deliberately does not model. So this figure admits roughly 780 MB of construction in one declaration.
 ///
@@ -130,8 +129,6 @@ pub struct Context {
     peak_depth: Cell<usize>,
     /// The heaviest declaration elaborated so far, for a measurement to read. See [`Consumption`]; nothing in elaboration consults it.
     heaviest: Cell<Consumption>,
-    /// What this compilation may still retain in the caches below. Compilation-scoped and never restored, unlike the budget beside it — see [`Retention`].
-    retention: Retention,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
@@ -207,7 +204,6 @@ impl Context {
             depth: Cell::new(0),
             peak_depth: Cell::new(0),
             heaviest: Cell::new(Consumption::default()),
-            retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             caches: Caches::new(),
             frames: Frames::new(),
             solutions: Solutions::new(),
@@ -472,7 +468,7 @@ impl Context {
 
     /// The heaviest declaration this context has elaborated, including the one in progress.
     ///
-    /// The measurement counterpart of [`Context::retained`], and what `curios-cert`'s `Kernel::heaviest_declaration` reads on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
+    /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.heaviest.get().heavier_of(self.consumed())
     }
@@ -485,25 +481,13 @@ impl Context {
     }
 
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
+    ///
+    /// **Stored for nothing.** The entry dies with the declaration — [`Caches::begin_declaration`] clears the table where the budget is restored — so the work budget that built it is its bound.
     pub(crate) fn reduce(&mut self, term: Term, result: &Term) {
         let cacheable =
             term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
-        if !cacheable {
-            return;
-        }
-
-        // A local-bearing term's entry dies with the declaration — its binders never recur — so the work budget that built it is its bound, and it is stored for nothing. A closed term's entry outlives the declaration, which is what the retention allowance exists to price: the key and the reduct both have their lifetimes extended by the insertion, so both are charged, and exhausting the allowance stops the cache accepting entries instead of refusing anything. See [`Retention`].
-        if term.has_local_free() {
-            self.caches.reduction_insert(term, result.clone());
-            return;
-        }
-
-        let cost = Cost::collection(1)
-            .saturating_add(Cost::units(term.footprint()))
-            .saturating_add(Cost::units(result.footprint()));
-
-        if self.retention.admits(cost) {
+        if cacheable {
             self.caches.reduction_insert(term, result.clone());
         }
     }
@@ -563,16 +547,9 @@ impl Context {
         }
     }
 
-    /// How much of this compilation's retention allowance the caches have consumed.
-    ///
-    /// An observation for a measurement, not a control: nothing in elaboration reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.
-    pub fn retained(&self) -> u64 {
-        self.retention.spent()
-    }
-
     /// The elaboration-level counterpart of the reduction cache ([`Context::cached_reduced`] / [`Context::reduce`]): memoize `(term, expected) → (rebuilt, type)` for subterms whose elaboration can neither read nor write anything context-dependent. Eligibility is O(1) per call (the bits are cached per `Term` node): the term — and the expected type, when checking — must contain no metavariable and no `#`-named free variable (an elaborator-minted local or witness name; `#` cannot occur in a written identifier, so every other free name is a top-level reference). Writes are detected by snapshotting `mutation_stamp` around the computation: an entry is inserted only when the run minted, solved, parked, defined, and refined nothing — a pure run whose replay would be the identity on the context. Errors are never cached. The one deliberate delta on a hit: the skipped run's `expect` no longer drains `retry_parked` at that exact point — safe deferral, since retries re-run at every later `expect` and the module drain reports whatever survives.
     ///
-    /// A cached entry additionally names only *already-defined* globals: the insert refuses any result — or `Check` expected — naming a not-yet-defined global (`Context::elaboration_cacheable`), the name analogue of the unsolved-metavariable refusal above. Definedness is the one ambient fact a pure, ground elaboration reads (through `expect`'s conversions, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define`. That is what lets `define_entry` drop its wholesale elaboration-cache clear and keep the memo warm across the `#`-minted definitions that reduction and the frame elaborators mint within one item. (`set_island` still clears at each top-level item boundary, so the survival is within-item.)
+    /// A cached entry additionally names only *already-defined* globals: the insert refuses any result — or `Check` expected — naming a not-yet-defined global (`Context::elaboration_cacheable`), the name analogue of the unsolved-metavariable refusal above. Definedness is the one ambient fact a pure, ground elaboration reads (through `expect`'s conversions, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define`. That is what lets `define_entry` drop its wholesale elaboration-cache clear and keep the memo warm across the `#`-minted definitions that reduction and the frame elaborators mint within one item. (`restore_budget` still clears at each declaration boundary, and `set_island` at each change of item, so the survival is within-item.)
     ///
     /// The suppression brackets need no insert refusal. Privacy: validity is directional (an entry that passed an island's strict checks is valid under suppression, but not the reverse), so `island.is_some()` is part of the key — the erasure path's privacy-suppressed re-derivations populate and hit their own partition, and `set_island` clears on every item change. Parking: `expect` can only be `Blocked` on unsolved metavariables, which the groundness gate excludes, so suppression is inert for every cacheable run. Refinements: the registrar, frame-exit, and suppression-boundary clears already remove every entry a live refinement could have influenced, on both sides of the flag.
     ///
@@ -957,7 +934,7 @@ impl Context {
     }
 
     fn define_entry(&mut self, name: Free, entry: DefEntry) {
-        // A *fresh* definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF (the name analogue of the unsolved-metavariable argument in `Context::reduce`) — so the reduction cache retains every entry whose result does not mention it instead of clearing wholesale. This keeps closed reducts warm across item boundaries: erasure re-derives an item right after its `define`, and a cold re-reduction of a deep closed spine (a string literal's scan-state chain) would repeat all of its work.
+        // A *fresh* definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF (the name analogue of the unsolved-metavariable argument in `Context::reduce`) — so the reduction cache retains every entry whose result does not mention it instead of clearing wholesale. This keeps reducts warm across the definitions one declaration mints, and across erasure's items, which erasure walks under one budget: it re-derives an item right after its `define`, and a cold re-reduction of a deep closed spine (a string literal's scan-state chain) would repeat all of its work.
         //
         // The elaboration cache survives the same fresh definition with no retain at all: its insert gate (`elaboration_cacheable`) already refused every entry naming a not-yet-defined global, so the fresh name appears in no surviving entry. A minted `let` binder — which the frame elaborators mint — is excluded from caching outright (`has_local_free`), and a global is only ever referenced once defined; so not clearing lets a deep spine memoize once across those definitions instead of re-elaborating its shared subterms after each.
         //

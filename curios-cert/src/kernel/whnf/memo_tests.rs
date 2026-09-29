@@ -3,7 +3,7 @@
 use {
     crate::Kernel,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Cost, Intrinsic, Reducer, Term, UniverseContext},
+    curios_core::{Intrinsic, Reducer, Term, UniverseContext},
 };
 
 use super::test_support::*;
@@ -87,32 +87,33 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
     assert_eq!(after_boundary, first);
 }
 
-/// The name-keyed table is the one that is *not* cleared at a declaration boundary, and it stays charged for exactly that reason: an entry outliving a declaration may not also be free, or which declarations came first would decide what this one can afford.
+/// What a declaration spends does not depend on what the declarations before it reduced. The first declaration here reduces a definition's body and then unfolds the definition by name, and the second unfolds it again: the second spends exactly what unfolding it costs a kernel that reduced nothing before it.
 ///
-/// So a hit costs what computing the body cost, and the second occurrence spends what the first did to within the peak-depth rule — a [`Cost::FRAME`] either way, since the boundary between them resets the peak — and the warmth of any term the first call remembered and the boundary did not clear. The equation is stated as the two bounds that survive either evaluator: the hit is charged the bulk of what it replaces, and the two never differ by more than a frame plus that warmth.
+/// It is the property a table outliving its declaration broke, whether its hits were free or charged at the price its first computation paid — which counted that computation's own free hits, so the declaration that unfolded a name first decided what every later one was charged. The occurrence is local-bearing, so it takes the strategy's delta rather than the closed machine.
 ///
-/// That near-equality is also why the table's *survival* cannot be asserted here: a charged hit and a recomputation are nearly the same number by construction, and only the wall clock separates them.
-///
-/// The two occurrences sit on either side of a declaration boundary, because that is where the unfold table is the only one left: within a declaration the occurrence itself is remembered, local-bearing or not, and the second look would be a free hit on *that* rather than a charged one on the name.
+/// Mutation-checked: keeping any reduct table across [`Kernel::restore_budget`] fails it.
 #[test]
-fn an_unfold_hit_is_charged_what_it_replaces() {
-    let mut kernel = kernel();
+fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
     let name = binder(0, "chain");
-    kernel.define(&name, &nat_type(), &chain(64), &monomorphic());
     let occurrence = Term::free_var(&name);
+    let defining = || {
+        let mut kernel = kernel();
+        kernel.define(&name, &nat_type(), &chain(64), &monomorphic());
+        kernel
+    };
 
-    let first = spent(&mut kernel, occurrence.clone());
-    kernel.restore_budget();
-    let second = spent(&mut kernel, occurrence);
+    let alone = spent(&mut defining(), occurrence.clone());
 
-    assert!(first > 1, "computing the body is what the first call pays");
-    assert!(
-        second > first / 2,
-        "the hit is charged what it replaces: {second} against {first}"
-    );
-    assert!(
-        first.abs_diff(second) <= Cost::FRAME.get() + 64,
-        "the two differ by at most a peak frame plus follow-on warmth: {second} against {first}"
+    let mut after = defining();
+    spent(&mut after, chain(64));
+    spent(&mut after, occurrence.clone());
+    after.restore_budget();
+    let again = spent(&mut after, occurrence);
+
+    assert!(alone > 1, "unfolding the name reduces its body");
+    assert_eq!(
+        again, alone,
+        "the name costs what it costs a kernel that reduced nothing first"
     );
 }
 

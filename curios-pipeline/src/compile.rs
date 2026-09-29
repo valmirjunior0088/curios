@@ -235,21 +235,21 @@ pub fn typecheck_reporting(
     loader: &RootSource,
 ) -> Result<(Program, Vec<String>), CompileError> {
     typecheck_measured(budget, scope, syntax, entrypoint, loader)
-        .map(|(module, obligations, _, _)| (module, obligations))
+        .map(|(module, obligations, _)| (module, obligations))
 }
 
-/// [`typecheck_reporting`], reporting what elaboration consumed as well: the heaviest declaration, and the retention allowance the whole compilation used.
+/// [`typecheck_reporting`], reporting what elaboration consumed as well: the heaviest declaration.
 ///
-/// The measurement entry point on this side of the seam, matching `curios-cert`'s `recheck_module_measured` on the other. The heaviest declaration's units and peak depth are what `DEFAULT_STEP_BUDGET` is set against and the only figures that say whether a program's cost is depth or work; the retention figure is what `DEFAULT_RETENTION_QUOTA` is set against, and the two are coupled from one side — a memo that cannot be stored is re-derived against the *work* budget, so a compilation that exhausts its allowance stops being linear in what it spends.
+/// The measurement entry point on this side of the seam, matching `curios-cert`'s `recheck_module_measured` on the other. The heaviest declaration's units and peak depth are what `DEFAULT_STEP_BUDGET` is set against and the only figures that say whether a program's cost is depth or work.
 ///
-/// A measurement's entry point, never a control. Nothing in the compiler reads the last two components, and [`typecheck_reporting`] drops them.
+/// A measurement's entry point, never a control. Nothing in the compiler reads the last component, and [`typecheck_reporting`] drops it.
 pub fn typecheck_measured(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
-) -> Result<(Program, Vec<String>, Consumption, u64), CompileError> {
+) -> Result<(Program, Vec<String>, Consumption), CompileError> {
     let text = scope.text();
     let cores = scope.cores();
     let LoweredEntry {
@@ -304,7 +304,6 @@ pub fn typecheck_measured(
         },
         obligations,
         context.heaviest_declaration(),
-        context.retained(),
     ))
 }
 

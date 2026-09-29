@@ -270,15 +270,7 @@ pub fn typecheck_with_prelude_measured(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<
-    (
-        curios_core::Program,
-        Vec<String>,
-        curios_core::Consumption,
-        u64,
-    ),
-    CompileError,
-> {
+) -> Result<(curios_core::Program, Vec<String>, curios_core::Consumption), CompileError> {
     with_prelude(|prelude| {
         crate::typecheck_measured(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })

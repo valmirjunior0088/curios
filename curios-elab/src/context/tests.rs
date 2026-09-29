@@ -342,3 +342,55 @@ fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {
     context.end_solutions(mark);
     assert_eq!(context.cached_reduced(&sum), None);
 }
+
+/// A reduct is remembered for the declaration that computed it and no longer. A hit on it is free, so an entry that outlived its declaration would let the declarations compiled first decide what a later one can afford.
+///
+/// Mutation-checked: keeping the reduction table across [`Context::restore_budget`] fails it.
+#[test]
+fn a_closed_reduct_does_not_outlive_its_declaration() {
+    let mut context = context();
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
+    context.reduce(sum.clone(), &literal(3));
+    assert_eq!(context.cached_reduced(&sum), Some(literal(3)));
+
+    context.restore_budget();
+    assert_eq!(context.cached_reduced(&sum), None);
+}
+
+/// What a declaration spends does not depend on what the declarations before it reduced. The first declaration here reduces a definition's body and then the definition's name, and the second reduces the name again: the second spends exactly what reducing it costs a context that reduced nothing before it — `curios-cert`'s test of the same name, put to the elaborator.
+///
+/// Mutation-checked: keeping the reduction table across [`Context::restore_budget`] fails it.
+#[test]
+fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let name = Free::from(&Global::Authored(Qualifier::from(["chain"])));
+    let body = (0..64).fold(literal(0), |sum, _| {
+        Term::intrinsic(Intrinsic::nat_add(sum, literal(1)))
+    });
+    let occurrence = Term::free_var(&name);
+    let defining = || {
+        let mut context = context();
+        context.define(&name, &body, None);
+        context
+    };
+    let spent = |context: &mut Context, term: Term| {
+        let before = context.consumed().units();
+        reduce(context, term).expect("reduces");
+        context.consumed().units() - before
+    };
+
+    let alone = spent(&mut defining(), occurrence.clone());
+
+    let mut after = defining();
+    spent(&mut after, body.clone());
+    spent(&mut after, occurrence.clone());
+    after.restore_budget();
+    let again = spent(&mut after, occurrence);
+
+    assert!(alone > 1, "reducing the name reduces its body");
+    assert_eq!(
+        again, alone,
+        "the name costs what it costs a context that reduced nothing first"
+    );
+}

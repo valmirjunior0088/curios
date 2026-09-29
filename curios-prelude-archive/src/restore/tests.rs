@@ -430,7 +430,6 @@ fn stored_prelude_measurements() {
             let (rechecked, kernel) =
                 recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
-            let retained = kernel.retained();
             let heaviest = kernel.heaviest_declaration();
 
             let definitions: usize = core
@@ -448,10 +447,6 @@ fn stored_prelude_measurements() {
                 "  certifying the unit          {:>10.1?}  ({} refusals)",
                 certification,
                 rechecked.verdicts.len()
-            );
-            println!(
-                "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
-                erasure_context.retained()
             );
             println!(
                 "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",

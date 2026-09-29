@@ -55,9 +55,9 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Advance, Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
-        LevelHead, Module, Polarity, Reads, ReduceError, Reducer, Retention, Spelling, StructDecl,
-        Term, UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
+        Advance, Atom, Consumption, Cost, Free, Global, InductDecl, Level, LevelHead, Module,
+        Polarity, Reads, ReduceError, Reducer, Spelling, StructDecl, Term, UniverseConstraint,
+        UniverseContext, UniverseError, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
@@ -431,8 +431,6 @@ pub struct Kernel {
     spend: Spend,
     /// Remembered weak-head reducts, replayed rather than re-derived.
     memos: Memos,
-    /// What this walk may still retain in those memos. Compilation-scoped, never restored — see [`Retention`].
-    retention: Retention,
     /// The erased positions this walk recorded — an output, not an input.
     positions: Positions,
     /// The recursive calls this walk typed, and each checked group's verdict — an output, not an input.
@@ -460,7 +458,6 @@ impl Kernel {
             scope: Scope::default(),
             spend: Spend::new(budget),
             memos: Memos::new(true),
-            retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             positions: Positions::default(),
             calls: Calls::default(),
             reads: ReadRecorder::default(),
@@ -483,41 +480,11 @@ impl Kernel {
         self.globals = globals.clone();
     }
 
-    /// A kernel at a stated retention allowance rather than the product default.
-    ///
-    /// Exists so a test can put the quota under pressure without building a module large enough to reach the shipped figure — which is measured to be unreachable by ordinary compilation, and would therefore make the degradation path untestable.
-    pub fn with_retention(budget: u64, quota: u64, syntax: SyntaxRegistry) -> Self {
-        Self {
-            retention: Retention::new(quota),
-            ..Self::new(budget, syntax)
-        }
-    }
-
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
     pub fn uncached(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             memos: Memos::new(false),
             ..Self::new(budget, syntax)
-        }
-    }
-
-    /// The remembered reduct of `name`'s body, with the replayed computation's whole consumption charged — or `None` when there is no entry, *or* when its charge does not fit.
-    ///
-    /// Looking one up and charging it are two components' jobs, joined here: [`Memos`] can hand back a [`Replay`] and cannot apply one.
-    ///
-    /// The two `None`s are deliberately the same answer, because the caller does the same thing with them: evaluate the body directly. An unaffordable replay is a reason to take the direct path and let it fail where it actually fails, not a reason to refuse from an aggregate — see [`Spend::charge`].
-    pub(crate) fn unfold_hit(&mut self, name: &Free) -> Option<Term> {
-        let replay = self.memos.unfold(name)?;
-
-        self.spend.charge(replay)
-    }
-
-    /// Remember what `name`'s body reduces to, and what computing it consumed — unless the compilation's retention allowance cannot cover the entry.
-    ///
-    /// A declined insertion is not a refusal of anything: the reduct has already been computed and is returned either way, and the only consequence is that the next occurrence of this name recomputes it. See [`Retention`].
-    pub(crate) fn unfold_store(&mut self, name: Free, replay: Replay) {
-        if self.retention.admits(replay.retention()) {
-            self.memos.store_unfold(name, replay);
         }
     }
 
@@ -550,23 +517,16 @@ impl Kernel {
         }
     }
 
-    /// Remember a local-free `term`'s weak-head reduct and its consumption.
+    /// Remember a `term`'s weak-head reduct and the identities computing it minted.
     ///
-    /// **Not charged to the retention allowance, and deliberately.** That allowance exists for storage that outlives the budget that built it — [`Retention`] names the composition it bounds, a cache surviving item boundaries times a budget restored at each — and this table does not: [`Memos::begin_declaration`] clears it exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds. It was charged anyway, key and reduct, at the tree footprint of each — and a thirteen-definition proof whose reducts were graphs with `2^n`-node trees spent a third of the whole compilation's allowance on entries that died with the declaration. The name-keyed table beside this one does outlive a declaration, and [`Kernel::unfold_store`] still pays for it.
+    /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. It was once charged besides, key and reduct, against a compilation-wide allowance at the tree footprint of each, and a thirteen-definition proof whose reducts were graphs with `2^n`-node trees spent a third of that allowance on entries that died with the declaration.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
         self.memos.store_whnf(term, forced, replay);
     }
 
-    /// How much of this walk's retention allowance its memos have consumed.
-    ///
-    /// An observation for a measurement, not a control: nothing in the kernel reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.
-    pub fn retained(&self) -> u64 {
-        self.retention.spent()
-    }
-
     /// The heaviest declaration this kernel has walked — what it spent, and how deep it went.
     ///
-    /// The measurement counterpart of [`Kernel::retained`], and the same kind of thing: nothing in the kernel reads it, and it exists so a figure can be stated with a probe beside it instead of bisected against a budget from outside the compiler. See [`Consumption`] for why depth is the row it separates out.
+    /// An observation for a measurement: nothing in the kernel reads it, and it exists so a figure can be stated with a probe beside it instead of bisected against a budget from outside the compiler. See [`Consumption`] for why depth is the row it separates out.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.spend.heaviest()
     }

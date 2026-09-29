@@ -2,7 +2,7 @@
 
 **Decision.** One counter decides whether a declaration type-checks, and it prices construction as well as transitions. A reducer transition costs one unit; a value a reduction builds costs its logical size; a level of guarded reducer recursion costs the native frame it takes. Every fold that can allocate reducer-owned storage charges *before* allocating, through `Reducer::spend`, and a size that overflows while being computed is refused without being compared. The unit is machine-independent — eight logical bytes of scalar payload, or one abstract reference slot, computed in `u64` on every target — and the formulas and constants live in `curios-core`'s `cost`, below both checkers, so the elaborator and the independent kernel price the same program the same way.
 
-A second, compilation-scoped counter bounds what the optional caches *retain*. It is not a second acceptance budget: exhausting it refuses an insertion and leaves evaluation correct and cold. `curios-core`'s `retention` owns it.
+No second counter bounds what the caches hold. Every memo either checker keeps lives one declaration, so the budget that built its entries bounds it; [No memo outlives the declaration that filled it](no-memo-outlives-the-declaration-that-filled-it.md) is that decision.
 
 **Rationale.** Reduction is the only stage a well-typed program can drive to arbitrary cost, because it is the only stage a *type* can call; every other stage's work is bounded by what elaboration produced. A counter that charged one unit per transition therefore bounded the one thing that could not run away and nothing else — a `Binary::concat` copying half a megabyte cost what a `Bool` fold cost. `Nat/shl(1, 400000000)` is three lines with no loop in them and built fifty megabytes of magnitude in under a second while the counter observed a handful of steps.
 
@@ -18,7 +18,7 @@ A second, compilation-scoped counter bounds what the optional caches *retain*. I
 
 **Rejected — exact heap-byte accounting.** A deterministic logical unit refuses pathological construction predictably across platforms; process memory remains subject to ordinary implementation overhead, measured at about 28 bytes per logical unit — see `curios-elab`'s `DEFAULT_STEP_BUDGET`, which records the measurement and what it admits. Pricing the overhead would price the allocator.
 
-**Rejected — bounding the caches by eviction rather than by admission.** Eviction needs a replacement policy and shared-payload lifetime accounting, and makes warmth less predictable. The monotone retention quota refuses new insertions after a conservative allowance is consumed and never refuses evaluation.
+**Rejected — bounding the caches by eviction.** Eviction needs a replacement policy and shared-payload lifetime accounting, and makes warmth less predictable. A cache that lives one declaration needs no bound of its own: the budget that built it is one.
 
 **Rejected — charging the recursion row when `recurse` actually grows the stack.** It prices the 32 MiB segment exactly, and makes acceptance depend on the host thread's stack size: a two-megabyte test thread grows on its first call where an eight-megabyte main thread does not. A charge that a thread's stack size can change is not a fact about the program.
 

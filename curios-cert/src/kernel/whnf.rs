@@ -47,7 +47,7 @@ fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
     kernel.machine && accelerable(term) && !kernel.has_refinements()
 }
 
-/// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
+/// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit is free.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         curios_profile::profile!("reduce");
@@ -283,23 +283,13 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
 
 /// Delta: unfold a definition, or leave the variable as the normal form it is.
 ///
-/// The body is reduced once and its reduct remembered, so the next occurrence of the name — in this spine or any later one — continues from the reduct instead of re-deriving it. A definition body is closed, so the memo entry depends on nothing but the definition store. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
+/// The body is reduced by a nested `whnf`, which remembers it under the body's term for the rest of the declaration, so the next occurrence of the name in this declaration continues from the reduct instead of re-deriving it — and nothing is remembered past the declaration. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
     let Some(body) = kernel.value(var.unwrap()).cloned() else {
         return Ok(Step::Stop(Term::var(var)));
     };
 
-    // A `None` here is "no entry, or one this budget cannot afford", and both mean the same thing: fall through and evaluate. The direct path then exhausts at the charge that could not be paid rather than at a recorded total.
-    if let Some(replayed) = kernel.unfold_hit(var.unwrap()) {
-        return Ok(Step::Continue(replayed));
-    }
-
-    let before = kernel.consumption();
-    let reduct = whnf(kernel, body)?;
-    let replay = kernel.replay_since(reduct.clone(), before);
-    kernel.unfold_store(var.unwrap().clone(), replay);
-
-    Ok(Step::Continue(reduct))
+    Ok(Step::Continue(whnf(kernel, body)?))
 }
 
 /// Beta: open a function's telescope over the arguments applied to it.

@@ -1122,23 +1122,6 @@ impl Intrinsic {
         reach
     }
 
-    /// The logical units this node's *own* payload occupies, excluding every child term.
-    ///
-    /// Only three variants carry payload a child term does not: a packed binary run, a natural's successor floor, and an integer. Everything else is either a scalar the node constant already covers or a child whose own footprint counts it — a `List`'s element vector included, since each element is a term with a footprint of its own and a slot costs less than the node it points at.
-    ///
-    /// Conservative in the one direction that matters: this feeds the retention quota, where overcounting costs a cold cache and undercounting costs the bound.
-    pub(crate) fn payload_units(&self) -> u64 {
-        match self {
-            Intrinsic::Bin(grain, value) => match grain {
-                Grain::X => (value.bit_length() as u64).div_ceil(64),
-                Grain::B => (value.bit_length() as u64).div_ceil(64),
-            },
-            Intrinsic::Nat(Nat::Succ(floor, _)) => floor.bits().div_ceil(64),
-            Intrinsic::Int(value) => value.bits().div_ceil(64),
-            _ => 0,
-        }
-    }
-
     /// The universe instance carried by an operation whose result names an ordinary polymorphic family.
     pub fn result_universes(&self) -> &[Level] {
         match self {

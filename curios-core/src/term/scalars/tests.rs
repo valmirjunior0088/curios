@@ -18,7 +18,6 @@ fn round_trips_every_field() {
         has_transient: true,
         has_universe_meta: true,
         has_universe_data: false,
-        footprint: 987_654,
         hash: u64::MAX,
     });
 
@@ -30,7 +29,6 @@ fn round_trips_every_field() {
     assert!(read.has_transient);
     assert!(read.has_universe_meta);
     assert!(!read.has_universe_data);
-    assert_eq!(read.footprint, 987_654);
     assert_eq!(read.hash, u64::MAX);
 }
 
@@ -45,7 +43,6 @@ fn zero_values_read_back_as_filled() {
         has_transient: false,
         has_universe_meta: false,
         has_universe_data: true,
-        footprint: 0,
         hash: 0,
     });
 
@@ -57,13 +54,12 @@ fn zero_values_read_back_as_filled() {
     assert!(!read.has_transient);
     assert!(!read.has_universe_meta);
     assert!(read.has_universe_data);
-    assert_eq!(read.footprint, 0);
     assert_eq!(read.hash, 0);
 }
 
-/// The two packed figures share one word, so each has to keep its own widest value with the other at *its* widest — a shift that overlapped would show up here and nowhere else.
+/// `reach` shares its word with the flags and the filled bit, so its widest value has to read back with every flag set beside it — a shift that overlapped would show up here and nowhere else.
 #[test]
-fn reach_and_footprint_keep_their_widest_packed_values() {
+fn the_widest_reach_reads_back_beside_every_flag() {
     let widest_reach = usize::try_from((1u64 << REACH_BITS) - 1).unwrap_or(usize::MAX);
     let cache = ScalarCache::default();
     cache.fill(Scalars {
@@ -73,29 +69,11 @@ fn reach_and_footprint_keep_their_widest_packed_values() {
         has_transient: true,
         has_universe_meta: true,
         has_universe_data: true,
-        footprint: FOOTPRINT_MAX,
         hash: 7,
     });
 
     let read = cache.get().unwrap();
     assert_eq!(read.reach, widest_reach);
-    assert_eq!(read.footprint, FOOTPRINT_MAX);
-}
-
-/// A footprint past its field is *clamped*, not wrapped — so an unmeasurably large term reads as "at least the maximum", which stops a retention insertion rather than admitting one. Wrapping would report a huge term as a tiny one, which is the direction that loses the bound.
-#[test]
-fn an_oversized_footprint_clamps_rather_than_wrapping() {
-    let cache = ScalarCache::default();
-    cache.fill(Scalars {
-        reach: 0,
-        has_local_free: false,
-        has_metavar: false,
-        has_transient: false,
-        has_universe_meta: false,
-        has_universe_data: false,
-        footprint: u64::MAX,
-        hash: 0,
-    });
-
-    assert_eq!(cache.get().unwrap().footprint, FOOTPRINT_MAX);
+    assert!(read.has_local_free && read.has_metavar && read.has_transient);
+    assert!(read.has_universe_meta && read.has_universe_data);
 }

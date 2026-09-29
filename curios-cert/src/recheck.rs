@@ -248,7 +248,7 @@ pub fn recheck_module_verdicts_uncached(
 
 /// What a whole-module walk consumed, beside what it reached — the walk's own kernel, handed back for a measurement to read.
 ///
-/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` and `DEFAULT_STEP_BUDGET` have to be set against what a real module actually costs, and nothing else can see those figures — the kernel a walk builds is otherwise its own. [`Kernel::retained`] is the compilation-scoped allowance it used and [`Kernel::heaviest_declaration`] the heaviest single judgment it made. The record is there for a measurement walking several units in order, which mounts each with it as a compilation does, so the next walk reads the classification rather than deriving it at a cost no compilation pays.
+/// Exists for one purpose too: `DEFAULT_STEP_BUDGET` has to be set against what a real module actually costs, and nothing else can see that figure — the kernel a walk builds is otherwise its own. [`Kernel::heaviest_declaration`] is the heaviest single judgment it made. The record is there for a measurement walking several units in order, which mounts each with it as a compilation does, so the next walk reads the classification rather than deriving it at a cost no compilation pays.
 ///
 /// It hands back the kernel rather than a tuple of figures so that asking a new question of a finished walk costs a reader rather than a signature. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
 pub fn recheck_module_measured(
