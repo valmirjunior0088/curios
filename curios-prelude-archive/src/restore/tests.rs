@@ -275,7 +275,7 @@ fn kernel_disagreements() {
                 &globals,
                 SYNTAX,
             ));
-            globals.mount(core, root.binder_floor());
+            globals.mount(core, root.binder_floor(), root.certification());
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -319,7 +319,7 @@ fn kernel_memo_parity() {
                 recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
                 recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
             );
-            globals.mount(core, root.binder_floor());
+            globals.mount(core, root.binder_floor(), root.certification());
         }
     });
 }
@@ -484,7 +484,7 @@ fn stored_prelude_measurements() {
                 core.binder_floor
             );
 
-            globals.mount(core, root.binder_floor());
+            globals.mount(core, root.binder_floor(), root.certification());
             cores.push(core);
             arena = erased;
         }

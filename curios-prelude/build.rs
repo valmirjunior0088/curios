@@ -57,7 +57,8 @@ fn certify() {
                 );
             }
 
-            globals.mount(core, unit.binder_floor());
+            // With the record this walk just made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again.
+            globals.mount(core, unit.binder_floor(), Some(&certification));
             items += core.items.len();
             certifications.push(certification);
         }

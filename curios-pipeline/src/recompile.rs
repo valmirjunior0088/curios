@@ -81,14 +81,7 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    let (verdicts, certification) = recheck_over(
-        &core,
-        budget,
-        scope,
-        &reused,
-        baseline.binder_floor(),
-        syntax,
-    );
+    let (verdicts, certification) = recheck_over(&core, budget, scope, &reused, baseline, syntax);
     if let Some(verdict) = verdicts.into_iter().next() {
         return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
     }
@@ -118,7 +111,7 @@ pub fn compile_unit_over(
     ))
 }
 
-/// [`recheck`](crate::recheck) with `reused` in scope beside the units: an earlier compilation's items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. `reused_floor` is the baseline's, a bound over every binder the reused terms mention.
+/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. They are mounted at the baseline's binder floor, a bound over every binder the reused terms mention, and with the baseline's record, whose classifications of them nothing in the closure has moved.
 ///
 /// The reused registry entries are both mounted and kept in `module`: the walk declares every entry the module carries, overwriting the mounted copy with an equal one, and its positivity pass extends the environment's registries with the module's, resolving a name in both to the module's own.
 pub(crate) fn recheck_over(
@@ -126,11 +119,11 @@ pub(crate) fn recheck_over(
     budget: u64,
     scope: Prefix<'_>,
     reused: &Module,
-    reused_floor: usize,
+    baseline: &Unit,
     syntax: &SyntaxRegistry,
 ) -> (Vec<Verdict>, Certification) {
     let mut globals = globals(scope);
-    globals.mount(reused, reused_floor);
+    globals.mount(reused, baseline.binder_floor(), baseline.certification());
 
     certify_module(module, budget, &globals, *syntax)
 }

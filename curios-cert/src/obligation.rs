@@ -10,7 +10,7 @@
 //!
 //! # What is already in scope
 //!
-//! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`](curios_core::Definition::totality) rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
+//! A compile judges only the user's items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
 
 use {
     super::{Globals, Kernel, KernelError, Sort},
@@ -45,9 +45,9 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
 ///
-/// What `globals` already answers for is read rather than recomputed: its non-total set seeds the closure, and an item it declares has its flags read from [`Definition::totality`](curios_core::Definition::totality). That is what keeps a compile from re-analyzing the standard library, and it is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+/// What `globals` already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds the closure, and an item it declares is passed over. That is what keeps a compile from re-analyzing the standard library. What it mounted without a covering record is classified here first, from its items, exactly as a judged item is — and a stamp on one of those is not this walk's to compare, since the walk judges nothing of it.
 ///
-/// The stamp comparison runs after the closure, against the closed set, because a stamp *asserts* the closure: it is what `Globals::of` seeds a later walk's non-total set from, so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. Compared against the local half alone — which this once was — that lie passed the filing walk, and a proof reaching the mis-stamped definition was then certified on the compile path with nothing anywhere refusing the route.
+/// The stamp comparison on a judged item runs after the closure, against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give.
 ///
 /// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and once the already-judged items stop being carried inside `module` there is nothing left in this walk that knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
 ///
@@ -64,33 +64,39 @@ pub(crate) fn partial_definitions(
     let mut partial: BTreeSet<Global> = globals.partial().clone();
     let mut stamped_total: Vec<Global> = Vec::new();
     let mut memo = HashMap::new();
-
-    for item in &module.items {
-        let definitions = item.definitions();
-        let names = item.declared_names();
-        let carried = !names.is_empty() && names.into_iter().all(|name| globals.in_scope(name));
+    let mut classify = |item: &Item| {
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
-            Item::Rec(rec) if !carried => group_totality(kernel, &rec.group) == Totality::Partial,
-            _ => false,
+            Item::Rec(rec) => group_totality(kernel, &rec.group) == Totality::Partial,
+            Item::Let(_) => false,
         };
 
-        for definition in definitions {
-            let local = if carried {
-                !definition.totality.is_total()
-            } else {
-                if definition.totality.is_total() {
-                    stamped_total.push(definition.name.clone());
-                }
-                rejected
-                    || locally_partial(kernel, &definition.body, &mut memo)
-                    || locally_partial(kernel, &definition.type_, &mut memo)
-            };
-            if local {
+        for definition in item.definitions() {
+            if rejected
+                || locally_partial(kernel, &definition.body, &mut memo)
+                || locally_partial(kernel, &definition.type_, &mut memo)
+            {
                 partial.insert(definition.name.clone());
             }
             mentions.insert(definition.name.clone(), definition.mentions());
         }
+    };
+
+    for item in globals.unclassified() {
+        classify(item);
+    }
+    for item in &module.items {
+        let names = item.declared_names();
+        if !names.is_empty() && names.into_iter().all(|name| globals.in_scope(name)) {
+            continue;
+        }
+        stamped_total.extend(
+            item.definitions()
+                .into_iter()
+                .filter(|definition| definition.totality.is_total())
+                .map(|definition| definition.name),
+        );
+        classify(item);
     }
 
     loop {

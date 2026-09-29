@@ -8,11 +8,11 @@ use {
     crate::{Globals, Kernel, Verdict},
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
-        Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductDecl,
-        InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope,
-        StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseConstraint,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
-        derived_binder_floor,
+        Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup,
+        RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope, Term, Totality,
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseParam, derived_binder_floor,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -2513,9 +2513,9 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     }
 }
 
-/// The environment a walk is handed: everything `module` puts in scope, at the floor its own terms derive.
+/// The environment a walk is handed: everything `module` puts in scope, at the floor its own terms derive, with no record — so a walk classifies its items' totality for itself.
 pub(super) fn already_judged(module: &Module) -> Globals {
-    Globals::of(module, derived_binder_floor(module))
+    Globals::of(module, derived_binder_floor(module), None)
 }
 
 /// A module carrying `items` and `induct_decls` and nothing else.
@@ -2629,5 +2629,15 @@ pub(super) fn fixture_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    super::verdicts_from(Kernel::new(budget, syntax), module, globals).0
+    fixture_certified(module, budget, globals, syntax).0
+}
+
+/// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
+pub(super) fn fixture_certified(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> (Vec<Verdict>, Certification) {
+    super::verdicts_from(Kernel::new(budget, syntax), module, globals)
 }

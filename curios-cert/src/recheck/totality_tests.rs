@@ -1,18 +1,18 @@
-//! Carried totality stamps: believed where they are read, judged where they are not.
+//! Totality verdicts across walks: the certifier's record read where a unit is carried, and elaboration's stamp compared, never read, where an item is judged.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Globals, KernelError, Verdict},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Global, Totality},
+    curios_core::{Certification, Global, Totality},
     curios_utilities::Qualifier,
 };
 
 use super::test_support::*;
 
-/// A totality stamp asserts the *closure* — it is what `Globals::of` seeds a later walk's non-total set from — so the cross-check must compare it against the closed verdict, not the local half.
+/// A totality stamp asserts the *closure* — elaboration's classification closes over mentions as the kernel's does — so the cross-check compares it against the closed verdict, not the local half.
 ///
-/// It compared the local half. The disagreement check in `partial_definitions` fired only where `rejected || locally_partial(..)` held — a non-descending group, an inline `rec`, an exit — while the closure loop below it inserted a transitively-partial name into the set with no stamp comparison at all. So `reaches`, total in itself but stamped `Total` while mentioning the diverging `sink`, passed the very walk every account credited with refusing "a recorded verdict more generous than the kernel's own": while the hole was open, `recheck_module_verdicts` returned **zero refusals** for exactly this module. `Globals::of` then filed the lie — its non-total set is stamp-derived, so it held `sink` alone — and the compile-path walk certified a proof mentioning `reaches` with zero refusals too, which is [`a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged`]'s first half and was verified together with this. The elaborator seeds its `inherited` map from the same stamps, so a wrong one is invisible to the two-checker comparison; the transitive half of every carried stamp was the elaborator's `classify_module` conclusion, believed by the kernel and certified by nothing.
+/// `reaches` is total in itself, stamped `Total`, and mentions the diverging `sink`: only the closure contradicts it. A comparison against the local half would pass it, as this one once did. Nothing reads the stamp afterwards — a later walk reads the certifier's record, which [`a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies`] holds — so what this guards is the two checkers' disagreement being reported where they disagree.
 ///
 /// No surface program reaches it: the only stamp writer is `record_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
 #[test]
@@ -54,21 +54,57 @@ fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
     );
 }
 
-/// The pair the perimeter row asks for: a carried stamp more generous than the kernel's verdict is *believed* by the walk that carries it, and the same content judged fresh from an empty environment is refused — so the cross-check at a unit's filing is the whole of what holds the compile-path belief.
-///
-/// The first half is the compile path's exact shape: the environment is `Globals::of` over the lying library, its non-total set holds `sink` alone because the set is stamp-derived, and `held : Vouched` mentions only `reaches` — so the closure over the judged module never meets a partial name, (V) passes, and the walk returns no verdicts. That is by design and must stay: the belief is what keeps a compile from re-analyzing the standard library, and [`a_totality_stamp_contradicted_only_by_the_closure_is_refused`] is what makes it a belief in a verdict the kernel reached. The second half is the same three definitions in one module from an empty environment, where the closure runs over everything and the named route refuses the proof.
-#[test]
-fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
-    let carried = fixture_verdicts(
+/// The definition whose stamp is on trial.
+fn reaches() -> Global {
+    Global::Authored(Qualifier::from(["reaches"]))
+}
+
+/// Whether `verdicts` refuse `held : Vouched` for reaching `reaches` — the refusal a walk owes the proof whenever it knows `reaches` is partial.
+fn refuses_the_proof_reaching_the_lie(verdicts: &[Verdict]) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
+            && matches!(
+                &verdict.error,
+                KernelError::NotTotal {
+                    erased: Erased::Proof,
+                    reached: Some(name),
+                } if *name == reaches()
+            )
+    })
+}
+
+/// The walk over the proof alone, the lying library mounted beneath it as the compile path mounts a unit — at its floor, with `certification` as the record filed beside it.
+fn carried_beneath_the_lie(certification: Option<&Certification>) -> Vec<Verdict> {
+    fixture_verdicts(
         &carried_proof_module(),
         1_000_000,
-        &Globals::of(&stamp_trial_module(Totality::Total, false), 1_000),
+        &Globals::of(
+            &stamp_trial_module(Totality::Total, false),
+            1_000,
+            certification,
+        ),
+        SYNTAX,
+    )
+}
+
+/// A later walk reads a carried unit's totality from the certifier's record and never from the stamps elaboration wrote, so a proof reaching a lying stamp is refused carried exactly as it is refused judged fresh.
+///
+/// The library is certified with `reaches` honestly stamped `Partial`, and the record that walk leaves is mounted beside the same terms stamped `Total`. `held : Vouched` mentions only `reaches`, so its walk refuses it exactly when the environment's non-total set holds `reaches` — which the record says it does, whatever the stamp claims. Read off the stamp instead, the set held `sink` alone and the carried walk certified the proof with no verdicts at all; judged in one module from an empty environment, the same proof is refused, which is the second half here.
+#[test]
+fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() {
+    let (verdicts, record) = fixture_certified(
+        &stamp_trial_module(Totality::Partial, false),
+        1_000_000,
+        &Globals::default(),
         SYNTAX,
     );
-    assert_eq!(
-        carried,
-        Vec::new(),
-        "a carried totality stamp is believed, so a walk seeded from a lying one must accept",
+    assert_eq!(verdicts, Vec::new(), "the honest library is certified");
+    assert_eq!(record.totality(&reaches()), Some(Totality::Partial));
+
+    let carried = carried_beneath_the_lie(Some(&record));
+    assert!(
+        refuses_the_proof_reaching_the_lie(&carried),
+        "carried beneath its record, the proof reaching the lying stamp must be refused: {carried:?}",
     );
 
     let judged = fixture_verdicts(
@@ -78,16 +114,32 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         SYNTAX,
     );
     assert!(
-        judged.iter().any(|verdict| {
-            verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
-                && matches!(
-                    &verdict.error,
-                    KernelError::NotTotal {
-                        erased: Erased::Proof,
-                        reached: Some(name),
-                    } if *name == Global::Authored(Qualifier::from(["reaches"]))
-                )
-        }),
+        refuses_the_proof_reaching_the_lie(&judged),
         "judged fresh, the same proof must be refused for reaching the mis-stamped definition: {judged:?}",
+    );
+}
+
+/// A unit mounted with no record is classified by the walk that reads it, from its items, and the stamps on those items are not consulted — so the lying library alone beneath the proof still has the proof refused.
+#[test]
+fn a_unit_mounted_without_a_record_is_classified_by_the_reading_walk() {
+    let carried = carried_beneath_the_lie(None);
+
+    assert!(
+        refuses_the_proof_reaching_the_lie(&carried),
+        "with no record, the reading walk must classify the library itself and refuse the proof: {carried:?}",
+    );
+}
+
+/// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — the `covers` filter in `Globals::of` dropped — fails this test and no other in this file.
+#[test]
+fn a_record_that_does_not_cover_its_unit_is_not_read() {
+    let forged = Certification::of([(reaches(), Totality::Total)]);
+    assert!(!forged.covers(&stamp_trial_module(Totality::Total, false)));
+
+    let carried = carried_beneath_the_lie(Some(&forged));
+
+    assert!(
+        refuses_the_proof_reaching_the_lie(&carried),
+        "a record not covering its unit must not be read, and the proof must be refused: {carried:?}",
     );
 }

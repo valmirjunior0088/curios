@@ -194,11 +194,11 @@ pub fn recheck_measured(
     recheck_module_measured(module, budget, &globals(scope), *syntax)
 }
 
-/// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
+/// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived and with the record the certifier filed with it.
 pub(crate) fn globals(scope: Prefix<'_>) -> Globals {
     let mut globals = Globals::default();
     for unit in scope.units() {
-        globals.mount(unit.core(), unit.binder_floor());
+        globals.mount(unit.core(), unit.binder_floor(), unit.certification());
     }
 
     globals

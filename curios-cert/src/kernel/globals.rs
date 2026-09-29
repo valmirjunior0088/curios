@@ -10,10 +10,13 @@
 //!
 //! # It is also what a walk starts from
 //!
-//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the two bounds a walk cannot re-derive cheaply. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what it does not already answer for, by name — the environment is a set of names, so nothing about it identifies an item by where it sits.
+//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, the certifier's record of its definitions' totality, and the binder floor a walk cannot re-derive cheaply. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what it does not already answer for, by name — the environment is a set of names, so nothing about it identifies an item by where it sits.
 
 use {
-    curios_core::{Free, Global, InductDecl, Item, Module, StructDecl, Term, UniverseContext},
+    curios_core::{
+        Certification, Free, Global, InductDecl, Item, Module, StructDecl, Term, Totality,
+        UniverseContext,
+    },
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
@@ -36,12 +39,14 @@ pub struct Globals {
     structs: BTreeMap<Global, StructDecl>,
     /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace — the one query that had no home when it lived on a prefix descriptor.
     concepts: HashSet<Global>,
-    /// The names in scope here that are *not* known to terminate, closed transitively already.
+    /// The names in scope here that are *not* known to terminate, closed transitively already, as the certifier's record of each unit mounted with one classifies them.
     ///
-    /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked. Held as the non-total set rather than a flag per definition because that is what a walk seeds from, and because it is the answer for names this crate will never see a body for.
+    /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked. Held as the non-total set rather than a flag per definition because that is what a walk seeds from.
     ///
-    /// It is not believed. `Definition::totality` is recomputed by the walk that judges an item, which refuses a definition whose recorded verdict is more generous than the kernel's own — so a verdict arriving here is one this crate reached about those exact terms.
+    /// It is read off [`Certification`], which only this crate's walk makes, and never off the totality elaboration stamps on a [`Definition`](curios_core::Definition): a verdict arriving here is one this crate reached about those exact terms.
     partial: BTreeSet<Global>,
+    /// The items of every unit mounted here without a record covering it — none filed, or one that does not name every definition the unit holds. A walk classifies these for itself, from their terms, beside the non-total set it seeds its closure from.
+    unclassified: Vec<Item>,
     /// One above the highest binder index every term in scope here mentions, as derived by the walk that established this environment.
     ///
     /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later walk. A floor is a bound rather than a verdict, so a caller combines it with its own by maximum and can only ever widen.
@@ -51,10 +56,10 @@ pub struct Globals {
 impl Globals {
     /// Everything `module` puts in scope: its definitions at their declared types with their real bodies, and its nominal registry.
     ///
-    /// `carried` is the binder floor derived by the build that established `module` — `curios_core::derived_binder_floor` over exactly it — which is why this does not walk the terms again.
+    /// `carried` is the binder floor derived by the build that established `module` — `curios_core::derived_binder_floor` over exactly it — which is why this does not walk the terms again. `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it is absent or does not, `module`'s items are held for a walk to classify.
     ///
     /// A definition enters here exactly as a refused item enters a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
-    pub fn of(module: &Module, carried: usize) -> Self {
+    pub fn of(module: &Module, carried: usize, certification: Option<&Certification>) -> Self {
         let mut definitions = HashMap::new();
         let mut record = |name: Free, type_: &Term, value: &Term, universes: &UniverseContext| {
             // Written straight in rather than through `insert`: a fresh environment has no memos behind it, so the overwrite that method reports has nothing to invalidate.
@@ -90,29 +95,44 @@ impl Globals {
             }
         }
 
+        // Restricted to `module`'s own definitions rather than every name the record classifies: a baseline's record mounted beside the items an item-level recompile reused also classifies the items it is re-judging, and a stale `Partial` seeded for one of those would outlive the walk that reclassifies it.
+        let (partial, unclassified) = match certification.filter(|record| record.covers(module)) {
+            Some(record) => (
+                module
+                    .items
+                    .iter()
+                    .flat_map(Item::definitions)
+                    .filter(|definition| record.totality(&definition.name) != Some(Totality::Total))
+                    .map(|definition| definition.name)
+                    .collect(),
+                Vec::new(),
+            ),
+            None => (BTreeSet::new(), module.items.clone()),
+        };
+
         Self {
             definitions,
             inducts: module.induct_decls.clone(),
             structs: module.struct_decls.clone(),
             concepts: module.concepts.keys().cloned().collect(),
-            partial: module
-                .items
-                .iter()
-                .flat_map(Item::definitions)
-                .filter(|definition| !definition.totality.is_total())
-                .map(|definition| definition.name)
-                .collect(),
+            partial,
+            unclassified,
             binder_floor: carried,
         }
     }
 
-    /// Add everything a second `module` puts in scope, at the binder floor its own walk derived.
+    /// Add everything a second `module` puts in scope, at the binder floor its own walk derived and with the record it filed, as [`Globals::of`] reads them.
     ///
     /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike `Globals::insert`, for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
     ///
     /// The floor combines by maximum, which can only widen: a bound is not a verdict, and a walk seeded above every identity in scope cannot capture one.
-    pub fn mount(&mut self, module: &Module, carried: usize) {
-        let added = Self::of(module, carried);
+    pub fn mount(
+        &mut self,
+        module: &Module,
+        carried: usize,
+        certification: Option<&Certification>,
+    ) {
+        let added = Self::of(module, carried, certification);
 
         for (name, definition) in added.definitions {
             assert!(
@@ -124,12 +144,18 @@ impl Globals {
         self.structs.extend(added.structs);
         self.concepts.extend(added.concepts);
         self.partial.extend(added.partial);
+        self.unclassified.extend(added.unclassified);
         self.binder_floor = self.binder_floor.max(carried);
     }
 
     /// The names in scope here that are not known to terminate. See the field.
     pub(crate) fn partial(&self) -> &BTreeSet<Global> {
         &self.partial
+    }
+
+    /// The items in scope here no covering record classifies. See the field.
+    pub(crate) fn unclassified(&self) -> &[Item] {
+        &self.unclassified
     }
 
     /// The `induct` registry in scope here, as the base of a declaration set. See [`curios_analysis::Declarations`] on why the base is analyzed rather than believed.
