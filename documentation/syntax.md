@@ -943,7 +943,7 @@ pub concept Monad(M: (Type) -> Type): pub Type {
 }
 ```
 
-Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation.
+Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation. A method's wrapper takes the concept's parameters and the witness in the same parameter list as the method's own, so a method is called once, as it is declared: `Show/show(value)`, and `Fun/name(@Pair)` for a `name() -> Str` at `Pair`. A field that is not a function is reached by the call that supplies the witness, `Sized/Carrier(@Nat)`.
 
 Concepts whose method types name one another's dictionaries are declared as one group with `and`, as structures are — see [Recursive groups](#recursive-groups). A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused whether or not the two are declared together, since resolution could never discharge it.
 

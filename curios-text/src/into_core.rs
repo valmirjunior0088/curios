@@ -1199,7 +1199,9 @@ fn process_items(
                         body,
                     });
 
-                    // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
+                    // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f; — and where `F` is a function type `(x₁ : X₁, …) -> R`, its parameters join the wrapper's one group instead: pub let C/f(@p₁ : P₁, …, use w : C(p₁, …), x₁ : X₁, …) -> R = w.f(x₁, …);
+                    //
+                    // One group because a call fills exactly one: `show(A) -> Str` declares one parameter list, so `Show/show(value)` is one call, where a wrapper returning the field as a value would be called `Show/show()(value)` — the concept's parameters and the witness are context the declaration never writes as a call. A field that is not written as a function, `Carrier : Type` or a type alias of a function, is the value it holds, reached by the call that supplies the witness: `Sized/Carrier(@Nat)`.
                     //
                     // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope, which is why it survived. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
                     //
@@ -1232,6 +1234,41 @@ fn process_items(
                             .open(&param_refs)
                             .field_type_from(&witness, index)
                             .expect("a concept's own field index is within its record telescope");
+                        let method = curios_core::Term::proj(witness, index);
+
+                        let (type_, body) = match &*field_type {
+                            curios_core::Subterm::FuncType(function) => {
+                                let mut cursor = function.telescope.cursor();
+                                let mut own = Vec::with_capacity(function.plicities().len());
+                                while let Some((hint, domain)) = cursor.entry() {
+                                    let binder = lower
+                                        .mint([hint.unwrap_or_default().to_string()])
+                                        .remove(0)
+                                        .1;
+                                    cursor.advance(curios_core::Term::free_var(&binder));
+                                    own.push((function.plicities()[own.len()], binder, domain));
+                                }
+                                let output = cursor.body().expect("a cursor past every entry");
+                                let arguments = own
+                                    .iter()
+                                    .map(|(plicity, binder, _)| {
+                                        (*plicity, curios_core::Term::free_var(binder))
+                                    })
+                                    .collect::<Vec<_>>();
+                                let group = params.into_iter().chain(own).collect::<Vec<_>>();
+                                (
+                                    curios_core::Term::func_type_marked(group.clone(), output),
+                                    curios_core::Term::func_marked(
+                                        group,
+                                        curios_core::Term::apply_marked(method, arguments),
+                                    ),
+                                )
+                            }
+                            _ => (
+                                curios_core::Term::func_type_marked(params.clone(), field_type),
+                                curios_core::Term::func_marked(params, method),
+                            ),
+                        };
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             span: None,
@@ -1242,11 +1279,8 @@ fn process_items(
                                 context.prefixed(&concept.label).with(&field.label),
                             ),
                             island: context.island(),
-                            type_: curios_core::Term::func_type_marked(params.clone(), field_type),
-                            body: curios_core::Term::func_marked(
-                                params,
-                                curios_core::Term::proj(witness, index),
-                            ),
+                            type_,
+                            body,
                         }));
                     }
                 }

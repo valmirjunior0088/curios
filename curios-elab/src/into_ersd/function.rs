@@ -111,8 +111,14 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         apply: &Apply,
+        expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        // A concept method's wrapper is erased as the projection call it forwards to. Called through the wrapper, `bind(dict, value, k)` at top level is a call whose callee calls a closure the effect summary cannot see, so pruning judges its eager evaluation observable and keeps it and everything it reaches — `/std/Json/decode/decode` kept the whole `Json`/`Parse` web in every program. Written as `dict.bind(value, k)`, closed-term evaluation resolves the method off the known dictionary before the prune, as it did when the wrapper returned the method for a second call to apply.
+        if let Some(forwarded) = forwarded_method(context, apply) {
+            return self.walk(context, &forwarded, expected, hint);
+        }
+
         let head = &apply.head;
         let params = apply.params().cloned().collect::<Vec<_>>();
 
@@ -205,6 +211,24 @@ impl Lowering {
         self.builder.let_functions(vec![function]);
         Ok(curios_ersd::Atom::Function(function))
     }
+}
+
+/// The call a concept method's wrapper forwards to, at `apply`'s arguments — `w.i(x…)` for a method, `w.i` for any other field — or `None` when the callee is not a wrapper.
+///
+/// `into_core` generates each wrapper as exactly that forwarding, `(@p…, use w, x…) => w.i(x…)`, and a call fills its one parameter group, so every call to one supplies the whole group and unfolds in one step: the wrapper's body opened at the call's arguments. One step and no further — reducing the call instead would go on into the method's own body wherever the dictionary is known, which is inlining arbitrary code. The kind is the definition's, read as [`is_proof_constructor`] reads its own, rather than guessed from the name.
+fn forwarded_method(context: &Context, apply: &Apply) -> Option<Term> {
+    let Subterm::Var(var) = &*apply.head else {
+        return None;
+    };
+    let name = var.as_free()?;
+    let Some(DefinitionKind::ConceptMethod { .. }) = context.definition_kind(name) else {
+        return None;
+    };
+    let Subterm::Func(wrapper) = &**context.definition_body(name)? else {
+        return None;
+    };
+    let arguments = apply.params().collect::<Vec<_>>();
+    (wrapper.telescope.len() == arguments.len()).then(|| wrapper.telescope.open(&arguments))
 }
 
 /// Whether `head` names a constructor of a `Prop`-sorted inductive.

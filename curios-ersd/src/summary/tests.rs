@@ -109,3 +109,95 @@ fn only_a_total_and_effect_free_function_crosses_as_droppable() {
         assert_eq!(droppable, expected, "{label}");
     }
 }
+
+/// A call through a field of a product the module constructs is a call to what the construction holds — the shape a concept method's call erases to, the method projected off its witness and applied, which pruning otherwise judged an unknown callee and kept for effect. A projection off a product the walk cannot see constructed stays unknown.
+#[test]
+fn a_call_through_a_constructed_products_field_is_judged_as_that_field() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Dict".into()),
+        fields: vec![Field::opaque(Some("method".into()))],
+        shared: false,
+    });
+
+    // fn method() = method
+    let method = builder.reserve_function();
+    builder.open_block();
+    let method_body = builder.seal_block(Terminator::Return(Atom::Function(method)));
+    builder.define_function(method, Some("method".into()), vec![], method_body);
+
+    // fn through(dict) = dict.method()
+    let through = builder.reserve_function();
+    let parameter = builder.value(Some("dict".into()));
+    builder.open_block();
+    let opaque = builder.let_value(
+        None,
+        Rhs::Project {
+            schema,
+            product: Atom::Value(parameter),
+            field: 0,
+        },
+    );
+    let opaque_call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(opaque),
+            arguments: vec![],
+        },
+    );
+    let through_body = builder.seal_block(Terminator::Return(Atom::Value(opaque_call)));
+    builder.define_function(
+        through,
+        Some("through".into()),
+        vec![parameter],
+        through_body,
+    );
+
+    // let dict = Dict { method }; let alias = dict; let known = alias.method; known()
+    builder.open_block();
+    builder.let_functions(vec![method, through]);
+    let dict = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Function(method)],
+        },
+    );
+    let alias = builder.let_value(None, Rhs::Alias(Atom::Value(dict)));
+    let known = builder.let_value(
+        None,
+        Rhs::Project {
+            schema,
+            product: Atom::Value(alias),
+            field: 0,
+        },
+    );
+    let known_call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(known),
+            arguments: vec![],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(known_call)));
+    builder.set_entry(entry);
+    let mut module = builder.finalize().expect("the fixture verifies");
+    // It returns itself, which makes its component recursive; the verdict is what says it returns.
+    module.mark_total(method);
+
+    let summary = Summary::analyze(&module, &Analysis::analyze(&module));
+    let call = |callee| Rhs::Apply {
+        callee: Atom::Value(callee),
+        arguments: vec![],
+    };
+    assert_eq!(
+        summary.rhs_behavior(&module, &call(known)),
+        LocalBehavior::pure(),
+        "a field of a constructed product is the function it holds",
+    );
+    assert_eq!(
+        summary.rhs_behavior(&module, &call(opaque)),
+        LocalBehavior::unknown(),
+        "a field of a parameter is whatever the caller passes",
+    );
+}

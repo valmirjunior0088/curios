@@ -392,7 +392,7 @@ impl Lowering {
             Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),
             Subterm::Proj(proj) => self.erase_proj(context, proj, hint),
             Subterm::Func(func) => self.erase_func(context, func, expected, hint),
-            Subterm::Apply(apply) => self.erase_apply(context, apply, hint),
+            Subterm::Apply(apply) => self.erase_apply(context, apply, expected, hint),
             Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),

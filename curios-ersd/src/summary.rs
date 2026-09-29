@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, Rhs, Semantics,
-        Statement, ValueId,
+        Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, ProductId, Rhs,
+        Semantics, Statement, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,14 +16,22 @@ use {
 #[derive(Debug, Clone, Default)]
 pub struct Summary {
     functions: BTreeMap<FunctionId, LocalBehavior>,
-    /// What each [`Rhs::Alias`] rebinds, so a callee spelled as an alias of a function is judged as that function rather than as an unknown — see [`resolve_callee`].
+    /// The computation-free rebindings between a callee spelled as a value and the function it names, so a call through one is judged as that function rather than as an unknown — see [`resolve_callee`].
+    rebindings: Rebindings,
+}
+
+/// What stands between a value and the atom it is, without computing anything: an [`Rhs::Alias`], and an [`Rhs::Project`] of a product the module constructs, whose field the [`Rhs::Product`] already holds.
+#[derive(Debug, Clone, Default)]
+struct Rebindings {
     aliases: BTreeMap<ValueId, Atom>,
+    products: BTreeMap<ValueId, (ProductId, Vec<Atom>)>,
+    projections: BTreeMap<ValueId, (ProductId, Atom, u32)>,
 }
 
 impl Summary {
     /// Compute the summary to a fixed point over a verified module and its analysis.
     pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
-        let aliases = alias_bindings(module);
+        let rebindings = rebindings(module);
         // Seed: a recursive component's members may diverge *unless the definition they erased from was proved total*; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
@@ -49,7 +57,7 @@ impl Summary {
             let mut next = current.clone();
             for id in module.function_ids() {
                 let function = module.function(id).expect("live function");
-                let composed = region_behavior(module, vec![function.body], &current, &aliases);
+                let composed = region_behavior(module, vec![function.body], &current, &rebindings);
                 let updated = current[&id].join(composed);
                 if updated != current[&id] {
                     changed = true;
@@ -64,19 +72,19 @@ impl Summary {
 
         Self {
             functions: current,
-            aliases,
+            rebindings,
         }
     }
 
     /// The total behavior of evaluating a right-hand side: its own operation, its callee or callback, and every sub-block it evaluates.
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
-            .join(call_behavior(rhs, &self.functions, &self.aliases))
+            .join(call_behavior(rhs, &self.functions, &self.rebindings))
             .join(region_behavior(
                 module,
                 rhs.sub_blocks(),
                 &self.functions,
-                &self.aliases,
+                &self.rebindings,
             ))
     }
 
@@ -94,7 +102,7 @@ fn region_behavior(
     module: &Module,
     seeds: Vec<BlockId>,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
-    aliases: &BTreeMap<ValueId, Atom>,
+    rebindings: &Rebindings,
 ) -> LocalBehavior {
     let mut behavior = LocalBehavior::pure();
     let mut seen = BTreeSet::new();
@@ -111,7 +119,7 @@ fn region_behavior(
                 Some(Statement::Let { rhs, .. }) => {
                     behavior = behavior
                         .join(Semantics::local_behavior(rhs))
-                        .join(call_behavior(rhs, summaries, aliases));
+                        .join(call_behavior(rhs, summaries, rebindings));
                     work.extend(rhs.sub_blocks());
                 }
                 Some(Statement::Rec { .. } | Statement::Functions { .. }) | None => {}
@@ -128,17 +136,17 @@ fn region_behavior(
 fn call_behavior(
     rhs: &Rhs,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
-    aliases: &BTreeMap<ValueId, Atom>,
+    rebindings: &Rebindings,
 ) -> LocalBehavior {
     match rhs {
-        Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries, aliases),
+        Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries, rebindings),
         Rhs::Intrinsic {
             intrinsic: Intrinsic::ListMap,
             operands,
         } => operands
             .get(1)
             .map_or_else(LocalBehavior::unknown, |&mapper| {
-                callee_behavior(mapper, summaries, aliases)
+                callee_behavior(mapper, summaries, rebindings)
             }),
         _ => LocalBehavior::pure(),
     }
@@ -147,9 +155,9 @@ fn call_behavior(
 fn callee_behavior(
     atom: Atom,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
-    aliases: &BTreeMap<ValueId, Atom>,
+    rebindings: &Rebindings,
 ) -> LocalBehavior {
-    match resolve_callee(atom, aliases) {
+    match resolve_callee(atom, rebindings) {
         // The seed covers every live function and a verified module references only live functions, so a miss is a broken snapshot discipline, never a program property.
         Atom::Function(function) => summaries
             .get(&function)
@@ -159,40 +167,72 @@ fn callee_behavior(
     }
 }
 
-/// Follow a callee atom through the [`Rhs::Alias`] rebindings that stand between it and the function it names.
+/// Follow a callee atom through the [`Rebindings`] that stand between it and the function it names.
 ///
 /// **An alias is computation-free, so a call through one is a call to what it rebinds** — and reading it as an unknown callee costs the whole conservative top. That is not a missed refinement but a retention bug with a price: `/std/Json/decode/decode` is a top-level `apply` whose callee is an alias of `/std/Parse/bind`, so pruning judged its eager evaluation observable, kept it, and through it kept the recursive parser group and the entire `Json`/`Parse` web — in *every* program, `/std/print("hi")` included.
 ///
-/// The walk is bounded by the map, not by trust: a verified module's aliases form a dag, and the visited set is what makes that an assumption this function does not have to make.
-fn resolve_callee(atom: Atom, aliases: &BTreeMap<ValueId, Atom>) -> Atom {
-    let mut atom = atom;
+/// **So is a projection of a product the module constructs**: the field it reads is an atom the construction already holds, so a call through `dict.bind` is a call to whatever `dict`'s construction put there. It is the shape a concept method's call erases to — the method projected off the witness, applied — and it was the second way the same web came to be kept, once `decode`'s `bind` was spelled as that call. A projection whose product is not one the walk can see constructed resolves to nothing, and its callee stays unknown.
+///
+/// The walk is bounded by the maps, not by trust: a verified module's rebindings form a dag, and the visited set is what makes that an assumption this function does not have to make. It is iterative, as every traversal here is: the projections still to apply wait on a stack, innermost last, for the product the walk reaches next.
+fn resolve_callee(atom: Atom, rebindings: &Rebindings) -> Atom {
+    let mut current = atom;
+    let mut pending = Vec::<(ProductId, u32)>::new();
     let mut seen = BTreeSet::new();
-    while let Atom::Value(value) = atom {
+    while let Atom::Value(value) = current {
         if !seen.insert(value) {
             break;
         }
-        match aliases.get(&value) {
-            Some(&next) => atom = next,
-            None => break,
+        if let Some(&next) = rebindings.aliases.get(&value) {
+            current = next;
+        } else if let Some(&(schema, product, field)) = rebindings.projections.get(&value) {
+            pending.push((schema, field));
+            current = product;
+        } else if let Some(&(schema, field)) = pending.last()
+            && let Some((built, fields)) = rebindings.products.get(&value)
+            && *built == schema
+            && let Some(&next) = fields.get(field as usize)
+        {
+            pending.pop();
+            current = next;
+        } else {
+            break;
         }
     }
-    atom
+    match pending.is_empty() {
+        true => current,
+        false => atom,
+    }
 }
 
-/// Every value an [`Rhs::Alias`] rebinds, module-wide. Scanned from the statement arena rather than walked per region, because a callee's alias is frequently bound at top level while the call sits inside a nested body.
-fn alias_bindings(module: &Module) -> BTreeMap<ValueId, Atom> {
-    module
-        .statements()
-        .iter()
-        .flatten()
-        .filter_map(|statement| match statement {
-            Statement::Let {
-                result,
-                rhs: Rhs::Alias(atom),
-            } => Some((*result, *atom)),
-            _ => None,
-        })
-        .collect()
+/// Every [`Rebindings`] entry, module-wide. Scanned from the statement arena rather than walked per region, because a callee's alias or dictionary is frequently bound at top level while the call sits inside a nested body.
+fn rebindings(module: &Module) -> Rebindings {
+    let mut rebindings = Rebindings::default();
+    for statement in module.statements().iter().flatten() {
+        let Statement::Let { result, rhs } = statement else {
+            continue;
+        };
+        match rhs {
+            Rhs::Alias(atom) => {
+                rebindings.aliases.insert(*result, *atom);
+            }
+            Rhs::Product { schema, fields } => {
+                rebindings
+                    .products
+                    .insert(*result, (*schema, fields.clone()));
+            }
+            Rhs::Project {
+                schema,
+                product,
+                field,
+            } => {
+                rebindings
+                    .projections
+                    .insert(*result, (*schema, *product, *field));
+            }
+            _ => {}
+        }
+    }
+    rebindings
 }
 
 #[cfg(test)]

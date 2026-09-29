@@ -89,7 +89,7 @@ fn a_constructor_whose_body_is_a_tuple_type_is_keyed() {
         satisfy Fun(Pair) {
             name() = "Pair",
         }
-        /std/print(Fun/name(@Pair)())
+        /std/print(Fun/name(@Pair))
         "#;
 
     assert_eq!(run(source), b"Pair");
