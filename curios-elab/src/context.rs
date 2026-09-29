@@ -452,7 +452,10 @@ impl Context {
     /// Restore the full budget for a new declaration, and with it the depth this declaration may reach before paying again.
     ///
     /// The live count is reset for the reason `curios-cert`'s `Spend::restore_budget` states in full: [`Context::enter_level`] increments before it charges and propagates the refusal, so an exhausted level is never left, and elaboration continues to the next declaration. A leaked level costs every later declaration [`Cost::FRAME`] for a frame nothing holds.
+    ///
+    /// **What the declaration it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Context::heaviest_declaration`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it.
     pub(crate) fn restore_budget(&mut self) {
+        curios_profile::sample!("budget::consumed", self.consumed().units());
         self.heaviest
             .set(self.heaviest.get().heavier_of(self.consumed()));
 

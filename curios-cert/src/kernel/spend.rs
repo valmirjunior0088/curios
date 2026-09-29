@@ -110,7 +110,10 @@ impl Spend {
     /// Restore the full budget for a new judgment, and with it the depth this judgment may reach before paying again.
     ///
     /// **The live count is reset here too, and it has to be.** [`Spend::enter_level`] increments before it charges and propagates the refusal with `?`, so the level whose frame could not be paid is never left; and the module walk continues past a refused item to judge the next one. Without this line a module that refuses once charges every later declaration [`Cost::FRAME`] for a level nothing is holding, and the leak accumulates per refusal — a cost that is a fact about what failed earlier rather than about the declaration under judgment, which is the one thing the per-declaration budget exists to prevent.
+    ///
+    /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name.
     pub(super) fn restore_budget(&mut self) {
+        curios_profile::sample!("budget::consumed", self.consumed().units());
         self.heaviest = self.heaviest.heavier_of(self.consumed());
 
         self.remaining = self.budget;
