@@ -88,21 +88,12 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 
 /// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` used here refused the whole term on the first open hole, so one unsolved `f` rendered `?(?)` where `?(double(p))` was known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
 ///
-/// Normalization is the whole denoising story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator, so the structural fold the goal reports use runs afterwards over the live local scope — the same three witness forms, the same source spelling.
+/// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
     let zonked = super::refold_recs(context, &super::zonk_solved_term_metas(context, term));
     let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
-    let resolved = super::refold_recs(context, &resolved);
-    let methods = super::method_table(context);
-    let binders = Rc::new(
-        context
-            .locals()
-            .iter()
-            .map(|(name, type_)| (name.clone(), type_.clone()))
-            .collect(),
-    );
-    super::denoise_for_display(&methods, &binders, &resolved)
+    super::refold_recs(context, &resolved)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.

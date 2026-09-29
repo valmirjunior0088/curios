@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
-    curios_core::{CalleeId, Free, Level, Spelling, Subterm, Term, UniverseMetaId},
+    curios_core::{CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId},
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
@@ -877,8 +877,10 @@ impl fmt::Display for Displayed<'_> {
                 solution,
             } => {
                 // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence span or candidates of its own.
+                // Its witness scope is the enclosing `InScope`'s, which the spelling handed here already carries.
                 let report = GoalReport {
                     span: None,
+                    witnesses: Rc::default(),
                     scope: scope.clone(),
                     goal: (**goal).clone(),
                     solution: solution.as_deref().cloned(),
@@ -893,7 +895,14 @@ impl fmt::Display for Displayed<'_> {
                     if index > 0 {
                         write!(f, "\n\n")?;
                     }
-                    f.write_str(&goal_text(report, spelling))?;
+                    let spelling = if report.witnesses.is_empty() {
+                        Rc::clone(spelling)
+                    } else {
+                        Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
+                            witnesses: Rc::clone(&report.witnesses),
+                        }))
+                    };
+                    f.write_str(&goal_text(report, &spelling))?;
                     if let Some(span) = &report.span {
                         write!(f, "\n\n{}", span.render_snippet())?;
                     }
@@ -1134,7 +1143,9 @@ impl fmt::Display for Displayed<'_> {
                 writeln!(f, "while elaborating {name}:")?;
                 Displayed(error, Rc::clone(spelling)).fmt(f)
             }
-            Error::Located { error, .. } => Displayed(error, Rc::clone(spelling)).fmt(f),
+            Error::Located { error, .. } | Error::InScope { error, .. } => {
+                Displayed(error, Rc::clone(spelling)).fmt(f)
+            }
             Error::InUnreachableArm { guard, case, error } => {
                 Displayed(error, Rc::clone(spelling)).fmt(f)?;
                 write!(f, "\n{}", unreachable_arm_note(guard, case, spelling))

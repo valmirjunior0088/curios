@@ -7,9 +7,9 @@ mod tests;
 use {
     super::{Erased, WitnessKey},
     curios_core::{
-        Atom, CalleeId, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling,
-        Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
-        build_shorten_layered, display_names,
+        Atom, CalleeId, Free, Global, Imports, Level, Module, Polarity, ReaderPosition,
+        ReduceError, Spelling, Subterm, Term, UniverseConstraintOrigin, UniverseError,
+        build_rename, build_shorten_layered, display_names,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -24,6 +24,8 @@ use {
 #[derive(Debug)]
 pub struct GoalReport {
     pub span: Option<Span>,
+    /// The witness binders in scope where the goal was written, outermost first: the reader position its report is spelled for.
+    pub witnesses: Rc<[(Free, Term)]>,
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
     pub solution: Option<Term>,
@@ -575,6 +577,11 @@ pub enum Error {
         case: Box<Term>,
         error: Box<Error>,
     },
+    /// The witness binders in scope where `error` arose, outermost first: the reader position its terms are spelled for, so a `use` argument resolution would restore reads as left out (the printer's axis (h)). A sibling of [`Error::Located`], attached by the same drivers.
+    InScope {
+        witnesses: Rc<[(Free, Term)]>,
+        error: Box<Error>,
+    },
     /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — `Error::batch` flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
     Batch(Vec<Error>),
 }
@@ -709,6 +716,10 @@ impl Error {
             },
             Self::Located { span, error } => Self::Located {
                 span,
+                error: Box::new(error.at_argument(site)),
+            },
+            Self::InScope { witnesses, error } => Self::InScope {
+                witnesses,
                 error: Box::new(error.at_argument(site)),
             },
             error => error,
@@ -1083,7 +1094,8 @@ impl Error {
             Self::Goals(_) => true,
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. } => error.is_incomplete(),
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.is_incomplete(),
             Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
         }
@@ -1264,6 +1276,42 @@ impl Error {
         }
     }
 
+    /// Record the witness binders in scope where this error arose. Innermost wins, as for [`Error::at`], and the record goes under a location rather than over it, so the two wrappers stamped together as an error unwinds each stay single. An empty scope records nothing.
+    pub(crate) fn in_scope(self, witnesses: &[(Free, Term)]) -> Self {
+        if witnesses.is_empty() {
+            return self;
+        }
+        match self {
+            Self::InScope { .. } | Self::Batch(_) => self,
+            Self::Located { span, error } => Self::Located {
+                span,
+                error: Box::new(error.in_scope(witnesses)),
+            },
+            error => Self::InScope {
+                witnesses: Rc::from(witnesses),
+                error: Box::new(error),
+            },
+        }
+    }
+
+    /// The innermost witness scope recorded on this error, looking through every wrapper — the reader position its report is spelled for.
+    fn witness_scope(&self) -> Rc<[(Free, Term)]> {
+        match self {
+            Self::InScope { witnesses, error } => {
+                let inner = error.witness_scope();
+                if inner.is_empty() {
+                    Rc::clone(witnesses)
+                } else {
+                    inner
+                }
+            }
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. } => error.witness_scope(),
+            _ => Rc::default(),
+        }
+    }
+
     /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. The axis-(b) shorten map rides along so globals are reserved under the rendering they actually display.
     fn rename_map(&self, shorten: &HashMap<Global, String>) -> Rc<HashMap<Free, String>> {
         let mut terms = Vec::new();
@@ -1326,11 +1374,13 @@ impl Error {
         let own = module.module_symbols();
         let mut symbols = Vec::new();
         let mut plicities = module.nominal_plicities();
+        let mut witnesses = module.witness_spelling(syntax);
         for unit in scope {
             symbols.extend(unit.module_symbols());
             for (name, marks) in unit.nominal_plicities() {
                 plicities.entry(name).or_insert(marks);
             }
+            witnesses.merge(unit.witness_spelling(syntax));
         }
 
         let mut shorten = build_shorten_layered(&own, &symbols);
@@ -1343,6 +1393,7 @@ impl Error {
                 .with_pretty_names(self.rename_map(&shorten))
                 .with_short_names(shorten)
                 .with_nominal_plicities(Rc::new(plicities))
+                .with_witness_spelling(Rc::new(witnesses))
                 .with_erased_universes()
                 .with_anonymous_metavars()
                 .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
@@ -1359,7 +1410,8 @@ impl Error {
         let term = match self {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. } => {
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => {
                 return error.unbound_suggestion(unbound, spelling);
             }
             Self::UnboundVariable { term } => term,
@@ -1403,17 +1455,31 @@ impl Error {
                 .collect();
         }
 
+        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else where its innermost witness scope was recorded.
+        let for_reader = |witnesses: Rc<[(Free, Term)]>| {
+            Rc::new(
+                spelling
+                    .as_ref()
+                    .clone()
+                    .for_reader(ReaderPosition { witnesses }),
+            )
+        };
+
         if let Self::Goals(goals) = self.unwrapped() {
             let prefix = self.declaration_prefix();
             return goals
                 .iter()
                 .map(|goal| Report {
                     span: goal.span.clone(),
-                    message: format!("{prefix}{}", goal_text(goal, spelling)),
+                    message: format!(
+                        "{prefix}{}",
+                        goal_text(goal, &for_reader(Rc::clone(&goal.witnesses)))
+                    ),
                 })
                 .collect();
         }
 
+        let spelling = &for_reader(self.witness_scope());
         let mut body = self.render_body(spelling);
         if let Some(suggestion) = self.unbound_suggestion(unbound, spelling) {
             body.push('\n');
@@ -1430,7 +1496,8 @@ impl Error {
         match self {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. } => error.unwrapped(),
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.unwrapped(),
             error => error,
         }
     }
@@ -1438,9 +1505,9 @@ impl Error {
     /// What the wrappers prefix a body with — `render_body`'s own lines for them, without the body.
     fn declaration_prefix(&self) -> String {
         match self {
-            Self::Located { error, .. } | Self::InUnreachableArm { error, .. } => {
-                error.declaration_prefix()
-            }
+            Self::Located { error, .. }
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.declaration_prefix(),
             Self::InDeclaration { name, error } => {
                 format!("while elaborating {name}:\n{}", error.declaration_prefix())
             }
@@ -1451,7 +1518,9 @@ impl Error {
     /// The message without any snippet — wrappers are transparent, every other variant renders through its own `Display`.
     fn render_body(&self, spelling: &Rc<Spelling>) -> String {
         match self {
-            Self::Located { error, .. } => error.render_body(spelling),
+            Self::Located { error, .. } | Self::InScope { error, .. } => {
+                error.render_body(spelling)
+            }
             Self::InDeclaration { name, error } => {
                 format!("while elaborating {name}:\n{}", error.render_body(spelling))
             }
@@ -1470,9 +1539,9 @@ impl Error {
     fn innermost_span(&self) -> Option<&Span> {
         match self {
             Self::Located { span, error } => error.innermost_span().or(Some(span)),
-            Self::InDeclaration { error, .. } | Self::InUnreachableArm { error, .. } => {
-                error.innermost_span()
-            }
+            Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.innermost_span(),
             Self::UniverseInconsistency { path, .. } => {
                 path.iter().find_map(|origin| origin.span.as_ref())
             }
@@ -1483,9 +1552,9 @@ impl Error {
     /// The terms this error embeds in its message, gathered so [`format`] can pretty-print their names consistently. Recurses through the `Located` wrapper; variants carrying no term contribute nothing.
     fn collect_terms<'a>(&'a self, out: &mut Vec<&'a Term>) {
         match self {
-            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
-                error.collect_terms(out)
-            }
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InScope { error, .. } => error.collect_terms(out),
             Self::InUnreachableArm { guard, case, error } => {
                 out.push(guard);
                 out.push(case);

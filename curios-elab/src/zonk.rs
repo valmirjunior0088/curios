@@ -2,7 +2,7 @@
 mod tests;
 
 use {
-    super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
+    super::{Context, Error, GoalReport, UniverseSolver, universe_context_validate},
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
@@ -955,17 +955,12 @@ pub(crate) fn collect_goal_reports(
         ));
     }
 
-    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold concept-method witness projections back to their source spelling, an operator's to infix and any other method's to its call — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, abstract ones are binders of the goal's own scope, and the fold handles all three.
-    let methods = super::method_table(context);
+    // Materialize committed substitutions tolerantly and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). How a witness reads is the printer's, against the witness binders the goal was written under (axis (h)).
     let context = &*context;
-    let display = |binders: &BinderTypes, term: &Term| {
-        super::denoise_for_display(
-            &methods,
-            binders,
-            &super::refold_recs(
-                context,
-                &project_erased_universes(&zonk_solved_term_metas(context, term)),
-            ),
+    let display = |term: &Term| {
+        super::refold_recs(
+            context,
+            &project_erased_universes(&zonk_solved_term_metas(context, term)),
         )
     };
     goal_sites
@@ -976,41 +971,24 @@ pub(crate) fn collect_goal_reports(
             let entry = context
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
-            // The goal's own birth telescope is the scope every term in its report is spelled against, so it is also the scope an abstract witness resolves through.
-            let binders: BinderTypes = Rc::new(
-                entry
-                    .telescope
-                    .iter()
-                    .map(|(name, type_)| (name.clone(), type_.clone()))
-                    .collect(),
-            );
             GoalReport {
                 span: span.clone(),
+                witnesses: entry.witnesses.clone().unwrap_or_default(),
                 scope: entry
                     .telescope
                     .iter()
-                    .map(|(name, type_)| (Term::free_var(name), display(&binders, type_)))
+                    .map(|(name, type_)| (Term::free_var(name), display(type_)))
                     .collect(),
-                goal: display(&binders, &entry.result),
-                solution: context
-                    .metavar_solution(*id)
-                    .map(|term| display(&binders, term)),
+                goal: display(&entry.result),
+                solution: context.metavar_solution(*id).map(display),
                 // The drain's surrendered conversions this goal holds up, already in display form; the batch's own pipeline re-runs over them harmlessly.
                 obligations: context
                     .goal_obligations()
                     .iter()
                     .filter(|obligation| obligation.goals.contains(id))
-                    .map(|obligation| {
-                        (
-                            display(&binders, &obligation.this),
-                            display(&binders, &obligation.that),
-                        )
-                    })
+                    .map(|obligation| (display(&obligation.this), display(&obligation.that)))
                     .collect(),
-                candidates: candidates
-                    .iter()
-                    .map(|term| display(&binders, term))
-                    .collect(),
+                candidates: candidates.iter().map(display).collect(),
             }
         })
         .collect()
@@ -1028,7 +1006,8 @@ fn goal_report(context: &Zonk, id: MetavarId) -> Error {
                 .collect(),
             display(&entry.result),
             context.metavar_solution(id).map(display),
-        ),
+        )
+        .in_scope(entry.witnesses.as_deref().unwrap_or_default()),
         // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
         None => Error::CannotInfer,
     }
@@ -1087,29 +1066,18 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             .map(|entry| entry.result.clone())
                             .unwrap_or_else(Term::type_ground);
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
-                        // Folded as a goal report's terms are, against the scope the hole was born in, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
-                        let binders: BinderTypes = Rc::new(
-                            entry
-                                .map(|entry| {
-                                    entry
-                                        .telescope
-                                        .iter()
-                                        .map(|(name, type_)| (name.clone(), type_.clone()))
-                                        .collect()
-                                })
-                                .unwrap_or_default(),
-                        );
-                        let bound = super::denoise_for_display(
-                            &super::method_table(context),
-                            &binders,
-                            &bound,
-                        );
+                        // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
                         Error::uninferred_implicit(
                             super::callee(context, &origin.func),
                             origin.binder.clone(),
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
                             entry.and_then(|entry| entry.reduct.clone()),
+                        )
+                        .in_scope(
+                            entry
+                                .and_then(|entry| entry.witnesses.as_deref())
+                                .unwrap_or_default(),
                         )
                     }
                     MetavarOrigin::Witness(origin) => {

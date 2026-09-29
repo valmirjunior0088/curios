@@ -274,3 +274,177 @@ fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
     let printed = lambda.to_string();
     assert!(printed.starts_with("(b) =>\n"), "{printed}");
 }
+
+/// A module `m` declaring a concept `Show` with one method `show`, whose wrapper takes the method's parameter in its group, and an alias `Wrap` taking a `Show` witness — spelled under axis (h).
+struct Witnesses {
+    show: Global,
+    wrap: Global,
+    spelling: Rc<Spelling>,
+}
+
+fn witnesses(operator: Option<InfixOp>) -> Witnesses {
+    let show = Global::Authored(Qualifier::from(["m", "Show"]));
+    let method = Global::Authored(Qualifier::from(["m", "Show", "show"]));
+    let wrap = Global::Authored(Qualifier::from(["m", "Wrap"]));
+    let mut table = WitnessSpelling::default();
+    table.concepts.insert(
+        show.clone(),
+        vec![FieldSpelling::Method {
+            wrapper: method.clone(),
+            merged: true,
+            operator,
+        }],
+    );
+    let globals = [show.clone(), method, wrap.clone()];
+    Witnesses {
+        show,
+        wrap,
+        spelling: Rc::new(
+            Spelling::default()
+                .with_short_names(Rc::new(build_shorten(&globals)))
+                .with_witness_spelling(Rc::new(table)),
+        ),
+    }
+}
+
+/// `(@A: Type, <witnesses…>, x: Wrap(A, use <argument>)) -> Nat`, over witness binders named by `binders`, each a `Show(A)`.
+fn under_witnesses(witnesses: &Witnesses, binders: &[&str], argument: usize) -> Term {
+    let a = Free::local(0, Some("A"));
+    let labels = binders
+        .iter()
+        .enumerate()
+        .map(|(index, hint)| Free::local(1 + index as u32, Some(*hint)))
+        .collect::<Vec<_>>();
+    let x = Free::local(9, Some("x"));
+    let concept = Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]);
+    let wrapped = Term::apply_marked(
+        Term::free_var(&Free::Global(witnesses.wrap.clone())),
+        [
+            (Plicity::Explicit, Term::free_var(&a)),
+            (Plicity::Witness, Term::free_var(&labels[argument])),
+        ],
+    );
+    Term::func_type_marked(
+        std::iter::once((Plicity::Implicit, a.clone(), Term::type_ground()))
+            .chain(
+                labels
+                    .iter()
+                    .map(|label| (Plicity::Witness, label.clone(), concept.clone())),
+            )
+            .chain(std::iter::once((Plicity::Explicit, x, wrapped))),
+        Term::intrinsic(Intrinsic::NatType),
+    )
+}
+
+/// A function type cannot name its witness, and a `use` argument resolution would restore is left out — so once the one reference to the binder is gone, the binder prints unnamed.
+#[test]
+fn a_witness_resolution_would_restore_is_left_out_and_its_binder_unnamed() {
+    let witnesses = witnesses(None);
+    let type_ = under_witnesses(&witnesses, &["w"], 0);
+    assert_eq!(
+        type_.spelled(&witnesses.spelling).to_string(),
+        "(@A: Type, use Show(A), x: Wrap(A)) -> Nat"
+    );
+}
+
+/// A binder shadowed by an inner one of its concept is not what resolution would find, so its argument stays, and the binder keeps the name the argument needs.
+#[test]
+fn a_shadowed_witness_keeps_its_argument_and_its_binder_its_name() {
+    let witnesses = witnesses(None);
+    let type_ = under_witnesses(&witnesses, &["outer", "inner"], 0);
+    assert_eq!(
+        type_.spelled(&witnesses.spelling).to_string(),
+        "(@A: Type, use outer: Show(A), use Show(A), x: Wrap(A, use outer)) -> Nat"
+    );
+}
+
+/// A method projected off a witness reads as the call a program writes: its wrapper, with the concept's parameter marked and the witness left to resolution.
+#[test]
+fn a_method_projected_off_a_witness_prints_as_its_call() {
+    let witnesses = witnesses(None);
+    let a = Free::local(0, Some("A"));
+    let w = Free::local(1, Some("w"));
+    let x = Free::local(2, Some("x"));
+    let call = Term::apply(Term::proj(Term::free_var(&w), 0), [Term::free_var(&x)]);
+    let type_ = Term::func_type_marked(
+        [
+            (Plicity::Implicit, a.clone(), Term::type_ground()),
+            (
+                Plicity::Witness,
+                w,
+                Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]),
+            ),
+            (Plicity::Explicit, x, Term::free_var(&a)),
+        ],
+        Term::apply(
+            Term::free_var(&Free::Global(witnesses.wrap.clone())),
+            [call],
+        ),
+    );
+    assert_eq!(
+        type_.spelled(&witnesses.spelling).to_string(),
+        "(@A: Type, use Show(A), x: A) -> Wrap(show(@A, x))"
+    );
+}
+
+/// A method projected off a witness resolution would not restore keeps that witness: called, as its wrapper's `use` argument, and taken as a value, as the projection itself, since the wrapper alone would resolve to the inner binder.
+#[test]
+fn a_method_off_a_shadowed_witness_keeps_the_witness() {
+    let witnesses = witnesses(None);
+    let a = Free::local(0, Some("A"));
+    let outer = Free::local(1, Some("outer"));
+    let inner = Free::local(2, Some("inner"));
+    let x = Free::local(3, Some("x"));
+    let concept = Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]);
+    let method = Term::proj(Term::free_var(&outer), 0);
+    let type_ = Term::func_type_marked(
+        [
+            (Plicity::Implicit, a.clone(), Term::type_ground()),
+            (Plicity::Witness, outer, concept.clone()),
+            (Plicity::Witness, inner, concept),
+            (Plicity::Explicit, x.clone(), Term::free_var(&a)),
+        ],
+        Term::apply(
+            Term::free_var(&Free::Global(witnesses.wrap.clone())),
+            [Term::apply(method.clone(), [Term::free_var(&x)]), method],
+        ),
+    );
+    assert_eq!(
+        type_.spelled(&witnesses.spelling).to_string(),
+        "(@A: Type, use outer: Show(A), use Show(A), x: A) -> Wrap(show(@A, use outer, x), (outer).0)"
+    );
+}
+
+/// An operator's method projected off a witness reads as the operator — `!=` too, whose concept slot is its own, so the disequality is never spelled as a negated equality.
+#[test]
+fn an_operators_method_projected_off_a_witness_prints_as_the_operator() {
+    for (op, symbol) in [(InfixOp::Eql, "=="), (InfixOp::Neq, "!=")] {
+        let witnesses = witnesses(Some(op));
+        let a = Free::local(0, Some("A"));
+        let w = Free::local(1, Some("w"));
+        let x = Free::local(2, Some("x"));
+        let compared = Term::apply(
+            Term::proj(Term::free_var(&w), 0),
+            [Term::free_var(&x), Term::free_var(&x)],
+        );
+        let type_ = Term::func_type_marked(
+            [
+                (Plicity::Implicit, a.clone(), Term::type_ground()),
+                (
+                    Plicity::Witness,
+                    w,
+                    Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]),
+                ),
+                (Plicity::Explicit, x, Term::free_var(&a)),
+            ],
+            Term::apply(
+                Term::free_var(&Free::Global(witnesses.wrap.clone())),
+                [compared],
+            ),
+        );
+        assert_eq!(
+            type_.spelled(&witnesses.spelling).to_string(),
+            format!("(@A: Type, use Show(A), x: A) -> Wrap(x {symbol} x)")
+        );
+    }
+}

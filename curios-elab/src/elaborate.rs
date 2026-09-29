@@ -80,7 +80,8 @@ pub(crate) fn elaborate(
         });
 
         // `Error::at` is first-wins, so stamping as the recursion unwinds reports the deepest node that failed.
-        let (rebuilt, type_) = result.map_err(|error| error.at_opt(term.span()))?;
+        let (rebuilt, type_) =
+            result.map_err(|error| error.at_opt(term.span()).in_scope(context.witness_scope()))?;
 
         let rebuilt = match term.span() {
             Some(span) => rebuilt.with_span(span),
@@ -102,7 +103,7 @@ pub(crate) fn elaborate_func_settle(
 ) -> Result<(Term, Term), Error> {
     let (rebuilt, type_) =
         elaborate_func_infer(context, &func.telescope, func.plicities(), Some(term))
-            .map_err(|error| error.at_opt(term.span()))?;
+            .map_err(|error| error.at_opt(term.span()).in_scope(context.witness_scope()))?;
     let rebuilt = match term.span() {
         Some(span) => rebuilt.with_span(span),
         None => rebuilt,

@@ -1276,10 +1276,6 @@ impl Context {
         self.program.is_witness_declaration(name)
     }
 
-    pub(crate) fn witness_entries(&self) -> impl Iterator<Item = (&Global, &Witness)> {
-        self.program.witness_entries()
-    }
-
     pub(crate) fn witness_keyed_entries(
         &self,
     ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {
@@ -1387,8 +1383,10 @@ impl Context {
     ) {
         self.caches.note_write();
         let refinements = self.frames.refinement_snapshot();
+        let witnesses = self.witness_scope();
+        let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
         self.solutions
-            .birth(id, telescope.into(), refinements, result);
+            .birth(id, telescope.into(), refinements, witnesses, result);
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.

@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Many, RecGroup,
-        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseError, UniverseSeed, build_shorten,
+        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
+        RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseError, UniverseSeed, WitnessSpelling, build_shorten,
     },
-    curios_utilities::{Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
@@ -507,6 +507,58 @@ impl Module {
         }
 
         marks
+    }
+
+    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
+    pub fn witness_spelling(&self, syntax: &SyntaxRegistry) -> WitnessSpelling {
+        let definitions = self
+            .items
+            .iter()
+            .flat_map(|item| match item {
+                Item::Let(def) => vec![def.clone()],
+                Item::Rec(rec) => rec.definitions(),
+            })
+            .map(|def| (def.name.clone(), def))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut spelling = WitnessSpelling::default();
+        for (name, concept) in &self.concepts {
+            let Global::Authored(path) = name else {
+                continue;
+            };
+            let parameters = concept.params.len();
+            let fields = concept
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(index, label)| {
+                    if let Some((_, reached)) =
+                        concept.supers.iter().find(|(position, _)| *position == index)
+                    {
+                        return FieldSpelling::Super(reached.clone());
+                    }
+                    let wrapper = Global::Authored(path.with(label));
+                    // A method's wrapper takes the method's parameters beside the concept's and its witness; any other field's takes those alone.
+                    let merged = definitions.get(&wrapper).is_some_and(|def| {
+                        matches!(&*def.type_, Subterm::FuncType(function) if function.plicities().len() > parameters + 1)
+                    });
+                    FieldSpelling::Method {
+                        wrapper,
+                        merged,
+                        operator: syntax.operator.operator_for(path, label),
+                    }
+                })
+                .collect();
+            spelling.concepts.insert(name.clone(), fields);
+        }
+
+        for def in definitions.into_values() {
+            if matches!(def.kind, DefinitionKind::Witness) {
+                spelling.witnesses.insert(def.name, def.type_);
+            }
+        }
+
+        spelling
     }
 
     /// Every top-level name `item`'s elaboration consumed: what the item [reaches](Item::reaches) through its definitions, plus what the registry entries it declares reach — a struct's field types, an inductive's constructor payloads and a concept's parameters live only in the entry, and an item whose entry names another declaration depends on it as its body would.

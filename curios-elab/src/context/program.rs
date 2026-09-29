@@ -178,14 +178,7 @@ impl Program {
         self.witness_table.get(&(concept.clone(), key.clone()))
     }
 
-    /// Every registered witness with the concept it witnesses — the display path's raw material for folding operator projections back to infix.
-    pub(crate) fn witness_entries(&self) -> impl Iterator<Item = (&Global, &Witness)> {
-        self.witness_table
-            .iter()
-            .map(|((concept, _), witness)| (concept, witness))
-    }
-
-    /// [`Self::witness_entries`] with the keys kept — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
+    /// Every registered witness with its concept and key — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
     pub(crate) fn witness_keyed_entries(
         &self,
     ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {

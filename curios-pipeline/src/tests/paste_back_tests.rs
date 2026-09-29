@@ -141,3 +141,99 @@ fn an_indexed_family_and_its_applications_read_back() {
 
     reads_back(source).unwrap();
 }
+
+#[test]
+fn a_type_alias_over_a_local_witness_reads_back() {
+    // `Wrap(A, use x)` under the binder `use Show(A)`: the argument is the binder resolution would find, so it is left out, and the binder, referenced nowhere else, prints unnamed.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let v(@A: Type, use Show(A), x: Wrap(A)) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_type_alias_over_a_global_witness_reads_back() {
+    // Nothing in scope reaches `Show`, so resolution goes to the table, and coherence makes its answer the witness the report would otherwise have named by its identity.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+        pub let u(x: Wrap(Nat)) -> Nat = 0;
+        pub let t: ? = u;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_method_whose_type_names_an_earlier_field_reads_back() {
+    // `Tot/div`'s `@ok` is typed by the concept's own `Ok`, a projection off the wrapper's witness, which prints as the call a program writes.
+    let source = r#"
+        pub concept Tot(A: Type): pub Type {
+            Ok(A) -> Prop,
+            div(a: A, b: A, @ok: Ok(b)) -> A,
+        }
+        pub let t: ? = Tot/div;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_law_over_its_concepts_methods_reads_back() {
+    let source = r#"
+        use /std/{Eq};
+        pub concept Idem(A: Type): pub Type {
+            op(A) -> A,
+            law(x: A) -> Eq()(op(op(x)), op(x)),
+        }
+        pub let t: ? = Idem/law;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_lambda_naming_its_witness_reads_back() {
+    // A lambda may name its witness and its type may not: the type prints `use Show(A)` unnamed.
+    let source = r#"
+        use /std/{Show, Str};
+        pub let t: ? = (@A: Type, use s: Show(A), a: A) => Show/show(a);
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn an_operator_under_an_abstract_witness_reads_back() {
+    // `a + a` elaborates to a projection off the `use Add(A)` binder, which prints as the operator.
+    let source = r#"
+        use /std/{Eq};
+        use /std/ops/{Add};
+        pub let f(@A: Type, use Add(A), a: A) -> Eq()(a + a, a + a) = Eq/refl();
+        pub let t: ? = f;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_standard_alias_taking_a_witness_reads_back() {
+    // `/std/Parse`'s `Parse(I, use Input(I), A)`: the `use` argument is the function type's own binder.
+    let source = r#"
+        use /std/{Parse};
+        pub let t: ? = Parse/pure;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
