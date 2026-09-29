@@ -2,6 +2,7 @@ mod aggregates;
 mod algebra;
 mod big_num;
 mod binders;
+mod bounds;
 mod characters;
 mod cli;
 mod codegen;

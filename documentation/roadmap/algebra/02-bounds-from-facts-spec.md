@@ -102,6 +102,39 @@ A refused bound's report lists the facts the procedure considered, each with whe
 
 Prelude elaboration and certification are read from the two profile streams `cargo x clippy` writes, since it builds with `--all-features`: `curios-prelude-archive/.artifacts/profile.tsv` for elaboration and erasure, and `curios-prelude/.artifacts/profile.tsv` for certification. Each is folded with `cargo run --all-features --package curios -- profile <stream>`. The build scripts are instrumented debug builds: a duration is noisy and inflated, while call counts and allocated megabytes are the stable figures. A stage's record names the span and the resource it compares.
 
+## Census
+
+Taken at `bb28989d` over `curios-prelude-archive/std`, outside `Nat/Le`, `Nat/Lt`, `Int/Le` and `Int/Lt`. A chain is one bridge expression at one site, however many lemmas it nests. `Le/refl` (15 calls) is not a bridge, since conversion decides `x <= x`, and neither are the `try` decision procedures (23).
+
+| Endpoint | Chains | Where | Stage that covers them |
+| --- | --- | --- | --- |
+| An `@` bound | 19 | `Char` 4, `Tui/input` 3, the three `drop`s of `List`, `Bits` and `Bytes`, `Handle` 2, `Str/At` 2, `Str`, `Int`, `Flt`, `Toml/build`, `http/Url` | 3; the `drop`s and three of `Char`'s at 5 |
+| A contradiction arm | 22 | `Str/Valid` 13, `Str` 7, `Nat/div_mod` 2 | 4; `Str/Valid`'s at 5, `Nat/div_mod`'s at 6 |
+| A fact handed on — an explicit argument, a field, a `let`, a body | 34 | `Str` 14, `Str/At` 10, `Char` 4, `List` 3, `Nat/div_mod`, `WellFounded`, `Char/Valid` | 4, through `proved`; truncated subtraction's at 5 |
+| An equation goal, by `antisym` | 3 | `Bytes`, `Str`, `Int` | none: an equation is not a bound |
+
+Of the 45 `Eq/subst` transports, 19 carry a linear fact across an equation a hypothesis, a field or an `==` guard holds: `Str/Valid` 12, the three `drop`s, `Bytes` 2, `Vec` and `Str/At` 1 each. The other 26 rewrite an equation goal or rewrite under a function, which is congruence.
+
+**The shapes.** Every fact is linear over atoms once truncated subtraction and division by a literal are read, except `Nat/div_mod`'s two products. Facts come from hypotheses, including those a constructor pattern binds (`some(inside)`); from proof fields one level down of hypotheses and of `let`- and pattern-bound structures (`have.progress`, `marker.room`, `range.low`); from guards; and from refined variables (`match k | j + 1`), with a slack the direct form closes by a literal fact. Four readings the list under *The facts* implies are named here because the census meets them:
+
+- a guard whose scrutinee unfolds to a comparison or a range check, as `is_upper(c)` does, gives its fact through the unfolding;
+- a range check, as a hypothesis or as a guard's true arm, gives its two bounds through `Le/of_in_range`;
+- an `==` guard's true arm gives an equation, which is how `Str/Valid` reads a quotient that its guard pinned;
+- a proof field two levels down, `first.past.within` in `Str`'s `occurrence`, is not read, so that site keeps its chain.
+
+A range check's false arm is a disjunction and is outside the fragment: `Str/Valid`'s `step_of_not_continuing` keeps its bridge.
+
+**The procedure runs on nothing the corpus accepts.** The two points it will run at were counted over the prelude's elaboration and over every program under `programs/`. The first is insertion, where the fill answered nothing for a proposition that waits on no metavariable. The second is a parked bound's retry, once the bound waits on nothing. Oracles were counted apart from ordinary elaboration. No count fired anywhere, and a control program with a refused bound fired the insertion count once.
+
+**To retake the premise count.** The measurement adds and then removes temporary instrumentation:
+
+1. In `insert_auto_argument`, after `waiting` is computed, put `curios_profile::sample!("premise::insertion", 1)` under `proposition && !waiting`. In `attempt_discharge`, put `curios_profile::sample!("premise::retry", 1)` after the `waits_on_metavariable` return. Name each `…_in_oracle` instead where `Context::parking_suppressed()` answers `true`.
+2. Run `cargo x clippy` and grep `curios-prelude-archive/.artifacts/profile.tsv` for `premise::`. A sample name is declared in the stream on its first event, so no match means no event.
+3. Build with `cargo build --all-features --package curios` and run `target/debug/curios --profile <file> wonder diagnostics <program>` for each program, grepping the same way.
+4. Run the spec's first row on standard input as the control.
+
+**To retake the census.** Search `curios-prelude-archive/std` with `rg -n "\b(Nat/|Int/)?(Le|Lt)/[a-z_]+\b" -g '*.crs' -g '!Nat/Le.crs' -g '!Nat/Lt.crs' -g '!Int/Le.crs' -g '!Int/Lt.crs'` and with `rg -n "Eq/subst\("`. Read each site and classify it by its endpoint, the bridge's outermost consumer, and by the shape of every fact the chain reads.
+
 ## Stages
 
 Each lands alone, with its rows stated first.
