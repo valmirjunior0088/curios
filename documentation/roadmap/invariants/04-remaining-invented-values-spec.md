@@ -2,7 +2,7 @@
 
 Working specification for the values `/std` still makes up where a proof or a refusal belongs, after the invariants work removed the rest: the requests and replies HTTP says to refuse and the library reads as values, the numbers `Json` reads by `Flt`'s grammar, the text formats that re-check the UTF-8 of input that began as a `Str`, and a branch that waits on a decision. The rule is the one the invariants work settled, recorded in [`curios-prelude-archive`'s README](../../../curios-prelude-archive/README.md): where a branch cannot be reached its unreachability is proved, where it can the caller sees an `Option`, a `Result` or a refusal, and a default stays only where it is the specified answer, documented as such.
 
-It follows the change that indexes `Parse` by the carrier it reads, which the campaign lands first. The text and number stages also follow [part 1](01-checkers-agree-spec.md)'s fourth stage, the change to solving, so they are written against the solver it leaves rather than around the one it replaces. It is otherwise independent of the other parts.
+It follows the change that indexes `Parse` by the carrier it reads, which the campaign lands first. The text and number stages also follow part 1's change to solving, which judges a solution under the refinements its metavariable was born under, so they are written against that solver rather than around the one it replaced. It is otherwise independent of the other parts.
 
 ## What this builds on
 

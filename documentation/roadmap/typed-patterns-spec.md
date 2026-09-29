@@ -2,7 +2,7 @@
 
 Working specification for compiling nested pattern matches where the scrutinee's type is known — in elaboration rather than in text lowering — so that a wildcard may stand beside a concrete pattern in any column, coverage is decided against each type's real constructors, and an arm no value can reach is reported. The algorithm is Maranget's decision-tree compilation ("Compiling Pattern Matching to Good Decision Trees", ML Workshop 2008) with the usefulness check of "Warnings for Pattern Matching" (JFP 2007); what changes is where it runs.
 
-It moves match compilation into `curios-elab`: not the solver, but the elaborator, so it does not land beside [the invariants campaign's part 1](invariants/01-checkers-agree-spec.md)'s change to solving.
+It moves match compilation into `curios-elab`: not the solver, but the elaborator, so it does not collide with the invariants campaign's change to solving, which judges a solution under the refinements its metavariable was born under.
 
 ## What this builds on
 

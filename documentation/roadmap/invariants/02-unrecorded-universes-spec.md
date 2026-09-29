@@ -2,7 +2,7 @@
 
 Working specification for the universe constraints a written type implies and the elaborator never records, which the kernel does not see because it types a type's reduct rather than the type as written. The leading hypothesis is that one declaration shape produces them — a type former whose result level floats free of its body — and the first stage tests it before anything is built on it. Whether any of it is a soundness gap is not known, and the same stage answers that; the part stands even if nothing is exploitable, because the kernel's reading of written types is still owed.
 
-Its first stage needs nothing. Its fix waits for [part 1](01-checkers-agree-spec.md)'s fourth stage, the change to solving, since both change what solving and finalization emit.
+Its first stage needs nothing. Its fix follows the change that judges a metavariable's solution under the refinements it was born under, which landed with part 1, since both change what solving and finalization emit.
 
 ## What this builds on
 

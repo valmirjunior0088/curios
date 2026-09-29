@@ -2,7 +2,7 @@
 
 Working specification for making the compiler principled about what one declaration may read of another. A compilation becomes a graph of items over an environment that is only ever added to; each item's output is a function of the inputs it declares, and every read of another item goes through one interface that records it. The same record schedules the work [part 6](06-item-tasks-spec.md) parallelizes, orders the kernel, and makes invalidation precise, and it is what makes a verdict independent of the order items were elaborated in. Items still run one at a time here, in source order.
 
-It needs [part 2](02-no-history-spec.md)'s caching rule, [part 3](03-no-minted-identity-spec.md)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it lands after [the invariants campaign](../invariants/01-checkers-agree-spec.md)'s change to the solver, never beside it.
+It needs [part 2](02-no-history-spec.md)'s caching rule, [part 3](03-no-minted-identity-spec.md)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it follows the invariants campaign's change to the solver, which has landed, rather than landing beside it.
 
 ## What this builds on
 
