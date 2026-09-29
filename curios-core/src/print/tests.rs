@@ -7,12 +7,30 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     assert_eq!(shorten.get(&global).map(String::as_str), Some("helper"));
 
     let binder = Free::local(0, Some("helper"));
-    let names = BTreeSet::from([Free::Global(global), binder.clone()]);
+    let names = DisplayNames {
+        names: BTreeSet::from([Free::Global(global), binder.clone()]),
+        labels: BTreeSet::new(),
+    };
     let rename = build_rename(
         &names,
         &Spelling::default().with_short_names(Rc::new(shorten)),
     );
     assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
+}
+
+/// A tuple label keeps the spelling it was written with, being part of its tuple type's identity, and a binder that would read like it is the one suffixed: a function's parameter `frame` beside its result's field `frame`.
+#[test]
+fn a_tuple_label_keeps_its_spelling_and_a_like_named_binder_is_suffixed() {
+    let parameter = Free::local(0, Some("frame"));
+    let label = Free::local(1, Some("frame"));
+    let names = DisplayNames {
+        names: BTreeSet::from([parameter.clone(), label.clone()]),
+        labels: BTreeSet::from([label.clone()]),
+    };
+    let rename = build_rename(&names, &Spelling::default());
+
+    assert_eq!(rename.get(&label).map(String::as_str), Some("frame"));
+    assert_eq!(rename.get(&parameter).map(String::as_str), Some("frame2"));
 }
 
 /// A reader's own declaration keeps the bare name, and a like-named one from the environment takes the longer spelling that actually reaches it.

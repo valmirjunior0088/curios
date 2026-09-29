@@ -407,10 +407,25 @@ impl<'a, T> Spelled<'a, T> {
     }
 }
 
-/// Every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from `collect_labels`, which descends scope bodies (where nested binders live).
-pub fn display_names(term: &Term) -> BTreeSet<Free> {
-    let mut names = term.free_vars();
-    collect_labels(term, &mut names);
+/// The names a render shows, which [`build_rename`] spells: every free variable and every binder the printer reopens, and among those binders the tuple labels, kept apart because a label is part of its tuple type's identity and so keeps the spelling it was written with.
+#[derive(Debug, Default, Clone)]
+pub struct DisplayNames {
+    names: BTreeSet<Free>,
+    labels: BTreeSet<Free>,
+}
+
+impl DisplayNames {
+    /// Add every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from `collect_labels`, which descends scope bodies (where nested binders live).
+    pub fn add(&mut self, term: &Term) {
+        self.names.extend(term.free_vars());
+        collect_labels(term, self);
+    }
+}
+
+/// Every name the printer will emit for `term` ([`DisplayNames::add`]).
+pub fn display_names(term: &Term) -> DisplayNames {
+    let mut names = DisplayNames::default();
+    names.add(term);
     names
 }
 
@@ -418,8 +433,8 @@ pub fn display_names(term: &Term) -> BTreeSet<Free> {
 ///
 /// Driven by [`Term::walk`] rather than its own worklist, so child enumeration stays in `Subterm::any_child_term` and a new term former carrying a binder cannot reach the printer while quietly missing this walk. What that would look like is not a crash but two distinct binders rendering under one spelling, which is exactly the thing [`build_rename`] promises cannot happen — so the failure mode argues for the shared fold rather than against it.
 ///
-/// This hook adds only each node's *own* labels; the depth is [`Term::walk`]'s to absorb. `Intrinsic` and `Foreign` interiors are skipped whole: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.
-fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
+/// This hook adds only each node's *own* labels; the depth is [`Term::walk`]'s to absorb. `Intrinsic` and `Foreign` interiors are skipped whole: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`. A tuple type's binders are recorded as its labels as well.
+fn collect_labels(term: &Term, out: &mut DisplayNames) {
     fn scope_names<A: Arity>(out: &mut BTreeSet<Free>, scope: &Scope<A>) {
         if let Some(names) = scope.names() {
             out.extend(names.iter().cloned());
@@ -443,33 +458,38 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
                 Subterm::Intrinsic(_) | Subterm::Foreign(..) => return Enter::Skip(()),
                 Subterm::Func(Func { telescope, .. })
                 | Subterm::FuncType(FuncType { telescope, .. }) => {
-                    telescope_binders(out, telescope)
+                    telescope_binders(&mut out.names, telescope)
                 }
-                Subterm::TupleType(TupleType { telescope }) => telescope_binders(out, telescope),
-                Subterm::Let(Let { tail, .. }) => scope_names(out, tail),
+                Subterm::TupleType(TupleType { telescope }) => {
+                    telescope_binders(&mut out.names, telescope);
+                    telescope_binders(&mut out.labels, telescope);
+                }
+                Subterm::Let(Let { tail, .. }) => scope_names(&mut out.names, tail),
                 Subterm::Rec(Rec { group, tail }) => {
                     for member in group.iter() {
-                        scope_names(out, &member.type_);
-                        scope_names(out, &member.body);
+                        scope_names(&mut out.names, &member.type_);
+                        scope_names(&mut out.names, &member.body);
                     }
-                    scope_names(out, tail);
+                    scope_names(&mut out.names, tail);
                 }
                 Subterm::Match(Match { result, cases, .. }) => {
                     if let Some(motive) = result.family() {
-                        scope_names(out, motive);
+                        scope_names(&mut out.names, motive);
                     }
 
                     match cases {
                         Cases::Induct { cases, .. } => {
                             for (_, arm) in cases {
-                                scope_names(out, &arm.body);
+                                scope_names(&mut out.names, &arm.body);
                             }
                         }
                         // The unary `Nat` cons arm binds a tail and a hypothesis; `Bin`/`List` bind a peeled generator before those, so the two arities do not share a pattern.
                         Cases::FreeMonoid { carrier } => match carrier {
-                            Carrier::Nat { cons_case, .. } => scope_names(out, cons_case),
+                            Carrier::Nat { cons_case, .. } => {
+                                scope_names(&mut out.names, cons_case)
+                            }
                             Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => {
-                                scope_names(out, cons_case)
+                                scope_names(&mut out.names, cons_case)
                             }
                         },
                         Cases::Bool { .. } | Cases::Switch { .. } => {}
@@ -489,10 +509,14 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
 /// `spelling` is the one the same render will apply, standing where its reader does: a global is reserved under the rendering it actually displays ([`Spelling::symbol`]), since a full path — never a bare identifier — is unshadowable by construction, while a bare label a reader reaches is exactly what a binder hint can read like.
 ///
 /// A hintless entry's `x` is consulted only where something references the binder — the label sites spell an unreferenced unnameable binder `_` (or elide it) without the map. Hinted names are assigned first, so a synthesized `x` can never steal the spelling from a binder actually written `x`.
-pub fn build_rename(names: &BTreeSet<Free>, spelling: &Spelling) -> HashMap<Free, String> {
+///
+/// A tuple label is the exception: it is part of its tuple type's identity, so it keeps the spelling it was written with before anything else is assigned, and a binder that would read like it is the one suffixed — a function's parameter `frame` beside a result field `frame` reads `frame2`, since a parameter's name is no part of its type. Two labels may therefore read alike, which is what their types say.
+pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
-    let (literal, prettifiable): (Vec<_>, Vec<_>) =
-        names.iter().partition(|name| name.as_global().is_some());
+    let (literal, prettifiable): (Vec<_>, Vec<_>) = names
+        .names
+        .iter()
+        .partition(|name| name.as_global().is_some());
 
     // Globals reserve the spelling they will display under.
     let mut used = literal
@@ -503,11 +527,19 @@ pub fn build_rename(names: &BTreeSet<Free>, spelling: &Spelling) -> HashMap<Free
         })
         .collect::<BTreeSet<_>>();
 
+    let mut map = HashMap::new();
+    for label in &names.labels {
+        if let Some(hint) = label.hint() {
+            used.insert(hint.to_string());
+            map.insert(label.clone(), hint.to_string());
+        }
+    }
+
     let (hinted, hintless): (Vec<_>, Vec<_>) = prettifiable
         .into_iter()
+        .filter(|name| !map.contains_key(*name))
         .partition(|name| name.hint().is_some());
 
-    let mut map = HashMap::new();
     for name in hinted.into_iter().chain(hintless) {
         let hint = name.hint().unwrap_or("x");
         let mut candidate = hint.to_string();

@@ -7,14 +7,14 @@ mod tests;
 use {
     super::{Erased, WitnessKey},
     curios_core::{
-        Atom, CalleeId, Free, Global, Item, Level, Module, Polarity, ReaderNames, ReaderPosition,
-        ReduceError, Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError,
-        build_rename, build_shorten_layered, display_names,
+        Atom, CalleeId, DisplayNames, Free, Global, Item, Level, Module, Polarity, ReaderNames,
+        ReaderPosition, ReduceError, Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin,
+        UniverseError, build_rename, build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, HashMap},
         fmt,
         rc::Rc,
     },
@@ -39,18 +39,22 @@ pub struct GoalReport {
 impl GoalReport {
     /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — renamed the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
     fn rename_map(&self, spelling: &Spelling) -> Rc<HashMap<Free, String>> {
-        let mut names = BTreeSet::new();
+        let mut names = DisplayNames::default();
         for (name, type_) in &self.scope {
-            names.extend(display_names(name));
-            names.extend(display_names(type_));
+            names.add(name);
+            names.add(type_);
         }
-        names.extend(display_names(&self.goal));
-        names.extend(self.solution.iter().flat_map(display_names));
+        names.add(&self.goal);
+        if let Some(solution) = &self.solution {
+            names.add(solution);
+        }
         for (this, that) in &self.obligations {
-            names.extend(display_names(this));
-            names.extend(display_names(that));
+            names.add(this);
+            names.add(that);
         }
-        names.extend(self.candidates.iter().flat_map(display_names));
+        for candidate in &self.candidates {
+            names.add(candidate);
+        }
         Rc::new(build_rename(&names, spelling))
     }
 }
@@ -1332,9 +1336,9 @@ impl Error {
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 
-        let mut names = BTreeSet::new();
+        let mut names = DisplayNames::default();
         for term in terms {
-            names.extend(display_names(term));
+            names.add(term);
         }
 
         Rc::new(build_rename(&names, spelling))
