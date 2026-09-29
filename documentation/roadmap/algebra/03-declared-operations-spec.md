@@ -1,8 +1,8 @@
 # Algebra, part 3: declared operations for `pow`, `min` and `max`, `abs` and `sign`, and the float identities
 
-Working specification for the operations and laws the numeric library needs conversion to decide, each a declaration of a kind [part 1](01-one-owner-spec.md) implements or this part adds, held by the grid part 1 generates. It takes the declaration halves of what were the `Nat`, `Int` and `Flt` laws specifications; their lemma halves are [the numeric laws](../numeric-laws-spec.md)', which is this part's consumer beside [Rat part 1](../rat/01-exact-rationals-spec.md) and the proofs of [the elementary functions](../flt/02-elementary-functions-spec.md).
+Working specification for the operations and laws the numeric library needs conversion to decide, each a declaration of a kind [part 1](../../design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) implements or this part adds, held by the grid generated from `curios-algebra`'s law table. It takes the declaration halves of what were the `Nat`, `Int` and `Flt` laws specifications; their lemma halves are [the numeric laws](../numeric-laws-spec.md)', which is this part's consumer beside [Rat part 1](../rat/01-exact-rationals-spec.md) and the proofs of [the elementary functions](../flt/02-elementary-functions-spec.md).
 
-It depends on part 1's seventh stage and is independently implementable and retirable. Each operation's stage lands alone.
+It builds on the law families and the generated grid part 1 delivered, and is independently implementable and retirable. Each operation's stage lands alone.
 
 ## What this builds on
 

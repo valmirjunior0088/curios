@@ -1,8 +1,8 @@
 # curios-algebra
 
-The carriers' algebra over abstract atoms: what conversion decides about `Nat` and `Int` — linear combinations, their cancellation, and the strength of what a comparison concludes — stated without the terms it is decided over. Both checkers reach it through `curios-core`, which decides which terms are one atom and rebuilds results from the terms it was given; the algorithms and their contracts belong to the crate rustdoc.
+The carriers' algebra over abstract atoms: what conversion decides about the carriers — the arithmetic of `Nat` and `Int`, the Boolean laws, the free monoid a sequence is, the round trips between carriers, and the strength of what a comparison concludes — stated without the terms it is decided over. Both checkers reach it through `curios-core`, which decides which terms are one atom and rebuilds results from the terms it was given; the algorithms and their contracts belong to the crate rustdoc.
 
-The consolidation that moved the carriers' reasoning here, and is still to generate the law grid from the declarations and align comparisons through one view, is [Algebra, part 1](../documentation/roadmap/algebra/01-one-owner-spec.md), whose baseline inventory records what has moved and what has not.
+Which crate owns which part of the carriers' algebra — this one the mathematics, `curios-core` the terms, `curios-analysis` the chain both checkers run — is the cross-crate decision [One crate owns the carriers' algebra, and the checkers share its strategy](../documentation/design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md), and why the laws are decided in conversion at all is [The carriers' algebra stays in conversion](../documentation/design/language/the-carriers-algebra-stays-in-conversion.md).
 
 ## Design
 
@@ -31,6 +31,14 @@ The consolidation that moved the carriers' reasoning here, and is still to gener
 **Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, and the conversions between carriers — and what that meaning says is stated here, once per operation: which operands bound its result (`bound_reads`, `upper_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`), and which conversion undoes which (`undoes`, over the `round_trip` table). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match.
 
 **Rationale.** The bound criterion — an operand is read where the result is not antitone in it — used to live in one function's arms, beside the terms it read, so an arm could not be checked against the criterion without reading the term plumbing too. Stated per operation, each arm is a fact about the operation, and an intrinsic joins a law by being declared an operation of that kind rather than by gaining an arm. An intrinsic is declared only where some implemented rule reads it at its carrier — `Int`'s bitwise operations stay opaque, since no identity of theirs is implemented — so declaring membership never enables an identity nothing implements.
+
+### A law is stated once per family, and declared per operation
+
+**Decision.** `Family` names each kind of law conversion decides — unit and absorber at either position, idempotence, self-cancellation, commutativity, associativity, complement, nested cancellation, distribution, dual, successor seam, cancellation, the length homomorphism and the inverse pair — and `laws` states each family's laws once, as equations between `Expr`s over variables and a carrier's `Constant`s. `TABLE` declares, for each operation at each carrier, exactly the families conversion decides for it, with its constants: `And` at `Bool` has the unit `true` and the absorber `false`, and `And` at ℕ the absorber `0` and no unit. `curios`'s `tests::laws::generated` spells every instance as Curios source and holds it through both checkers and at closed values.
+
+**Rationale.** A law true at two carriers used to be stated at each by hand, under a convention to state it at every carrier, and the `<`/`<=` seam slipped past the convention. Declared once and instantiated, the row at every carrier is a consequence, and a family declared where no procedure decides it fails at that carrier instead of going unstated — associativity of `and` at ℕ is the generator's own test of that.
+
+**Rejected.** Declaring a carrier a member of a structure — ℕ a commutative semiring, `Bool` a Boolean algebra — and deriving its laws: membership would enable every law of the structure, and conversion decides only some of them, so the table names families per operation and declares only what a procedure implements. `map`, `fold`, `get`, `slice` and `replicate` are in no family: their laws take a function operand, read a binder or carry a bound that a family's abstract operands do not, so they stay rows written by hand.
 
 ### A comparison has one linear form, in one total order
 

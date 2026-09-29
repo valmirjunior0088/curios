@@ -643,7 +643,7 @@ pub fn laws() -> Vec<(Declared, Law)> {
 }
 
 /// The carrier an operation's operands are of: a conversion's source, and otherwise the carrier it is declared at.
-pub fn operand_carrier(carrier: Carrier, operation: Operation) -> Carrier {
+fn operand_carrier(carrier: Carrier, operation: Operation) -> Carrier {
     match operation {
         Operation::Conversion { from } => from,
         _ => carrier,
@@ -651,7 +651,7 @@ pub fn operand_carrier(carrier: Carrier, operation: Operation) -> Carrier {
 }
 
 /// The carrier an operation's result is of: a comparison's is the Boolean algebra and a length's ℕ, and every other operation's is the carrier it is declared at.
-pub fn result_carrier(carrier: Carrier, operation: Operation) -> Carrier {
+fn result_carrier(carrier: Carrier, operation: Operation) -> Carrier {
     match operation {
         Operation::Equal | Operation::Unequal | Operation::Less | Operation::AtMost => {
             Carrier::Boolean
@@ -662,7 +662,7 @@ pub fn result_carrier(carrier: Carrier, operation: Operation) -> Carrier {
 }
 
 /// The carrier a word's elements are of, and `None` for a carrier that is no word.
-pub fn element_carrier(carrier: Carrier) -> Option<Carrier> {
+fn element_carrier(carrier: Carrier) -> Option<Carrier> {
     match carrier {
         Carrier::Packed(Grain::B) => Some(Carrier::Boolean),
         Carrier::Packed(Grain::X) => Some(Carrier::Byte),

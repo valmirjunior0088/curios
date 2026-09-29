@@ -35,7 +35,7 @@ Each lands alone, with a doubling-term fixture where it makes a walk graph-aware
 4. **The kernel looks types up.** `family_at_head` reads the family's declared type rather than inferring it.
 5. **The remaining walks.** A completed-pair memo for the kernel's conversion, keyed so a hit cannot change a verdict; `walk_term` over a graph, its effects accounted per node; erasure surveyed; printing's shared nodes named. Printing and erasure need a design first, presented before either is built.
 
-`Nat::summands` flattening a sum on every call, which the survey found behind `Nat::ordered_sums`, is [algebra part 1](../algebra/01-one-owner-spec.md)'s, since that part moves the code.
+`Nat::summands` flattens a sum afresh on every call, which the survey found behind `Nat::ordered_sums`. [Algebra part 1](../../design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) moved the code around it and left the flattening in `curios-core`, measured in the instrumented prelude build `cargo x clippy` files: 206 137 calls in elaboration, about 1.0 s of 105 s and 43 MB of 36 684 MB, and 118 066 calls in certification, 0.45 s and 25 MB of 8 009 MB. Keeping a sum's flattened form is this part's, weighed against those figures.
 
 ## Verification
 

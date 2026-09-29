@@ -3,7 +3,7 @@ name = "curios-algebra"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The carriers' algebra over abstract atoms, shared by both Curios checkers: linear combinations, their cancellation, and the strength of what a comparison concludes"
+description = "The carriers' algebra over abstract atoms, shared by both Curios checkers: arithmetic, Boolean and word laws, the operations' declarations and law families, and the strength of what a comparison concludes"
 
 [lints]
 workspace = true

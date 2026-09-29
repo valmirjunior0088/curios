@@ -30,7 +30,7 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     }
 }
 
-/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and `curios-algebra`'s cancellation moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Impossible`; a pair the cancellation changed carries on as `Equivalent` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Undecided`, the stability `classify_nat` rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
+/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and `curios-algebra`'s cancellation moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Impossible`; a pair the cancellation changed carries on as `Equivalent` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Undecided`, the stability [`peel_nat_terms`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
 pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let this = Term::intrinsic(left.clone());
     let that = Term::intrinsic(right.clone());
@@ -167,7 +167,7 @@ fn bool_leaves(intrinsic: &Intrinsic) -> Option<(bool, Vec<Term>)> {
 pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     // Gated before lifting, so a pair that is not a `Nat` at all costs a shape test rather than two allocations.
     (nat_shaped_intrinsic(left) || nat_shaped_intrinsic(right)).then(|| {
-        classify_nat(
+        Nat::cancellation_deduced(
             &Term::intrinsic(left.clone()),
             &Term::intrinsic(right.clone()),
         )
@@ -179,24 +179,21 @@ pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 /// **The gate is a shape, not a carrier, and that is the whole of what floorless sums needed.** `Nat::decompose` reads a successor floor and `Nat::summands` reads a `NatAdd` spine; those two shapes are what the cancellation acts on, and a `Nat`-valued operation that is neither rides in as an opaque summand either way. Admitting a pair where *one* side is one of them is what reaches the mixed case — `(s + 1) + l` reduces to a floored `Succ(1, s + l)` while `s + l` stays a bare `NatAdd`, so a gate demanding both sides be `Intrinsic::Nat` sees neither the reassociation nor the shared floor and hands the pair to a shape congruence that refuses it.
 ///
 /// Sound at that width for the reason [`peel_bin`] and [`peel_list`] already rest on: conversion and inversion ask about pairs that inhabit one type, so a side carrying a floor or a sum spine makes both sides `Nat`s.
-pub fn peel_nat_terms(left: &Term, right: &Term) -> Option<Verdict> {
-    (nat_shaped(left) || nat_shaped(right)).then(|| classify_nat(left, right))
-}
-
+///
 /// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
 ///
-/// The cancellation itself is `curios-algebra`'s, reached through `Nat::cancellation_deduced`, which the reduction-side comparison and subtraction folds read too — one law, three readers — and so is what it concludes: both residuals gone is equality, a surviving positive floor against nothing is impossible, and anything else is a smaller pair for the caller to keep comparing. This function only rebuilds that pair as terms. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
+/// The cancellation itself is `curios-algebra`'s, the one `Nat::cancel_common` runs for the reduction-side comparison and subtraction folds — one law, three readers — and so is what it concludes: both residuals gone is equality, a surviving positive floor against nothing is impossible, and anything else is a smaller pair for the caller to keep comparing. `Nat::cancellation_deduced` rebuilds that pair as terms, and this function only gates it. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
 ///
 /// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it.
 ///
 /// **A pass that changed nothing must decline, not carry.** Every `Equivalent` off a floored pair strips a shared floor, and that structural decrease is the termination argument; a floorless pair sharing no summand comes back from the cancellation *identically* — its no-progress arm returns the operands untouched on purpose — and handing that back as `Equivalent` re-enters the same congruence on the same terms and never settles. So a cancellation that took nothing off is `Undecided`, and the pair falls through to the caller's shape congruence, exactly as `Bin`'s and `List`'s peels do.
 ///
 /// `Undecided` therefore stays unreachable for a pair of `Nat` *carriers*: two `Nat`s that are not both zero and not zero-against-floored are both `Succ`-headed, so they share a positive floor and always progress.
-fn classify_nat(left: &Term, right: &Term) -> Verdict {
-    Nat::cancellation_deduced(left, right)
+pub fn peel_nat_terms(left: &Term, right: &Term) -> Option<Verdict> {
+    (nat_shaped(left) || nat_shaped(right)).then(|| Nat::cancellation_deduced(left, right))
 }
 
-/// Whether a reduced term is one of the two shapes [`classify_nat`] can act on: a successor floor, or a sum spine.
+/// Whether a reduced term is one of the two shapes [`peel_nat_terms`] can act on: a successor floor, or a sum spine.
 fn nat_shaped(term: &Term) -> bool {
     match &**term {
         Subterm::Intrinsic(intrinsic) => nat_shaped_intrinsic(intrinsic),
@@ -212,7 +209,7 @@ fn nat_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
 pub fn peel_nat(actual: &Nat, target: &Nat) -> Verdict {
     let lift = |value: &Nat| Term::intrinsic(Intrinsic::Nat(value.clone()));
 
-    classify_nat(&lift(actual), &lift(target))
+    Nat::cancellation_deduced(&lift(actual), &lift(target))
 }
 
 /// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`, and `get(xs ++ ys, i)` is `get(xs, i)` where the second read's own bound places `i` inside `xs`. `Equal` when `curios-algebra`'s `same_position` finds the two positions one, `Undecided` otherwise and never `Impossible` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier and grain.
@@ -297,7 +294,7 @@ fn peel_words<S: Sequence>(words: &Words<S>, left: &Intrinsic, right: &Intrinsic
     }
 }
 
-/// The verdict for a pair whose leading segments the strip could not match. A side spelled as anything but its own segment list — a nesting, an append, a run split across operands, an empty operand — is handed back as that list, and the pair carries on as `Equivalent`: regrouping is the identity on values, so the residuals hold the same obligation as any other `Equivalent`'s, and what the caller then sees is one operand list against another rather than a nesting against its flattening, which its shape congruence refused on operand count before comparing a single chunk. A pair already spelled flat declines as `Undecided`, exactly as `classify_nat` declines an unchanged pair — an `Equivalent` that changed nothing would re-enter the caller on the same terms and never settle. The round after a regroup is that flat pair, so the two arms are the whole termination argument.
+/// The verdict for a pair whose leading segments the strip could not match. A side spelled as anything but its own segment list — a nesting, an append, a run split across operands, an empty operand — is handed back as that list, and the pair carries on as `Equivalent`: regrouping is the identity on values, so the residuals hold the same obligation as any other `Equivalent`'s, and what the caller then sees is one operand list against another rather than a nesting against its flattening, which its shape congruence refused on operand count before comparing a single chunk. A pair already spelled flat declines as `Undecided`, exactly as [`peel_nat_terms`] declines an unchanged pair — an `Equivalent` that changed nothing would re-enter the caller on the same terms and never settle. The round after a regroup is that flat pair, so the two arms are the whole termination argument.
 fn regroup(left: &Intrinsic, flat_left: Term, right: &Intrinsic, flat_right: Term) -> Verdict {
     let flat = |written: &Intrinsic, spelled: &Term| match &**spelled {
         Subterm::Intrinsic(intrinsic) => intrinsic == written,

@@ -87,7 +87,7 @@ impl<C: Coefficient, O> Combination<C, O> {
     }
 
     /// Whether the two combinations hold a monomial in common.
-    pub fn shares_summand(&self, other: &Self) -> bool {
+    fn shares_summand(&self, other: &Self) -> bool {
         self.summands.iter().any(|summand| {
             other
                 .summands

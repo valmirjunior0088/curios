@@ -2,7 +2,7 @@
 
 **Not refined yet.** This specification preserves the broader certifier design: checked evidence for reasoning performed outside the kernel, explicit requirements on trusted implementations, and the corresponding soundness account. [Part 1](01-measured-spec.md) owns profiling the certifier, and [part 4](04-certifier-record-spec.md) its independent verdict record and kernel call-site discovery. Those changes can retire independently; they do not establish the stronger implementation restrictions proposed here.
 
-The requirements below retain the earlier design direction. Their precise grade definitions, dependency transitions and delivery order need refinement; the certificate format needs it with [algebra part 4](../algebra/04-relational-layer-spec.md), which reserves the relational layer whose certificates the certifier would check. In particular, [algebra part 1](../algebra/01-one-owner-spec.md) preserves today's comparison retries and does not satisfy a blanket prohibition on retrying or first-answer chains, and [algebra part 2](../algebra/02-bounds-from-facts-spec.md) needs no evidence at all: its search writes ordinary proofs, which the certifier checks as it checks any term.
+The requirements below retain the earlier design direction. Their precise grade definitions, dependency transitions and delivery order need refinement; the certificate format needs it with [algebra part 4](../algebra/04-relational-layer-spec.md), which reserves the relational layer whose certificates the certifier would check. In particular, [algebra part 1](../../design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) preserved today's comparison retries, so it does not satisfy a blanket prohibition on retrying or first-answer chains, and [algebra part 2](../algebra/02-bounds-from-facts-spec.md) needs no evidence at all: its search writes ordinary proofs, which the certifier checks as it checks any term.
 
 ## What this builds on
 
@@ -41,7 +41,7 @@ The certifier depends on certifier-grade code alone. Such code may be shared thr
 
 **Search outside, checking inside.** Where a verdict is expensive to find and cheap to check, the elaborator finds it and the certifier checks it. Evidence travels with the module, keyed by what it is about — a certificate by its canonical formula — so the certifier's relation is a function of the question and never of where it was asked. Missing evidence is a refusal, never an acceptance.
 
-**The certifier decides the carriers' theory itself**, with the reference implementation [algebra part 1](../algebra/01-one-owner-spec.md) establishes; the theory grows by [algebra part 3](../algebra/03-declared-operations-spec.md)'s declarations, and its evidence contracts are [algebra part 4](../algebra/04-relational-layer-spec.md)'s to refine. Inversion reads the theory's freeness — constructors distinct and injective modulo the theory — through that implementation, never through the elaborator's search.
+**The certifier decides the carriers' theory itself**, with the reference implementation [algebra part 1](../../design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) established; the theory grows by [algebra part 3](../algebra/03-declared-operations-spec.md)'s declarations, and its evidence contracts are [algebra part 4](../algebra/04-relational-layer-spec.md)'s to refine. Inversion reads the theory's freeness — constructors distinct and injective modulo the theory — through that implementation, never through the elaborator's search.
 
 **An optimization inside the certifier keeps its slow path.** A memo, an evaluator, a recurrence key: each is held by a differential against the unoptimized rule it replaces, as `kernel_memo_parity` and `the_closed_machine_agrees_with_the_strategy` already hold two.
 
@@ -84,7 +84,7 @@ Each is revised in the change that makes it true.
 
 - **Duplicating the shared code.** A copy fails where its original does — the correlation independent implementations are known for (Knight and Leveson, 1986). What the certifier needs is simple code, not a second one.
 - **Compiling matches to eliminators and recursion to recursors**, as Lean's elaborator does, which would take inversion and termination out of the certifier. `Match` is an intrinsic of Core and partial recursion is allowed at run time: both are the language's, not its elaboration's.
-- **Taking the algebra out of conversion by casts.** The recorded rejection is retained, and [algebra part 1](../algebra/01-one-owner-spec.md#the-carriers-algebra-stays-in-conversion) supplies its rationale, recording it as a design decision when it lands.
+- **Taking the algebra out of conversion by casts**, for the reasons [The carriers' algebra stays in conversion](../../design/language/the-carriers-algebra-stays-in-conversion.md) records.
 - **A fresh explicit kernel IR**, for the reasons [An independent kernel re-checks what the elaborator accepts](../../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) records.
 - **Forbidding all sharing**, which buys independence only from code whose simplicity was the point.
 
