@@ -43,15 +43,17 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
     );
     let body = builder.seal_block(Terminator::Return(Atom::Value(call)));
     builder.define_function(id, Some("loop".into()), vec![param], body);
-    if total {
-        builder.mark_total(id);
-    }
 
     builder.open_block();
     builder.let_functions(vec![id]);
     let entry = builder.seal_block(Terminator::Return(Atom::Function(id)));
     builder.set_entry(entry);
-    builder.finalize().expect("the fixture verifies")
+    let mut module = builder.finalize().expect("the fixture verifies");
+    if total {
+        module.mark_total(id);
+    }
+
+    module
 }
 
 fn may_diverge(module: &Module) -> bool {

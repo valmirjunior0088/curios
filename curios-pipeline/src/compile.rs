@@ -7,7 +7,7 @@ use {
         Globals, Kernel, Rechecked, Verdict, certify_module, recheck_module_measured,
         recheck_module_verdicts,
     },
-    curios_core::{Consumption, Intrinsic, Term, derived_binder_floor},
+    curios_core::{Certification, Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
         Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
@@ -532,34 +532,55 @@ pub fn check_entrypoint(
 ) -> Result<Checked, CompileError> {
     let mut lowered = lower_entry(scope, syntax, entrypoint, loader, &mut |_| {})?;
     let entry = Findings::take(&mut lowered);
-    let verdict = check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {}).and_then(
-        |(module, core_type, _foreigns, _records)| {
-            erase_checked(budget, scope, syntax, &module, &core_type)?;
-            Ok(module.into_module())
-        },
-    );
+    let verdict =
+        check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {}).and_then(|judged| {
+            erase_checked(budget, scope, syntax, &judged)?;
+            Ok(judged.module.into_module())
+        });
 
     Ok(Checked { entry, verdict })
 }
 
+/// An entry lowered, elaborated, zonked and accepted by the kernel: what [`erase_checked`] erases, with what the lowering after it needs of the entry.
+struct Judged {
+    /// The entry's module, zonked, every item the kernel judged accepted.
+    module: curios_core::Zonked<curios_core::Module>,
+    /// The type the entry's body was checked against, which erasure seals it at.
+    core_type: Term,
+    /// The `foreign` rows the entry declares.
+    foreigns: ForeignStore,
+    /// One per scheduled test, when the entry is compiled as a test program.
+    records: Vec<TestRecord>,
+    /// The certifier's record of the entry's own definitions, which marks the sealed program's functions beside every unit's.
+    certification: Certification,
+}
+
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
+///
+/// The sealed program's termination flags are marked here, from the record of everything it was erased from — every unit in scope and the entry — and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
 fn erase_checked(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
-    module: &curios_core::Zonked<curios_core::Module>,
-    core_type: &Term,
+    judged: &Judged,
 ) -> Result<curios_ersd::Module, CompileError> {
     let cores = scope.cores();
 
-    erase_unit(
+    let mut arena = erase_unit(
         &mut Context::new(budget, *syntax),
         Resumed::of(&cores, scope.arena()),
-        module,
-        Some(core_type),
+        &judged.module,
+        Some(&judged.core_type),
     )
-    .map(|erased| erased.into_module())
-    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores, syntax)))
+    .map_err(|error| {
+        CompileError::Failure(error.reports_with(judged.module.as_module(), &cores, syntax))
+    })?;
+    for unit in scope.units() {
+        arena.mark_total(unit.certification());
+    }
+    arena.mark_total(&judged.certification);
+
+    Ok(arena.into_module())
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
@@ -571,15 +592,7 @@ fn check_observed<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<
-    (
-        curios_core::Zonked<curios_core::Module>,
-        Term,
-        ForeignStore,
-        Vec<TestRecord>,
-    ),
-    CompileError,
->
+) -> Result<Judged, CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -595,15 +608,7 @@ fn check_lowered<O>(
     lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<
-    (
-        curios_core::Zonked<curios_core::Module>,
-        Term,
-        ForeignStore,
-        Vec<TestRecord>,
-    ),
-    CompileError,
->
+) -> Result<Judged, CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -615,9 +620,10 @@ where
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
-    {
+    let certification = {
         curios_profile::profile!("recheck");
-        if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
+        let rechecked = certify(&module, budget, scope, syntax);
+        if let Some(verdict) = rechecked.verdicts.first() {
             let refusal = verdict
                 .error
                 .format_with(module.as_module(), &scope.cores(), syntax);
@@ -626,9 +632,16 @@ where
                 None => format!("the kernel refused the entrypoint: {refusal}"),
             }));
         }
-    }
+        rechecked.certification
+    };
 
-    Ok((module, core_type, foreigns, records))
+    Ok(Judged {
+        module,
+        core_type,
+        foreigns,
+        records,
+        certification,
+    })
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
@@ -886,7 +899,7 @@ where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("compile_entrypoint");
-    let (module, core_type, foreigns, records) = check_observed(
+    let judged = check_observed(
         budget,
         scope,
         syntax,
@@ -895,15 +908,15 @@ where
         tail,
         &mut observe,
     )?;
-    let ersd_module = erase_checked(budget, scope, syntax, &module, &core_type)?;
+    let ersd_module = erase_checked(budget, scope, syntax, &judged)?;
 
     // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
     let mut all_foreigns = scope.foreigns();
-    all_foreigns.absorb(&foreigns);
+    all_foreigns.absorb(&judged.foreigns);
 
     Ok((
         lower_from_ersd(ersd_module, &mut observe),
         all_foreigns,
-        records,
+        judged.records,
     ))
 }

@@ -128,6 +128,19 @@ impl Module {
         self.functions.get(id)
     }
 
+    /// Mark a live function as one whose definition the certifier found total — see [`Function::total`]. Called where a sealed program meets the records of what it was erased from; a function no record classifies keeps the conservative `false`.
+    pub fn mark_total(&mut self, id: FunctionId) {
+        if let Some(function) = self.functions.get(id).cloned() {
+            self.set_function(
+                id,
+                Function {
+                    total: true,
+                    ..function
+                },
+            );
+        }
+    }
+
     pub fn block(&self, id: BlockId) -> Option<&Block> {
         self.blocks.get(id)
     }

@@ -27,7 +27,7 @@ impl Summary {
         // Seed: a recursive component's members may diverge *unless the definition they erased from was proved total*; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
-            // Recursion is why this stage cannot tell termination on its own, and the verdict is why it does not have to: it is the size-change engine's, decided above Core and carried down (see `Function::total`). Reading it here is what keeps a total recursive definition from being called divergent by everything that consults a summary.
+            // Recursion is why this stage cannot tell termination on its own, and the verdict is why it does not have to: it is the certifier's, decided above Core and carried down (see `Function::total`). Reading it here is what keeps a total recursive definition from being called divergent by everything that consults a summary.
             let recursive = analysis
                 .component_of(id)
                 .is_some_and(|component| analysis.is_recursive(component))

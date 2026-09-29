@@ -10,8 +10,8 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item, Module, Operand,
-        StructDecl, Zonked, foreign_operands, project_erased_universes,
+        Certification, ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item,
+        Module, Operand, StructDecl, Zonked, foreign_operands, project_erased_universes,
     },
     curios_utilities::{Span, grown},
     std::{
@@ -82,7 +82,7 @@ fn project_definition(definition: &Definition) -> Definition {
         kind: definition.kind.clone(),
         universe_context: Default::default(),
         island: definition.island.clone(),
-        // Carried, not projected out. It was elaboration-only metadata while the gates that read it all ran before erasure; the erased representation now carries it onto the function a definition becomes (see `curios_ersd::Function::total`), because below Core there is nothing left to derive termination from and a second derivation would be a second opinion about a question the trusted base has already answered.
+        // Carried as every field is, and read by nothing below: the erased functions' termination flags are marked from the certifier's record where the sealed program meets it (see `curios_ersd::Function::total`), never from this stamp.
         totality: definition.totality,
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
@@ -507,6 +507,20 @@ impl ErasedArena {
     pub fn compact(&mut self) {
         let compaction = self.module.compact();
         self.environment.remap(&compaction);
+    }
+
+    /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through the name→operand binding erasure made for it, so a definition that erased to anything but a function has nothing to mark, and a function no record names keeps the conservative `false`.
+    ///
+    /// Run on the sealed program, once per record of what it was erased from: every unit's in scope and the entry's own. The arena is cumulative, so one arena holds every unit's functions, and nothing reads the flag before the back half lowers what this leaves.
+    pub fn mark_total(&mut self, certification: &Certification) {
+        for (name, totality) in certification.iter() {
+            if totality.is_total()
+                && let Some(Binding::Atom(curios_ersd::Atom::Function(id))) =
+                    self.environment.lookup(&Free::from(name))
+            {
+                self.module.mark_total(id);
+            }
+        }
     }
 
     /// The finished erased module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.

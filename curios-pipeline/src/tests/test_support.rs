@@ -87,7 +87,7 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
     .map_err(String::from)
 }
 
-/// Elaborate `source` to its meta-free Core module and erase it exactly as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it.
+/// Elaborate `source` to its meta-free Core module and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
 /// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {

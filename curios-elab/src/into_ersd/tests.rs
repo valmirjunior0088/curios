@@ -299,38 +299,77 @@ fn calls(erased: &curios_ersd::Module) -> usize {
         .count()
 }
 
-/// A definition's termination verdict reaches the function it erased to, and a definition without one leaves it false.
-///
-/// Carried rather than re-derived: below Core a function is a body and a parameter list, and nothing there says which definition it came from or whether that definition descends. The conservative reading is `false`, which is what an unproved definition gets, and so does every function minted deeper than an item.
+/// `identity : (Nat) -> Nat`, stamped `stamp` by elaboration, and an entry applying it — erased through the unit path production takes, as the arena a sealed program is.
+fn identity_arena(stamp: Totality) -> ErasedArena {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let mut items = vec![definition(
+        "identity",
+        Term::func_type([(x.clone(), nat.clone())], nat.clone()),
+        Term::func([(x.clone(), nat.clone())], Term::free_var(&x)),
+    )];
+    let Item::Let(declared) = &mut items[0] else {
+        unreachable!("the fixture declares a definition");
+    };
+    declared.totality = stamp;
+    let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
+
+    erase_unit(
+        &mut context,
+        Resumed::of(&[], ErasedArena::default()),
+        &zonked(&module(items, body)),
+        Some(&nat),
+    )
+    .expect("the module erases")
+}
+
+/// Every erased function's termination flag.
+fn totals(erased: &curios_ersd::Module) -> Vec<bool> {
+    erased
+        .functions()
+        .iter()
+        .flatten()
+        .map(|function| function.total)
+        .collect()
+}
+
+/// Erasure marks nothing total, whatever elaboration stamped: the flag is the certifier's record's to set, where the sealed program meets it, and a stamp is read by nothing below Core.
 #[test]
-fn a_definitions_termination_verdict_reaches_its_function() {
-    for verdict in [Totality::Total, Totality::Partial] {
-        let mut context = context();
-        let x = context.fresh(Some("x"));
-        let nat = Term::intrinsic(Intrinsic::NatType);
-        let mut items = vec![definition(
-            "identity",
-            Term::func_type([(x.clone(), nat.clone())], nat.clone()),
-            Term::func([(x.clone(), nat.clone())], Term::free_var(&x)),
-        )];
-        let Item::Let(declared) = &mut items[0] else {
-            unreachable!("the fixture declares a definition");
-        };
-        declared.totality = verdict;
+fn erasure_marks_no_function_total_whatever_its_stamp() {
+    for stamp in [Totality::Total, Totality::Partial] {
+        let erased = identity_arena(stamp).into_module();
 
-        let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
-        let erased = erase(&mut context, &module(items, body), nat);
+        assert_eq!(totals(&erased), [false], "stamped {stamp:?}");
+    }
+}
 
-        let stamped = erased
-            .functions()
-            .iter()
-            .flatten()
-            .map(|function| function.total)
-            .collect::<Vec<_>>();
+/// A record marks exactly the functions its `Total` definitions erased to — found through the binding erasure made — and nothing it classifies otherwise or does not name, whatever the stamp says: a `Partial` stamp does not stop a `Total` record, and a `Total` stamp does not stand in for one.
+#[test]
+fn a_record_marks_the_functions_its_total_definitions_erased_to() {
+    let identity = nominal("identity");
+    let cases = [
+        (
+            Totality::Partial,
+            Certification::of([(identity.clone(), Totality::Total)]),
+            true,
+        ),
+        (
+            Totality::Total,
+            Certification::of([(identity.clone(), Totality::Partial)]),
+            false,
+        ),
+        (Totality::Total, Certification::default(), false),
+    ];
+
+    for (stamp, record, marked) in cases {
+        let mut arena = identity_arena(stamp);
+        arena.mark_total(&record);
+
         assert_eq!(
-            stamped,
-            vec![verdict == Totality::Total],
-            "{verdict:?} reached the erased function as {stamped:?}"
+            totals(&arena.into_module()),
+            [marked],
+            "stamped {stamp:?}, recorded {record:?}"
         );
     }
 }

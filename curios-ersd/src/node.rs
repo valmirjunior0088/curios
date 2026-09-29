@@ -270,11 +270,13 @@ pub struct Function {
     pub body: BlockId,
     /// Whether this function is an erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
     pub description: bool,
-    /// Whether the definition this function was erased from terminates on every input, together with everything it reaches — `curios_core::Totality::Total`, carried rather than re-derived.
+    /// Whether the definition this function was erased from terminates on every input, together with everything it reaches — as the certifier's own record classifies it (`curios_core::Certification`), carried rather than re-derived.
     ///
-    /// **Carried, because below Core there is nothing to derive it from.** Termination is decided once, by the size-change engine both checkers share, and it is already load-bearing above: the obligations that let erasure delete a proof or a type rest on it, and the kernel reads the same field rather than recomputing it for a plain definition. A second derivation down here would be a second opinion about a question the trusted base has already answered, and two answers is how the stages come to disagree.
+    /// **Carried, because below Core there is nothing to derive it from.** Termination is decided by the kernel's walk and filed as its record, and it is already load-bearing above: the obligations that let erasure delete a proof or a type rest on it. A second derivation down here would be a second opinion about a question the trusted base has already answered, and two answers is how the stages come to disagree.
     ///
-    /// False is the safe reading and the default: a definition the engine did not prove total is `Partial`, and so is anything this could not be filled from.
+    /// **Marked on the sealed program, never by erasure.** Erasure leaves every flag false, so an arena a unit files or the prelude archives carries none; the marks are made once, where the program the back half lowers meets the record of every unit it was erased from and of its entry, by [`Module::mark_total`](crate::Module::mark_total). Nothing reads the flag before then.
+    ///
+    /// False is the safe reading and the default: a definition the certifier did not find total is `Partial`, and so is anything no record classifies.
     pub total: bool,
 }
 
