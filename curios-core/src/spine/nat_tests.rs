@@ -7,13 +7,13 @@ use super::{test_support::*, *};
 fn peel_nat_decides_a_commuted_sum_equal() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
 
-    let peel = peel_nat(
-        &nat_of(1, add(x.clone(), y.clone())),
-        &nat_of(1, add(y.clone(), x.clone())),
+    let peel = peel_nat_pair(
+        &Intrinsic::Nat(nat_of(1, add(x.clone(), y.clone()))),
+        &Intrinsic::Nat(nat_of(1, add(y.clone(), x.clone()))),
     );
 
     assert!(
-        matches!(peel, Deduction::Equal),
+        matches!(peel, Some(Deduction::Equal)),
         "`x + y + 1` and `y + x + 1` are one number"
     );
 }
@@ -23,10 +23,13 @@ fn peel_nat_decides_a_commuted_sum_equal() {
 fn peel_nat_clashes_a_surviving_floor_against_the_identity() {
     let x = sym(0, "x");
 
-    let peel = peel_nat(&nat_of(2, x.clone()), &nat_of(1, x.clone()));
+    let peel = peel_nat_pair(
+        &Intrinsic::Nat(nat_of(2, x.clone())),
+        &Intrinsic::Nat(nat_of(1, x.clone())),
+    );
 
     assert!(
-        matches!(peel, Deduction::Impossible),
+        matches!(peel, Some(Deduction::Impossible)),
         "`x + 2` never equals `x + 1`"
     );
 }
@@ -36,10 +39,13 @@ fn peel_nat_clashes_a_surviving_floor_against_the_identity() {
 fn peel_nat_continues_where_the_residuals_may_still_agree() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
 
-    let peel = peel_nat(&nat_of(1, x.clone()), &nat_of(1, y.clone()));
+    let peel = peel_nat_pair(
+        &Intrinsic::Nat(nat_of(1, x.clone())),
+        &Intrinsic::Nat(nat_of(1, y.clone())),
+    );
 
     assert!(
-        matches!(peel, Deduction::Equivalent(_)),
+        matches!(peel, Some(Deduction::Equivalent(_))),
         "`x` and `y` are undecided, not unequal"
     );
 }

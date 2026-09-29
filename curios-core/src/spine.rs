@@ -205,13 +205,6 @@ fn nat_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
     matches!(intrinsic, Intrinsic::Nat(_) | Intrinsic::NatAdd(..))
 }
 
-/// The `Nat` peel over two carriers — the entry the reduction-side folds and the fixtures reach it at, where a `Nat` is already in hand rather than a term.
-pub fn peel_nat(actual: &Nat, target: &Nat) -> Verdict {
-    let lift = |value: &Nat| Term::intrinsic(Intrinsic::Nat(value.clone()));
-
-    Nat::cancellation_deduced(&lift(actual), &lift(target))
-}
-
 /// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`, and `get(xs ++ ys, i)` is `get(xs, i)` where the second read's own bound places `i` inside `xs`. `Equal` when `curios-algebra`'s `same_position` finds the two positions one, `Undecided` otherwise and never `Impossible` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier and grain.
 ///
 /// Decided here, as a comparison, because reduction cannot take it: rewriting the node would owe `s + i < len(xs)`, which follows from the window's bound and the index's by transitivity and is convertible with neither, and a reducer that derives a proof is the defect window fusion was reparameterised to avoid. Comparing builds no term, so it owes no proof — the two bounds are never read, which is proof irrelevance, the line a window's proof already draws.

@@ -2,7 +2,7 @@
 
 use {
     super::{Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split},
-    crate::{Free, Intrinsic, Subterm, Term, peel_nat},
+    crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms},
     curios_algebra::Deduction,
     curios_num::Natural,
 };
@@ -262,25 +262,25 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
         )
     };
 
-    let peel = peel_nat(
-        &as_nat(&fold(plus(instanced(0), lit(1)))),
-        &as_nat(&fold(plus(instanced(1), lit(1)))),
+    let peel = peel_nat_terms(
+        &fold(plus(instanced(0), lit(1))),
+        &fold(plus(instanced(1), lit(1))),
     );
 
     assert!(
-        matches!(peel, Deduction::Equal),
+        matches!(peel, Some(Deduction::Equal)),
         "`g<0> + 1` and `g<1> + 1` differ only in a level, which is not part of a number",
     );
 
     let applied = |argument: Term| Term::apply(instanced(0), vec![argument]);
 
-    let peel = peel_nat(
-        &as_nat(&fold(plus(applied(symbol(1, "x")), lit(1)))),
-        &as_nat(&fold(plus(applied(symbol(2, "y")), lit(1)))),
+    let peel = peel_nat_terms(
+        &fold(plus(applied(symbol(1, "x")), lit(1))),
+        &fold(plus(applied(symbol(2, "y")), lit(1))),
     );
 
     assert!(
-        matches!(peel, Deduction::Equivalent(_)),
+        matches!(peel, Some(Deduction::Equivalent(_))),
         "`g<0>(x) + 1` and `g<0>(y) + 1` are undecided, not one number",
     );
 }
@@ -295,15 +295,18 @@ fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
         )
     };
     let product = |level: u32| {
-        as_nat(&fold(plus(
+        fold(plus(
             Term::intrinsic(Intrinsic::nat_mul(instanced(level), symbol(1, "x"))),
             lit(1),
-        )))
+        ))
     };
 
     for level in 1..32 {
         assert!(
-            matches!(peel_nat(&product(0), &product(level)), Deduction::Equal),
+            matches!(
+                peel_nat_terms(&product(0), &product(level)),
+                Some(Deduction::Equal)
+            ),
             "`g<0> · x + 1` and `g<{level}> · x + 1` differ only in a level",
         );
     }

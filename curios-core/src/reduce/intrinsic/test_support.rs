@@ -171,13 +171,6 @@ pub(super) fn at(term: Term, binder: &Free, value: Term) -> Term {
     Scope::close(One, &[binder], term).open(&[&value])
 }
 
-pub(super) fn as_nat(term: &Term) -> Nat {
-    match &**term {
-        Subterm::Intrinsic(Intrinsic::Nat(nat)) => nat.clone(),
-        _ => unreachable!("a folded `Nat` carrying a successor floor"),
-    }
-}
-
 pub(super) fn run_bytes(run: &[u8]) -> Term {
     Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.to_vec())))
 }
