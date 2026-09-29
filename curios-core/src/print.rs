@@ -1107,6 +1107,15 @@ fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Prin
                 };
                 list_concat_entries(operands, frame, entries);
             }
+            Subterm::Intrinsic(Intrinsic::ListAppend { .. }) if !frame.spelling.grouped => {
+                let Subterm::Intrinsic(Intrinsic::ListAppend { list, item, .. }) =
+                    Term::unwrap_or_clone(operand)
+                else {
+                    unreachable!()
+                };
+                list_concat_entries(vec![list], frame, entries);
+                entries.push(sub(item, frame));
+            }
             _ => entries.push(flat([pure(".."), sub(operand, frame)])),
         }
     }
@@ -1128,6 +1137,17 @@ fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: 
                     unreachable!()
                 };
                 bin_concat_entries(grain, operands, frame, entries);
+            }
+            Subterm::Intrinsic(Intrinsic::BinAppend { grain: g, .. })
+                if *g == grain && !frame.spelling.grouped =>
+            {
+                let Subterm::Intrinsic(Intrinsic::BinAppend { bin, element, .. }) =
+                    Term::unwrap_or_clone(operand)
+                else {
+                    unreachable!()
+                };
+                bin_concat_entries(grain, vec![bin], frame, entries);
+                entries.push(sub(element, frame));
             }
             _ => entries.push(flat([pure(".."), sub(operand, frame)])),
         }
@@ -1521,11 +1541,6 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             length,
             within: _,
         } => print_call("Bytes/slice", vec![], vec![bin, start, length], frame),
-        Intrinsic::BinAppend {
-            grain: Grain::X,
-            bin: b,
-            element: byte,
-        } => print_call("Bytes/append", vec![], vec![b, byte], frame),
         Intrinsic::BinType(Grain::B) => pure(frame.spelling.intrinsic_symbol("Bits")),
         Intrinsic::Bin(Grain::B, bits) => print_packed(Grain::B, bin_atoms(Grain::B, &bits)),
         Intrinsic::BinLen(Grain::B, b) => print_call("Bits/len", vec![], vec![b], frame),
@@ -1543,11 +1558,17 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             length,
             within: _,
         } => print_call("Bits/slice", vec![], vec![bin, start, length], frame),
+        // An append has no named form in the surface: `x[..acc, b]` is how a program writes one, and so how a report does.
         Intrinsic::BinAppend {
-            grain: Grain::B,
-            bin: b,
-            element: bit,
-        } => print_call("Bits/append", vec![], vec![b, bit], frame),
+            grain,
+            bin,
+            element,
+        } => {
+            let mut entries = Vec::new();
+            bin_concat_entries(grain, vec![bin], frame, &mut entries);
+            entries.push(sub(element, frame));
+            print_packed(grain, entries)
+        }
         Intrinsic::BinConcat { grain, operands } => {
             let mut entries = Vec::new();
             bin_concat_entries(grain, operands, frame, &mut entries);
@@ -1645,10 +1666,15 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             within: _,
         } => print_call("List/slice", vec![ty], vec![list, start, length], frame),
         Intrinsic::ListAppend {
-            element: ty,
+            element: _,
             list,
-            item: elem,
-        } => print_call("List/append", vec![ty], vec![list, elem], frame),
+            item,
+        } => {
+            let mut entries = Vec::new();
+            list_concat_entries(vec![list], frame, &mut entries);
+            entries.push(sub(item, frame));
+            print_entries("[", entries)
+        }
         Intrinsic::ListConcat {
             element: _,
             operands,

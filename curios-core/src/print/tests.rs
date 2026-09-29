@@ -466,3 +466,32 @@ fn a_non_finite_flt_prints_as_what_reads_back_as_it() {
     let payload = printed(Floating::from_bits(0x7ff8_0000_0000_0001));
     assert!(payload.contains("of_le_bytes(x["), "{payload}");
 }
+
+/// An append prints as the literal a program writes it with, `b[..acc, b]`, since the surface has no named form for one, and a chain of appends splices into one literal. A list append prints the same way over `[…]`.
+#[test]
+fn an_append_prints_as_the_literal_that_writes_it() {
+    let var = |index, hint| Term::free_var(&Free::local(index, Some(hint)));
+    let append = |bin: Term, element: Term| {
+        Term::intrinsic(Intrinsic::BinAppend {
+            grain: Grain::B,
+            bin,
+            element,
+        })
+    };
+
+    assert_eq!(
+        append(var(0, "acc"), var(1, "b")).to_string(),
+        "b[..acc, b]"
+    );
+    assert_eq!(
+        append(append(var(0, "acc"), var(1, "b")), var(2, "c")).to_string(),
+        "b[..acc, b, c]"
+    );
+
+    let list = Term::intrinsic(Intrinsic::ListAppend {
+        element: Term::intrinsic(Intrinsic::NatType),
+        list: var(0, "xs"),
+        item: var(1, "x"),
+    });
+    assert_eq!(list.to_string(), "[..xs, x]");
+}
