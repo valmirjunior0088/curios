@@ -88,12 +88,14 @@ pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomi
     int_monomials_of(int_combination(&mut atoms, zero(), &summands))
 }
 
-/// A reduced summand as `curios-algebra` reads it: its coefficient, its factors as atoms in canonical order, and those factors as the origin a rebuild restores. `None` for a summand whose coefficient is zero, which is no summand.
+/// A reduced summand as `curios-algebra` reads it: its coefficient, its factors as atoms, and those factors as the origin a rebuild restores. `None` for a summand whose coefficient is zero, which is no summand.
+///
+/// The atoms are put in their own order, as `Nat`'s are: [`int_monomial`] orders factors by the structural hash of each as written, levels included, so two instances of one polymorphic factor can sort apart, while an atom's rank is its projected term's hash, which no level moves.
 fn int_summand(atoms: &mut Atoms, summand: &Term) -> Option<Summand<Integer, Vec<Term>>> {
     let (coefficient, factors) = int_monomial(summand);
     (!coefficient.is_zero()).then(|| Summand {
         coefficient,
-        monomial: curios_algebra::Monomial::new(
+        monomial: curios_algebra::Monomial::product(
             factors.iter().map(|factor| atoms.numeric(factor)).collect(),
         ),
         origin: factors,

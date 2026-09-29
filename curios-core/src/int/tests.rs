@@ -59,6 +59,25 @@ fn a_product_of_symbols_has_one_factor_order() {
     );
 }
 
+// A factor's universe instance is not part of the number a product is — Core has no elimination from a level into an `Int` — yet a product's factors are ordered by their structural hash as written, levels included, so two instances of one factor can sort to opposite sides of another. The atoms a monomial is read as are ordered by the projected term's hash instead, which no level moves.
+#[test]
+fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
+    let instanced = |level: u32| {
+        Term::instance(
+            crate::InstanceHead::Var(crate::Var::free(crate::Free::local(0, Some("g")))),
+            vec![crate::Level::constant(level)],
+        )
+    };
+    let product = |level: u32| add(int_product(&instanced(level), &sym(1, "x")), int(1));
+
+    for level in 1..32 {
+        assert!(
+            int_same(&product(0), &product(level)),
+            "`g<0> · x + 1` and `g<{level}> · x + 1` differ only in a level",
+        );
+    }
+}
+
 // A single monomial distributes over a sum in the fold, and a product of two symbolic sums does not — that is `int_normalize`'s to do on demand.
 #[test]
 fn a_product_distributes_only_past_a_single_monomial() {

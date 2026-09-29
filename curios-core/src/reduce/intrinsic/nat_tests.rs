@@ -285,6 +285,30 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
     );
 }
 
+// The same licence inside a product: a factor's universe instance is not part of the number either, so a product is one number at every instance of its factors. A product's factors are put in order by their structural hash as written, levels included, so two instances of one factor can sort to opposite sides of another; the atoms a monomial is read as are therefore ordered by the projected term's hash instead, which no level moves.
+#[test]
+fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
+    let instanced = |level: u32| {
+        Term::instance(
+            crate::InstanceHead::Var(crate::Var::free(Free::local(0, Some("g")))),
+            vec![crate::Level::constant(level)],
+        )
+    };
+    let product = |level: u32| {
+        as_nat(&fold(plus(
+            Term::intrinsic(Intrinsic::nat_mul(instanced(level), symbol(1, "x"))),
+            lit(1),
+        )))
+    };
+
+    for level in 1..32 {
+        assert!(
+            matches!(peel_nat(&product(0), &product(level)), Deduction::Equal),
+            "`g<0> · x + 1` and `g<{level}> · x + 1` differ only in a level",
+        );
+    }
+}
+
 // The rule the base-256 encodings need: a digit whose carrier bounds it below the divisor cannot carry, so the scaled symbol divides out exactly and the digit is the whole remainder.
 #[test]
 fn a_bounded_digit_divides_out_of_a_scaled_symbol() {

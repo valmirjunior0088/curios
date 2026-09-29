@@ -279,7 +279,7 @@ impl Nat {
         }
     }
 
-    /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, each factor one atom under the carrier's identity (`crate::atoms`). This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other. The collection is `curios-algebra`'s; what is read here is which term each summand's factor is, and the factor a merged summand keeps is its first appearance's.
+    /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, each factor's product spine a monomial of atoms under the carrier's identity (`crate::atoms`). This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other. The collection is `curios-algebra`'s; what is read here is which term each summand's factor is, and the factor a merged summand keeps is its first appearance's.
     pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
         curios_profile::profile!("nat::linear");
         let mut atoms = Atoms::default();
@@ -291,12 +291,19 @@ impl Nat {
         Self::terms_of(Combination::collect(Natural::zero(), read))
     }
 
-    /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor as one atom. A `Nat` monomial is compared as the one term its product spine is — the product fold builds that spine in one factor order — so the whole factor is the atom, and the factor is the origin a rebuild restores.
+    /// A reduced summand as `curios-algebra` reads it: its literal coefficient, and its factor's product spine as a monomial of atoms, the factor itself the origin a rebuild restores.
+    ///
+    /// **The atoms are put in their own order, not the spine's.** The product fold orders a spine's factors by the structural hash of each as written, levels included, so two instances of one polymorphic factor can sort to opposite sides of another and spell one number two ways. An atom's rank is the hash of its projected term, which no level moves, so [`Monomial::product`] puts `g<0> · x` and `g<8> · x` in one order. A factor still holding a literal inside its spine — a term no fold left that way — is read whole, as one atom, so its literal is never dropped from the coefficient.
     fn summand(atoms: &mut Atoms, summand: &Term) -> Summand<Natural, Term> {
         let (coefficient, factor) = Self::literal_factor(summand);
+        let (inner, factors) = Self::monomial(&factor);
+        let monomial = match inner.is_one() {
+            true => Monomial::product(factors.iter().map(|factor| atoms.numeric(factor)).collect()),
+            false => Monomial::new(vec![atoms.numeric(&factor)]),
+        };
         Summand {
             coefficient,
-            monomial: Monomial::new(vec![atoms.numeric(&factor)]),
+            monomial,
             origin: factor,
         }
     }
