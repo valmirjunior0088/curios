@@ -813,7 +813,11 @@ impl fmt::Display for Displayed<'_> {
                 embedding,
                 shape,
             } => {
-                let goal = goal.spelled(spelling);
+                let goal = embedding
+                    .as_ref()
+                    .and_then(|diagnosis| diagnosis.goal.as_deref())
+                    .unwrap_or(goal)
+                    .spelled(spelling);
                 write!(f, "no witness of {goal} found")?;
                 if let Some(diagnosis) = shape {
                     let ShapeDiagnosis { wanted, bare } = &**diagnosis;

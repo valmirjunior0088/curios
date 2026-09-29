@@ -158,8 +158,17 @@ pub struct Context {
     ///
     /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
     solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
+    /// What each auto-lift site named as written, under the span its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
+    embedding_sites: Vec<(Span, EmbeddingSite)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
     imports: Imports,
+}
+
+/// What an auto-lift site names as written: the action, and the region's monad — its type without the value slot, as a report shows a monad. A missing embedding is reported through these rather than through the monads unification solved, which are reduced and so spell a type alias by its representation: `Of(Str, (input, offset) => Boundary(input, offset))` where the program wrote `Parse(Str, …)`. The action's monad is read off its head's declaration only when a report asks, since reading it opens the declaration's arrows.
+#[derive(Debug, Clone)]
+pub(crate) struct EmbeddingSite {
+    pub(crate) action: Term,
+    pub(crate) region: Term,
 }
 
 /// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
@@ -207,10 +216,10 @@ impl Context {
             goal_spans: BTreeMap::new(),
             rec_slot_names: BTreeMap::new(),
             solve_blockers: BTreeMap::new(),
+            embedding_sites: Vec::new(),
         }
     }
 
-    /// Record where the written goal `id` was written, at its birth.
     /// Record what blocked `id`'s solve, replacing any earlier record: only the last attempt's reason is worth reporting, since an earlier one may since have been solved away.
     pub(crate) fn note_solve_blockers(
         &mut self,
@@ -227,6 +236,7 @@ impl Context {
         self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
     }
 
+    /// Record where the written goal `id` was written, at its birth.
     pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
         self.goal_spans.entry(id).or_insert(span);
     }
@@ -234,6 +244,20 @@ impl Context {
     /// Where the written goal `id` was written, if elaboration reached it.
     pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
         self.goal_spans.get(&id)
+    }
+
+    /// Record what the auto-lift at `span` named as written.
+    pub(crate) fn note_embedding_site(&mut self, span: Span, site: EmbeddingSite) {
+        self.embedding_sites.push((span, site));
+    }
+
+    /// What the auto-lift at `span` named as written, where it recorded it — the latest record, since re-validation may elaborate a site again.
+    pub(crate) fn embedding_site(&self, span: &Span) -> Option<&EmbeddingSite> {
+        self.embedding_sites
+            .iter()
+            .rev()
+            .find(|(at, _)| at == span)
+            .map(|(_, site)| site)
     }
 
     /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.

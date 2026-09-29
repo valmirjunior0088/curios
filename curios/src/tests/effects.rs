@@ -463,6 +463,25 @@ fn a_missing_edge_reports_the_lift_witness() {
     );
 }
 
+/// A pair of monads spelled through a type alias is reported as written. Unification solves the monads reduced, and `Parse(Str, …)` reduces to its representation — `Of(Str, (input, offset) => Boundary(input, offset))` — so the report reads the monads the auto-lift site named instead: the region's type without its value slot, and the action's declared result the same way.
+#[test]
+fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
+    let source = r#"
+        use /std/{Byte, Str, Parse};
+        pub let mixed: Parse(Str, Byte) =
+            let b = Parse/bytes/byte!;
+            Parse/pure(b);
+        /std/Io/pure(())
+        "#;
+
+    let error = typecheck(source).expect_err("a byte action in a text region must refuse");
+    assert!(
+        error.contains("no witness of Lift(Parse(Bytes), Parse(Str)) found")
+            && error.contains("needed to sequence a Parse(Bytes) action in this Parse(Str) region"),
+        "expected the embedding report with the monads as written, got: {error}"
+    );
+}
+
 /// A chain of declared edges that reaches the target without a composite is reported hop by hop — embeddings never chain automatically, and the report says where each hop lives.
 #[test]
 fn a_missing_composite_reports_the_declared_chain() {

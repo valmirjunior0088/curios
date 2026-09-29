@@ -15,10 +15,11 @@ use {
         ParkedWork, ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
-        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar,
-        MetavarId, StructType, Subterm, Term, UniverseContext, WitnessOrigin,
+        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Instance,
+        InstanceHead, Level, Metavar, MetavarId, StructType, Subterm, Term, UniverseContext,
+        WitnessOrigin,
     },
-    curios_utilities::{Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Plicity, Qualifier, Span},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -75,8 +76,13 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
     }
 }
 
-fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
-    let embedding = diagnose_embedding(context, goal);
+fn no_witness_error(
+    context: &mut Context,
+    goal: &Term,
+    provenance: &WitnessOrigin,
+    site: Option<&Span>,
+) -> Error {
+    let embedding = diagnose_embedding(context, goal, site);
     let shape = diagnose_shape(context, goal);
     Error::no_witness(
         display_goal(context, goal),
@@ -120,8 +126,12 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
     }))
 }
 
-/// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Error-path only; a diagnosis that cannot be computed is simply absent.
-pub(crate) fn diagnose_embedding(context: &mut Context, goal: &Term) -> Option<EmbeddingDiagnosis> {
+/// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Where the goal came from an auto-lift at `site`, the monads are the ones it named as written ([`EmbeddingSite`](crate::EmbeddingSite)), and so is the goal the report leads with. Error-path only; a diagnosis that cannot be computed is simply absent.
+pub(crate) fn diagnose_embedding(
+    context: &mut Context,
+    goal: &Term,
+    site: Option<&Span>,
+) -> Option<EmbeddingDiagnosis> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let Global::Authored(concept_path) = &concept_name else {
@@ -152,12 +162,88 @@ pub(crate) fn diagnose_embedding(context: &mut Context, goal: &Term) -> Option<E
         _ => Vec::new(),
     };
 
+    let written = site.and_then(|span| context.embedding_site(span)).cloned();
+    let written_source = written
+        .as_ref()
+        .and_then(|site| declared_result(context, &site.action))
+        .and_then(|result| written_monad(&result));
+    let source = match written_source {
+        Some(source) => display_goal(context, &source),
+        None => display_goal(context, &source_whnf),
+    };
+    let target = match &written {
+        Some(site) => display_goal(context, &site.region),
+        None => display_goal(context, &target_whnf),
+    };
+    let written_goal = written.and_then(|_| match &*goal {
+        Subterm::StructType(struct_type) => {
+            let mut struct_type = struct_type.clone();
+            struct_type.params = vec![source.clone(), target.clone()];
+            Some(Box::new(Term::from(Subterm::StructType(struct_type))))
+        }
+        _ => None,
+    });
+
     Some(EmbeddingDiagnosis {
-        source: Box::new(display_goal(context, &source_whnf)),
-        target: Box::new(display_goal(context, &target_whnf)),
+        source: Box::new(source),
+        target: Box::new(target),
         source_is_monad,
         chain,
+        goal: written_goal,
     })
+}
+
+/// `F(c̄, v)` as the monad it names, `F(c̄)`: an application of a name — at a universe instance or not — without its value slot, its explicit arguments alone, which is what a report shows of a monad. `None` unless `type_` applies a name.
+pub(crate) fn written_monad(type_: &Term) -> Option<Term> {
+    let Subterm::Apply(apply) = &**type_ else {
+        return None;
+    };
+    named(&apply.head)?;
+    let mut explicit: Vec<Term> = apply
+        .params()
+        .zip(apply.plicities())
+        .filter(|(_, plicity)| matches!(plicity, Plicity::Explicit))
+        .map(|(argument, _)| argument.clone())
+        .collect();
+    explicit.pop()?;
+    Some(match explicit.is_empty() {
+        true => apply.head.clone(),
+        false => Term::apply(apply.head.clone(), explicit),
+    })
+}
+
+/// The name `head` is, at a universe instance or not.
+fn named(head: &Term) -> Option<&Free> {
+    match &**head {
+        Subterm::Var(var) => var.as_free(),
+        Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) => var.as_free(),
+        _ => None,
+    }
+}
+
+/// The result `action`'s head declares, as written: the head is a name, its declared arrows are opened without reducing anything, and the result mentions none of their binders. `None` otherwise, and the report shows the monad unification solved. Error-path only, since opening the arrows mints binders.
+fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
+    let mut head = action;
+    while let Subterm::Apply(apply) = &**head {
+        head = &apply.head;
+    }
+    let mut result = context.assumption(named(head)?)?.clone();
+    let mut binders = Vec::new();
+    while let Subterm::FuncType(func_type) = &*result {
+        let mut cursor = func_type.telescope.cursor();
+        while cursor.entry().is_some() {
+            binders.push(cursor.advance_fresh(|hint| context.fresh(hint)));
+        }
+        result = cursor.body().expect("a cursor past every entry");
+    }
+    let mentioned = result.free_vars();
+    binders
+        .iter()
+        .all(|binder| !mentioned.contains(binder))
+        .then_some(result)
 }
 
 /// A shortest chain of declared `Lift` edges from `from` to `to`, each hop rendered as its key and declaring module — breadth-first over the witness table's keys, so the result is minimal and deterministic.
@@ -688,7 +774,10 @@ pub(crate) fn attempt_witness_goal(
         }
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
-            Err(no_witness_error(context, goal, &provenance).at_opt(origin.span()))
+            Err(
+                no_witness_error(context, goal, &provenance, origin.span().as_ref())
+                    .at_opt(origin.span()),
+            )
         }
     }
 }
@@ -737,7 +826,10 @@ pub(crate) fn retry_witness(
         }
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
-            Err(no_witness_error(context, &goal, &provenance).at_opt(origin.span()))
+            Err(
+                no_witness_error(context, &goal, &provenance, origin.span().as_ref())
+                    .at_opt(origin.span()),
+            )
         }
     }
 }
@@ -818,7 +910,8 @@ pub(crate) fn finish_deferred_witnesses(
         };
         refusals.push(DeferredRefusal {
             item,
-            error: no_witness_error(context, &goal, &provenance).at_opt(origin.span()),
+            error: no_witness_error(context, &goal, &provenance, origin.span().as_ref())
+                .at_opt(origin.span()),
         });
     }
 

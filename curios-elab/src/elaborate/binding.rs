@@ -524,7 +524,9 @@ pub(super) fn elaborate_bang(
         action_result_shape(context, &bang.action),
     ) {
         (Some(region_shape), Some(action_shape)) if embeds(&region_shape, &action_shape) => {
-            lift_wrapped(context, &bang.action, term.span())
+            let wrapped = lift_wrapped(context, &bang.action, term.span());
+            note_embedding_site(context, &wrapped, &bang.action, expected);
+            wrapped
         }
         _ => bang.action.clone(),
     };
@@ -607,6 +609,20 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Ter
     }
 }
 
+/// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`](crate::EmbeddingSite). A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
+fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
+    let (Some(span), Some(region)) = (wrapped.span(), crate::written_monad(region)) else {
+        return;
+    };
+    context.note_embedding_site(
+        span,
+        crate::EmbeddingSite {
+            action: action.clone(),
+            region,
+        },
+    );
+}
+
 /// Auto-lift on a checked tail, the region-end twin of [`elaborate_bang`]'s wrap: a term whose named head is declared in a monad other than the region's, checked where the region's monad is rigid, is wrapped in `lift` before it elaborates, so the declared edge carries it or the missing edge is reported — `Some(wrapped)` to elaborate in the tail's place. It fires only where both heads are registered monads, so a mismatch between two data types stays the ordinary mismatch, and it abstains exactly where the `!` oracle does: a flexible region, an unreadable head, or equal keys. The monad gate is read before the head, since most checked nodes sit under a data type and settle on one table lookup.
 pub(super) fn lift_on_check(
     context: &mut Context,
@@ -632,7 +648,9 @@ pub(super) fn lift_on_check(
     if !embeds(&region_shape, &action_shape) || !is_monad(context, &action_shape.head) {
         return Ok(None);
     }
-    Ok(Some(lift_wrapped(context, term, None)))
+    let wrapped = lift_wrapped(context, term, None);
+    note_embedding_site(context, &wrapped, term, expected);
+    Ok(Some(wrapped))
 }
 
 /// What identifies a monad for the lift oracle: the rigid head, and the keys of the application's *context* arguments — every argument but the last, which is the slot a right-biased partial application abstracts and so the value slot, free to differ between an action and its region. A context argument that keys on nothing, a binder the action's own telescope will solve above all, is `None` and compatible with anything.

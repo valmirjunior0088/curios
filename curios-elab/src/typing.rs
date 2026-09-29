@@ -582,7 +582,11 @@ impl Context {
                                 .or_else(|| self.witness_hole(&goal.that))
                             {
                                 Some((origin, witness_goal)) => {
-                                    let embedding = super::diagnose_embedding(self, &witness_goal);
+                                    let embedding = super::diagnose_embedding(
+                                        self,
+                                        &witness_goal,
+                                        parked_origin.span().as_ref(),
+                                    );
                                     let shape = super::diagnose_shape(self, &witness_goal);
                                     Error::no_witness(
                                         resolved_for_display(self, &witness_goal),
@@ -637,7 +641,11 @@ impl Context {
                         ParkedWork::Witness {
                             goal, provenance, ..
                         } => {
-                            let embedding = super::diagnose_embedding(self, &goal);
+                            let embedding = super::diagnose_embedding(
+                                self,
+                                &goal,
+                                parked_origin.span().as_ref(),
+                            );
                             let shape = super::diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
