@@ -783,10 +783,12 @@ dependencies = [
 name = "curios-prelude"
 version = "0.15.3"
 dependencies = [
+ "curios-archive",
  "curios-cert",
  "curios-core",
  "curios-prelude-archive",
  "curios-profile",
+ "curios-unit",
 ]
 
 [[package]]

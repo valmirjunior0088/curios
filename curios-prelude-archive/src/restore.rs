@@ -55,7 +55,9 @@ fn archived() -> &'static [Validated; 2] {
 /// Deserialize the validated images.
 ///
 /// The universe invariants are *not* re-checked here. They are asserted once by `build.rs`, on the values it is about to serialize, and these bytes are exactly the bytes written from those values — constants of the same build, whose structure [`validate_bytes`] confirms. Walking the whole standard library again per compilation to re-derive an answer already settled cost ~175 ms of a ~680 ms release compile of a one-line program.
-fn restore_archives() -> [Stored; 2] {
+///
+/// Public for `curios-prelude`, which restores its own copy to attach the record its build's certification filed — a record this crate cannot make, since it sits below the certifier. [`with_prelude`] here lends the units as this crate's build left them, which only that certification itself should want.
+pub fn restore_archives() -> [Stored; 2] {
     curios_profile::profile!("restore_archives");
     let mut units = archived().iter().zip(ROOTS).map(|(archived, (root, _))| {
         let (record, unit) = match archived {

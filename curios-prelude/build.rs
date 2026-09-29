@@ -2,11 +2,12 @@
 //!
 //! `curios-prelude-archive` produced an image. This restores it, walks every item with the independent kernel, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 //!
-//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. There is nothing to serialize here and nothing for a later pass to believe.
+//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `.artifacts/certification.rkyv` beside this crate, which the crate attaches to the units it restores.
 
 use {
-    curios_cert::{Globals, recheck_module_verdicts},
-    curios_core::Zonked,
+    curios_cert::{Globals, certify_module},
+    curios_core::{Certification, Zonked},
+    std::{fs, path::PathBuf},
 };
 
 fn main() {
@@ -25,6 +26,7 @@ fn certify() {
         // Built up as the fold goes rather than taken from `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand, which is two lines and says exactly what the fold order means.
         let mut globals = Globals::default();
         let mut items = 0;
+        let mut certifications = Vec::new();
 
         for unit in prelude {
             let core = unit.core();
@@ -32,7 +34,7 @@ fn certify() {
             let zonked = Zonked::project(core).unwrap_or_else(|refusal| {
                 panic!("a restored prelude root is not zonked: {refusal}")
             });
-            let refusals = recheck_module_verdicts(
+            let (refusals, certification) = certify_module(
                 &zonked,
                 curios_prelude_archive::DEFAULT_STEP_BUDGET,
                 &globals,
@@ -57,9 +59,31 @@ fn certify() {
 
             globals.mount(core, unit.binder_floor());
             items += core.items.len();
+            certifications.push(certification);
         }
+
+        file_certifications(&certifications);
 
         // Plain stdout rather than `cargo:warning=`, for the same reason as the archive's metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has already certified. What this adds is the count, which changes only when the prelude does.
         println!("fixed prelude certified: {items} items accepted by the kernel");
     });
+}
+
+/// File the roots' records, in the fold's order, where the crate's own restoration reads them.
+///
+/// Under `.artifacts/` rather than `OUT_DIR`, as the images are: a build product outliving the build that made it lives beside its owner.
+fn file_certifications(certifications: &Vec<Certification>) {
+    let artifacts = PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR")
+            .expect("Cargo runs a build script with `CARGO_MANIFEST_DIR` set"),
+    )
+    .join(".artifacts");
+    fs::create_dir_all(&artifacts)
+        .unwrap_or_else(|error| panic!("failed to create {}: {error}", artifacts.display()));
+
+    let bytes = curios_archive::to_bytes(certifications)
+        .unwrap_or_else(|error| panic!("the prelude's certification failed to serialize: {error}"));
+    let path = artifacts.join("certification.rkyv");
+    fs::write(&path, &*bytes)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }

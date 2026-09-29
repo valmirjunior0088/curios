@@ -3,6 +3,7 @@
 use {
     super::test_support::{recompile_over, reuses_body, unit_of},
     curios_core::Totality,
+    curios_prelude::with_prelude,
     curios_unit::Unit,
 };
 
@@ -58,4 +59,18 @@ fn an_item_level_recompile_keeps_the_baselines_record_for_what_it_reuses() {
     assert_eq!(classified(&recompiled, "double"), Some(Totality::Total));
     assert_eq!(classified(&recompiled, "spin"), Some(Totality::Partial));
     assert_eq!(classified(&recompiled, "twice"), Some(Totality::Total));
+}
+
+/// The fixed prelude is lent with the record its build's certification filed, so a walk with the prelude in scope reads the certifier's verdict on every `/sys` and `/std` definition and classifies none of them for itself.
+#[test]
+fn the_restored_prelude_carries_a_record_covering_every_definition() {
+    with_prelude(|prelude| {
+        for unit in prelude {
+            let certification = unit
+                .certification()
+                .expect("the restored prelude carries its record");
+
+            assert!(certification.covers(unit.core()));
+        }
+    });
 }
