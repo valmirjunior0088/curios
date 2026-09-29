@@ -34,7 +34,7 @@ fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() 
 
         induct Wit : pub Type
         | base()
-        | tied(a : Wit, b : Wit, p : Eq(a, b))
+        | tied(a : Wit, b : Wit, p : Eq()(a, b))
         end
 
         match Wit/tied(Wit/base(), Wit/base(), Eq/refl())

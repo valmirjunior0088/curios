@@ -19,7 +19,7 @@ pub let flip(r: Ordering) -> Ordering =
     match r | lt() => Ordering/gt() | eq() => Ordering/eq() | gt() => Ordering/lt() end;
 
 --- Equal answers flip to equal answers.
-pub let cong_flip(@s: Ordering, @t: Ordering, p: Eq(s, t)) -> Eq(flip(s), flip(t)) =
+pub let cong_flip(@s: Ordering, @t: Ordering, p: Eq()(s, t)) -> Eq()(flip(s), flip(t)) =
     Eq/cong(flip, p);
 
 --- Whether the answer is `lt`.
@@ -43,28 +43,28 @@ pub let is_ge(r: Ordering) -> Bool =
     match r | lt() => false | eq() => true | gt() => true end;
 
 --- `lt` and `eq` are distinct.
-pub let lt_neq_eq(p: Eq(Ordering/lt(), Ordering/eq())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
+pub let lt_neq_eq(p: Eq()(Ordering/lt(), Ordering/eq())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
 
 --- `gt` and `eq` are distinct.
-pub let gt_neq_eq(p: Eq(Ordering/gt(), Ordering/eq())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
+pub let gt_neq_eq(p: Eq()(Ordering/gt(), Ordering/eq())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
 
 --- `eq` and `lt` are distinct.
-pub let eq_neq_lt(p: Eq(Ordering/eq(), Ordering/lt())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
+pub let eq_neq_lt(p: Eq()(Ordering/eq(), Ordering/lt())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
 
 --- `gt` and `lt` are distinct.
-pub let gt_neq_lt(p: Eq(Ordering/gt(), Ordering/lt())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
+pub let gt_neq_lt(p: Eq()(Ordering/gt(), Ordering/lt())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
 
 --- `eq` and `gt` are distinct.
-pub let eq_neq_gt(p: Eq(Ordering/eq(), Ordering/gt())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
+pub let eq_neq_gt(p: Eq()(Ordering/eq(), Ordering/gt())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
 
 --- `lt` and `gt` are distinct.
-pub let lt_neq_gt(p: Eq(Ordering/lt(), Ordering/gt())) -> Bool/False =
-    false_neq_true(match p: (s, t, _) => Eq(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
+pub let lt_neq_gt(p: Eq()(Ordering/lt(), Ordering/gt())) -> Bool/False =
+    false_neq_true(match p: (s, t, _) => Eq()(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
 
 satisfy Eql(Ordering);
 

@@ -10,7 +10,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
         use /std/Nat/{Le};
         let a : Nat = 6;
         let b : Nat = 7;
-        let p : Eq(a + (b - a), b) = Le/add_sub_cancel(a, b, Le/add_r(a, 1));
+        let p : Eq()(a + (b - a), b) = Le/add_sub_cancel(a, b, Le/add_r(a, 1));
         /std/print("ok")
         "#;
     assert_eq!(run(source), b"ok");
@@ -79,7 +79,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         use /std/Nat/{Le};
         let a : Nat = 6;
         let b : Nat = 7;
-        let consume(x : Nat, y : Nat, p : Eq(x + (y - x), y)) -> Nat = 42;
+        let consume(x : Nat, y : Nat, p : Eq()(x + (y - x), y)) -> Nat = 42;
         /std/print(Nat/to_str(consume(a, b, Le/add_sub_cancel(a, b, Le/add_r(a, 1)))))
         "#;
     assert_eq!(run(source), b"42");

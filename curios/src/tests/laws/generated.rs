@@ -74,7 +74,7 @@ fn by_carrier(rows: &[Row]) -> Vec<(String, Vec<(String, String)>)> {
         .collect()
 }
 
-/// A law as Curios source: its binders — the variables, then a proof for every narrowing it takes — and `Eq(left, right)`.
+/// A law as Curios source: its binders — the variables, then a proof for every narrowing it takes — and `Eq()(left, right)`.
 pub(super) fn spell(law: &Law) -> (String, String) {
     let mut spelling = Spelling::default();
     let claim = format!(

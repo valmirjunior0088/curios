@@ -73,7 +73,7 @@ fn a_superclass_edge_is_in_scope_for_a_later_field_type() {
         }
         pub concept Keyed(A : Type) : pub Type {
             use Encoded(A),
-            injective(a : A, b : A, same : Eq(Encoded/encode(a), Encoded/encode(b))) -> Eq(a, b)
+            injective(a : A, b : A, same : Eq()(Encoded/encode(a), Encoded/encode(b))) -> Eq()(a, b)
         }
         satisfy Encoded(Str) {
             encode = Str/to_bytes

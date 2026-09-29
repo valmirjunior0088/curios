@@ -2,45 +2,45 @@
 use /std/{Nat, Eq};
 
 induct _Div(d: Nat, n: Nat): pub Prop
-| intro(k: Nat, e: Eq(n, k * d))
+| intro(k: Nat, e: Eq()(n, k * d))
 end
 
 let _scale_0(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_1(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_2(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_3(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_4(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_5(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_6(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
 let _scale_7(@d: Nat, @a: Nat, p: _Div(d, a), c: Nat) -> _Div(d, a * c) =
     match p
-    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq(a * c, x * c), e, Eq/refl()))
+    | intro(k, e) => _Div/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;

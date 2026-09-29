@@ -193,7 +193,7 @@ fn types_spell_operators_as_infix_not_witness_projections() {
     // The concept-dispatch rebuild (`a + b` ≙ a witness projection call — `elaborate_infix`) folds back to its source spelling in reports, nested operands parenthesized, and no anonymous witness name leaks.
     let source = r#"
         use /std/{Nat, Eq};
-        let claim : Eq((1 + 2) * 3, 9) = ?;
+        let claim : Eq()((1 + 2) * 3, 9) = ?;
         0
     "#;
 
@@ -210,8 +210,8 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
-            match n : (m) => Eq(double(m), m * 2)
+        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
+            match n : (m) => Eq()(double(m), m * 2)
             | 0 => Eq/refl()
             | p + 1; ih => Eq/cong(?, ih)
             end;

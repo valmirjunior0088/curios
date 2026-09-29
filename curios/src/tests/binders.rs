@@ -11,12 +11,12 @@ use super::{error, run};
 fn lambda_annotation_names_an_earlier_binder() {
     let source = r#"
         use /std/{Nat, Eq};
-        let flip : (@A : Type, s : A, t : A, q : Eq(s, t)) -> Eq(t, s) =
-            (@A, s : A, t : A, q : Eq(s, t)) =>
+        let flip : (@A : Type, s : A, t : A, q : Eq()(s, t)) -> Eq()(t, s) =
+            (@A, s : A, t : A, q : Eq()(s, t)) =>
                 match q
                 | refl(@z) => Eq/refl()
                 end;
-        let _ : Eq(2, 2) = flip(2, 2, Eq/refl());
+        let _ : Eq()(2, 2) = flip(2, 2, Eq/refl());
         /std/print(Nat/to_str(2))
         "#;
     assert_eq!(run(source), b"2");
@@ -27,10 +27,10 @@ fn lambda_annotation_names_an_earlier_binder() {
 fn func_type_and_lambda_accept_the_same_dependent_telescope() {
     let source = r#"
         use /std/{Nat, Eq};
-        let apply(f : (s : Nat, t : Nat, q : Eq(s, t)) -> Nat) -> Nat =
+        let apply(f : (s : Nat, t : Nat, q : Eq()(s, t)) -> Nat) -> Nat =
             f(7, 7, Eq/refl());
-        let written : (s : Nat, t : Nat, q : Eq(s, t)) -> Nat =
-            (s : Nat, t : Nat, q : Eq(s, t)) => s;
+        let written : (s : Nat, t : Nat, q : Eq()(s, t)) -> Nat =
+            (s : Nat, t : Nat, q : Eq()(s, t)) => s;
         /std/print(Nat/to_str(apply(written)))
         "#;
     assert_eq!(run(source), b"7");
@@ -41,8 +41,8 @@ fn func_type_and_lambda_accept_the_same_dependent_telescope() {
 fn lambda_annotation_names_a_tuple_pattern_leaf() {
     let source = r#"
         use /std/{Nat, Eq};
-        let first : (pair : {Nat, Nat}, q : Eq(pair.0, pair.1)) -> Nat =
-            ((lo, hi), q : Eq(lo, hi)) => lo;
+        let first : (pair : {Nat, Nat}, q : Eq()(pair.0, pair.1)) -> Nat =
+            ((lo, hi), q : Eq()(lo, hi)) => lo;
         /std/print(Nat/to_str(first((4, 4), Eq/refl())))
         "#;
     assert_eq!(run(source), b"4");
@@ -57,8 +57,8 @@ fn lambda_annotation_names_a_struct_pattern_leaf() {
             lo : Nat,
             hi : Nat,
         }
-        let high : (span : Span, q : Eq(span.lo, span.hi)) -> Nat =
-            (Span { lo, hi }, q : Eq(lo, hi)) => hi;
+        let high : (span : Span, q : Eq()(span.lo, span.hi)) -> Nat =
+            (Span { lo, hi }, q : Eq()(lo, hi)) => hi;
         /std/print(Nat/to_str(high(Span { lo = 9, hi = 9 }, Eq/refl())))
         "#;
     assert_eq!(run(source), b"9");

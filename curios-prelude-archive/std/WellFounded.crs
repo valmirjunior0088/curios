@@ -36,7 +36,7 @@ let lifted(
     b: B,
     acc: Accessible(R)(b),
     x: A,
-    same: Eq(f(x), b),
+    same: Eq()(f(x), b),
 ) -> Accessible((u: A, v: A) => R(f(u), f(v)))(x) =
     match acc
     | intro(@_, below) =>

@@ -280,7 +280,7 @@ fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
     assert_eq!(universe_parameters(&module, "/M/bind"), 5);
 }
 
-/// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.
+/// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq()(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.
 #[test]
 fn a_concept_field_may_reference_a_preceding_field() {
     elaborate_source(

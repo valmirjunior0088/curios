@@ -89,9 +89,9 @@ pub let cons_inj_head(
     @t1: Bits,
     @h2: Bool,
     @t2: Bits,
-    p: Eq(b[h1, ..t1], b[h2, ..t2]),
-) -> Eq(h1, h2) =
-    match p: (s, t, _) => Eq(head_of(s), head_of(t)) | refl(@_) => Eq/refl() end;
+    p: Eq()(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq()(h1, h2) =
+    match p: (s, t, _) => Eq()(head_of(s), head_of(t)) | refl(@_) => Eq/refl() end;
 
 --- A cons is injective in its tail.
 pub let cons_inj_tail(
@@ -99,19 +99,19 @@ pub let cons_inj_tail(
     @t1: Bits,
     @h2: Bool,
     @t2: Bits,
-    p: Eq(b[h1, ..t1], b[h2, ..t2]),
-) -> Eq(t1, t2) =
-    match p: (s, t, _) => Eq(tail_of(s), tail_of(t)) | refl(@_) => Eq/refl() end;
+    p: Eq()(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq()(t1, t2) =
+    match p: (s, t, _) => Eq()(tail_of(s), tail_of(t)) | refl(@_) => Eq/refl() end;
 
 --- Congruence for a run extended by a head and a tail, which is the rebuild the two injections above take apart.
 pub let cong_cons2(
     @h1: Bool,
     @h2: Bool,
-    ph: Eq(h1, h2),
+    ph: Eq()(h1, h2),
     @t1: Bits,
     @t2: Bits,
-    pt: Eq(t1, t2),
-) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
+    pt: Eq()(t1, t2),
+) -> Eq()(b[h1, ..t1], b[h2, ..t2]) =
     match ph
     | refl(@_) => match pt | refl(@_) => Eq/refl() end
     end;

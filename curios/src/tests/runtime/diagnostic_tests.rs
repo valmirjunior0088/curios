@@ -103,7 +103,7 @@ fn spells_index_arithmetic_infix() {
 fn parenthesizes_a_reduced_successor_operand() {
     let source = r#"
         use /std/{Nat, Eq};
-        let claim(n: Nat, k: Nat) -> Eq(n - (k + 1), 0) = Eq/refl();
+        let claim(n: Nat, k: Nat) -> Eq()(n - (k + 1), 0) = Eq/refl();
         claim
         "#;
 
@@ -124,7 +124,7 @@ fn keeps_the_name_of_a_stalled_unfolding() {
     let source = r#"
         use /std/{Nat, Eq};
         let double(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let claim(n: Nat) -> Eq(double(n), n * 2) = Eq/refl();
+        let claim(n: Nat) -> Eq()(double(n), n * 2) = Eq/refl();
         claim
         "#;
 

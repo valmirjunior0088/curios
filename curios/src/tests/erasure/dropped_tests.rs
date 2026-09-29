@@ -200,7 +200,7 @@ fn a_dependent_proof_payload_leaves_its_constructor_a_bare_tag() {
         | theorem(P: Prop, proof: P)
         | other(Nat)
         end
-        let t: Box = Box/theorem(Eq(1 + 1, 2), Eq/refl());
+        let t: Box = Box/theorem(Eq()(1 + 1, 2), Eq/refl());
         match t
         | theorem(P, p) => /std/print("proved\n")
         | other(n) => /std/print("other\n")
@@ -236,7 +236,7 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
         | tag()
         end
         let prove(P: Prop, proof: P) -> Box = Box/tag();
-        let b: Box = prove(Eq(2 * 21, 42), Eq/refl());
+        let b: Box = prove(Eq()(2 * 21, 42), Eq/refl());
         match b | tag() => /std/print("called\n") end
         "#),
         b"called\n"

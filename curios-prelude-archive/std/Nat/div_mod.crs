@@ -8,7 +8,7 @@ pub struct DivMod(n: Nat, d: Nat): pub Type {
     --- What is left over.
     remainder: Nat,
     --- `n` is the quotient's multiple of `d` and the remainder.
-    joined: Eq(n, quotient * d + remainder),
+    joined: Eq()(n, quotient * d + remainder),
     --- The remainder is below `d`.
     bounded: Lt(remainder, d),
 }

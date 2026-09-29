@@ -1031,17 +1031,17 @@ pub(super) fn lying_motive(sort: Term) -> Module {
 
 /// The three motives [`fold_motive`] states over `match n`, for `n : Nat`.
 pub(super) enum FoldMotive {
-    /// `(_) => Eq(n, 0)`: names the scrutinee instead of binding it, with the hypothesis returned whole in the successor arm.
+    /// `(_) => Eq()(n, 0)`: names the scrutinee instead of binding it, with the hypothesis returned whole in the successor arm.
     Captured,
-    /// `(m) => Eq(m, 0)`: binds the scrutinee, with the same successor arm — which is then the mismatch it should be.
+    /// `(m) => Eq()(m, 0)`: binds the scrutinee, with the same successor arm — which is then the mismatch it should be.
     Honest,
-    /// `(m) => Eq(m, m)`, with `refl(k + 1)` in the successor arm: the same shape at a goal each arm can inhabit, so the module is otherwise well-formed.
+    /// `(m) => Eq()(m, m)`, with `refl(k + 1)` in the successor arm: the same shape at a goal each arm can inhabit, so the module is otherwise well-formed.
     Reflexive,
 }
 
-/// `all_zero : (n : Nat) -> Eq(n, 0)` (or `Eq(n, n)` for [`FoldMotive::Reflexive`]) by a `Nat` fold under the given motive, with `refl` in the zero arm.
+/// `all_zero : (n : Nat) -> Eq()(n, 0)` (or `Eq()(n, n)` for [`FoldMotive::Reflexive`]) by a `Nat` fold under the given motive, with `refl` in the zero arm.
 ///
-/// Under the captured motive the hypothesis is assumed at `Eq(n, 0)` inside an arm where `n` is specialized to `k + 1`, which is the arm's own goal, so the successor arm checks and `all_zero(1) : Eq(1, 0)` follows. The honest motive types the hypothesis at `Eq(k, 0)`, and the same arm is a mismatch against `Eq(k + 1, 0)`.
+/// Under the captured motive the hypothesis is assumed at `Eq()(n, 0)` inside an arm where `n` is specialized to `k + 1`, which is the arm's own goal, so the successor arm checks and `all_zero(1) : Eq()(1, 0)` follows. The honest motive types the hypothesis at `Eq()(k, 0)`, and the same arm is a mismatch against `Eq()(k + 1, 0)`.
 ///
 /// `Eq` is the two-index equality [`equality_declaration`] declares, at `Nat`, so the module needs nothing from the prelude; its `refl` payload is the value alone, the carrier being the family's parameter.
 pub(super) fn fold_motive(motive: FoldMotive) -> Module {

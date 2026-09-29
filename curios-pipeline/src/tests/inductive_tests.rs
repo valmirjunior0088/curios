@@ -508,13 +508,13 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
 
 #[test]
 fn payload_relying_on_implicit_insertion_is_rebuilt() {
-    // The inductive registry used to keep `into_core`'s *lowered* payload and index types, so a type relying on implicit-argument insertion — `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived under-applied and panicked the `Telescope::open` arity assert the first time reduction met the registry copy. The registry telescopes are now rebuilt during `elaborate_module` (indices while the inductive group's signatures are assumed, constructors once its bodies are defined), so the payload elaborates like any other type.
+    // The inductive registry used to keep `into_core`'s *lowered* payload and index types, so a type relying on implicit-argument insertion — `Eq()(0, 1)` against `Eq`'s 3-ary type constructor — survived under-applied and panicked the `Telescope::open` arity assert the first time reduction met the registry copy. The registry telescopes are now rebuilt during `elaborate_module` (indices while the inductive group's signatures are assumed, constructors once its bodies are defined), so the payload elaborates like any other type.
     let payload = r#"
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
         end
         induct Box : Type
-        | mk(p : Eq(0, 1))
+        | mk(p : Eq()(0, 1))
         end
         0
     "#;
@@ -525,7 +525,7 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
         end
-        induct Tag : (p : Eq(0, 0)) -> Type
+        induct Tag : (p : Eq()(0, 0)) -> Type
         | mk() : (Eq/refl(0))
         end
         0
@@ -539,7 +539,7 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         | refl(z : A) : (z, z)
         end
         induct Box : Type
-        | mk(p : Eq(0, 0))
+        | mk(p : Eq()(0, 0))
         end
         let b : Box = Box/mk(Eq/refl(0));
         match b : (_) => Nat
@@ -604,6 +604,29 @@ fn an_indexed_family_applied_in_one_call_is_refused() {
 
     assert!(
         error.contains("wrong number of arguments: expected 1, got 2"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_familys_implicit_parameters_still_take_a_call_of_their_own() {
+    // `Eq`'s `@A` is a parameter list of its own ahead of its indices, so a use writes its call — empty, or supplying `@A` — and the indices in the next. One call carrying both is refused.
+    let accepted = r#"
+        use /std/{Nat, Eq};
+        let a : Eq()(0, 0) = Eq/refl();
+        let b : Eq(@Nat)(0, 0) = Eq/refl();
+        0
+    "#;
+    assert!(compile(accepted, Some("/std/Nat")).is_ok());
+
+    let refused = r#"
+        use /std/{Nat, Eq};
+        let a : Eq(0, 0) = Eq/refl();
+        0
+    "#;
+    let error = compile(refused, Some("/std/Nat")).unwrap_err();
+    assert!(
+        error.contains("wrong number of arguments: expected 0, got 2"),
         "unexpected error: {error}"
     );
 }

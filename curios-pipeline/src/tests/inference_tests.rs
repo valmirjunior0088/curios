@@ -120,9 +120,9 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             @t1: Bits,
             @h2: Bool,
             @t2: Bits,
-            p: Eq(b[h1, ..t1], b[h2, ..t2]),
-        ) -> Eq(h1, h2) =
-            match p: (s, t, q) => Eq(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
+            p: Eq()(b[h1, ..t1], b[h2, ..t2]),
+        ) -> Eq()(h1, h2) =
+            match p: (s, t, q) => Eq()(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
 
         let raw(x: Bits) -> Bits =
             match x
@@ -130,7 +130,7 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
             end;
 
-        let probe(zt: Bits, p: Eq(raw(b[]), raw(b[true, ..zt]))) -> Bool/False =
+        let probe(zt: Bits, p: Eq()(raw(b[]), raw(b[true, ..zt]))) -> Bool/False =
             false_neq_true(Eq/sym(cons_inj_head(p)));
 
         Io/pure(())
@@ -185,11 +185,11 @@ fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
 
 #[test]
 fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
-    // The diversion above applies only when written goals are *all* that holds a conversion up. Here the goal's congruence equation rides under a lambda binder — `f`'s implicit meets `(n: Nat) -> Eq(?f(k), ?f(7))` whose metavariables were minted under that binder, so the containment exemption cannot commit the candidate and it postpones — and the survivor watches the goal and the implicit both, reporting as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
+    // The diversion above applies only when written goals are *all* that holds a conversion up. Here the goal's congruence equation rides under a lambda binder — `f`'s implicit meets `(n: Nat) -> Eq()(?f(k), ?f(7))` whose metavariables were minted under that binder, so the containment exemption cannot commit the candidate and it postpones — and the survivor watches the goal and the implicit both, reporting as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
     let source = r#"
         use /std/{Nat, Eq};
         let f(@A : Type, a : A) -> {} = ();
-        let stuck(k : Nat, h : Eq(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
+        let stuck(k : Nat, h : Eq()(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
         0
     "#;
 

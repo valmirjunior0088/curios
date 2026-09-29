@@ -521,7 +521,7 @@ impl Convert {
             return Ok(false);
         }
 
-        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — a stuck `Eq(P, p, q)` converts with `Eq(P, p, p)`. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
+        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — a stuck `Eq(@P)(p, q)` converts with `Eq(@P)(p, p)`. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
         let arity = match context.induct_decl(&this.name).cloned() {
             Some(induct_decl) => Some(instantiate_bound_at(
                 context,

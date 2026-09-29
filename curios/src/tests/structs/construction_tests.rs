@@ -160,15 +160,15 @@ fn prop_struct_with_prop_fields_runs() {
     let source = r#"
         use /std/{Nat, Eq};
         struct And(A : Prop, B : Prop) : pub Prop { fst : A, snd : B }
-        let p : And(Eq(0, 0), Eq(1, 1)) = And { Eq/refl(), Eq/refl() };
-        let proof : Eq(0, 0) = p.fst;
+        let p : And(Eq()(0, 0), Eq()(1, 1)) = And { Eq/refl(), Eq/refl() };
+        let proof : Eq()(0, 0) = p.fst;
         /std/print(Nat/to_str(7))
         "#;
 
     assert_eq!(run(source), b"7");
 }
 
-// A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected at declaration. Projection is an unguarded eliminator, so admitting it under proof irrelevance proves `Eq(b0, b1)` for distinct `b0`, `b1` — and thence `Eq(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
+// A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected at declaration. Projection is an unguarded eliminator, so admitting it under proof irrelevance proves `Eq()(b0, b1)` for distinct `b0`, `b1` — and thence `Eq()(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
 #[test]
 fn prop_struct_with_informative_field_rejected() {
     let source = r#"
@@ -176,9 +176,9 @@ fn prop_struct_with_informative_field_rejected() {
         struct Box : pub Prop { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
-        let irrelevant : Eq(b0, b1) = Eq/refl();
+        let irrelevant : Eq()(b0, b1) = Eq/refl();
         let get(b : Box) -> Nat = b.val;
-        let zero_eq_one : Eq(0, 1) = Eq/cong(get, irrelevant);
+        let zero_eq_one : Eq()(0, 1) = Eq/cong(get, irrelevant);
         /std/print("no")
         "#;
 
@@ -186,7 +186,7 @@ fn prop_struct_with_informative_field_rejected() {
     assert!(error.contains("informative"), "unexpected error: {error}");
 }
 
-// Control: the same record at the default `Type` sort gets no proof irrelevance, so `Eq(b0, b1)` for distinct values is correctly rejected by conversion — confirming the `Prop` sort was the only door to the contradiction, and that closing it leaves ordinary records untouched.
+// Control: the same record at the default `Type` sort gets no proof irrelevance, so `Eq()(b0, b1)` for distinct values is correctly rejected by conversion — confirming the `Prop` sort was the only door to the contradiction, and that closing it leaves ordinary records untouched.
 #[test]
 fn type_struct_distinct_values_not_convertible() {
     let source = r#"
@@ -194,7 +194,7 @@ fn type_struct_distinct_values_not_convertible() {
         struct Box : pub Type { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
-        let irrelevant : Eq(b0, b1) = Eq/refl();
+        let irrelevant : Eq()(b0, b1) = Eq/refl();
         /std/print("no")
         "#;
 

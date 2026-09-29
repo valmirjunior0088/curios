@@ -82,7 +82,7 @@ pub(crate) fn premise_label(index: usize) -> String {
 
 /// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled.
 ///
-/// Written `@` and `use` arguments fill the slots of their kind in order, so a slot's position among its kind is also the position of the argument written for it, and one count serves both the argument a refusal names and the premise a witness goal names. Every slot a walk visits passes through [`SlotPositions::next`] in telescope order; a walk that saturates several telescopes of one call carries one value across them, as it carries the written queues.
+/// Written `@` and `use` arguments fill the slots of their kind in order, so a slot's position among its kind is also the position of the argument written for it, and one count serves both the argument a refusal names and the premise a witness goal names. Every slot a walk visits passes through [`SlotPositions::next`] in telescope order.
 #[derive(Default)]
 pub(crate) struct SlotPositions {
     explicit: usize,
@@ -279,8 +279,8 @@ pub(super) fn elaborate_apply(
     }
     let func_label = innermost_reference(head).map_or(CalleeId::Anonymous, CalleeId::Function);
 
-    let (mut head, written_type) = elaborate(context, head, Mode::Infer)?;
-    let mut head_type = reduce_with(context, &written_type)?;
+    let (head, written_type) = elaborate(context, head, Mode::Infer)?;
+    let head_type = reduce_with(context, &written_type)?;
 
     // The three call-site queues: plain arguments fill explicit binders in telescope order, `@`-arguments fill implicit binders, `use`-arguments fill witness binders — each matched independently, so the relative position of a marked argument among the plain ones carries no meaning.
     let mut plain: VecDeque<Term> = VecDeque::new();
@@ -294,55 +294,12 @@ pub(super) fn elaborate_apply(
         }
     }
 
-    // All-auto telescopes (the curried `bind` shape, e.g. `(@A, @B) -> (M A, A -> M B) -> M B`, or a method wrapper's `(@A, use w) -> …`): when the head telescope has zero explicit slots but plain arguments were given, saturate it — marked queues first, fresh metavariables (and witness goals) for the rest — reduce the output, and re-target the plain arguments at the next telescope. This fires *only* with zero explicit slots, so application stays arity-strict everywhere else (this is deliberately not general partial application).
-    let mut positions = SlotPositions::default();
-    let ft = loop {
-        let ft = match &*head_type {
-            Subterm::FuncType(ft) => ft.clone(),
-            other => return Err(Error::not_a_function(written_type.clone(), other.clone())),
-        };
-
-        let all_auto = !ft.plicities().is_empty()
-            && ft
-                .plicities()
-                .iter()
-                .all(|p| !matches!(p, Plicity::Explicit));
-        if !all_auto || plain.is_empty() {
-            break ft;
-        }
-
-        let mut args = Vec::with_capacity(ft.plicities().len());
-        let mut cursor = ft.telescope.cursor();
-        for (index, plicity) in ft.plicities().iter().enumerate() {
-            let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
-            let position = positions.next(*plicity);
-            let queue = match plicity {
-                Plicity::Implicit => &mut marked,
-                Plicity::Witness => &mut used,
-                Plicity::Explicit => unreachable!("all-auto telescope"),
-            };
-            let arg = match queue.pop_front() {
-                Some(arg) => check(context, &arg, ty.clone()).map_err(|error| {
-                    error.at_argument(argument_site(
-                        &func_label,
-                        *plicity,
-                        position,
-                        &opened_link(&cursor),
-                        &ft.plicities()[index + 1..],
-                    ))
-                })?,
-                None => {
-                    insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
-                }
-            };
-            cursor.advance(arg.clone());
-            args.push((*plicity, arg));
-        }
-        let output = cursor.body().expect("plicities parallel the telescope");
-
-        head = Term::apply_marked(head, args);
-        head_type = reduce_with(context, &output)?;
+    // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/language/a-call-fills-one-parameter-group.md.
+    let ft = match &*head_type {
+        Subterm::FuncType(ft) => ft.clone(),
+        other => return Err(Error::not_a_function(written_type.clone(), other.clone())),
     };
+    let mut positions = SlotPositions::default();
 
     // Arity is checked per queue: plain arguments must exactly cover the explicit slots; `@`- and `use`-arguments may undershoot their slots (the remainder is inserted/resolved) but never overshoot them.
     let explicit_slots = ft

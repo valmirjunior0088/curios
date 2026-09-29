@@ -99,7 +99,7 @@ pub let step(c: Byte, s: Scan) -> Scan =
 let step_of_continuing(
     c: Byte,
     q: Bool/Holds(continues(c)),
-) -> Eq(step(c, Scan/lead()), Scan/bad()) =
+) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
     let n = Byte/to_nat(c);
     let range = Nat/Le/of_in_range(n, 0x80, 0xBF, q);
     match Nat/in_range(n, 0x0, 0x7F)
@@ -363,9 +363,9 @@ pub let of_char(c: Char) -> Str =
     Str { bytes = Char/to_utf8(c), valid = Valid/encoded(c) };
 
 --- Eql bytes are equal strings.
-pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
+pub let eq_of_bytes(a: Str, b: Str, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
     Eq/subst(
-        (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
+        (bytes: Bytes) => (valid: Valid(bytes)) -> Eq()(a, Str { bytes = bytes, valid = valid }),
         p,
         (_: Valid(a.bytes)) => Eq/refl())(b.valid);
 
@@ -509,7 +509,7 @@ pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
 --- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what `Valid` says and what the count restarts on.
-pub let len_concat(a: Str, b: Str) -> Eq(len(concat(a, b)), len(a) + len(b)) =
+pub let len_concat(a: Str, b: Str) -> Eq()(len(concat(a, b)), len(a) + len(b)) =
     count_concat(a.bytes, b.bytes, a.valid);
 
 --- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len_concat` needs to descend a byte, where the state has moved.
@@ -518,7 +518,7 @@ let count_concat(
     b: Bytes,
     @s: Scan,
     w: Valid/from(s, a),
-) -> Eq(count_scalars(s, x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
+) -> Eq()(count_scalars(s, x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
     match a
     | x[] =>
         match s

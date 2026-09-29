@@ -13,7 +13,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         use /std/WellFounded/{Accessible};
 
         -- `refl(@z) : (z, z)` pins its payload twice; the payload is the index.
-        let z_of(@a: Nat, @b: Nat, e: Eq(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
+        let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
 
         -- A pinned payload beside a proof payload: `below` erases, `w` is the index.
         let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Nat/Lt(a, b))(x)) -> Nat =
@@ -26,7 +26,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let digits(@a: Nat, @b: Nat, s: Swap(a, b)) -> Nat = match s | mk(@x, @y) => x * 10 + y end;
 
         -- A type and a proof parameter, erased beside the data they do not affect.
-        let pick(T: Type, p: Eq(1, 1), n: Nat) -> Nat = n + 1;
+        let pick(T: Type, p: Eq()(1, 1), n: Nat) -> Nat = n + 1;
 
         -- An erased field beside a kept one.
         struct Bounded: pub Type { n: Nat, ok: Nat/Lt(n, 100) }
@@ -35,12 +35,12 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let lemma(n: Nat) -> Nat/Le(n, n) = Le/refl(n);
         let keep(n: Nat, _p: Nat/Le(n, n)) -> Nat = n + 1;
 
-        let _refl_payload: Eq(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
-        let _accessible_payload: Eq(point(WellFounded/lt(41)), 42) = Eq/refl();
-        let _swapped_payloads: Eq(digits(Swap/mk(@2, @1)), 21) = Eq/refl();
-        let _erased_parameters: Eq(pick(Nat, Eq/refl(), 41), 42) = Eq/refl();
-        let _erased_field: Eq(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1, 42) = Eq/refl();
-        let _proof_valued_callee: Eq(keep(41, lemma(41)), 42) = Eq/refl();
+        let _refl_payload: Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
+        let _accessible_payload: Eq()(point(WellFounded/lt(41)), 42) = Eq/refl();
+        let _swapped_payloads: Eq()(digits(Swap/mk(@2, @1)), 21) = Eq/refl();
+        let _erased_parameters: Eq()(pick(Nat, Eq/refl(), 41), 42) = Eq/refl();
+        let _erased_field: Eq()(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1, 42) = Eq/refl();
+        let _proof_valued_callee: Eq()(keep(41, lemma(41)), 42) = Eq/refl();
 
         let show(n: Nat) -> Io({}) = print(Str/concat(Nat/to_str(n), "\n"));
 

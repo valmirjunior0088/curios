@@ -394,7 +394,7 @@ fn combinator_sharing_measurements() {
 ///
 /// Flat in the first four columns, and they are each other's controls: what a `match` is written over no longer decides anything, at any size, and fourteen definitions compile where they refused. The first row is the first compile of the run and carries its warm-up.
 ///
-/// **The last column was the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It was unchanged by that commit, to the wall clock, and it was exponential in *both* checkers rather than one; the section above is where it went.
+/// **The last column was the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq()(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It was unchanged by that commit, to the wall clock, and it was exponential in *both* checkers rather than one; the section above is where it went.
 ///
 /// Under `--features profile` at 13 definitions — `cargo x profile <the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
 ///
@@ -468,7 +468,7 @@ fn scrutinee_refinement_measurements() {
     }
 }
 
-/// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.
+/// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq()(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.
 fn numerics(rules: usize) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Eq};\n\n\
@@ -504,7 +504,7 @@ fn numerics(rules: usize) -> String {
     source
 }
 
-/// **The decision's own probe.** Deciding `Eq(top(n), 0)` for a symbolic `n` needs the sum's head, not its normal form: a stuck sum whose summands are not literal zero is not zero. Under eager folding the fold built the linear combination first — ~φ²ⁿ monomials, since the web's degree is Fibonacci in its size — and the units grew with it. The folds now answer the weak-head form and the peel clashes from the head, so the units grow with the weak-head DAG, which memoization keeps linear in `n`. The control is the increment: each further definition costs about what the previous one did.
+/// **The decision's own probe.** Deciding `Eq()(top(n), 0)` for a symbolic `n` needs the sum's head, not its normal form: a stuck sum whose summands are not literal zero is not zero. Under eager folding the fold built the linear combination first — ~φ²ⁿ monomials, since the web's degree is Fibonacci in its size — and the units grew with it. The folds now answer the weak-head form and the peel clashes from the head, so the units grow with the weak-head DAG, which memoization keeps linear in `n`. The control is the increment: each further definition costs about what the previous one did.
 #[test]
 fn a_symbolic_web_compares_against_zero_in_linear_units() {
     let units = |rules: usize| {
@@ -681,7 +681,7 @@ fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f6
 ///
 /// **The scrutinized door is closed.** Forty definitions retain 222 555 units — a fifth of a percent of the allowance — where fifteen used to retain 892 370 244 and eighteen saturated. That door was `assume_case_value` reducing to key a case refinement, and it no longer reduces.
 ///
-/// **The proved door was open, and it was the same reduction reached another way.** `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web at all — the scrutinee is a proof variable — and reduces it anyway, through `invert_indices` unifying the actual indices against `(z, z)`. Retention grew by a factor of about 2.4 per definition: thirteen definitions consumed 31% of the whole compilation's allowance, and fifteen would have exhausted it. The wall clock grew with it, and *both checkers* paid — `elab units` climbs on this ladder where it is flat on the other, which is what made it a different defect. [`scrutinee_refinement_measurements`] carries where both went.
+/// **The proved door was open, and it was the same reduction reached another way.** `Eq()(top(n), true)` eliminated at `refl` registers no case equation for the web at all — the scrutinee is a proof variable — and reduces it anyway, through `invert_indices` unifying the actual indices against `(z, z)`. Retention grew by a factor of about 2.4 per definition: thirteen definitions consumed 31% of the whole compilation's allowance, and fifteen would have exhausted it. The wall clock grew with it, and *both checkers* paid — `elab units` climbs on this ladder where it is flat on the other, which is what made it a different defect. [`scrutinee_refinement_measurements`] carries where both went.
 ///
 /// **It is not the step budget.** The same proved web across a sixty-four-fold budget range retains the identical figure and takes the identical time. Every other counter the kernel holds is per declaration and restored at each item boundary; this one is not, which is why a wall clock alone cannot tell a fan-out from a ceiling.
 ///

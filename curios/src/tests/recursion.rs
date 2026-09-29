@@ -70,10 +70,10 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
                 (x, ih) => (k) => match x | 0 => k | p + 1 => ih(p, Bool/True/qed())(k) + 1 end,
                 n,
                 WellFounded/lt(n))(k);
-        let _top : Eq(top(3)(1), 4) = Eq/refl();
-        let _nested : Eq(nested(3)(1), 4) = Eq/refl();
-        let _measured : Eq(measured(3, 10), 13) = Eq/refl();
-        let _symbolic(k : Nat) -> Eq(top(2)(k), k + 2) = Eq/refl();
+        let _top : Eq()(top(3)(1), 4) = Eq/refl();
+        let _nested : Eq()(nested(3)(1), 4) = Eq/refl();
+        let _measured : Eq()(measured(3, 10), 13) = Eq/refl();
+        let _symbolic(k : Nat) -> Eq()(top(2)(k), k + 2) = Eq/refl();
         /std/print(Nat/to_str(measured(3, 10)))
         "#;
 

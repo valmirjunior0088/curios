@@ -11,12 +11,12 @@ use crate::tests::{error, run};
 fn a_motive_may_name_a_top_level_family() {
     let source = r#"
         use /std/{Nat, Eq};
-        let discriminates(s : Nat, t : Nat, q : Eq(s, t)) -> Type = Eq(t, s);
-        let flip(@x : Nat, @y : Nat, p : Eq(x, y)) -> Eq(y, x) =
+        let discriminates(s : Nat, t : Nat, q : Eq()(s, t)) -> Type = Eq()(t, s);
+        let flip(@x : Nat, @y : Nat, p : Eq()(x, y)) -> Eq()(y, x) =
             match p : discriminates
             | refl(@z) => Eq/refl()
             end;
-        let _ : Eq(4, 4) = flip(Eq/refl());
+        let _ : Eq()(4, 4) = flip(Eq/refl());
         /std/print(Nat/to_str(4))
         "#;
 
@@ -48,27 +48,27 @@ fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
 fn a_motive_binder_annotation_may_name_earlier_index_binders() {
     let source = r#"
         use /std/{Nat, Eq};
-        let flip(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
-            match p : (s : A, t : A, q : Eq(s, t)) => Eq(t, s)
+        let flip(@A : Type, @x : A, @y : A, p : Eq()(x, y)) -> Eq()(y, x) =
+            match p : (s : A, t : A, q : Eq()(s, t)) => Eq()(t, s)
             | refl(@z) => Eq/refl()
             end;
-        let _ : Eq(6, 6) = flip(Eq/refl());
+        let _ : Eq()(6, 6) = flip(Eq/refl());
         /std/print(Nat/to_str(6))
         "#;
 
     assert_eq!(run(source), b"6");
 }
 
-// Plicity is expressible because the annotation is a real application: `Eq` hides its type parameter, so `Eq(s, t)` is how it is written here, and the old flat slot list that spelled it `Eq(A, s, t)` has no counterpart.
+// Plicity is expressible because the annotation is a real application: `Eq` hides its type parameter, so `Eq()(s, t)` is how it is written here, and the old flat slot list that spelled it `Eq(A, s, t)` has no counterpart.
 #[test]
 fn a_motive_binder_annotation_obeys_the_families_plicity() {
     let source = r#"
         use /std/{Nat, Eq};
-        let flip(@x : Nat, @y : Nat, p : Eq(x, y)) -> Eq(y, x) =
-            match p : (s, t, q : Eq(@Nat, s, t)) => Eq(t, s)
+        let flip(@x : Nat, @y : Nat, p : Eq()(x, y)) -> Eq()(y, x) =
+            match p : (s, t, q : Eq(@Nat)(s, t)) => Eq()(t, s)
             | refl(@z) => Eq/refl()
             end;
-        let _ : Eq(7, 7) = flip(Eq/refl());
+        let _ : Eq()(7, 7) = flip(Eq/refl());
         /std/print(Nat/to_str(7))
         "#;
 
@@ -134,7 +134,7 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
         end
 
-        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq(0, 0) =
+        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =
             match s
             | lead() => match d | stop() => Eq/refl() | more(c, _, t, rest) => dv(step(c, Scan/lead()), rest) end
             | cont(_, _, _) => match d | more(c, _, _, rest) => dv(step(c, s), rest) end
@@ -235,12 +235,12 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
     let source = r#"
         use /std/{Nat, Bytes, List, Eq};
         let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
-            -> Eq(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
+            -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._] => Eq/refl() end;
         let at_list(@T : Type, xs : List(T), i : Nat, q : Nat/Lt(i, List/len(xs)))
-            -> Eq(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
+            -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
             match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;
-        let byte_of(n : Nat, q : Nat/Lt(n, 256)) -> Eq(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
+        let byte_of(n : Nat, q : Nat/Lt(n, 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
             match n | 0 => Eq/refl() | p + 1 => Eq/refl() end;
         /std/print("ok")
         "#;
@@ -254,7 +254,7 @@ fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
     let source = r#"
         use /std/{Nat, Bytes, Eq};
         let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
-            -> Eq(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
+            -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._]; ih => ih end;
         /std/print("ok")
         "#;

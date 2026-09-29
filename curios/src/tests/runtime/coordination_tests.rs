@@ -42,10 +42,10 @@ fn proof_payloads_still_occupy_storage() {
         run(r#"
         use /std/{Nat, Eq, Cell, Option, Io, print};
         use /std/Async/Channel/{Channel};
-        let proof = Cell/new(@Eq(1, 1))!;
+        let proof = Cell/new(@Eq()(1, 1))!;
         let _ = Cell/fill(proof, Eq/refl())!;
         let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
-        let p = Channel/new(@Eq(1, 1), 1)!;
+        let p = Channel/new(@Eq()(1, 1), 1)!;
         let _ = Channel/push(p, Eq/refl())!;
         print(match Channel/take(p)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end)
     "#),

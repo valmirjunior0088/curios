@@ -22,7 +22,7 @@ Here is the standard library's vector, which carries its own length around in it
 
 ```crs
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
-    Eq(List/len(l), n);
+    Eq()(List/len(l), n);
 
 pub struct Vec(T: Type, n: Nat): pub Type {
     list: List(T),

@@ -24,7 +24,7 @@ The library carries what reduction does not state:
 
 **Uniqueness of division.** Two pairs `(q, r)` and `(q′, r′)` with `n = q · d + r`, `r < d` and the same for the primed pair are equal. This is the fact every Euclidean argument ends in, and it is what lets `div_mod(k · d, d)` be read as `(k, 0)`.
 
-**Exact division.** `exact_div(n, d, @ok: Lt(0, d), p: Divides(d, n)) -> Nat` returns the quotient, with `Eq(n, exact_div(n, d, p) · d)` beside it. It is `n / d` in its computation; the law is what the divisibility evidence buys.
+**Exact division.** `exact_div(n, d, @ok: Lt(0, d), p: Divides(d, n)) -> Nat` returns the quotient, with `Eq()(n, exact_div(n, d, p) · d)` beside it. It is `n / d` in its computation; the law is what the divisibility evidence buys.
 
 **A certified greatest common divisor.** `/std/Nat/gcd` exists as general recursion and a type may not mention it. The certified one recurses on `Lt(b % a, a)` through `WellFounded/recurse` over `WellFounded/lt`, so it is total and may appear in a type; whether it replaces the existing `gcd` or stands beside it is decided when it lands, preferring one `gcd`. The other way to a total `gcd` is a size-change rule for `NatRem` in the totality analysis, which would accept the existing definition as written; its divisor is the pattern `bp + 1`, so the rule would have to read a remainder as below its divisor's shape rather than below a nonzero variable. The certified `gcd`'s laws:
 
@@ -32,7 +32,7 @@ The library carries what reduction does not state:
 - every common divisor divides it;
 - symmetry, `gcd(a, 0) = a`, `gcd(a, 1) = 1`.
 
-**Coprimality.** `Coprime(a, b)` is `Eq(gcd(a, b), 1)`, with `is_coprime` as its decision and the bridge to common-divisor reasoning: two numbers are coprime exactly when every common divisor is one. Then:
+**Coprimality.** `Coprime(a, b)` is `Eq()(gcd(a, b), 1)`, with `is_coprime` as its decision and the bridge to common-divisor reasoning: two numbers are coprime exactly when every common divisor is one. Then:
 
 - the quotients of two numbers by their gcd are coprime;
 - coprime cancellation — `Coprime(a, b)` and `Divides(a, b · c)` give `Divides(a, c)` — which is Euclid's lemma;
@@ -58,13 +58,13 @@ Their order facts and semilattice equations hold by conversion through [algebra 
 Two laws a proof might expect to state are already conversion's and are not lemmas: order reversal under negation, `a <= b` being `+0 - b <= +0 - a`, and additive cancellation in its order form, `a + n <= b + n` being `a <= b`.
 
 - **Totality**, as a disjunction: `Le(a, b)` or `Le(b, a)`, from `trichotomy`. Its `Bool` form holding by conversion would take a relational layer, which [algebra part 4](algebra/04-relational-layer-spec.md) reserves until a consumer needs it.
-- **The executable relations agree with the propositions**: `ord`, `==`, `<`, `<=`, `>` and `>=` each decide the proposition their spelling names, and `ord(a, b)` is `eq` exactly when `Eq(a, b)`.
+- **The executable relations agree with the propositions**: `ord`, `==`, `<`, `<=`, `>` and `>=` each decide the proposition their spelling names, and `ord(a, b)` is `eq` exactly when `Eq()(a, b)`.
 - **Flip symmetry**: `ord(b, a)` is `ord(a, b)` reversed.
 - **Multiplication monotonicity under a non-positive factor**: `Le(a, b)` and `Le(k, +0)` give `Le(b · k, a · k)`, the twin of `Le/mul_mono_r`.
 
 ## `Int`: cancellation
 
-- **Multiplicative cancellation under a nonzero premise**: `Eq(a · c, b · c)` and `NonZero(c)` give `Eq(a, b)`, on both sides of the product. This is the integral-domain fact both `Rat` normalizations use in place of an inverse. Conversion never takes it, since without the premise `a · c = b · c` does not give `a = b`.
+- **Multiplicative cancellation under a nonzero premise**: `Eq()(a · c, b · c)` and `NonZero(c)` give `Eq()(a, b)`, on both sides of the product. This is the integral-domain fact both `Rat` normalizations use in place of an inverse. Conversion never takes it, since without the premise `a · c = b · c` does not give `a = b`.
 
 ## `Int`: `abs`, `sign`, `min` and `max`
 
@@ -72,8 +72,8 @@ The homomorphism and reflection laws hold by conversion through [algebra part 3]
 
 - **the order facts**: `abs(n)` is zero exactly when `n` is, `Le(+0, n)` exactly when `sign(n)` is not `-1`, and `Le(-Nat/to_int(abs(n)), n)` and `Le(n, Nat/to_int(abs(n)))`;
 - **the absolute difference**: `abs(a - b)` is symmetric and satisfies the triangle inequality `Le(abs(a - c), abs(a - b) + abs(b - c))` in `Nat` — the form a rounding error is compared in;
-- **decomposition**, `Eq(n, sign(n) · Nat/to_int(abs(n)))`: a product of two defined operations, which linear arithmetic reads as one opaque atom;
-- **`abs(a - b)` is zero exactly when `Eq(a, b)`**: its `Bool` half holds by conversion, and its `Prop` half is a lemma through `eq_of_eql`;
+- **decomposition**, `Eq()(n, sign(n) · Nat/to_int(abs(n)))`: a product of two defined operations, which linear arithmetic reads as one opaque atom;
+- **`abs(a - b)` is zero exactly when `Eq()(a, b)`**: its `Bool` half holds by conversion, and its `Prop` half is a lemma through `eq_of_eql`;
 - `min` and `max`'s equations, as `Nat`'s.
 
 ## `Int`: the signed scale
@@ -88,7 +88,7 @@ The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned b
 
 Provable in `/std` without further trust, over the model [algebra part 3](algebra/03-declared-operations-spec.md)'s float declarations are validated against:
 
-- `ord` is reflexive, transitive and total, antisymmetric to `Eq`, and `ord(a, b) = eq` exactly when `Eq(a, b)` — so `Ord(Flt)` is IEEE's `totalOrder` in fact as well as in intent.
+- `ord` is reflexive, transitive and total, antisymmetric to `Eq`, and `ord(a, b) = eq` exactly when `Eq()(a, b)` — so `Ord(Flt)` is IEEE's `totalOrder` in fact as well as in intent.
 - A `Key(Flt)` over `to_le_bytes` is a congruence, since the byte round trip is injective. Whether to give one is a separate decision: `/std/Map` withholds it because `/std/ops/Eql`'s witness is IEEE `==`, which calls `+0.0` and `-0.0` equal and a NaN equal to nothing, and a map keyed on propositional equality would disagree with it at both ends. The theorem lands whichever way that goes.
 
 ## Verification

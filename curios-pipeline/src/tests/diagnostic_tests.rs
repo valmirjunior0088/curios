@@ -4,12 +4,12 @@ use super::test_support::*;
 
 #[test]
 fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_numbered() {
-    // The beginner's collision: the statement `Eq(n + n, n * 2)` handed to `Eq/cong` where the proof `ih` belonged. The mismatch is `Prop` against an `Eq` whose indices never solved; the report says so in a sentence, and spells the unsolved indices `?` rather than as elaboration counters.
+    // The beginner's collision: the statement `Eq()(n + n, n * 2)` handed to `Eq/cong` where the proof `ih` belonged. The mismatch is `Prop` against an `Eq` whose indices never solved; the report says so in a sentence, and spells the unsolved indices `?` rather than as elaboration counters.
     let source = r#"
         use /std/{Nat, Eq, Io};
 
-        let step(n: Nat, ih: Eq(n + n, n * 2)) -> Eq((n + 1) + (n + 1), (n + 1) * 2) =
-            Eq/cong((x) => x + 2, Eq(n + n, n * 2));
+        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =
+            Eq/cong((x) => x + 2, Eq()(n + n, n * 2));
 
         Io/pure(())
     "#;
@@ -30,7 +30,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     let source = r#"
         use /std/{Nat, Eq, Io};
 
-        let step(n: Nat, ih: Eq(n + n, n * 2)) -> Eq((n + 1) + (n + 1), (n + 1) * 2) =
+        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =
             cong((x) => x + 2, ih);
 
         Io/pure(())
@@ -93,8 +93,8 @@ fn goal_reports_spell_no_universe_instances() {
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
-        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
-            match n : (m) => Eq(m + m, m * 2)
+        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
+            match n : (m) => Eq()(m + m, m * 2)
             | 0 => ?
             | p + 1; ih => ?
             end;
@@ -173,10 +173,10 @@ fn a_mismatch_keeps_a_concrete_universe_level() {
 
 #[test]
 fn a_mismatch_marks_an_implicit_nominal_parameter() {
-    // `Eq(@A : Type) : (A, A) -> pub Prop` has one implicit parameter and two indices, so a use site writes `Eq(5, 6)`. The mismatch normalizes to `InductType`, which carries no plicities — leaving `Eq(Nat, 5, 5)`, three positional arguments the surface would reject. The marks come from the type constructor's own definition, which is where lowering left them.
+    // `Eq(@A : Type) : (A, A) -> pub Prop` has one implicit parameter and two indices, so a use site writes `Eq()(5, 6)`. The mismatch normalizes to `InductType`, which carries no plicities — leaving `Eq(Nat)(5, 5)`, an explicit argument where the surface takes an implicit one. The marks come from the type constructor's own definition, which is where lowering left them.
     let source = r#"
         use /std/{Nat, Eq};
-        let claim : Eq(2 + 3, 6) = Eq/refl();
+        let claim : Eq()(2 + 3, 6) = Eq/refl();
         0
     "#;
 
@@ -250,7 +250,7 @@ fn an_abstract_witness_folds_back_to_its_operator() {
     let source = r#"
         use /std/ops/{Add};
         use /std/{Nat, Eq};
-        let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a + a) = ?;
+        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a + a) = ?;
         0
     "#;
 
@@ -270,7 +270,7 @@ fn an_abstract_witness_folds_back_in_a_mismatch_too() {
     let source = r#"
         use /std/ops/{Add};
         use /std/{Nat, Eq};
-        let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a) = Eq/refl();
+        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a) = Eq/refl();
         0
     "#;
 
@@ -289,7 +289,7 @@ fn goal_types_spell_negated_equality_as_neq() {
     // `a != b` elaborates as an xor-negated equality call (no `BoolNot` intrinsic exists); the report folds the pair back to `!=`.
     let source = r#"
         use /std/{Nat, Bool, Eq};
-        let claim : Eq(1 != 2, true) = ?;
+        let claim : Eq()(1 != 2, true) = ?;
         0
     "#;
 

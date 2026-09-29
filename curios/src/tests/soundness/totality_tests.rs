@@ -543,7 +543,7 @@ fn the_library_well_founded_recursion_computes_at_a_dependent_motive() {
         let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
         let pick(n: Nat) -> Shape(n) =
             WellFounded/recurse(Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n, WellFounded/lt(n));
-        let _computed: Eq(pick(5), 4) = Eq/refl();
+        let _computed: Eq()(pick(5), 4) = Eq/refl();
         /std/print(Nat/to_str(pick(5)))
         "#;
     assert_eq!(run(source), b"4");
@@ -561,7 +561,7 @@ fn a_hand_written_convoy_keeps_its_descent_visible() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
         end
 
-        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
             match d
             | stop() => Eq/refl()
             | more(c, st, t, rest) => ((r: Utf8(step(c, st), t)) => dv(step(c, st), r))(rest)
@@ -584,7 +584,7 @@ fn a_let_alias_keeps_its_descent_visible() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
         end
 
-        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
             match d
             | stop() => Eq/refl()
             | more(c, st, t, rest) => let r = rest; dv(step(c, st), r)
@@ -607,7 +607,7 @@ fn a_proof_over_a_dependent_hypothesis_descends() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
         end
 
-        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq(0, 0) =
+        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =
             match s
             | lead() => match d | stop() => Eq/refl() | more(c, _, t, rest) => dv(step(c, Scan/lead()), rest) end
             | cont(_, _, _) => match d | more(c, _, _, rest) => dv(step(c, s), rest) end
@@ -625,9 +625,9 @@ fn a_halving_walk_descends_on_its_fuel_and_stands_in_a_type() {
     let source = r#"
         use /std/{Str, Eq, List};
 
-        let _in_a_type: Eq(Str/repeat("ab", 2), "abab") = Eq/refl();
-        let _summed: Eq(List/balanced(5, 0, (i, _) => i + 1, (l, r) => l + r), 15) = Eq/refl();
-        let _joined: Eq(Str/join(",", ["a", "b", "c", "d", "e"]), "a,b,c,d,e") = Eq/refl();
+        let _in_a_type: Eq()(Str/repeat("ab", 2), "abab") = Eq/refl();
+        let _summed: Eq()(List/balanced(5, 0, (i, _) => i + 1, (l, r) => l + r), 15) = Eq/refl();
+        let _joined: Eq()(Str/join(",", ["a", "b", "c", "d", "e"]), "a,b,c,d,e") = Eq/refl();
 
         /std/print(Str/repeat("ab", 3))
         "#;

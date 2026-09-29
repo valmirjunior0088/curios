@@ -20,27 +20,27 @@ use {
 const TWO_INSTANCES_OF_ZIP: &str = r#"
     use /std/{Nat, List, Eq, Io, Bool};
     let same(@T: Type, l: List(T)) -> List(T) = l;
-    let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> Bool/False =
+    let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> Bool/False =
         Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, Bool/True/qed());
-    let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =
+    let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
         Eq/cong((w: Nat) => w - 1, e);
-    pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq(List/len(b), List/len(a)))
-        -> Eq(List/len(List/zip(a, b)), List/len(a)) =
+    pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/len(b), List/len(a)))
+        -> Eq()(List/len(List/zip(a, b)), List/len(a)) =
         (match a: (l) =>
-                (c: List(B), q: Eq(List/len(c), List/len(l))) -> Eq(List/len(List/zip(l, c)), List/len(l))
+                (c: List(B), q: Eq()(List/len(c), List/len(l))) -> Eq()(List/len(List/zip(l, c)), List/len(l))
         | [] => (_, _) => Eq/refl()
         | [x, ..xs]; ih =>
             (c, q) =>
                 (match c: (d) =>
-                        (Eq(List/len(d), List/len(xs) + 1))
-                            -> Eq(List/len(List/zip([x, ..xs], d)), List/len(xs) + 1)
+                        (Eq()(List/len(d), List/len(xs) + 1))
+                            -> Eq()(List/len(List/zip([x, ..xs], d)), List/len(xs) + 1)
                 | [] => (r) => match zero_not_succ(r) end
                 | [_, ..ys] => (r) => Eq/cong((y: Nat) => y + 1, ih(ys, succ_cancel(r)))
                 end)(q)
         end)(b, p);
     pub let use_call(@A: Type, @B: Type, n: Nat, a: List(A), b: List(B),
-                     ca: Eq(List/len(same(a)), n), cb: Eq(List/len(b), n))
-        -> Eq(List/len(List/zip(same(a), b)), n) =
+                     ca: Eq()(List/len(same(a)), n), cb: Eq()(List/len(b), n))
+        -> Eq()(List/len(List/zip(same(a), b)), n) =
         Eq/trans(zip_len(same(a), b, Eq/trans(cb, Eq/sym(ca))), ca);
     Io/pure(())
     "#;
@@ -181,7 +181,7 @@ fn the_same_quantifier_instantiates_at_a_type_below_it() {
     assert_eq!(run(&source), b"stratified");
 }
 
-// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. A twin fixture over a *prelude* family stood beside this one, where the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor passed it and the kernel refused the definition instead. It was written over `/std/Vec` when `Vec` was an indexed inductive; `/std` now has no `Type`-valued universe-polymorphic indexed family to state it over, and the prelude rung is held by the build rather than by a fixture: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
+// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq()(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. A twin fixture over a *prelude* family stood beside this one, where the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor passed it and the kernel refused the definition instead. It was written over `/std/Vec` when `Vec` was an indexed inductive; `/std` now has no `Type`-valued universe-polymorphic indexed family to state it over, and the prelude rung is held by the build rather than by a fixture: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
 #[test]
 fn a_refined_scrutinee_carries_the_family_universe_levels() {
     let source = r#"
@@ -195,7 +195,7 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
             | nil() => 0
             | cons(_, rest) => len(rest) + 1
             end;
-        let len_self(xs: L(Nat)) -> Eq(len(xs), len(xs)) =
+        let len_self(xs: L(Nat)) -> Eq()(len(xs), len(xs)) =
             match xs
             | nil() => Eq/refl()
             | cons(x, rest) => Eq/refl()
@@ -237,7 +237,7 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
             | z() => 0
             | s(m) => count(m) + 1
             end;
-        let count_self(n: N) -> Eq(count(n), count(n)) =
+        let count_self(n: N) -> Eq()(count(n), count(n)) =
             match n
             | z() => Eq/refl()
             | s(m) => Eq/refl()

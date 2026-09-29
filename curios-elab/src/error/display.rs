@@ -218,7 +218,7 @@ impl fmt::Display for Displayed<'_> {
                     f,
                     "type mismatch\n  inferred: {shown_inferred}\n  expected: {shown_expected}"
                 )?;
-                // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
+                // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
                 let inferred_is_sort = matches!(&***inferred, Subterm::Type(_) | Subterm::Prop);
                 let expected_is_sort = matches!(&***expected, Subterm::Type(_) | Subterm::Prop);
                 if inferred_is_sort && !expected_is_sort {

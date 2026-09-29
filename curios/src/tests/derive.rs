@@ -123,7 +123,7 @@ fn a_proof_payload_spells_as_a_goal() {
     // Evidence erases and has no literal; the written goal is the one thing that re-parses at a proposition, and a reader fills it in.
     let source = r#"
         use /std/{Nat, Str, Eq, Spell, print};
-        induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
+        induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
         satisfy Spell(Certified);
         print(Spell/spell(Certified/cert(1, Eq/refl())))
         "#;
@@ -209,7 +209,7 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
     let source = r#"
         use /std/{Nat, Bool, Str, Eq, print};
         use /std/ops/{Eql};
-        induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
+        induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
@@ -651,7 +651,7 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
     let source = r#"
         use /std/{Nat, Str, Eq, Ord, Show, print};
         use /std/ops/{Eql};
-        induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
+        induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
         satisfy Eql(Certified);
         satisfy Ord(Certified);
         let show(a: Certified, b: Certified) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");

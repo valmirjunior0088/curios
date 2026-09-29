@@ -53,7 +53,7 @@ fn a_long_literal_is_elided_in_a_report() {
     let source = format!(
         r#"
         use /std/{{Str, Eq}};
-        let same: Eq("{literal}", "x") = Eq/refl();
+        let same: Eq()("{literal}", "x") = Eq/refl();
         /std/print("unreachable")
         "#
     );

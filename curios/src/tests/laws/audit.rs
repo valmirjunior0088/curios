@@ -113,7 +113,7 @@ fn compound(law: &Law) -> Option<(Expr, Expr)> {
     Some((var, compound))
 }
 
-/// Every law whose first variable stands on both sides, with that variable on the left read through a metavariable the comparison must solve: `h(Eq/refl())` against `h(@w, e: Eq(left[x := w], right))`. A law [`solves`] names as one that cannot must still refuse, so a change that moves one is seen, as a refused row moving is.
+/// Every law whose first variable stands on both sides, with that variable on the left read through a metavariable the comparison must solve: `h(Eq/refl())` against `h(@w, e: Eq()(left[x := w], right))`. A law [`solves`] names as one that cannot must still refuse, so a change that moves one is seen, as a refused row moving is.
 #[test]
 fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     let items = rows(&declared())

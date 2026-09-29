@@ -29,9 +29,9 @@ pub let of_nat(code: Nat) -> Option(Char) =
     end;
 
 --- Eql code points are equal characters.
-pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
+pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) =
     Eq/subst(
-        (code: Nat) => (valid: Valid(code)) -> Eq(a, Char { code = code, valid = valid }),
+        (code: Nat) => (valid: Valid(code)) -> Eq()(a, Char { code = code, valid = valid }),
         proof,
         (_: Valid(a.code)) => Eq/refl())(b.valid);
 

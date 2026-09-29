@@ -107,14 +107,14 @@ fn prop_concept_certifies() {
         mod Guard
             use /std/{Nat, Eq};
             pub concept Certified(A : Type) : Prop {
-                proof(x : A) -> Eq(x, x)
+                proof(x : A) -> Eq()(x, x)
             }
             satisfy Certified(Nat) {
                 proof(x) = Eq/refl()
             }
         end
         use Guard/{Certified};
-        let ignore(p : Eq(2, 2), n : Nat) -> Nat = n;
+        let ignore(p : Eq()(2, 2), n : Nat) -> Nat = n;
         /std/print(Nat/to_str(ignore(Certified/proof(2), 3)))
         "#;
 

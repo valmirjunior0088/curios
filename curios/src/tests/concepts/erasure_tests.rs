@@ -8,12 +8,12 @@ fn prop_concept_resolves_and_erases() {
     let source = r#"
         use /std/{Nat, Str, Eq};
         pub concept Refl(A : Type) : pub Prop {
-            proof(x : A) -> Eq(x, x)
+            proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
             proof(x) = Eq/refl()
         }
-        let ignore_proof(p : Eq(2, 2), n : Nat) -> Nat = n;
+        let ignore_proof(p : Eq()(2, 2), n : Nat) -> Nat = n;
         /std/print(Nat/to_str(ignore_proof(Refl/proof(2), 3)))
         "#;
 
@@ -26,14 +26,14 @@ fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
         use /std/{Nat, Eq};
         pub concept Refl(A : Type) : pub Prop {
-            proof(x : A) -> Eq(x, x)
+            proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
             proof(x) = Eq/refl()
         }
-        let probe(@A : Type, x : A, use Refl(A)) -> Eq(x, x) = Refl/proof(x);
-        let direct : Eq(2, 2) = Refl/proof(2);
-        let routed : Eq(3, 3) = probe(3);
+        let probe(@A : Type, x : A, use Refl(A)) -> Eq()(x, x) = Refl/proof(x);
+        let direct : Eq()(2, 2) = Refl/proof(2);
+        let routed : Eq()(3, 3) = probe(3);
         /std/print("ok")
         "#;
 
@@ -46,12 +46,12 @@ fn type_concept_prop_method_binding_collapses() {
     let source = r#"
         use /std/{Nat, Eq};
         pub concept Refl(A : Type) : pub Type {
-            proof(x : A) -> Eq(x, x)
+            proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
             proof(x) = Eq/refl()
         }
-        let evidence : Eq(2, 2) = Refl/proof(2);
+        let evidence : Eq()(2, 2) = Refl/proof(2);
         /std/print("ok")
         "#;
 
@@ -64,12 +64,12 @@ fn prop_laws_concept_resolves() {
     let source = r#"
         use /std/{Nat, Str, Show, Eq};
         pub concept ShowLaws(A : Type) : pub Prop {
-            stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
+            stable(use Show(A), x : A) -> Eq()(Show/show(x), Show/show(x))
         }
         satisfy ShowLaws(Nat) {
             stable(use w, x) = Eq/refl()
         }
-        let take(q : Eq(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
+        let take(q : Eq()(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
         /std/print(Nat/to_str(take(ShowLaws/stable(7), 42)))
         "#;
 
@@ -83,7 +83,7 @@ fn a_witness_must_prove_its_concepts_law() {
         use /std/{Nat, Eq, Str};
         pub concept Idem(A : Type) : pub Type {
             op(A) -> A,
-            law(x : A) -> Eq(op(op(x)), op(x)),
+            law(x : A) -> Eq()(op(op(x)), op(x)),
         }
         satisfy Idem(Nat) {
             op(x) = x,
@@ -103,7 +103,7 @@ fn a_witness_violating_its_concepts_law_is_rejected() {
         use /std/{Nat, Eq, Str};
         pub concept Idem(A : Type) : pub Type {
             op(A) -> A,
-            law(x : A) -> Eq(op(op(x)), op(x)),
+            law(x : A) -> Eq()(op(op(x)), op(x)),
         }
         satisfy Idem(Nat) {
             op(x) = x + 1,

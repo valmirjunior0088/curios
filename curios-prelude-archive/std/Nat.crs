@@ -98,8 +98,8 @@ pub let is_even(n: Nat) -> Bool =
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
---- A decided equality is an equation: `a == b` gives `Eq(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
-pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq(a, b) =
+--- A decided equality is an equation: `a == b` gives `Eq()(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
+pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b

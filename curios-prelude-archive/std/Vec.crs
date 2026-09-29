@@ -3,7 +3,7 @@ use /std/ops/{Eql};
 
 --- That `l` holds exactly `n` elements.
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
-    Eq(List/len(l), n);
+    Eq()(List/len(l), n);
 
 --- A list of exactly `n` elements.
 pub struct Vec(T: Type, n: Nat): pub Type {
@@ -14,11 +14,11 @@ pub struct Vec(T: Type, n: Nat): pub Type {
 }
 
 -- Zero is no successor, refuted by the comparison that decides it.
-let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> Bool/False =
+let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> Bool/False =
     Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, Bool/True/qed());
 
 -- A successor cancels off both sides, which is how a tail's length is read off the whole's.
-let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =
+let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
     Eq/cong((w: Nat) => w - 1, e);
 
 --- The length, read off the type.
@@ -39,10 +39,10 @@ pub let eq_of_list(
     @n: Nat,
     v: Vec(T, n),
     w: Vec(T, n),
-    p: Eq(v.list, w.list),
-) -> Eq(v, w) =
+    p: Eq()(v.list, w.list),
+) -> Eq()(v, w) =
     Eq/subst(
-        (l: List(T)) => (counted: Counted(l, n)) -> Eq(v, Vec { list = l, counted = counted }),
+        (l: List(T)) => (counted: Counted(l, n)) -> Eq()(v, Vec { list = l, counted = counted }),
         p,
         (_: Counted(v.list, n)) => Eq/refl())(w.counted);
 
@@ -75,9 +75,9 @@ pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T,
         list = [..v.list, ..w.list],
         counted =
             Eq/subst(
-                (x: Nat) => Eq(x + List/len(w.list), n + m),
+                (x: Nat) => Eq()(x + List/len(w.list), n + m),
                 Eq/sym(v.counted),
-                Eq/subst((y: Nat) => Eq(n + y, n + m), Eq/sym(w.counted), Eq/refl())),
+                Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())),
     };
 
 --- `f` on every element.

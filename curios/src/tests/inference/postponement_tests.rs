@@ -12,12 +12,12 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
-            match p : (s, t, q) => Eq2(t, s)
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
+            match p : (s, t, q) => Eq2()(t, s)
             | refl(@z) => Eq2/refl()
             end;
-        let direct : Eq2(2, 2) = sym2(Eq2/refl());
-        let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
+        let direct : Eq2()(2, 2) = sym2(Eq2/refl());
+        let chained : Eq2()(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : (_, _, _) => /std/Io({})
         | refl(@z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
         end
@@ -60,7 +60,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let bad : Eq2(2, 3) = Eq2/refl();
+        let bad : Eq2()(2, 3) = Eq2/refl();
         let _ = Io/write(Io/stdout, /std/Str/to_bytes("no"))!;
         /std/Io/pure(())
         "#;
@@ -112,11 +112,11 @@ fn postponed_lambda_projecting_by_label_elaborates() {
         struct Boxed : pub Type {
             value : Nat
         }
-        let cong_value(@s : Boxed, @t : Boxed, p : Eq(s, t)) -> Eq(s.value, t.value) =
+        let cong_value(@s : Boxed, @t : Boxed, p : Eq()(s, t)) -> Eq()(s.value, t.value) =
             Eq/cong((b : Boxed) => b.value, p);
         let boxed : Boxed = Boxed { value = 7 };
-        let same : Eq(boxed, boxed) = Eq/refl();
-        let lifted : Eq(boxed.value, boxed.value) = cong_value(same);
+        let same : Eq()(boxed, boxed) = Eq/refl();
+        let lifted : Eq()(boxed.value, boxed.value) = cong_value(same);
         /std/print(Nat/to_str(boxed.value))
         "#;
 
@@ -230,7 +230,7 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     let report = error(
         r#"
         use /std/{Nat, Eq, Result};
-        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq(Result/map_success(Result/success(x), f), Result/success(f(x))) = Eq/refl();
+        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq()(Result/map_success(Result/success(x), f), Result/success(f(x))) = Eq/refl();
         /std/print("ok")
         "#,
     );

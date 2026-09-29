@@ -28,8 +28,8 @@ pub let trim(bits: Bits) -> Bits =
 let combine_is_trimmed(
     head: Bool,
     t: Bits,
-    p: Eq(is_trimmed(t), true),
-) -> Eq(is_trimmed(combine(head, t)), true) =
+    p: Eq()(is_trimmed(t), true),
+) -> Eq()(is_trimmed(combine(head, t)), true) =
     match t
     | b[] => match head | true => Eq/refl() | false => Eq/refl() end
     | b[_, .._] => p
@@ -42,20 +42,20 @@ let combine_cons(
     head: Bool,
     t: Bits,
     p: Nat/Lt(0, Bits/len(t)),
-) -> Eq(combine(head, t), b[head, ..t]) =
+) -> Eq()(combine(head, t), b[head, ..t]) =
     match t
     | b[] => match p end
     | b[_, .._] => Eq/refl()
     end;
 
 --- `trim` answers a trimmed word.
-pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
+pub let trim_is_trimmed(bits: Bits) -> Eq()(is_trimmed(trim(bits)), true) =
     match bits
     | b[] => Eq/refl()
     | b[head, ..tail]; ih => combine_is_trimmed(head, trim(tail), ih)
     end;
 
-let canonical_of_is_trimmed(bits: Bits, p: Eq(is_trimmed(bits), true)) -> Canonical(bits) =
+let canonical_of_is_trimmed(bits: Bits, p: Eq()(is_trimmed(bits), true)) -> Canonical(bits) =
     Eq/subst(Bool/Holds, Eq/sym(p), Bool/True/qed());
 
 let canonical_of_trim(bits: Bits) -> Canonical(trim(bits)) =
@@ -82,19 +82,19 @@ end
 let tail_is_trimmed(
     head: Bool,
     tail: Bits,
-    p: Eq(is_trimmed(b[head, ..tail]), true),
-) -> Eq(is_trimmed(tail), true) =
+    p: Eq()(is_trimmed(b[head, ..tail]), true),
+) -> Eq()(is_trimmed(tail), true) =
     match tail | b[] => Eq/refl() | b[_, .._] => p end;
 
 --- The certificate as a decided equation.
-pub let is_trimmed_of_canonical(bits: Bits, c: Canonical(bits)) -> Eq(is_trimmed(bits), true) =
-    match is_trimmed(bits): (r) => Eq(r, true)
+pub let is_trimmed_of_canonical(bits: Bits, c: Canonical(bits)) -> Eq()(is_trimmed(bits), true) =
+    match is_trimmed(bits): (r) => Eq()(r, true)
     | true => Eq/refl()
     | false => match c end
     end;
 
 --- The number of a word already known to be trimmed, with no trim spent.
-pub let of_trimmed_bits(bits: Bits, p: Eq(is_trimmed(bits), true)) -> BigNat =
+pub let of_trimmed_bits(bits: Bits, p: Eq()(is_trimmed(bits), true)) -> BigNat =
     BigNat { bits = bits, canonical = canonical_of_is_trimmed(bits, p) };
 
 --- `a` as zero, or its low bit over the rest.
@@ -109,7 +109,7 @@ pub let view(a: BigNat) -> View =
                 tail_is_trimmed(head, tail, is_trimmed_of_canonical(a.bits, a.canonical))))
     end;
 
-let refl_at(@A: Type, x: A) -> Eq(x, x) =
+let refl_at(@A: Type, x: A) -> Eq()(x, x) =
     Eq/refl();
 
 --- Zero.
@@ -170,35 +170,35 @@ pub let maj3(a: Bool, b: Bool, c: Bool) -> Bool =
     end;
 
 --- Eql words are equal numbers.
-pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
+pub let eq(a: BigNat, b: BigNat, p: Eq()(a.bits, b.bits)) -> Eq()(a, b) =
     Eq/subst(
-        (r: Bits) => (c: Canonical(r)) -> Eq(a, BigNat { bits = r, canonical = c }),
+        (r: Bits) => (c: Canonical(r)) -> Eq()(a, BigNat { bits = r, canonical = c }),
         p,
         (_: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
 --- Congruence of `combine` in its tail.
-pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
+pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq()(s, t)) -> Eq()(combine(h, s), combine(h, t)) =
     Eq/cong((w) => combine(h, w), p);
 
-let cong_bits(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(s.bits, t.bits) =
+let cong_bits(@s: BigNat, @t: BigNat, p: Eq()(s, t)) -> Eq()(s.bits, t.bits) =
     Eq/cong((n: BigNat) => n.bits, p);
 
-let cong_is_trimmed(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
+let cong_is_trimmed(@s: Bits, @t: Bits, p: Eq()(s, t)) -> Eq()(is_trimmed(s), is_trimmed(t)) =
     Eq/cong(is_trimmed, p);
 
 let is_trimmed_cons(
     head: Bool,
     u: Bits,
-    pt: Eq(is_trimmed(u), true),
-    pn: Eq(nonempty(u), true),
-) -> Eq(is_trimmed(b[head, ..u]), true) =
+    pt: Eq()(is_trimmed(u), true),
+    pn: Eq()(nonempty(u), true),
+) -> Eq()(is_trimmed(b[head, ..u]), true) =
     match u
     | b[] => match false_neq_true(pn) end
     | b[_, .._] => pt
     end;
 
 --- A trimmed word is its own trim.
-pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
+pub let trim_of_trimmed(x: Bits, p: Eq()(is_trimmed(x), true)) -> Eq()(trim(x), x) =
     match x
     | b[] => Eq/refl()
     | b[h, ..t] =>

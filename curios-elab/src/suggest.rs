@@ -1,6 +1,6 @@
 //! Candidate suggestions for unsolved written goals — the `? ≈` lines of a goal report.
 //!
-//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type converts to the goal type (the sandboxed `probe_match` witness resolution uses), and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type converts to the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq(7, k)` from `h : Eq(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
+//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type converts to the goal type (the sandboxed `probe_match` witness resolution uses), and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type converts to the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq()(7, k)` from `h : Eq()(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
 //!
 //! A fit is kept only when it says something: a candidate whose head has explicit parameters, none of which the goal pinned or the scope filled, is `Eq/sym(?)` — true of every equation, and an arity rather than a suggestion — so it is dropped. And a fit whose output conversion is undecided is kept when its blockers are exactly the explicit slots still open: `Eq/cong(?, ih)` has its hypothesis placed and its function genuinely unknown, which is the refinement a reader wants, where the same hole-free candidate would have had to convert outright. Pool 1 admits a holed constructor on the same reasoning.
 //!
@@ -8,7 +8,7 @@
 //!
 //! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with a shared `?`-named hole standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
 //!
-//! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal ever saw an application fit — which is every goal outside a function body, and almost no goal in a proof.
+//! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq()(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal ever saw an application fit — which is every goal outside a function body, and almost no goal in a proof.
 
 use {
     super::{
@@ -38,7 +38,7 @@ struct Candidate {
 
 /// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope`, the `refinements` of the arms it was written in, and the expected `goal_type`), the module and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
 ///
-/// The refinements are reinstalled beside the telescope, so a fit that holds only under the arm's guard — `Eq/refl()` at `Eq(b, true)` in the `true` arm of `match b` — is found and verified as a paste at the goal would be checked.
+/// The refinements are reinstalled beside the telescope, so a fit that holds only under the arm's guard — `Eq/refl()` at `Eq()(b, true)` in the `true` arm of `match b` — is found and verified as a paste at the goal would be checked.
 pub(crate) fn suggest_candidates(
     context: &mut Context,
     telescope: &[(Free, Term)],
@@ -225,7 +225,7 @@ fn module_pool(
 
 /// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, offer each explicit slot the output left unpinned to the scope's binders, and hand back the applied candidate with its hole count when the fit is definite, or undecided on exactly the holes — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste); an unsolved explicit slot spells the shared hole.
 ///
-/// The output is probed *before* any slot is filled, so a slot the goal determines keeps the goal's value (`mk(3)` against `Eq(3, 3)` with a `k : Nat` in scope stays `mk(3)`, not `mk(k)`), and a binder is offered only to what the goal left open. The first binder whose type fits a slot is taken, in binding order; a later hypothesis that would also have fit is not a second candidate, since the cap is three lines and the reader can see the scope. Every trial is its own transaction inside the attempt's, so a rejected binder leaves no solution behind for the next.
+/// The output is probed *before* any slot is filled, so a slot the goal determines keeps the goal's value (`mk(3)` against `Eq()(3, 3)` with a `k : Nat` in scope stays `mk(3)`, not `mk(k)`), and a binder is offered only to what the goal left open. The first binder whose type fits a slot is taken, in binding order; a later hypothesis that would also have fit is not a second candidate, since the cap is three lines and the reader can see the scope. Every trial is its own transaction inside the attempt's, so a rejected binder leaves no solution behind for the next.
 fn apply_fit(
     context: &mut Context,
     telescope: &[(Free, Term)],
@@ -294,7 +294,7 @@ fn apply_fit_within(
         return None;
     }
 
-    // Then the scope, for each explicit slot still open, in slot order. A binder fits a slot when its type converts to the slot's domain and the slot's metavariable then converts to the binder — two committed conversions, so the domain's own metavariables (`x` and `y` in `p : Eq(x, y)`) pin from the hypothesis and the output is re-probed below with them in hand.
+    // Then the scope, for each explicit slot still open, in slot order. A binder fits a slot when its type converts to the slot's domain and the slot's metavariable then converts to the binder — two committed conversions, so the domain's own metavariables (`x` and `y` in `p : Eq()(x, y)`) pin from the hypothesis and the output is re-probed below with them in hand.
     let mut filled = false;
     for (arg, domain) in args
         .iter()

@@ -13,7 +13,7 @@ Four stages, each landing alone: the executable core, the executable binary64 bo
 
 ## Permanent decisions
 
-**One canonical representation.** A value is `numerator · 2^exponent / odd_denominator`, zero as `(+0, +0, 1)`, and a nonzero value with an odd numerator magnitude, an odd denominator and the two coprime. Equality is then structural, so `Eql(Rat)` may be derived, `Key(Rat)` is a congruence, and `Eq(x, y)` in a type means the same number. The binary part is kept apart from the odd denominator so a dyadic value — every finite float's — is the denominator-one case with no gcd to take.
+**One canonical representation.** A value is `numerator · 2^exponent / odd_denominator`, zero as `(+0, +0, 1)`, and a nonzero value with an odd numerator magnitude, an odd denominator and the two coprime. Equality is then structural, so `Eql(Rat)` may be derived, `Key(Rat)` is a congruence, and `Eq()(x, y)` in a type means the same number. The binary part is kept apart from the odd denominator so a dyadic value — every finite float's — is the denominator-one case with no gcd to take.
 
 **Certificates only where fields interact.** `Rat` carries one joint canonicity certificate, because the three fields together decide whether a triple is reduced. It erases, and no equality proof may depend on distinguishing its inhabitants.
 

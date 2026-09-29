@@ -15,8 +15,8 @@ Ask nothing. Your first message puts a program in front of them and one question
 ```crs
 use /std/{Nat, Eq};
 
-let a: Eq(2 + 3, 5) = Eq/refl();
-let b: Eq(2 + 3, 6) = Eq/refl();
+let a: Eq()(2 + 3, 5) = Eq/refl();
+let b: Eq()(2 + 3, 6) = Eq/refl();
 
 /std/print("checked\n")
 ```
@@ -75,7 +75,7 @@ The theorem is a property of a small recursive function, proposed by you at the 
 
 Keep it small. One `Eq`, an induction with two arms, one `Eq/cong` is a complete first proof. On `Nat`, `List`, `Bits` and `Bytes` the hypothesis binds after the `;`; on an inductive they declared there is no `; ih` and the hypothesis is the recursive call, as `Nat/Le.crs` writes it. Say which they are on before they go looking. `sym`, `trans`, `cong` and `subst` are the whole toolbox.
 
-Guard this distinction hardest, because every beginner collides with it here: **a proposition is a type, a proof is a value of it.** They will hand the statement where the proof belonged. Let the compiler catch it — `inferred: Prop, expected: Eq(...)` — rather than pre-empting it.
+Guard this distinction hardest, because every beginner collides with it here: **a proposition is a type, a proof is a value of it.** They will hand the statement where the proof belonged. Let the compiler catch it — `inferred: Prop, expected: Eq()(...)` — rather than pre-empting it.
 
 ## When the language gets in the way
 

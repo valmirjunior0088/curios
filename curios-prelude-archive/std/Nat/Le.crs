@@ -138,7 +138,7 @@ pub let to_in_range(
     end;
 
 --- Two bounds facing each other pin one value.
-pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
+pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b
@@ -153,7 +153,7 @@ pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
     end;
 
 --- `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
-pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq(a + (b - a), b) =
+pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq()(a + (b - a), b) =
     match a
     | 0 => Eq/refl()
     | ap + 1 =>

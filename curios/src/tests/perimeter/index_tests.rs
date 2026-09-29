@@ -77,7 +77,7 @@ fn a_nested_relevant_clash_still_excuses_an_omitted_arm() {
     );
 }
 
-// The conflict rule through a *non-linear* target. `Eq`'s `refl(@z) : (z, z)` mentions its binder twice, so against `Eq(false, true)` no position clashes on its own: each solves `z`, to `false` and to `true`. The deletion rule reconciles a binder forced twice, and where the two forcings definitely clash the case is unreachable — each was reached by injective steps, so the arm needs `false` to be `true`. Every refutation here was refused while the rule only ever dropped such a pair, and the library worked around it by transporting into a decided proposition. Stated over a literal, two constructors, a closed `Nat` pair, an open successor, a parameterized family and an equality the program declares itself, since the rule is the walk's and not `Eq`'s.
+// The conflict rule through a *non-linear* target. `Eq`'s `refl(@z) : (z, z)` mentions its binder twice, so against `Eq()(false, true)` no position clashes on its own: each solves `z`, to `false` and to `true`. The deletion rule reconciles a binder forced twice, and where the two forcings definitely clash the case is unreachable — each was reached by injective steps, so the arm needs `false` to be `true`. Every refutation here was refused while the rule only ever dropped such a pair, and the library worked around it by transporting into a decided proposition. Stated over a literal, two constructors, a closed `Nat` pair, an open successor, a parameterized family and an equality the program declares itself, since the rule is the walk's and not `Eq`'s.
 #[test]
 fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
     assert_eq!(
@@ -86,7 +86,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
     );
 }
 
-// The control the rule above is most dangerous without, and the exploit it would be: `Two/a()` and `Two/b()` are distinct constructors, and they are proofs, so `Eq/refl()` inhabits `Eq(Two/a(), Two/b())` by irrelevance. Reading the two forcings as a clash would make `absurd` total on an inhabited type, and `forged` a closed inhabitant of `False`. Two things stand in the way and either suffices: the forcings *convert* at `Two`, so the deletion rule keeps one before a clash is ever asked for; and the walk that would answer the clash reads the family's sort before its tags.
+// The control the rule above is most dangerous without, and the exploit it would be: `Two/a()` and `Two/b()` are distinct constructors, and they are proofs, so `Eq/refl()` inhabits `Eq()(Two/a(), Two/b())` by irrelevance. Reading the two forcings as a clash would make `absurd` total on an inhabited type, and `forged` a closed inhabitant of `False`. Two things stand in the way and either suffices: the forcings *convert* at `Two`, so the deletion rule keeps one before a clash is ever asked for; and the walk that would answer the clash reads the family's sort before its tags.
 //
 // The two are independent rather than one guard stated twice, and that was run at the unifier itself, in `curios-analysis`'s `tests/driven.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
 #[test]
@@ -146,7 +146,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     );
 }
 
-// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices` now; the elaborator used to bind an index only when it was itself a variable, never reached the `n` inside `n + 1`, and refused this where the kernel's own specialization would have certified it. The control is the same arm claiming `Eq(n, 1)`, which learning `n := 0` must refuse, and whose refusal states the goal as the arm sees it, `Eq(0, 1)`.
+// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq()(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices` now; the elaborator used to bind an index only when it was itself a variable, never reached the `n` inside `n + 1`, and refused this where the kernel's own specialization would have certified it. The control is the same arm claiming `Eq()(n, 1)`, which learning `n := 0` must refuse, and whose refusal states the goal as the arm sees it, `Eq()(0, 1)`.
 #[test]
 fn an_arm_learns_an_outer_variable_inside_an_index() {
     let source = r#"
@@ -156,7 +156,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
         | one() : (1)
         end
 
-        let zero_below(n : Nat, x : One(n + 1)) -> Eq(n, 0) =
+        let zero_below(n : Nat, x : One(n + 1)) -> Eq()(n, 0) =
             match x | one() => Eq/refl() end;
 
         let _ = zero_below(0, One/one());
@@ -172,7 +172,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
         | one() : (1)
         end
 
-        let one_below(n : Nat, x : One(n + 1)) -> Eq(n, 1) =
+        let one_below(n : Nat, x : One(n + 1)) -> Eq()(n, 1) =
             match x | one() => Eq/refl() end;
 
         /std/print("unreachable")
@@ -181,7 +181,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
     );
 }
 
-// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq(n, 7)` taken at the case, `Eq(0, 7)`, and `h` keeps its type `Eq(n, 7)`. The elaborator used to re-type by the goal's own substitution rather than by the case's solution, so it re-typed `h` to `Eq(0, 7)`, accepted the arm, and handed the kernel a program the kernel refused. Both now re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, and the refusal is the elaborator's.
+// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. The elaborator used to re-type by the goal's own substitution rather than by the case's solution, so it re-typed `h` to `Eq()(0, 7)`, accepted the arm, and handed the kernel a program the kernel refused. Both now re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, and the refusal is the elaborator's.
 #[test]
 fn an_unreachable_arm_retypes_no_local() {
     rejected_by(
@@ -192,7 +192,7 @@ fn an_unreachable_arm_retypes_no_local() {
         | mk() : (0, 1)
         end
 
-        let f(n : Nat, h : Eq(n, 7), x : Two(n, n)) -> Eq(n, 7) =
+        let f(n : Nat, h : Eq()(n, 7), x : Two(n, n)) -> Eq()(n, 7) =
             match x | mk() => h end;
 
         /std/print("unreachable")

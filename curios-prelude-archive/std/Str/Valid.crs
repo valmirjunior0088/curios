@@ -19,7 +19,7 @@ pub let Valid(b: Bytes) -> Prop =
     from(Scan/lead(), b);
 
 --- A scan at rest is at `lead`.
-let lead_of(s: Scan, h: Bool/Holds(at_lead(s))) -> Eq(s, Scan/lead()) =
+let lead_of(s: Scan, h: Bool/Holds(at_lead(s))) -> Eq()(s, Scan/lead()) =
     match s
     | lead() => Eq/refl()
     | cont(_, _, _) => match h end
@@ -31,7 +31,7 @@ let append(
     s: Scan,
     a: Bytes,
     b: Bytes,
-) -> Eq(scan_from(s, x[..a, ..b]), scan_from(scan_from(s, a), b)) =
+) -> Eq()(scan_from(s, x[..a, ..b]), scan_from(scan_from(s, a), b)) =
     match a | x[] => Eq/refl() | x[h, ..t] => append(step(h, s), t, b) end;
 
 --- The procedure that decides whether `b` is well-formed from `s`: the evidence when it is, `none` otherwise.
@@ -89,7 +89,7 @@ let interrupted(
     hi: Nat,
     h: Bool/Holds(scan_continues(Scan/cont(rem, lo, hi))),
     q: Bool/Holds(Bool/not(continues(c))),
-) -> Eq(step(c, Scan/cont(rem, lo, hi)), Scan/bad()) =
+) -> Eq()(step(c, Scan/cont(rem, lo, hi)), Scan/bad()) =
     let n = Byte/to_nat(c);
     match Nat/in_range(n, lo, hi)
     | false => Eq/refl()

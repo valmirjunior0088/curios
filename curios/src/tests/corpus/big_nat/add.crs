@@ -20,7 +20,7 @@ pub let raw(x: Bits, y: Bits, carry: Bool) -> Bits =
         end
     end;
 
-let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
+let raw_zero_r(x: Bits) -> Eq()(raw(x, b[], false), x) =
     match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -31,7 +31,7 @@ let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
     end;
 
 --- The empty word with no carry is a left identity.
-pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
+pub let raw_zero_l(y: Bits) -> Eq()(raw(b[], y, false), y) =
     match y
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -41,7 +41,7 @@ pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
         end
     end;
 
-let raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
+let raw_succ_r(x: Bits) -> Eq()(raw(x, b[], true), succ/raw(x)) =
     match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -51,7 +51,7 @@ let raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
         end
     end;
 
-let raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
+let raw_succ_l(y: Bits) -> Eq()(raw(b[], y, true), succ/raw(y)) =
     match y
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -66,7 +66,7 @@ let raw_nonempty_l(
     xt: Bits,
     y: Bits,
     c: Bool,
-) -> Eq(nonempty(raw(b[xh, ..xt], y, c)), true) =
+) -> Eq()(nonempty(raw(b[xh, ..xt], y, c)), true) =
     match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
 
 let raw_nonempty_r(
@@ -74,7 +74,7 @@ let raw_nonempty_r(
     yh: Bool,
     yt: Bits,
     c: Bool,
-) -> Eq(nonempty(raw(x, b[yh, ..yt], c)), true) =
+) -> Eq()(nonempty(raw(x, b[yh, ..yt], c)), true) =
     match x | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
 
 --- The sum of two trimmed words is trimmed.
@@ -82,9 +82,9 @@ pub let raw_trimmed(
     x: Bits,
     y: Bits,
     c: Bool,
-    px: Eq(is_trimmed(x), true),
-    py: Eq(is_trimmed(y), true),
-) -> Eq(is_trimmed(raw(x, y, c)), true) =
+    px: Eq()(is_trimmed(x), true),
+    py: Eq()(is_trimmed(y), true),
+) -> Eq()(is_trimmed(raw(x, y, c)), true) =
     match x
     | b[] =>
         match c
@@ -151,7 +151,7 @@ pub let add(a: BigNat, b: BigNat) -> BigNat =
             is_trimmed_of_canonical(a.bits, a.canonical),
             is_trimmed_of_canonical(b.bits, b.canonical)));
 
-let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
+let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq()(xor3(a, b, c), xor3(b, a, c)) =
     match a
     | true =>
         match b | true => refl_at(xor3(true, true, c)) | false => refl_at(xor3(true, false, c)) end
@@ -162,7 +162,7 @@ let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
         end
     end;
 
-let maj3_comm(a: Bool, b: Bool, c: Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
+let maj3_comm(a: Bool, b: Bool, c: Bool) -> Eq()(maj3(a, b, c), maj3(b, a, c)) =
     match a
     | true =>
         match b | true => refl_at(maj3(true, true, c)) | false => refl_at(maj3(true, false, c)) end
@@ -178,8 +178,8 @@ let xor3_inj_mid(
     @b1: Bool,
     @b2: Bool,
     c: Bool,
-    p: Eq(xor3(a, b1, c), xor3(a, b2, c)),
-) -> Eq(b1, b2) =
+    p: Eq()(xor3(a, b1, c), xor3(a, b2, c)),
+) -> Eq()(b1, b2) =
     match a
     | true =>
         match c
@@ -245,9 +245,9 @@ let cong_maj3_mid(
     a: Bool,
     @b1: Bool,
     @b2: Bool,
-    p: Eq(b1, b2),
+    p: Eq()(b1, b2),
     c: Bool,
-) -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
+) -> Eq()(maj3(a, b1, c), maj3(a, b2, c)) =
     Eq/cong((w) => maj3(a, w, c), p);
 
 let cong_raw_c(
@@ -255,12 +255,12 @@ let cong_raw_c(
     y: Bits,
     @c1: Bool,
     @c2: Bool,
-    p: Eq(c1, c2),
-) -> Eq(raw(x, y, c1), raw(x, y, c2)) =
+    p: Eq()(c1, c2),
+) -> Eq()(raw(x, y, c1), raw(x, y, c2)) =
     Eq/cong((c) => raw(x, y, c), p);
 
 --- `raw` is commutative.
-pub let raw_comm(x: Bits, y: Bits, c: Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
+pub let raw_comm(x: Bits, y: Bits, c: Bool) -> Eq()(raw(x, y, c), raw(y, x, c)) =
     match x
     | b[] =>
         match y
@@ -279,9 +279,7 @@ and raw_swap_step(
     h1: Bool,
     h2: Bool,
     c: Bool,
-) -> Eq(
-    b[xor3(h1, h2, c), ..raw(x, y, maj3(h1, h2, c))],
-    b[xor3(h2, h1, c), ..raw(y, x, maj3(h2, h1, c))]) =
+) -> Eq()(b[xor3(h1, h2, c), ..raw(x, y, maj3(h1, h2, c))], b[xor3(h2, h1, c), ..raw(y, x, maj3(h2, h1, c))]) =
     cong_cons2(
         xor3_comm(h1, h2, c),
         Eq/trans(raw_comm(x, y, maj3(h1, h2, c)), cong_raw_c(y, x, maj3_comm(h1, h2, c))));
@@ -290,10 +288,10 @@ and raw_swap_step(
 pub let cong_raw_l(
     @s: Bits,
     @t: Bits,
-    p: Eq(s, t),
+    p: Eq()(s, t),
     y: Bits,
     c: Bool,
-) -> Eq(raw(s, y, c), raw(t, y, c)) =
+) -> Eq()(raw(s, y, c), raw(t, y, c)) =
     Eq/cong((w) => raw(w, y, c), p);
 
 --- Congruence of `raw` in its right operand.
@@ -301,13 +299,13 @@ pub let cong_raw_r(
     x: Bits,
     @s: Bits,
     @t: Bits,
-    p: Eq(s, t),
+    p: Eq()(s, t),
     c: Bool,
-) -> Eq(raw(x, s, c), raw(x, t, c)) =
+) -> Eq()(raw(x, s, c), raw(x, t, c)) =
     Eq/cong((w) => raw(x, w, c), p);
 
 --- A carry in is the successor of the sum without it.
-pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
+pub let raw_carry_spec(x: Bits, y: Bits) -> Eq()(raw(x, y, true), succ/raw(raw(x, y, false))) =
     match x
     | b[] =>
         match y
@@ -346,7 +344,7 @@ pub let raw_succ_out_l(
     u: Bits,
     v: Bits,
     c: Bool,
-) -> Eq(raw(succ/raw(u), v, c), succ/raw(raw(u, v, c))) =
+) -> Eq()(raw(succ/raw(u), v, c), succ/raw(raw(u, v, c))) =
     match u
     | b[] =>
         match v
@@ -426,7 +424,7 @@ pub let raw_succ_out_r(
     u: Bits,
     v: Bits,
     c: Bool,
-) -> Eq(raw(u, succ/raw(v), c), succ/raw(raw(u, v, c))) =
+) -> Eq()(raw(u, succ/raw(v), c), succ/raw(raw(u, v, c))) =
     match v
     | b[] =>
         match u
@@ -505,8 +503,8 @@ let carry_shift(
     x: Bits,
     y: Bits,
     z: Bits,
-    assoc: Eq(raw(raw(x, y, false), z, true), raw(x, raw(y, z, false), true)),
-) -> Eq(raw(raw(x, y, false), z, true), raw(x, raw(y, z, true), false)) =
+    assoc: Eq()(raw(raw(x, y, false), z, true), raw(x, raw(y, z, false), true)),
+) -> Eq()(raw(raw(x, y, false), z, true), raw(x, raw(y, z, true), false)) =
     Eq/trans(
         assoc,
         Eq/trans(
@@ -522,7 +520,7 @@ pub let raw_assoc(
     z: Bits,
     c1: Bool,
     c2: Bool,
-) -> Eq(raw(raw(x, y, c1), z, c2), raw(x, raw(y, z, c1), c2)) =
+) -> Eq()(raw(raw(x, y, c1), z, c2), raw(x, raw(y, z, c1), c2)) =
     match x
     | b[] =>
         match y
@@ -1108,7 +1106,7 @@ pub let raw_assoc(
     end;
 
 --- Adding one is the successor.
-pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
+pub let raw_one_r(x: Bits) -> Eq()(raw(x, b[1], false), succ/raw(x)) =
     match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -1119,11 +1117,11 @@ pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
     end;
 
 --- Commutativity.
-pub let comm(a: BigNat, b: BigNat) -> Eq(add(a, b), add(b, a)) =
+pub let comm(a: BigNat, b: BigNat) -> Eq()(add(a, b), add(b, a)) =
     eq(add(a, b), add(b, a), raw_comm(a.bits, b.bits, false));
 
 --- Associativity.
-pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
+pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq()(add(add(a, b), c), add(a, add(b, c))) =
     eq(add(add(a, b), c), add(a, add(b, c)), raw_assoc(a.bits, b.bits, c.bits, false, false));
 
 --- Cancellation of `raw` on the left.
@@ -1132,10 +1130,10 @@ pub let raw_cancel_l(
     y: Bits,
     z: Bits,
     c: Bool,
-    py: Eq(is_trimmed(y), true),
-    pz: Eq(is_trimmed(z), true),
-    p: Eq(raw(x, y, c), raw(x, z, c)),
-) -> Eq(y, z) =
+    py: Eq()(is_trimmed(y), true),
+    pz: Eq()(is_trimmed(z), true),
+    p: Eq()(raw(x, y, c), raw(x, z, c)),
+) -> Eq()(y, z) =
     match x
     | b[] =>
         match c
@@ -1179,12 +1177,12 @@ and raw_cancel_absurd(
     zh: Bool,
     zt: Bits,
     c: Bool,
-    pz: Eq(is_trimmed(b[zh, ..zt]), true),
-    p: Eq(raw(b[xh, ..xt], b[], c), raw(b[xh, ..xt], b[zh, ..zt], c)),
+    pz: Eq()(is_trimmed(b[zh, ..zt]), true),
+    p: Eq()(raw(b[xh, ..xt], b[], c), raw(b[xh, ..xt], b[zh, ..zt], c)),
 ) -> Bool/False =
     let shifted =
         Eq/subst(
-            (w: Bits) => Eq(is_trimmed(w), true),
+            (w: Bits) => Eq()(is_trimmed(w), true),
             cong_cons2(
                 Eq/sym(xor3_inj_mid(xh, @false, @zh, c, cons_inj_head(p))),
                 Eq/sym(
@@ -1214,14 +1212,14 @@ pub let raw_cancel_r(
     y: Bits,
     z: Bits,
     c: Bool,
-    py: Eq(is_trimmed(y), true),
-    pz: Eq(is_trimmed(z), true),
-    p: Eq(raw(y, x, c), raw(z, x, c)),
-) -> Eq(y, z) =
+    py: Eq()(is_trimmed(y), true),
+    pz: Eq()(is_trimmed(z), true),
+    p: Eq()(raw(y, x, c), raw(z, x, c)),
+) -> Eq()(y, z) =
     raw_cancel_l(x, y, z, c, py, pz, Eq/trans(raw_comm(x, y, c), Eq/trans(p, raw_comm(z, x, c))));
 
 --- Cancellation on the left.
-pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -> Eq(b, c) =
+pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq()(add(a, b), add(a, c))) -> Eq()(b, c) =
     eq(
         b,
         c,
@@ -1235,7 +1233,7 @@ pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -
             cong_bits(p)));
 
 --- Cancellation on the right.
-pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(b, a), add(c, a))) -> Eq(b, c) =
+pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq()(add(b, a), add(c, a))) -> Eq()(b, c) =
     cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));
 
 satisfy Add(BigNat) {

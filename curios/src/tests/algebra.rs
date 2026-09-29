@@ -8,12 +8,12 @@ fn a_law_holds_at_an_instance_that_changes_its_atoms() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Int, Eq};
-        let comm(x: Nat, y: Nat) -> Eq(x + y, y + x) = Eq/refl();
-        let at_sums(a: Nat, b: Nat) -> Eq(2 * b + a + 1, (a + 1) + b * 2) = comm(b * 2, a + 1);
-        let cancel(x: Nat, y: Nat, z: Nat) -> Eq(x + z <= y + z, x <= y) = Eq/refl();
-        let at_shared(a: Nat, b: Nat) -> Eq(a <= 0, a + b <= b) = cancel(a + b, b, a + 1);
-        let shift(i: Int, j: Int) -> Eq(i - j + j, i) = Eq/refl();
-        let at_products(k: Int, l: Int) -> Eq(k * l, k * l - (k + l) + (k + l)) = Eq/sym(shift(k * l, k + l));
+        let comm(x: Nat, y: Nat) -> Eq()(x + y, y + x) = Eq/refl();
+        let at_sums(a: Nat, b: Nat) -> Eq()(2 * b + a + 1, (a + 1) + b * 2) = comm(b * 2, a + 1);
+        let cancel(x: Nat, y: Nat, z: Nat) -> Eq()(x + z <= y + z, x <= y) = Eq/refl();
+        let at_shared(a: Nat, b: Nat) -> Eq()(a <= 0, a + b <= b) = cancel(a + b, b, a + 1);
+        let shift(i: Int, j: Int) -> Eq()(i - j + j, i) = Eq/refl();
+        let at_products(k: Int, l: Int) -> Eq()(k * l, k * l - (k + l) + (k + l)) = Eq/sym(shift(k * l, k + l));
         /std/print("ok")
         "#),
         b"ok"
@@ -26,7 +26,7 @@ fn a_metavariable_is_solved_through_the_cancellation() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Eq};
-        let pred(@n: Nat, p: Eq(n + 1, 3)) -> Nat = n;
+        let pred(@n: Nat, p: Eq()(n + 1, 3)) -> Nat = n;
         /std/print(Nat/to_str(pred(Eq/refl())))
         "#),
         b"2"
@@ -39,7 +39,7 @@ fn a_metavariable_is_solved_through_the_packed_literal_view() {
     assert_eq!(
         run(r#"
         use /std/{Bool, Bits, Eq};
-        let head(@h: Bool, p: Eq(b[1], b[h])) -> Bool = h;
+        let head(@h: Bool, p: Eq()(b[1], b[h])) -> Bool = h;
         match head(Eq/refl()) | true => /std/print("true") | false => /std/print("false") end
         "#),
         b"true"
@@ -52,7 +52,7 @@ fn a_metavariable_is_solved_as_the_rest_of_a_split_packed_literal() {
     assert_eq!(
         run(r#"
         use /std/{Byte, Bytes, Eq, Nat};
-        let tail(@h: Byte, @t: Bytes, p: Eq(x[1, 2, 3], x[h, ..t])) -> Bytes = t;
+        let tail(@h: Byte, @t: Bytes, p: Eq()(x[1, 2, 3], x[h, ..t])) -> Bytes = t;
         /std/print(Nat/to_str(Bytes/len(tail(Eq/refl()))))
         "#),
         b"2"

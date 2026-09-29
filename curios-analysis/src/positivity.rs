@@ -199,7 +199,7 @@ impl Split {
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
-            // The index *binder types* are deliberately not walked. They describe the family's arity, not its carrier: they exist to typecheck the index arguments a constructor targets and store nothing, so what a declaration contains is witnessed entirely by its constructor payloads. `Eq(@A : Type) : (x : A, y : A)` is `Strict` in `A` because `refl(@z : A)` has an `A` payload, and walking `x : A` on top of that would only cost the vector its precision — enough to reject the sound `induct Wit | tied(a : Wit, b : Wit, p : Eq(a, b)) end`.
+            // The index *binder types* are deliberately not walked. They describe the family's arity, not its carrier: they exist to typecheck the index arguments a constructor targets and store nothing, so what a declaration contains is witnessed entirely by its constructor payloads. `Eq(@A : Type) : (x : A, y : A)` is `Strict` in `A` because `refl(@z : A)` has an `A` payload, and walking `x : A` on top of that would only cost the vector its precision — enough to reject the sound `induct Wit | tied(a : Wit, b : Wit, p : Eq()(a, b)) end`.
             //
             // Nor do they need to guard a self-reference. `induct Foo : (x : Foo) -> Type` does not elaborate: `x : Foo` requires `Foo` to already be a type, and it is a family until applied to the very index being declared. The elaborator rejects it on kinding before positivity ever runs.
             //

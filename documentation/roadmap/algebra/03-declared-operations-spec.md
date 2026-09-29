@@ -40,7 +40,7 @@ The specifications this part replaces asked for `min`, `max`, `abs` and `sign` t
 - **`min` and `max`**, as `Nat`'s.
 - **The signed scale.** `shl(n, k)` is `n` times the widened `pow(2, k)`, so with the homomorphisms `sign(shl(n, k)) = sign(n)` and `abs(shl(n, k)) = shl(abs(n), k)` hold by conversion.
 
-What stays a lemma at `Int` is [the numeric laws](../numeric-laws-spec.md)': the order facts of `abs` and `sign`, the triangle inequality, the decomposition `n = sign(n) · Nat/to_int(abs(n))`, and the `Prop` half of `abs(a - b)` being zero exactly when `Eq(a, b)`.
+What stays a lemma at `Int` is [the numeric laws](../numeric-laws-spec.md)': the order facts of `abs` and `sign`, the triangle inequality, the decomposition `n = sign(n) · Nat/to_int(abs(n))`, and the `Prop` half of `abs(a - b)` being zero exactly when `Eq()(a, b)`.
 
 ## `Flt`
 

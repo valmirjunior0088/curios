@@ -90,8 +90,8 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
 }
 
 #[test]
-fn all_implicit_telescope_saturates_and_retargets() {
-    // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`. Applying it directly to plain arguments saturates the all-implicit telescope with fresh metavariables and re-targets the arguments at the next telescope — both through a direct call and the `!` sugar (which sequences through the user's `Monad(Id)` witness).
+fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
+    // The curried `bind` shape: `(@A, @B) -> (Id(A), (A) -> Id(B)) -> Id(B)`. The hidden list is its own call — empty here, `bind(@A, @B)` in the witness — and the plain arguments are the next call's, both through a direct call and the `!` sugar (which sequences through the user's `Monad(Id)` witness).
     let source = r#"
         use /std/{Nat, Monad};
         induct Id(A : Type) : Type
@@ -106,7 +106,7 @@ fn all_implicit_telescope_saturates_and_retargets() {
             pure(@A, x) = Id/wrap(x),
             bind(@A, @B, m, f) = bind(@A, @B)(m, f)
         }
-        let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
+        let direct = bind()(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
         -- The lambda body is its own region root: the `!` sequences inside
         -- it instead of hoisting into the entrypoint tail (which returns a
         -- bare `Nat`, not an `Id`). The annotation is what names the region's
@@ -126,6 +126,23 @@ fn all_implicit_telescope_saturates_and_retargets() {
     "#;
 
     compile(source, Some("/std/Nat")).unwrap();
+}
+
+#[test]
+fn plain_arguments_do_not_pass_through_an_all_implicit_parameter_list() {
+    // A call fills one parameter list: the hidden list's call takes no plain argument, so the pair meant for the next list arrives one call too early.
+    let source = r#"
+        use /std/{Nat};
+        let pair : (@A : Type) -> (A, A) -> Nat = (@A) => (a, b) => 0;
+        pair(1, 2)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("wrong number of arguments: expected 0, got 2"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

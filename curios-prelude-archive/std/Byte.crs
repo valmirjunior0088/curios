@@ -7,8 +7,8 @@ use /std/ops/{Eql, Cmp, And, Or};
 pub let eql(a: Byte, b: Byte) -> Bool =
     Nat/eql(to_nat(a), to_nat(b));
 
---- A decided equality is an equation: `a == b` gives `Eq(a, b)`. The codes are equal by `Nat`'s, and a byte is the byte of its own code, since `to_byte(to_nat(b))` converts with `b`.
-pub let eq_of_eql(a: Byte, b: Byte, h: Bool/Holds(a == b)) -> Eq(a, b) =
+--- A decided equality is an equation: `a == b` gives `Eq()(a, b)`. The codes are equal by `Nat`'s, and a byte is the byte of its own code, since `to_byte(to_nat(b))` converts with `b`.
+pub let eq_of_eql(a: Byte, b: Byte, h: Bool/Holds(a == b)) -> Eq()(a, b) =
     Eq/cong((n) => Nat/to_byte(n % 256), Nat/eq_of_eql(to_nat(a), to_nat(b), h));
 
 --- Whether `a` is below `b`.

@@ -20,7 +20,7 @@ const SUBJECTS: &[(&str, &str)] = &[
         use /std/{Nat, Bool, Eq};
         let count : Nat = 3;
         let flag : Bool = true;
-        let same : Eq(1, 1) = Eq/refl();
+        let same : Eq()(1, 1) = Eq/refl();
         let twice(n : Nat) -> Nat = n + n;
         /std/print(Nat/to_str(twice(count)))
         "#,
@@ -199,12 +199,12 @@ const GRAFTS: &[(&str, &str, &str)] = &[
         "an equation between the wrong pair",
         r#"
         use /std/{Nat, Eq};
-        let subject : Eq(1, 1) = Eq/refl();
+        let subject : Eq()(1, 1) = Eq/refl();
         /std/print("donor")
         "#,
         r#"
         use /std/{Nat, Eq};
-        let subject : Eq(2, 2) = Eq/refl();
+        let subject : Eq()(2, 2) = Eq/refl();
         /std/print("host")
         "#,
     ),

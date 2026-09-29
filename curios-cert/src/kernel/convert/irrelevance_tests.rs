@@ -443,7 +443,7 @@ fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
 
 /// A struct's *parameters* compare at the declaration's outer telescope too, so a parameter at a proposition is discharged without being read.
 ///
-/// This is the gap `induct_type_args` named and left open — "no witness has forced it" — and it is the parameter-side twin of the field rule above: a family's indices were typed, a struct's and a constructor's parameters were not, so `Wrap(P, p)` and `Wrap(P, q)` were two types for one, where `Eq(@P, p, q)` and `Eq(@P, p, p)` were already one. Nothing in `/std` forces it either; it is taken because the rule is the same rule and the asymmetry was an accident of which shape someone needed first.
+/// This is the gap `induct_type_args` named and left open — "no witness has forced it" — and it is the parameter-side twin of the field rule above: a family's indices were typed, a struct's and a constructor's parameters were not, so `Wrap(P, p)` and `Wrap(P, q)` were two types for one, where `Eq(@P)(p, q)` and `Eq(@P)(p, p)` were already one. Nothing in `/std` forces it either; it is taken because the rule is the same rule and the asymmetry was an accident of which shape someone needed first.
 #[test]
 fn a_struct_parameter_at_a_proposition_is_not_read() {
     let mut kernel = kernel();

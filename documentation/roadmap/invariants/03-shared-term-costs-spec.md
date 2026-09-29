@@ -36,7 +36,7 @@ Each lands alone, with a doubling-term fixture where it makes a walk graph-aware
 
 ## Budgets
 
-Taken on the tree stage 1 landed on, with `target/debug/curios` built by `cargo build --package curios --all-features`, a program's wall time the time `wonder diagnostics -` takes on standard input from a warm filesystem, the program holding `use /std/{Str, Option, Eq, Nat, Flt, List};` and the one claim, `Eq(<left>, <right>) = Eq/refl()`, as the decomposition corpus spells it.
+Taken on the tree stage 1 landed on, with `target/debug/curios` built by `cargo build --package curios --all-features`, a program's wall time the time `wonder diagnostics -` takes on standard input from a warm filesystem, the program holding `use /std/{Str, Option, Eq, Nat, Flt, List};` and the one claim, `Eq()(<left>, <right>) = Eq/refl()`, as the decomposition corpus spells it.
 
 | Claim or build | Budget |
 | --- | --- |

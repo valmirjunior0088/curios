@@ -916,7 +916,7 @@ fn ascii_refinement(n: usize) -> String {
                 | false => false
                 end
             end;
-        let ok : Eq(all_ascii(x[{entries}]), true) = Eq/refl();
+        let ok : Eq()(all_ascii(x[{entries}]), true) = Eq/refl();
         /std/print("ok")
         "#
     )

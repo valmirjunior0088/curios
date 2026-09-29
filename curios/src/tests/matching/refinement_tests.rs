@@ -26,7 +26,7 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
         let refined(t : Nat, b : Bool) -> Str =
             match Pred/test(t, b)
             | true =>
-                let p : Eq(true, Pred/test(t, b)) = Eq/refl();
+                let p : Eq()(true, Pred/test(t, b)) = Eq/refl();
                 "refined"
             | false => "unrefined"
             end;
@@ -53,8 +53,8 @@ fn a_boolean_refinement_reaches_an_occurrence_spelled_differently_on_its_right()
         let refined(x : Bool) -> Str =
             match x && g(7)
             | true =>
-                let p : Eq(x && h(7), true) = Eq/refl();
-                let q : Eq(Bool/and(x, h(7)), true) = Eq/refl();
+                let p : Eq()(x && h(7), true) = Eq/refl();
+                let q : Eq()(Bool/and(x, h(7)), true) = Eq/refl();
                 "refined"
             | false => "unrefined"
             end;
@@ -79,7 +79,7 @@ fn a_matched_payload_converts_against_the_value_it_carried() {
         let head_opt(@V : Type, l : L(V)) -> Option(V) =
             match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
 
-        let carried : Eq(head_opt(L/cons(7, L/nil())), Option/some(7)) = Eq/refl();
+        let carried : Eq()(head_opt(L/cons(7, L/nil())), Option/some(7)) = Eq/refl();
 
         /std/print("carried")
         "#;
@@ -101,7 +101,7 @@ fn a_matched_payload_still_refuses_a_false_equation() {
         let head_opt(@V : Type, l : L(V)) -> Option(V) =
             match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
 
-        let carried : Eq(head_opt(L/cons(7, L/nil())), Option/some(8)) = Eq/refl();
+        let carried : Eq()(head_opt(L/cons(7, L/nil())), Option/some(8)) = Eq/refl();
 
         /std/print("carried")
         "#;
@@ -387,11 +387,11 @@ fn a_let_bound_scrutinee_is_refined_through_its_definition() {
         let f(x: Nat) -> Nat =
             let y: Nat = x;
             match y
-            | 0 => let _zero: Eq(y, 0) = Eq/refl(); 0
+            | 0 => let _zero: Eq()(y, 0) = Eq/refl(); 0
             | xp + 1 =>
-                let _same: Eq(y, y) = Eq/refl();
-                let _successor: Eq(y, xp + 1) = Eq/refl();
-                let _definition: Eq(x, xp + 1) = Eq/refl(@Nat, @(xp + 1));
+                let _same: Eq()(y, y) = Eq/refl();
+                let _successor: Eq()(y, xp + 1) = Eq/refl();
+                let _definition: Eq()(x, xp + 1) = Eq/refl(@Nat, @(xp + 1));
                 xp
             end;
         /std/print(Nat/to_str(f(5)))
@@ -406,8 +406,8 @@ fn a_let_bound_boolean_scrutinee_is_refined_through_its_definition() {
         let f(b: Bool) -> Str =
             let c: Bool = b;
             match c
-            | true => let _: Eq(c, true) = Eq/refl(); "yes"
-            | false => let _: Eq(c, false) = Eq/refl(); "no"
+            | true => let _: Eq()(c, true) = Eq/refl(); "yes"
+            | false => let _: Eq()(c, false) = Eq/refl(); "no"
             end;
         /std/print(f(true))
         "#;
@@ -422,7 +422,7 @@ fn a_let_bound_inductive_scrutinee_is_refined_through_its_definition() {
         let f(o: Option(Nat)) -> Nat =
             let p: Option(Nat) = o;
             match p
-            | some(v) => let _: Eq(p, Option/some(v)) = Eq/refl(); v
+            | some(v) => let _: Eq()(p, Option/some(v)) = Eq/refl(); v
             | none() => 0
             end;
         /std/print(Nat/to_str(f(Option/some(7))))
@@ -440,8 +440,8 @@ fn a_chain_of_lets_is_refined_to_its_end() {
             match z
             | 0 => 0
             | zp + 1 =>
-                let _: Eq(z, z) = Eq/refl();
-                let _: Eq(x, zp + 1) = Eq/refl(@Nat, @(zp + 1));
+                let _: Eq()(z, z) = Eq/refl();
+                let _: Eq()(x, zp + 1) = Eq/refl(@Nat, @(zp + 1));
                 zp
             end;
         /std/print(Nat/to_str(f(3)))
@@ -459,7 +459,7 @@ fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
             let y: Nat = count(x);
             match y
             | 0 => 0
-            | yp + 1 => let _: Eq(y, y) = Eq/refl(); yp
+            | yp + 1 => let _: Eq()(y, y) = Eq/refl(); yp
             end;
         /std/print(Nat/to_str(f(3)))
         "#;
@@ -478,7 +478,7 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
         let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
             match Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi))
             | true => 0
-            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            | false => let _: Eq()(outside(c, lo, hi), true) = Eq/refl(); 1
             end;
         /std/print("ok")
         "#),
@@ -498,7 +498,7 @@ fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
             let n = Byte/to_nat(c);
             match Bool/not(Nat/in_range(n, lo, hi))
             | true => 0
-            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            | false => let _: Eq()(outside(c, lo, hi), true) = Eq/refl(); 1
             end;
         /std/print("ok")
         "#),
@@ -519,7 +519,7 @@ fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
             let m = Byte/to_nat(c);
             match Bool/not(Nat/in_range(m, lo, hi))
             | true => 0
-            | false => let _: Eq(outside(c, lo, hi), true) = Eq/refl(); 1
+            | false => let _: Eq()(outside(c, lo, hi), true) = Eq/refl(); 1
             end;
         /std/print("ok")
         "#),

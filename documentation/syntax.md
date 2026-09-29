@@ -301,6 +301,8 @@ join(use custom_show, values)
 
 Omitted implicit arguments are inferred. Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
+A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/language/a-call-fills-one-parameter-group.md).
+
 A projection is positional or labeled:
 
 ```crs
@@ -326,8 +328,8 @@ Lambda parameters may be plain binders or irrefutable tuple and struct patterns.
 A lambda's parameter list is a dependent telescope, exactly as a function type's is: a later parameter's annotation may name the parameters written before it, including the leaf names bound by an earlier tuple or struct pattern. An earlier parameter shadows a like-named module binding inside a later annotation, just as it does inside the body.
 
 ```crs
-(s: A, t: A, q: Eq(s, t)) => proof(q)
-((lo, hi), q: Eq(lo, hi)) => lo
+(s: A, t: A, q: Eq()(s, t)) => proof(q)
+((lo, hi), q: Eq()(lo, hi)) => lo
 ```
 
 A lambda parameter carries the same plicity mark as a function-type parameter: `@name` binds an implicit slot, `use name` binds a witness slot, and an unmarked binder binds an explicit slot. The mark applies to the slot the parameter occupies whatever the pattern shape. Each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
@@ -520,12 +522,12 @@ The motive states the result type as a family. It is an ordinary term, checked a
 There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/language/a-motive-is-a-term-not-a-grammar.md)).
 
 ```crs
-match b: (_) => Nat                            -- result ignores the scrutinee
-match n: (m) => P(m)                           -- result depends on it
-match p: (s, t, q) => Eq(t, s)                 -- an indexed family
-match p: (s: A, t: A, q: Eq(s, t)) => Eq(t, s) -- with written annotations
-match p: discriminates_eq                      -- a named family
-match v                                        -- omitted; inferred
+match b: (_) => Nat                                -- result ignores the scrutinee
+match n: (m) => P(m)                               -- result depends on it
+match p: (s, t, q) => Eq()(t, s)                   -- an indexed family
+match p: (s: A, t: A, q: Eq()(s, t)) => Eq()(t, s) -- with written annotations
+match p: discriminates_eq                          -- a named family
+match v                                            -- omitted; inferred
 ```
 
 The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — takes exactly one, so a result that ignores it is written `(_) => T`; the `Sized` declared under [Inductive declarations](#inductive-declarations) has one index and takes two binders, and `Eq` has two and takes three.
@@ -537,7 +539,7 @@ Each arm is checked against the motive at that constructor's target indices, and
 A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: checked by conversion against the binder's expected type, obeying the usual plicity rules, and free to name the binders before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
 
 ```crs
-match p: (s, t, q: Eq(s, t)) => Eq(t, s)
+match p: (s, t, q: Eq()(s, t)) => Eq()(t, s)
 ```
 
 Omitting the motive asks the elaborator to infer it. In a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted for, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. A fold over `Nat`, `List`, `Bits` or `Bytes` whose arm reads its induction hypothesis — names it, or holds a goal `?` that could — is the exception: the hypothesis is typed at the result at the tail, so its motive is abstracted over the scrutinee instead. A case split — the same match with no `; ih` read — is not. Prefer omission wherever inference succeeds. A motive has to be written where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position — and where the result must depend on the scrutinee beyond its written occurrences.
@@ -730,7 +732,7 @@ use /std/{Nat, Eq, Test};
 test the_answer_holds =
     Test/assert(21 * 2 == 42);
 
-let _right_identity(n: Nat) -> Eq(n + 0, n) =
+let _right_identity(n: Nat) -> Eq()(n + 0, n) =
     Eq/refl();
 ```
 
@@ -954,7 +956,7 @@ The field list is a dependent telescope: later fields may refer to earlier named
 ```crs
 pub concept Idem(A: Type): pub Type {
     op(A) -> A,
-    law(x: A) -> Eq(op(op(x)), op(x)),
+    law(x: A) -> Eq()(op(op(x)), op(x)),
 }
 ```
 
@@ -1139,8 +1141,8 @@ A tuple type's labels are part of its identity, so nothing may be invented, drop
 Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives; `Eq` gets no syntax of its own, which is the point.
 
 ```crs
-pub let sym(@A: Type, @x: A, @y: A, proof: Eq(x, y)) -> Eq(y, x) =
-    match proof: (left, right, p) => Eq(right, left)
+pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
+    match proof: (left, right, p) => Eq()(right, left)
     | refl(@value) => Eq/refl()
     end;
 ```

@@ -131,7 +131,7 @@ fn acceptance_is_upward_closed_in_the_budget() {
                 | 0 => 0
                 | p + 1; below => below + p
                 end;
-            let _held : Eq(sum(200), 19900) = Eq/refl();
+            let _held : Eq()(sum(200), 19900) = Eq/refl();
             /std/print("ok")
             "#,
         ),

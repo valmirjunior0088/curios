@@ -11,19 +11,19 @@ test atom_splice_builds_the_written_sequence =
 let _bytes_cons_has_the_length_of_its_tail_plus_one(
     h: Byte,
     t: Bytes,
-) -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) =
+) -> Eq()(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) =
     Eq/refl();
 
 let _bytes_cons_decodes_its_head_first(
     h: Byte,
     t: Bytes,
-) -> Eq(Bytes/try_get(x[h, ..t], 0), Option/some(h)) =
+) -> Eq()(Bytes/try_get(x[h, ..t], 0), Option/some(h)) =
     Eq/refl();
 
 let _bits_cons_has_the_length_of_its_tail_plus_one(
     h: Bool,
     t: Bits,
-) -> Eq(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) =
+) -> Eq()(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) =
     Eq/refl();
 
 test list_fold_sums_elements =

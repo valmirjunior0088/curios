@@ -316,14 +316,14 @@ fn a_literal_divisor_sees_through_a_symbolic_dividend() {
         run(r#"
         use /std/{Nat, Byte, Eq, Io};
         -- The split: `b` cannot carry, because its carrier bounds it at 255.
-        let hi : (x : Nat, b : Byte) -> Eq((256 * x + Byte/to_nat(b)) / 256, x) =
+        let hi : (x : Nat, b : Byte) -> Eq()((256 * x + Byte/to_nat(b)) / 256, x) =
             (x, b) => Eq/refl();
-        let lo : (x : Nat, b : Byte) -> Eq((256 * x + Byte/to_nat(b)) % 256, Byte/to_nat(b)) =
+        let lo : (x : Nat, b : Byte) -> Eq()((256 * x + Byte/to_nat(b)) % 256, Byte/to_nat(b)) =
             (x, b) => Eq/refl();
         -- The floor law, with nothing bounded to split on.
-        let floor : (x : Nat) -> Eq((x + 700) / 256, (x + 188) / 256 + 2) = (x) => Eq/refl();
+        let floor : (x : Nat) -> Eq()((x + 700) / 256, (x + 188) / 256 + 2) = (x) => Eq/refl();
         -- A remainder is below its divisor, for every dividend.
-        let below : (x : Nat) -> Eq(x % 256 < 256, true) = (x) => Eq/refl();
+        let below : (x : Nat) -> Eq()(x % 256 < 256, true) = (x) => Eq/refl();
         /std/print("ok")
         "#),
         b"ok"
@@ -397,7 +397,7 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
     assert_eq!(
         run(r#"
         use /std/{Flt, Str, Eq, Bool};
-        let compares_equal: Eq(Flt/eql(+0.0, -0.0), true) = Eq/refl();
+        let compares_equal: Eq()(Flt/eql(+0.0, -0.0), true) = Eq/refl();
         /std/print(Str/concat(Flt/to_str(+0.0), Flt/to_str(-0.0)))
         "#),
         b"+0-0"
@@ -407,7 +407,7 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
         typecheck(
             r#"
         use /std/{Flt, Eq};
-        let same: Eq(+0.0, -0.0) = Eq/refl();
+        let same: Eq()(+0.0, -0.0) = Eq/refl();
         /std/print("")
         "#
         )

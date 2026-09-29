@@ -17,7 +17,7 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
             | false => y + 1
             end;
 
-        let probe(x : Nat) -> Eq(through(x), through(x)) = Eq/refl();
+        let probe(x : Nat) -> Eq()(through(x), through(x)) = Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -33,13 +33,13 @@ fn implicit_inductive_type_param_executes() {
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
-            match p : (s, t, q) => Eq2(t, s)
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
+            match p : (s, t, q) => Eq2()(t, s)
             | refl(@z) => Eq2/refl()
             end;
-        let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
-        let proof : Eq2(2, 2) = Eq2/refl();
-        let inferred : Eq2(2, 2) = sym2(proof);
+        let pinned : Eq2(@Nat)(3, 3) = Eq2/refl();
+        let proof : Eq2()(2, 2) = Eq2/refl();
+        let inferred : Eq2()(2, 2) = sym2(proof);
         match inferred : (_, _, _) => /std/Io({})
         | refl(@z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z)))!; /std/Io/pure(())
         end
@@ -50,13 +50,13 @@ fn implicit_inductive_type_param_executes() {
 
 #[test]
 fn implicit_inductive_type_param_rejects_explicit_spelling() {
-    // With `@A` implicit, the old explicit spelling queues `Nat` into the explicit slots — one argument too many, an error rather than a silent reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
+    // With `@A` implicit, the explicit spelling queues `Nat` into the parameter call's explicit slots, of which there are none — an error rather than a silent reinterpretation. (`Eq2(@Nat)(2, 2)` is the pinned spelling.)
     let source = r#"
         use /std/{Nat, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let bad : Eq2(Nat, 2, 2) = Eq2/refl();
+        let bad : Eq2(Nat)(2, 2) = Eq2/refl();
         let _ = Io/write(Io/stdout, /std/Str/to_bytes("no"))!;
         /std/Io/pure(())
         "#;
@@ -64,14 +64,14 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
     error(source);
 }
 
-// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
+// Regression: an `Eq/subst` whose motive contains `Eq()(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
 #[test]
 fn subst_motive_inserts_implicit_in_eq() {
     let source = r#"
         use /std/{Eq, Nat, Io};
         let g(n : Nat) -> Nat = n;
-        let lemma(@a : Nat, @b : Nat, p : Eq(a, b)) -> Eq(g(a), g(b)) =
-            Eq/subst((x) => Eq(g(a), g(x)), p, Eq/refl());
+        let lemma(@a : Nat, @b : Nat, p : Eq()(a, b)) -> Eq()(g(a), g(b)) =
+            Eq/subst((x) => Eq()(g(a), g(x)), p, Eq/refl());
         let _ = lemma;
         /std/print("ok")
         "#;
@@ -105,8 +105,8 @@ fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
             end;
         let trim(bits : Bits) -> Bits =
             match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
-        let through(@t : Bits, q : Eq(trim(t), b[])) -> Eq(trim(t), b[]) = q;
-        let probe(x : Bits, q : Eq(trim(b[0, ..x]), b[])) -> Eq(trim(b[0, ..x]), b[]) = through(q);
+        let through(@t : Bits, q : Eq()(trim(t), b[])) -> Eq()(trim(t), b[]) = q;
+        let probe(x : Bits, q : Eq()(trim(b[0, ..x]), b[])) -> Eq()(trim(b[0, ..x]), b[]) = through(q);
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -120,7 +120,7 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
         let constant(n : Nat) -> Nat = 0;
-        let same : Eq(constant(2), constant(1)) = Eq/refl();
+        let same : Eq()(constant(2), constant(1)) = Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -433,7 +433,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
             k + hop(@Bytes/drop(b, k, @within), Nat/Lt/sub_positive_of_lt(k, Bytes/len(b), here));
 
         pub let same(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b)))
-            -> Eq(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
+            -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
             Eq/refl();
 
         print(Nat/to_str(reach(x[1, 2], 0, @Bool/True/qed(), @Bool/True/qed())))

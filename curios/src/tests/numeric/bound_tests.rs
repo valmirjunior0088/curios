@@ -101,7 +101,7 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
         run(r#"
         use /std/{Str, Bytes, Byte, Nat, Eq};
         let len(b : Bytes) -> Nat = match b | x[] => 0 | x[_, ..t] => 1 + len(t) end;
-        let step(h : Byte, t : Bytes) -> Eq(Nat/sub(len(x[h, ..t]), 1), len(t)) = Eq/refl();
+        let step(h : Byte, t : Bytes) -> Eq()(Nat/sub(len(x[h, ..t]), 1), len(t)) = Eq/refl();
         /std/print("ok")
         "#),
         b"ok"
@@ -272,13 +272,13 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
         use /std/{Flt, Nat, Int, Str, Eq, Bool};
         let two: Nat = Flt/to_nat(2.5);
         let minus_two: Int = Flt/to_int(-2.5);
-        let sum: Eq(Flt/add(1.0, 1.0), 2.0) = Eq/refl();
-        let binary64_is_not_binary32: Eq(Flt/eql(Flt/add(0.1, 0.2), 0.3), false) = Eq/refl();
-        let tie: Eq(Flt/nearest(2.5), 2.0) = Eq/refl();
-        let subnormal_tie: Eq(Flt/div(5.0e-324, 2.0), +0.0) = Eq/refl();
-        let signed_zero: Eq(Flt/add(-0.0, +0.0), +0.0) = Eq/refl();
-        let round_trip: Eq(Flt/of_le_bytes(Flt/to_le_bytes(2.5)), 2.5) = Eq/refl();
-        let widen: Eq(Flt/to_nat(Nat/to_flt(16777215)), 16777215) = Eq/refl();
+        let sum: Eq()(Flt/add(1.0, 1.0), 2.0) = Eq/refl();
+        let binary64_is_not_binary32: Eq()(Flt/eql(Flt/add(0.1, 0.2), 0.3), false) = Eq/refl();
+        let tie: Eq()(Flt/nearest(2.5), 2.0) = Eq/refl();
+        let subnormal_tie: Eq()(Flt/div(5.0e-324, 2.0), +0.0) = Eq/refl();
+        let signed_zero: Eq()(Flt/add(-0.0, +0.0), +0.0) = Eq/refl();
+        let round_trip: Eq()(Flt/of_le_bytes(Flt/to_le_bytes(2.5)), 2.5) = Eq/refl();
+        let widen: Eq()(Flt/to_nat(Nat/to_flt(16777215)), 16777215) = Eq/refl();
         /std/print(Str/concat(Nat/to_str(two), Int/to_str(minus_two)))
         "#),
         b"2-2"
@@ -344,7 +344,7 @@ fn a_bound_whose_subject_a_later_argument_pins_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Bool, Eq};
-        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, 3)) -> Nat = n;
+        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, 3)) -> Nat = n;
         let g: Nat = need(Eq/refl());
         /std/print(Nat/to_str(g))
         "#),
@@ -386,7 +386,7 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     let error = typecheck(
         r#"
         use /std/{Nat, Bool, Eq};
-        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, 30)) -> Nat = n;
+        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, 30)) -> Nat = n;
         let g: Nat = need(Eq/refl());
         /std/print("unreachable")
         "#,
@@ -405,7 +405,7 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     typecheck(
         r#"
         use /std/{Nat, Bool, Eq};
-        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
+        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
         let f(m: Nat) -> Nat =
             match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
         /std/print("ok")
@@ -416,7 +416,7 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     let error = typecheck(
         r#"
         use /std/{Nat, Bool, Eq};
-        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
+        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
         let f(m: Nat) -> Nat =
             need(m, match m < 10 | true => Eq/refl() | false => Eq/refl() end);
         /std/print("unreachable")

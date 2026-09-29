@@ -244,7 +244,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
         // A fully applied nominal family has the sort its declaration states, and its arguments have the types the declaration states *them* at.
         //
-        // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and were checked there; the shapes are typing's, and reading one unestablished is what admitted `Eq(@True, 0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` discharges both by irrelevance and `refl` inhabits the forgery, whose elimination then transports between two instances of a relevant family.
+        // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and were checked there; the shapes are typing's, and reading one unestablished is what admitted `Eq(@True)(0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` discharges both by irrelevance and `refl` inhabits the forgery, whose elimination then transports between two instances of a relevant family.
         Subterm::InductType(family) => {
             let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
@@ -635,7 +635,7 @@ fn check_free_monoid(
     let motive = match (reads_hypothesis(carrier), result) {
         (false, _) => None,
         (true, MatchResult::Ambient(goal)) => return Err(KernelError::AmbientFold(goal.clone())),
-        // The capture is refused syntactically — `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` would prove `Eq(n, 0)` for every `n` — which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
+        // The capture is refused syntactically — `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` would prove `Eq()(n, 0)` for every `n` — which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
         (true, MatchResult::Family(motive)) => {
             if motive.body().mentions_term(scrutinee) {
                 return Err(KernelError::FoldMotiveCapturesScrutinee(scrutinee.clone()));
