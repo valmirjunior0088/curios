@@ -6,7 +6,7 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit_over, invalidated,
         tests::test_support::compile_with_units,
     },
-    curios_prelude::{SYNTAX, with_stored},
+    curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
     curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
@@ -63,10 +63,11 @@ fn std_recompile_closure_census() {
         },
     ];
 
-    with_stored(|stored| {
-        let sys = &stored[0].unit;
-        let std = &stored[1].unit;
-        let roots = [sys];
+    with_prelude(|prelude| {
+        let [sys, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
         let scope = Prefix::over(&roots);
 
         println!("\n=== recompiling /std over the archive ===");
@@ -118,29 +119,29 @@ fn supplied(prefix: &str) -> RootSource {
 /// The name is the claim: a package named `std` takes the archived root's place wherever it is read from, and however it arrived.
 #[test]
 fn a_package_named_std_takes_the_archived_roots_place() {
-    with_stored(|stored| {
+    with_prelude(|prelude| {
         for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
-            let (index, root) = withheld(stored, &[claim]).expect("a package named std");
+            let (index, root) = withheld(prelude, &[claim]).expect("a package named std");
 
-            assert_eq!(index + 1, stored.len(), "the last root, /std");
-            assert_eq!(root.unit.mounts()[0].prefix, Qualifier::from(["std"]));
+            assert_eq!(index + 1, prelude.len(), "the last root, /std");
+            assert_eq!(root.mounts()[0].prefix, Qualifier::from(["std"]));
         }
     });
 }
 
 #[test]
 fn a_package_named_otherwise_takes_no_roots_place() {
-    with_stored(|stored| {
-        assert!(withheld(stored, &[supplied("other")]).is_none());
-        assert!(withheld(stored, &[]).is_none());
+    with_prelude(|prelude| {
+        assert!(withheld(prelude, &[supplied("other")]).is_none());
+        assert!(withheld(prelude, &[]).is_none());
     });
 }
 
 /// Only the last root can be taken, since the roots after a withheld one were compiled against it: a claim on the compiler's own root, which nothing could name anyway, collides with it as any claim does.
 #[test]
 fn a_package_named_sys_collides_with_the_compilers_own_root() {
-    with_stored(|stored| {
-        assert!(withheld(stored, &[supplied("sys")]).is_none());
+    with_prelude(|prelude| {
+        assert!(withheld(prelude, &[supplied("sys")]).is_none());
     });
 
     let error = compile_with_units(&[("sys", "pub let a : /std/Nat = 1;")], "0")
@@ -152,8 +153,8 @@ fn a_package_named_sys_collides_with_the_compilers_own_root() {
 /// A unit after the first has a scope the archived unit was never compiled in, so it is not the one that takes the root's place — and it collides, as any later claim does.
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
-    with_stored(|stored| {
-        assert!(withheld(stored, &[supplied("other"), std_from_its_tree()]).is_none());
+    with_prelude(|prelude| {
+        assert!(withheld(prelude, &[supplied("other"), std_from_its_tree()]).is_none());
     });
 
     let error = compile_with_units(
@@ -170,8 +171,8 @@ fn only_the_first_unit_can_take_a_roots_place() {
 
 #[test]
 fn a_withheld_root_is_granted_the_roots_before_it() {
-    with_stored(|stored| {
-        let prefixes = granted(stored, stored.len() - 1, &std_from_its_tree());
+    with_prelude(|prelude| {
+        let prefixes = granted(prelude, prelude.len() - 1, &std_from_its_tree());
 
         assert!(prefixes.contains(&Qualifier::from(["sys"])));
     });

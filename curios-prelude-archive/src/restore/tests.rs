@@ -111,23 +111,18 @@ fn a_truncated_archive_is_rejected() {
 /// `/sys` is supplied whole by the build script — no file is read and nothing precedes it — so its record says so, which is what keeps a source tree from ever claiming to be the one it came from.
 #[test]
 fn the_sys_image_records_no_reads_and_no_predecessor() {
-    with_stored(|stored| {
-        let sys = &stored[0].record;
+    let [sys, _] = restore_archives();
 
-        assert!(sys.reads.is_empty());
-        assert!(sys.predecessors.is_empty());
-    });
+    assert!(sys.record.reads.is_empty());
+    assert!(sys.record.predecessors.is_empty());
 }
 
 /// The digest a record names its predecessor by is the one that predecessor's own record names itself by: the chain is checkable from the records alone.
 #[test]
 fn the_std_image_records_the_sys_image_as_its_predecessor() {
-    with_stored(|stored| {
-        assert_eq!(
-            stored[1].record.predecessors,
-            [stored[0].record.unit.clone()]
-        );
-    });
+    let [sys, std] = restore_archives();
+
+    assert_eq!(std.record.predecessors, [sys.record.unit]);
 }
 
 /// The read set is closed and every authored module is registered, so the record and the tree agree exactly: the record is the compiler's own account of which sources the image came from.
@@ -141,16 +136,15 @@ fn the_std_record_names_every_authored_source_and_no_other() {
         })
         .collect::<BTreeSet<_>>();
 
-    with_stored(|stored| {
-        let std = &stored[1].record;
-        let recorded = std
-            .reads
-            .iter()
-            .map(|(path, _)| PathBuf::from(path))
-            .collect::<BTreeSet<_>>();
+    let [_, std] = restore_archives();
+    let recorded = std
+        .record
+        .reads
+        .iter()
+        .map(|(path, _)| PathBuf::from(path))
+        .collect::<BTreeSet<_>>();
 
-        assert_eq!(recorded, authored);
-    });
+    assert_eq!(recorded, authored);
 }
 
 /// The record ahead of each image digests exactly the unit segment behind it, as a slot's record digests the unit it was filed with.

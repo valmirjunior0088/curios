@@ -12,9 +12,9 @@ use {
         Cache, Checked, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
         compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
     },
-    curios_prelude::{SYNTAX, with_prelude, with_stored},
+    curios_prelude::{SYNTAX, with_prelude},
     curios_text::{RootSource, UnitSource},
-    curios_unit::{Prefix, Stored, Unit},
+    curios_unit::{Prefix, Unit},
     curios_utilities::Qualifier,
 };
 
@@ -191,14 +191,14 @@ impl<'a> Fold<'a> {
             cache,
         } = self;
 
-        with_stored(|stored| {
+        with_prelude(|prelude| {
             // The prelude's roots are in scope unconditionally, with one exception: a package named `std` is the standard library, by the meaning of the name. It takes the archived root's place — the root is withheld, the package is compiled over the archived unit as its baseline and sees what the root could see — and every unit after it is compiled against it, addressed in the store after it. Any other unit claiming a prefix a root mounts collides with it and is refused, exactly as two source units claiming one prefix are. What this is not is a way to swap standard libraries under a dependency: a dependency means what it means against the `/std` it was compiled after, which is why the name is reserved rather than the scope made a parameter.
-            let withheld = withheld(stored, units);
-            let roots = stored
+            let withheld = withheld(prelude, units);
+            let roots = prelude
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| withheld.is_none_or(|(root, _)| *index != root))
-                .map(|(_, stored)| &stored.unit)
+                .map(|(_, root)| *root)
                 .collect::<Vec<_>>();
 
             // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines.
@@ -207,8 +207,8 @@ impl<'a> Fold<'a> {
                 .enumerate()
                 .map(|(index, unit)| match withheld {
                     Some((index_of_root, root)) if index == 0 => (
-                        UnitSource::mounted(unit).seeing(granted(stored, index_of_root, unit)),
-                        Some(&root.unit),
+                        UnitSource::mounted(unit).seeing(granted(prelude, index_of_root, unit)),
+                        Some(root),
                     ),
                     _ => (UnitSource::mounted(unit), None),
                 })
@@ -230,12 +230,11 @@ impl<'a> Fold<'a> {
 /// The last archived root, when the first of `units` claims a prefix it mounts: the root that unit takes the place of.
 ///
 /// The first unit alone, because its scope is then exactly the roots before the withheld one — the scope the archived unit was compiled in — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
-fn withheld<'a>(stored: &[&'a Stored], units: &[RootSource]) -> Option<(usize, &'a Stored)> {
+fn withheld<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'a Unit)> {
     let claims = units.first()?.mounts();
-    let (index, root) = stored.iter().enumerate().next_back()?;
+    let (index, root) = prelude.iter().copied().enumerate().next_back()?;
 
-    root.unit
-        .mounts()
+    root.mounts()
         .iter()
         .any(|mount| claims.iter().any(|claim| claim.prefix == mount.prefix))
         .then_some((index, root))
@@ -244,11 +243,11 @@ fn withheld<'a>(stored: &[&'a Stored], units: &[RootSource]) -> Option<(usize, &
 /// What the unit standing in for the archived root at `withheld` may name: every root before it, which the archived unit could see, beside whatever the unit declared itself.
 ///
 /// The roots before it are granted whether or not the unit declared them, because the one that matters is closed: `/sys` is in no unit's default set and the standard library reaches it by declaring it, and a package's manifest cannot declare it.
-fn granted(stored: &[&Stored], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
+fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
     let source = UnitSource::mounted(unit);
-    let mut prefixes = stored[..withheld]
+    let mut prefixes = prelude[..withheld]
         .iter()
-        .flat_map(|root| root.unit.mounts().iter().map(|mount| mount.prefix.clone()))
+        .flat_map(|root| root.mounts().iter().map(|mount| mount.prefix.clone()))
         .collect::<Vec<_>>();
     prefixes.extend(source.declared().unwrap_or(&[]).iter().cloned());
 
