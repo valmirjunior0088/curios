@@ -793,6 +793,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The input is opened over the export names for elaboration; the output captures those names back into one [`RecItem`] and publishes each export as its folded structural member.
 fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
     let defs = rec.definitions();
+    // Where the group's own solutions begin, so they can be stamped with its instance once it has one.
+    let solved_from = context.solutions_committed();
     // See `elaborate_module_let`: Γ keys on identities, the registries on names.
     let names = defs
         .iter()
@@ -1088,6 +1090,20 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             );
         }
     }
+    // The solutions committed while the group elaborated are terms it produced too, and a later zonk substitutes them long after this rewrite — the proof-totality check fills in every type elaboration recorded, and a goal's report its scope — so they are stamped as a registry entry is, being stored outside the group. `Eq()(a, a)` in a constructor's payload solved `Eq`'s `@A` to the member's reduct from before its generalization, with no instance, and `Eq()`'s recorded type carried it into that check.
+    let restamped = context
+        .solutions_since(solved_from)
+        .into_iter()
+        .map(|(id, solution)| {
+            let stamped = stamp(context, &solution, &owned, SelfReference::Free, &instance)?;
+            Ok((id, solution, stamped))
+        })
+        .collect::<Result<Vec<_>, Error>>()?
+        .into_iter()
+        .filter(|(_, solution, stamped)| solution != stamped)
+        .map(|(id, _, stamped)| (id, stamped))
+        .collect();
+    context.restamp_solutions(restamped);
 
     let definitions = defs
         .iter()

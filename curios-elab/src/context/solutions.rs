@@ -252,6 +252,23 @@ impl Solutions {
         self.solved_log.len()
     }
 
+    /// The solutions committed since `solved_len` that still stand, each with its id.
+    pub(crate) fn solved_since(&self, solved_len: usize) -> Vec<(MetavarId, Term)> {
+        self.solved_log[solved_len.min(self.solved_log.len())..]
+            .iter()
+            .filter_map(|id| self.solution(*id).map(|solution| (*id, solution.clone())))
+            .collect()
+    }
+
+    /// Replace a standing solution with `term`, a term it already denotes, logging no solve: nothing parked on it wakes, and a rollback past its first commitment unwinds it as before.
+    pub(crate) fn restamp(&mut self, id: MetavarId, term: Term) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0)
+            && entry.solution.is_some()
+        {
+            entry.solution = Some(term);
+        }
+    }
+
     /// Unwind every solution committed since the watermark, removing the unwound ids from the wake signals. The façade clears the caches.
     pub(crate) fn unwind_to(&mut self, solved_len: usize) {
         let unwound = self

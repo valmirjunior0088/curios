@@ -206,6 +206,25 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
     assert_eq!(run(source), b"2");
 }
 
+// A solution committed while a recursive group elaborates is stamped with the group's instance when the group generalizes, as its signatures and registry entries are. `Eq()(a, a)` and `same2()(a, a)` in a constructor's payload solve the hidden `@A` to the family being declared, spelled from before it had an instance, and the recorded type of the call filling the hidden list kept that spelling past generalization, where the proof-totality check refused it as an instance with no levels. The written `@Wit` is the control, stamped with the payload it sits in.
+#[test]
+fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
+    for payload in ["Eq()(a, a)", "same2()(a, a)", "Eq(@Wit)(a, a)"] {
+        let source = format!(
+            r#"
+            use /std/{{Eq}};
+            pub let same2(@A : Type) -> (x : A, y : A) -> Prop = (x, y) => Eq(@A)(x, y);
+            induct Wit : pub Type
+            | base()
+            | tied(a : Wit, p : {payload})
+            end
+            /std/print("declared")
+            "#
+        );
+        assert_eq!(run(&source), b"declared", "{payload}");
+    }
+}
+
 // `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter its constraints leave free, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Three more of its levels are bounded by zero and are solved to the constant when the scheme is generalized, which is why the count is nineteen and not the twenty-two it was before generalization solved such levels; the context is otherwise the same, bound for bound.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
