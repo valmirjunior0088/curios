@@ -1514,14 +1514,78 @@ impl Context {
         else {
             return false;
         };
+        // Refinements as well as names: a `Bool` arm opens no binder, so a metavariable born inside `match k < n | true =>` has the telescope of one born just outside it, and a solution resting on the arm's guard would escape through a containment that read names alone.
+        self.metavar_names_contained(inner, outer)
+            && inner_entry.refinements.within(&outer_entry.refinements)
+    }
+
+    /// The names half of [`Context::metavar_context_contained`]: every binder of `inner`'s birth telescope is one of `outer`'s.
+    fn metavar_names_contained(&self, inner: MetavarId, outer: MetavarId) -> bool {
+        let (Some(inner_entry), Some(outer_entry)) =
+            (self.metavar_entry(inner), self.metavar_entry(outer))
+        else {
+            return false;
+        };
         let outer_names: BTreeSet<&Free> =
             outer_entry.telescope.iter().map(|(name, _)| name).collect();
-        // Refinements as well as names: a `Bool` arm opens no binder, so a metavariable born inside `match k < n | true =>` has the telescope of one born just outside it, and a solution resting on the arm's guard would escape through a containment that read names alone.
         inner_entry
             .telescope
             .iter()
             .all(|(name, _)| outer_names.contains(name))
-            && inner_entry.refinements.within(&outer_entry.refinements)
+    }
+
+    /// Whether the unsolved `inner`, occurring as `origin` in a candidate for `outer` and not contained in its birth context, may be restricted to it ([`Context::restrict_metavar`]) rather than hold the candidate back: contained by names, so refinements alone separate them, and an omitted implicit or a settled lambda's domain — a hole whose solution nothing but unification fills. A written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge and a placeholder by its parked check, each keyed on the id restriction would solve, so those still wait.
+    pub(crate) fn metavar_restrictable(
+        &self,
+        inner: MetavarId,
+        outer: MetavarId,
+        origin: &MetavarOrigin,
+    ) -> bool {
+        matches!(
+            origin,
+            MetavarOrigin::Implicit(_) | MetavarOrigin::Domain(_)
+        ) && !self.is_rec_slot(inner)
+            && self
+                .metavar_entry(inner)
+                .is_some_and(|entry| !entry.proposition)
+            && self.metavar_names_contained(inner, outer)
+    }
+
+    /// Narrow the unsolved `inner` to the refinements it shares with `outer`'s birth, as a solver restricts a context it prunes: a fresh metavariable at `inner`'s telescope and type, born under the shared refinements alone, and `inner` solved to it. Called as a solution for `outer` that embeds `inner` commits: whatever reaches `outer` through `inner` must hold where `outer` does, so narrowing loses no solution `outer` could take, and `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. Birth records stay frozen; the narrowing is a solution, rolled back and reported like any other.
+    pub(crate) fn restrict_metavar(
+        &mut self,
+        inner: MetavarId,
+        outer: MetavarId,
+        origin: MetavarOrigin,
+    ) {
+        let (Some(inner_entry), Some(outer_entry)) =
+            (self.metavar_entry(inner), self.metavar_entry(outer))
+        else {
+            return;
+        };
+        let telescope = Rc::clone(&inner_entry.telescope);
+        let refinements = Rc::new(
+            inner_entry
+                .refinements
+                .shared_with(&outer_entry.refinements),
+        );
+        let witnesses = inner_entry.witnesses.clone();
+        let result = inner_entry.result.clone();
+
+        self.caches.note_write();
+        let narrowed = self.solutions.mint();
+        self.solutions.birth(
+            narrowed,
+            Rc::clone(&telescope),
+            refinements,
+            witnesses,
+            result,
+        );
+        let spine = telescope
+            .iter()
+            .map(|(name, _)| Term::free_var(name))
+            .collect::<Vec<_>>();
+        self.solve_metavar(inner, Term::metavar_birthed(narrowed, origin, spine));
     }
 
     fn fresh_metavar_with(

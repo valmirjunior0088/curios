@@ -92,6 +92,30 @@ impl Refinements {
     pub(crate) fn same_as(&self, other: &Refinements) -> bool {
         self.within(other) && other.within(self)
     }
+
+    /// The refinements here that `other` holds too, in this one's order: what a metavariable is restricted to when a solution born under `other` embeds it ([`Context::restrict_metavar`](crate::Context::restrict_metavar)).
+    pub(crate) fn shared_with(&self, other: &Refinements) -> Refinements {
+        Refinements {
+            variables: self
+                .variables
+                .iter()
+                .filter(|entry| other.variables.contains(entry))
+                .cloned()
+                .collect(),
+            projections: self
+                .projections
+                .iter()
+                .filter(|entry| other.projections.contains(entry))
+                .cloned()
+                .collect(),
+            scrutinees: self
+                .scrutinees
+                .iter()
+                .filter(|entry| other.scrutinees.contains(entry))
+                .cloned()
+                .collect(),
+        }
+    }
 }
 
 /// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions and refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry runs under exactly what its origin saw — the arm-local refinements included, and nothing of the live context it is scheduled inside (`Context::with_retry_frame`).

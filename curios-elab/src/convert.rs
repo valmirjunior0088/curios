@@ -1087,44 +1087,68 @@ impl Convert {
         }
 
         // Embedded-metavariable guard: any *other* unsolved metavariable in the candidate may carry a wider context than `id`'s, so solving now could let the solution escape its scope. Postpone (the stand-in for pruning) — except a metavariable whose birth context is *contained* in `id`'s, which provably cannot smuggle a name out: everything it can ever inject — its spine entries now, its own solution's names later, arriving only through that scope-checked spine — lies inside `id`'s scope already. The exemption is what lets a settle-synthesized lambda type, whose unannotated domains are metavariables minted at the settling expectation's own scope, commit instead of stranding.
-        if metavars.iter().any(|other| {
-            context.metavar_solution(*other).is_none()
-                && !context.metavar_context_contained(*other, id)
-        }) {
-            // Record what blocked this candidate before postponing. A metavariable that never solves is reported by the item drain, and the drain has only the goal's own terms to look at — the blocker rides inside a definition body it cannot see, so the edge must be kept here or the cause is lost.
-            let occurrences = crate::metavar_origins(&[t]);
-            context.note_solve_blockers(
-                id,
-                metavars
+        //
+        // One contained by names alone, born under refinements `id` was not — an implicit minted in an arm `id` stands outside of — is *restricted* to `id`'s as `id` commits, instead of holding the candidate back ([`Context::restrict_metavar`]). Postponing it waited for a solution that, once `id` embeds it, could only escape the arm: `let read = match … | none() => Async/pure(Result/success(x[])) end` left `read`'s type open until a later `read!` pinned it to the region's monad.
+        let blocking = metavars
+            .iter()
+            .copied()
+            .filter(|other| {
+                context.metavar_solution(*other).is_none()
+                    && !context.metavar_context_contained(*other, id)
+            })
+            .collect::<Vec<_>>();
+        let restricted = match blocking.is_empty() {
+            true => Vec::new(),
+            false => {
+                let occurrences = crate::metavar_origins(&[t]);
+                let restricted = blocking
                     .iter()
-                    .filter(|other| context.metavar_solution(**other).is_none())
-                    .filter_map(|other| {
+                    .map(|other| {
                         occurrences
                             .get(other)
-                            .map(|(origin, span)| (*other, origin.clone(), span.clone()))
+                            .filter(|(origin, _)| context.metavar_restrictable(*other, id, origin))
+                            .map(|(origin, _)| (*other, origin.clone()))
                     })
-                    .collect(),
-            );
+                    .collect::<Option<Vec<_>>>();
+                match restricted {
+                    Some(restricted) => restricted,
+                    None => {
+                        // Record what blocked this candidate before postponing. A metavariable that never solves is reported by the item drain, and the drain has only the goal's own terms to look at — the blocker rides inside a definition body it cannot see, so the edge must be kept here or the cause is lost.
+                        context.note_solve_blockers(
+                            id,
+                            metavars
+                                .iter()
+                                .filter(|other| context.metavar_solution(**other).is_none())
+                                .filter_map(|other| {
+                                    occurrences.get(other).map(|(origin, span)| {
+                                        (*other, origin.clone(), span.clone())
+                                    })
+                                })
+                                .collect(),
+                        );
 
-            curios_profile::note!(
-                target: "curios_elab::solve",
-                meta = id.0,
-                blockers = %metavars
-                    .iter()
-                    .filter(|other| context.metavar_solution(**other).is_none())
-                    .map(|other| {
-                        let result = context
-                            .metavar_entry(*other)
-                            .map(|entry| format!("{}", entry.result))
-                            .unwrap_or_else(|| "<no birth record>".into());
-                        format!("?{} : {result}", other.0)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                "postponed: embedded metavariable",
-            );
-            return Ok(Solved::Postponed);
-        }
+                        curios_profile::note!(
+                            target: "curios_elab::solve",
+                            meta = id.0,
+                            blockers = %metavars
+                                .iter()
+                                .filter(|other| context.metavar_solution(**other).is_none())
+                                .map(|other| {
+                                    let result = context
+                                        .metavar_entry(*other)
+                                        .map(|entry| format!("{}", entry.result))
+                                        .unwrap_or_else(|| "<no birth record>".into());
+                                    format!("?{} : {result}", other.0)
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                            "postponed: embedded metavariable",
+                        );
+                        return Ok(Solved::Postponed);
+                    }
+                }
+            }
+        };
 
         let Some(entry) = context.metavar_entry(id) else {
             // No birth record (e.g. a synthesis-position hole that never reached a checking site): nothing to validate against, cannot solve.
@@ -1309,6 +1333,9 @@ impl Convert {
         }
 
         context.end_solutions(mark);
+        for (other, origin) in restricted {
+            context.restrict_metavar(other, id, origin);
+        }
         context.solve_metavar(id, inverted);
         self.progress = true;
         Ok(Solved::Done)

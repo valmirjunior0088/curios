@@ -210,6 +210,60 @@ fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
+/// A metavariable born in an arm, embedded in a candidate for one born outside it, is restricted to the outer one's refinements as the candidate commits rather than holding it back: `?0 ≟ (x : ?1) -> Nat` solves, and `?1` is solved to a fresh metavariable born under no refinement, whose own solution is then judged without the arm's guard. The control is the same candidate over a silent hole, whose id a parked check may be keyed on, and which still waits. Mutation-checked: postponing on refinements, as containment alone does, leaves `?0` unsolved.
+#[test]
+fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it() {
+    let embedding = |origin: MetavarOrigin| {
+        let mut context = context();
+        let b = context.fresh(Some("b"));
+        let x = context.fresh(Some("x"));
+        let bool_type = Term::intrinsic(Intrinsic::BoolType);
+        context.assume(&b, &bool_type);
+        context.birth_metavar(
+            MetavarId(0),
+            vec![(b.clone(), bool_type.clone())],
+            Term::type_ground(),
+        );
+        context.with_frame(|context| {
+            context.refine(&b, &Term::intrinsic(Intrinsic::Bool(true)));
+            context.birth_metavar(
+                MetavarId(1),
+                vec![(b.clone(), bool_type.clone())],
+                Term::type_ground(),
+            );
+        });
+
+        let spine = vec![Term::free_var(&b)];
+        let outer = Term::metavar_birthed(0, MetavarOrigin::Hole, spine.clone());
+        let candidate = Term::func_type(
+            [(x, Term::metavar_birthed(1, origin, spine))],
+            Term::intrinsic(Intrinsic::NatType),
+        );
+        let converted = conv(&mut context, &outer, &candidate);
+        (context, converted)
+    };
+
+    let (context, converted) = embedding(MetavarOrigin::Domain("x".into()));
+    assert_eq!(converted, Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    let Some(Subterm::Metavar(narrowed)) = context
+        .metavar_solution(MetavarId(1))
+        .map(|solution| &**solution)
+    else {
+        panic!("the embedded metavariable is solved to its restriction");
+    };
+    assert!(
+        context
+            .metavar_entry(narrowed.id)
+            .is_some_and(|entry| entry.refinements.is_empty() && entry.solution.is_none()),
+        "the restriction is born under the refinements the two share — none — and left open"
+    );
+
+    let (context, converted) = embedding(MetavarOrigin::Hole);
+    assert_eq!(converted, Ok(false));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
 #[test]
 fn revalidation_rejects_ill_typed_solution() {
     let mut context = context();
