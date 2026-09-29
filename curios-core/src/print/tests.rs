@@ -242,10 +242,13 @@ fn a_lambda_over_some_of_a_familys_indices_stays_a_lambda() {
             [numeral(1), Term::free_var(&y)],
         ),
     );
-    assert_eq!(lambda.spelled(&spelling).to_string(), "y => Eq(@Nat)(1, y)");
+    assert_eq!(
+        lambda.spelled(&spelling).to_string(),
+        "(y) => Eq(@Nat)(1, y)"
+    );
 }
 
-/// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `x => x` does not split it in two.
+/// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `(x) => x` does not split it in two. Its one parameter is parenthesized: a lambda's parameter list always is, and the parser refuses a bare `x => x`.
 #[test]
 fn a_short_lambda_body_stays_on_the_arrows_line() {
     let x = Free::local(0, Some("x"));
@@ -253,7 +256,7 @@ fn a_short_lambda_body_stays_on_the_arrows_line() {
         [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
         Term::free_var(&x),
     );
-    assert_eq!(identity.to_string(), "x => x");
+    assert_eq!(identity.to_string(), "(x) => x");
 }
 
 /// A body that carries a break of its own — a `match` — still takes the line after the arrow and indents, as it did before the group.
@@ -269,5 +272,5 @@ fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
     );
     let lambda = Term::func([(b.clone(), Term::intrinsic(Intrinsic::BoolType))], body);
     let printed = lambda.to_string();
-    assert!(printed.starts_with("b =>\n"), "{printed}");
+    assert!(printed.starts_with("(b) =>\n"), "{printed}");
 }

@@ -115,6 +115,17 @@ fn a_proposition_over_an_implicit_parameter_reads_back() {
 }
 
 #[test]
+fn a_type_holding_a_lambda_reads_back() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        pub let t: ? = Eq/refl(@(Nat) -> Nat, @(n: Nat) => n);
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
 fn an_indexed_family_and_its_applications_read_back() {
     let source = r#"
         use /std/{Nat};

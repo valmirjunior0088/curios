@@ -694,7 +694,7 @@ enum FormerEta {
     Intrinsic(&'static str),
 }
 
-/// Recognize a type-former eta shape on the *unopened* telescope. Two shapes contract. `x => T(…, x)`: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. And `(x₁, …, xₖ) => F(p…)(x₁, …, xₖ)`: one binder per index of an indexed family, in order — the family at its parameters, which is a function of its own because the family takes its indices in a call of their own. The binders' plicities are deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binders already mirror the declaration. The arguments left must be closed under the binders (`reach() == 0`), which is what guarantees the binders occur nowhere else.
+/// Recognize a type-former eta shape on the *unopened* telescope. Two shapes contract. `(x) => T(…, x)`: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. And `(x₁, …, xₖ) => F(p…)(x₁, …, xₖ)`: one binder per index of an indexed family, in order — the family at its parameters, which is a function of its own because the family takes its indices in a call of their own. The binders' plicities are deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binders already mirror the declaration. The arguments left must be closed under the binders (`reach() == 0`), which is what guarantees the binders occur nowhere else.
 fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
     let binders = telescope.len();
     if binders == 0 || plicities.len() != binders {
@@ -1245,7 +1245,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             telescope,
             plicities,
         }) => {
-            // A type-former lambda `x => T(…, x)`, or one over exactly an indexed family's indices — the shapes witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
+            // A type-former lambda `(x) => T(…, x)`, or one over exactly an indexed family's indices — the shapes witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
             if let Some(former) = former_eta(&telescope, &plicities) {
                 return former_doc(former, frame);
             }
@@ -1265,11 +1265,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 cursor.advance(Term::free_var(&label));
             }
             let body = cursor.body().expect("a cursor past every entry");
-            let param_str = if marked.len() == 1 && plicities.first() == Some(&Plicity::Explicit) {
-                marked.into_iter().next().unwrap()
-            } else {
-                format!("({})", marked.join(", "))
-            };
+            // Parenthesized whatever the count: a lambda's parameter list is always written in parentheses, and a bare `x => x` is a spelling the parser refuses.
+            let param_str = format!("({})", marked.join(", "));
             // The body sits on the arrow's line when it fits and indents on its own line when it does not. A body that is a multi-line form of its own takes the line unconditionally: those forms spell their breaks as literal newlines, which end the fits scan within budget rather than failing it, so a group would render the arrow's line flat and leave the form's first line trailing the arrow.
             let separator = match &*body {
                 Subterm::Match(_) | Subterm::Let(_) | Subterm::Rec(_) => hard_line(),
