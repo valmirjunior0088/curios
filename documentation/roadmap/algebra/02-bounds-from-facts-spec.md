@@ -91,6 +91,17 @@ One lemma, `add_le_add`, adds two of them. Conversion's cancellation does the re
 
 A refused bound's report lists the facts the procedure considered, each with where it came from — a hypothesis, a field, a guard — the facts it could not read, and, when the search produced one, an assignment of the atoms satisfying the facts and falsifying the goal. A written goal `?` over a bound shows the same.
 
+## Settled decisions
+
+- **The search** is integer Fourier–Motzkin behind one interface, from the admitted facts to non-negative multipliers or a counterexample: rows scaled to integers and divided by their gcd, the multipliers tracked per derived row, the counterexample read by back-substitution. Its cap is a count of derived rows. Mathlib's `linarith` defaults to a simplex oracle and keeps Fourier–Motzkin as the one "sometimes faster on small states" that "cannot handle large problems" ([`Mathlib.Tactic.Linarith.Frontend`](https://florisvandoorn.com/carleson/docs/Mathlib/Tactic/Linarith/Frontend.html)). The census finds small states. Stage 6 measures the product rows, and a row that exhausts the cap replaces the engine with a Bland's-rule simplex over integer tableaus behind the same interface.
+- **The procedure** is `curios-elab`'s `entailment` module: `facts`, `search`, `proof` and `report`. No crate of its own, since nothing else consumes it yet.
+- **The vocabulary** is a `SyntaxRegistry` group, `EntailmentSyntax`, beside `ProofSyntax`. A proof form is written only where every name it applies is assumed in the context, which is how an item of `/std` compiled before its vocabulary keeps today's behavior.
+- **The names.** Sums are `Le/add` at `/std/Nat/Le` and `/std/Int/Le`: `a <= b` and `c <= d` give `a + c <= b + d`. The `False` producer is `/std/Bool/False/refuted`, in a `Bool/False` module that mirrors `Bool/True`. `proved` is top-level in `/std`, beside `print`. A further lemma the procedure writes is housed under the proposition it concludes: `Le/of_eq` for an equation, `Lt/of_not_le` for a `<=` guard's false arm, and `Le/mul` for stage 6's products — `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`.
+
+## Cost
+
+Prelude elaboration and certification are read from the two profile streams `cargo x clippy` writes, since it builds with `--all-features`: `curios-prelude-archive/.artifacts/profile.tsv` for elaboration and erasure, and `curios-prelude/.artifacts/profile.tsv` for certification. Each is folded with `cargo run --all-features --package curios -- profile <stream>`. The build scripts are instrumented debug builds: a duration is noisy and inflated, while call counts and allocated megabytes are the stable figures. A stage's record names the span and the resource it compares.
+
 ## Stages
 
 Each lands alone, with its rows stated first.
