@@ -1891,15 +1891,20 @@ impl Context {
         Ok(terms)
     }
 
+    /// Finalize a declaration's levels — see `UniverseSolver::finalize`. The levels a still-deferred witness goal mentions are read here, since the goals are this context's.
     pub(crate) fn finalize_universe_metas(
         &mut self,
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
         curios_profile::profile!("ctx::finalize_universe_metas");
+        let pending = self
+            .deferred_witness_goals()
+            .flat_map(|(_, goal)| self.universe_metas_in(goal))
+            .collect::<BTreeSet<_>>();
         let universe_context = self
             .universes_mut()
-            .finalize(interface, internal)
+            .finalize(interface, internal, pending)
             .map_err(Error::from)?;
         self.caches.invalidate_for_universe_rewrite();
         Ok(universe_context)

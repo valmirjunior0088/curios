@@ -11,7 +11,7 @@
 //! Change detection therefore cannot read the journal's length, which no longer counts rewrites. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
 use {
-    curios_core::{Level, LevelHead, UniverseConstraint},
+    curios_core::{Level, LevelHead, UniverseConstraint, UniverseMetaId},
     curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -205,13 +205,15 @@ impl ConstraintStore {
     ///
     /// Worth separating from the defect it is *not*. Rebuilding each level per atom was an implementation fault inside `Level::substitute`, and is fixed there. Inflating the store is a property of materialising substitutions at all, and the standing alternative remains recording `meta := level` and dereferencing lazily — which this compiler already does for term metavariables, where a solution lives in a table and nothing is substituted until `zonk` runs. That change is no longer motivated by these numbers; it would have to earn its way in on the read side, which nothing has measured.
     ///
+    /// Answers the metas a discharge left bounded below by a constant alone — `ℓ ≤ u` become `0 ≤ u` — since that bound is what the solver's floor records and the discharge erases.
     pub(super) fn substitute_head(
         &mut self,
         head: LevelHead,
         solution: &Level,
-    ) -> Result<(), super::UniverseError> {
+    ) -> Result<Vec<UniverseMetaId>, super::UniverseError> {
         curios_profile::profile!("universe::substitute");
         let positions = self.mentioning(head).collect::<Vec<_>>();
+        let mut floored = Vec::new();
         let arrived = solution
             .atoms()
             .map(|(atom, _)| atom)
@@ -234,11 +236,18 @@ impl ConstraintStore {
                 //
                 // Discharging it to `0 ≤ 0` rather than removing it keeps every position stable, so the occurrence index needs no rebuild. Leaving it indexed is harmless for the same reason the index is already an over-approximation: a later substitution reaches it, rewrites nothing, and takes the no-op path above. `structurally_leq` is the right predicate and not an approximation of one — it is true exactly when the constraint is provable without any surrounding constraint, so dropping it cannot make an inconsistent system look consistent, and cannot move a least solution.
                 match lower.structurally_leq(&upper) {
-                    true => UniverseConstraint {
-                        lower: Level::zero(),
-                        upper: Level::zero(),
-                        origin: constraint.origin.clone(),
-                    },
+                    true => {
+                        if lower.atoms().next().is_none()
+                            && let Some(meta) = super::bare_meta(&upper)
+                        {
+                            floored.push(meta);
+                        }
+                        UniverseConstraint {
+                            lower: Level::zero(),
+                            upper: Level::zero(),
+                            origin: constraint.origin.clone(),
+                        }
+                    }
                     false => UniverseConstraint {
                         lower,
                         upper,
@@ -260,6 +269,6 @@ impl ConstraintStore {
 
         // `head` is solved, so nothing mentions it any more — including the constraints the substitution left alone, which by definition did not mention it.
         self.occurrences.remove(&head);
-        Ok(())
+        Ok(floored)
     }
 }

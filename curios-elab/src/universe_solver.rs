@@ -22,6 +22,7 @@ use {
 pub struct UniverseMark {
     constraints: StoreScope,
     solution_log_len: usize,
+    floor_log_len: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +36,8 @@ struct UniverseMeta {
     provenance: Provenance,
     origin: Option<UniverseConstraintOrigin>,
     solution: Option<Level>,
+    /// Whether a constant has bounded this occurrence's level from below. The store discharges `0 ≤ u` as trivially true — when it is added, and when a substitution turns `ℓ ≤ u` into it — so this is the one record that it was ever said; Rocq keeps an inferred `Set ≤ u` apart for the same reason. A bound by another level stays in the store, where a lower bound is read.
+    floored: bool,
 }
 
 /// Where a universe meta came from, which decides which member of an identified pair represents it and how finalization settles it.
@@ -431,6 +434,8 @@ pub struct UniverseSolver {
     metas: Vec<UniverseMeta>,
     constraints: ConstraintStore,
     solution_log: Vec<UniverseMetaId>,
+    /// The levels whose floor was recorded, in order, so a rollback unrecords them as it unsolves `solution_log`'s.
+    floor_log: Vec<UniverseMetaId>,
     next_meta: usize,
     consistency: Option<ConsistencyCache>,
 }
@@ -489,10 +494,12 @@ impl UniverseSolver {
                     provenance: Provenance::Chosen,
                     origin: None,
                     solution: None,
+                    floored: false,
                 })
                 .collect(),
             constraints: ConstraintStore::default(),
             solution_log: Vec::new(),
+            floor_log: Vec::new(),
             next_meta: meta_floor,
             consistency: None,
         }
@@ -509,6 +516,7 @@ impl UniverseSolver {
                 provenance: seed.role.into(),
                 origin: seed.origin.clone(),
                 solution: None,
+                floored: false,
             })
             .collect();
         self.next_meta = seeds.len();
@@ -534,6 +542,7 @@ impl UniverseSolver {
             provenance,
             origin,
             solution: None,
+            floored: false,
         });
         id
     }
@@ -553,6 +562,7 @@ impl UniverseSolver {
         UniverseMark {
             constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
+            floor_log_len: self.floor_log.len(),
         }
     }
 
@@ -574,6 +584,10 @@ impl UniverseSolver {
         while self.solution_log.len() > mark.solution_log_len {
             let meta = self.solution_log.pop().unwrap();
             self.metas[meta.0].solution = None;
+        }
+        while self.floor_log.len() > mark.floor_log_len {
+            let meta = self.floor_log.pop().unwrap();
+            self.metas[meta.0].floored = false;
         }
         self.constraints.rollback(mark.constraints);
         self.consistency = None;
@@ -739,6 +753,11 @@ impl UniverseSolver {
         constraint.lower = self.zonk(&constraint.lower)?;
         constraint.upper = self.zonk(&constraint.upper)?;
         if constraint.lower.structurally_leq(&constraint.upper) {
+            if constraint.lower.atoms().next().is_none()
+                && let Some(meta) = bare_meta(&constraint.upper)
+            {
+                self.record_floor(meta);
+            }
             return Ok(());
         }
         if constraint.lower.atoms.is_empty() && constraint.upper.atoms.is_empty() {
@@ -851,8 +870,20 @@ impl UniverseSolver {
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
     }
 
-    /// Whether any constraint genuinely bounds `meta` from above. A level with no such bound has the unconditional least solution zero.
-    fn is_upper_bounded(&self, meta: UniverseMetaId) -> bool {
+    /// Record that a constant bounded an occurrence's level from below — see `UniverseMeta::floored`. Only an occurrence's floor is read, so no other level records one.
+    fn record_floor(&mut self, meta: UniverseMetaId) {
+        let Some(entry) = self.metas.get_mut(meta.0) else {
+            return;
+        };
+        if entry.provenance != Provenance::Occurrence || entry.floored {
+            return;
+        }
+        entry.floored = true;
+        self.floor_log.push(meta);
+    }
+
+    /// Whether any constraint genuinely bounds `meta` from below — names it on its upper side. A level with no such bound has the unconditional least solution zero.
+    fn is_bounded_below(&self, meta: UniverseMetaId) -> bool {
         self.constraints
             .mentioning(LevelHead::Meta(meta))
             .filter_map(|position| self.constraints.get(position))
@@ -899,11 +930,11 @@ impl UniverseSolver {
                 }
             }
 
-            // A flexible level that occurs only in lower positions is zero. Default the lowest such id, then resume propagation: for `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. Taking these before the stalled levels below is what keeps that derivation available, since a level nothing bounds from above can never be the one holding a cycle together.
+            // A flexible level that occurs only in lower positions is zero. Default the lowest such id, then resume propagation: for `v + 1 ≤ u`, defaulting `v` first derives `u = 1`. Taking these before the stalled levels below is what keeps that derivation available, since a level nothing bounds from below can never be the one holding a cycle together.
             if let Some(meta) = metas
                 .iter()
                 .copied()
-                .find(|meta| self.is_open_flexible(*meta) && !self.is_upper_bounded(*meta))
+                .find(|meta| self.is_open_flexible(*meta) && !self.is_bounded_below(*meta))
             {
                 let dependents = self.dependents_of(meta);
                 self.assign(meta, Level::zero())?;
@@ -1124,13 +1155,20 @@ impl UniverseSolver {
         if entry.solution.is_some() {
             return Ok(());
         }
+        // A floor survives an alias: whatever bounded `meta` from below bounds the level it now names.
+        let alias = entry.floored.then(|| bare_meta(&level)).flatten();
         entry.solution = Some(level);
         self.solution_log.push(meta);
         self.consistency = None;
+        if let Some(alias) = alias {
+            self.record_floor(alias);
+        }
 
         let head = LevelHead::Meta(meta);
         let solution = self.zonk(&Level::meta(meta))?;
-        self.constraints.substitute_head(head, &solution)?;
+        for floored in self.constraints.substitute_head(head, &solution)? {
+            self.record_floor(floored);
+        }
         Ok(())
     }
 
@@ -1284,6 +1322,92 @@ impl UniverseSolver {
         solved
     }
 
+    /// The unsolved metas that carry `metas`, following each solution to the metas it names. Following one link is not enough, because the meta a link lands on may itself be solved; a level solved to a constant carries no meta and needs no parameter.
+    fn representatives(
+        &self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> BTreeSet<UniverseMetaId> {
+        let mut metas = metas.into_iter().collect::<BTreeSet<_>>();
+        loop {
+            let mut followed = BTreeSet::new();
+            for meta in &metas {
+                match self.solution(*meta) {
+                    Some(level) => followed.extend(level.metas()),
+                    None => {
+                        followed.insert(*meta);
+                    }
+                }
+            }
+            if followed == metas {
+                return metas;
+            }
+            metas = followed;
+        }
+    }
+
+    /// Settle `metas` at their least solutions wherever that takes no choice from a caller, round after round until one settles nothing.
+    ///
+    /// A level with a principal lower bound takes it. A level in `floored` that nothing bounds from below takes zero; any other stays, and so does one whose only lower bounds are disjunctive, for the reason [`Self::close_stalled_components`] declines a disjunction. A round commits every settlement it finds and checks consistency once, since a check after an assignment rebuilds the difference graph; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
+    fn settle(
+        &mut self,
+        metas: &BTreeSet<UniverseMetaId>,
+        floored: &BTreeSet<UniverseMetaId>,
+    ) -> Result<(), UniverseError> {
+        curios_profile::profile!("universe::settle");
+        loop {
+            let mark = self.mark();
+            let settled = self.settle_round(metas, floored, false)?;
+            if settled == 0 {
+                self.release(mark);
+                return Ok(());
+            }
+            if self.check_consistent().is_ok() {
+                self.release(mark);
+                continue;
+            }
+            self.rollback(mark);
+            self.release(mark);
+            if self.settle_round(metas, floored, true)? == 0 {
+                return Ok(());
+            }
+        }
+    }
+
+    /// One pass of [`Self::settle`], each level read after the settlements before it, answering how many it settled. `checked` commits a settlement only where the store stays consistent.
+    fn settle_round(
+        &mut self,
+        metas: &BTreeSet<UniverseMetaId>,
+        floored: &BTreeSet<UniverseMetaId>,
+        checked: bool,
+    ) -> Result<usize, UniverseError> {
+        let mut settled = 0;
+        for &meta in metas {
+            if self.solution(meta).is_some() {
+                continue;
+            }
+            let level = match self.principal_lower_bound(meta)? {
+                Some(level) => level,
+                None if floored.contains(&meta) && !self.is_bounded_below(meta) => Level::zero(),
+                None => continue,
+            };
+            if !checked {
+                self.assign(meta, level)?;
+                settled += 1;
+                continue;
+            }
+            let mark = self.mark();
+            let committed = self.assign(meta, level).is_ok() && self.check_consistent().is_ok();
+            if !committed {
+                self.rollback(mark);
+            }
+            self.release(mark);
+            if committed {
+                settled += 1;
+            }
+        }
+        Ok(settled)
+    }
+
     /// Identify each chosen level bounded only from above, by one other chosen level, with that level.
     ///
     /// Such a level occurs where a caller passes a type — `pure(@A: Type, A) -> M(A)`'s `A`, bounded by `M`'s domain — and cumulativity already lets a caller pass anything smaller, so identifying it with its bound takes no program from a caller. What it takes away is an implementation's licence to answer at a smaller level: generalized apart, `Monad`'s three method levels were five parameters in all, a witness pinned them at zero and refused `!` at a large payload, and left generic they put maxima into the domains of the witnesses built over them, which a use could only meet as a disjunction. Lean's `Pure (f : Type u → Type v)` declares `pure {α : Type u}`, and Rocq's manual writes its monad `monad@{i}` with `unit : forall (A : Type@{i}), A -> m A`. A level with two bounds names no one level to be, and stays.
@@ -1340,33 +1464,21 @@ impl UniverseSolver {
         }
     }
 
-    /// Minimize inference-only levels and bind every surviving input meta as a deterministic declaration parameter.
+    /// Settle the levels no caller can choose and bind every surviving one as a deterministic declaration parameter.
     ///
-    /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed.
+    /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed. `pending` names the levels a still-deferred witness goal mentions.
+    ///
+    /// Three kinds of level are settled rather than generalized, by [`Self::settle`]: a level the constraints reach that neither the type nor the body mentions; a level a still-deferred goal names, and every level settling it lands on, until the goal is ground; and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
     pub fn finalize(
         &mut self,
         interface: impl IntoIterator<Item = UniverseMetaId>,
         internal: impl IntoIterator<Item = UniverseMetaId>,
+        pending: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
-        // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal, and the direction is not the signature's to choose -- so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant. Following one link is not enough, because the meta a link lands on may itself be solved.
-        let mut interface = interface.into_iter().collect::<BTreeSet<_>>();
-        loop {
-            let mut followed = BTreeSet::new();
-            for meta in &interface {
-                match self.solution(*meta) {
-                    // A level solved to a constant carries no meta and needs no parameter.
-                    Some(level) => followed.extend(level.metas()),
-                    None => {
-                        followed.insert(*meta);
-                    }
-                }
-            }
-            if followed == interface {
-                break;
-            }
-            interface = followed;
-        }
+        // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
+        let interface = self.representatives(interface);
+        let pending = self.representatives(pending);
         let internal = internal
             .into_iter()
             .filter(|meta| !interface.contains(meta))
@@ -1379,7 +1491,46 @@ impl UniverseSolver {
         curios_profile::sample!("universe::finalize_connected_metas", relevant.len());
         curios_profile::sample!("universe::finalize_store_len", self.constraints.len());
         self.minimize(&internal, &relevant)?;
-        // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left, and only what is still free is generalized.
+        // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left.
+        self.merge_forced_equalities(&relevant)?;
+        // A still-deferred witness goal is made ground, whatever bounds its levels and whoever chose them: the goal resolves after this scheme closes, and the witness it finds can only be pinned to a level the goal already fixes (`close_instance`), while a constraint it brings then reaches no scheme at all. So a level the goal names settles, and so does every level a settlement lands on, until the goal names none. Generalized, `/std/Io`'s `Read(Async, Input)` witness named the unapplied `Async` at a parameter while the `Read(Async, Handle)` witness its body resolved later sat at zero; settled one step only, `tcp/Socket/close_raising`'s `Try(Io, Io/Error, A)` left its `Io` at `A`'s level, offered at every level, while its `!` lifts `Handle/close`'s `Io` at zero through `Lift(Io, Io)`, whose two sides are one level, so the witness answered at zero alone.
+        let mut pending = pending
+            .into_iter()
+            .filter(|meta| relevant.contains(meta))
+            .collect::<BTreeSet<_>>();
+        loop {
+            self.settle(&pending, &pending)?;
+            let reached = self
+                .representatives(pending.iter().copied())
+                .into_iter()
+                .filter(|meta| relevant.contains(meta) && !pending.contains(meta))
+                .collect::<BTreeSet<_>>();
+            if reached.is_empty() {
+                break;
+            }
+            pending.extend(reached);
+        }
+        // An occurrence's level in the signature settles at its recorded floor: `List(Nat)` in a domain sits at `Type 0` where its reduct does, rather than at a parameter no caller needs. As in Rocq, a level settles only at a lower bound something recorded, so one nothing bounded from below stays — and a chosen level identified with an occurrence stays with it, being the class's representative.
+        let occurrences = interface
+            .iter()
+            .copied()
+            .filter(|meta| self.provenance(*meta) == Some(Provenance::Occurrence))
+            .collect::<BTreeSet<_>>();
+        let floored = occurrences
+            .iter()
+            .copied()
+            .filter(|meta| self.metas[meta.0].floored)
+            .collect::<BTreeSet<_>>();
+        self.settle(&occurrences, &floored)?;
+        // Last, a level the constraints reach but neither the type nor the body mentions — read after the occurrences settle, since settling one at a chosen level's bound makes that level the one the signature names; `Try`'s `Monad` witness took its payload at zero while the lambda binder that chose it went unmentioned. What is left is one nothing can observe — `/sys/List`'s body level, joined to its result by `v ≤ u` and nothing else — so it is settled rather than generalized, which is Rocq's restriction of a context to the universes its terms use.
+        let interface = self.representatives(interface);
+        let unmentioned = relevant
+            .iter()
+            .copied()
+            .filter(|meta| !interface.contains(meta) && !internal.contains(meta))
+            .collect::<BTreeSet<_>>();
+        self.settle(&unmentioned, &unmentioned)?;
+        // Settling can leave two levels mutual, and a chosen level bounded by one chosen level alone, so the merge and the identification are asked of what it left.
         self.merge_forced_equalities(&relevant)?;
         self.identify_bounded_choices(&relevant)?;
         let metas = relevant
@@ -1440,7 +1591,7 @@ impl UniverseSolver {
 
     /// Commit `instance` to the levels `determined` already fixes, position by position.
     ///
-    /// A witness inhabits its goal and no other, so the levels its scheme introduces at a use site carry no freedom — the goal fixes them. Conversion alone does not say so: cumulativity makes a concept application's universe arguments a bound rather than an equation, and a bounded-but-unsolved level is left for declaration finalization.
+    /// A witness inhabits its goal and no other, so the levels its scheme introduces at a use site carry no freedom — the goal fixes them. Conversion alone does not say so: it equates two applications' levels (`compare_levels`), but an equation it cannot turn into an alias — against a level already generalized, or a maximum — stays two constraints, and a level held only by constraints is left for declaration finalization.
     ///
     /// These must therefore be *solutions*, not constraints. A goal that deferred resolves after its consuming declaration finalized, so no finalization remains to turn a bound into a value, and the enclosing item's `clear_constraints` would discard a constraint unsolved.
     ///

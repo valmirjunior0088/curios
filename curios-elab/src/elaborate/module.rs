@@ -447,9 +447,11 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
 ///
 /// `id : (A : Type u) -> A -> A` is genuinely polymorphic: a caller picks `A`, and with it `u`. `Le : Nat -> Nat -> Type u` is not. Nothing at a use site supplies that `u`, so generalizing it mints a parameter every occurrence must instantiate for no benefit — which is how a proof about naturals ends up universe-polymorphic, and how a string literal's per-byte constructor applications each mint fresh levels.
 ///
-/// Minimizing instead is sound for two reasons. Cumulativity already lets a declaration sitting at `Type 0` be used where a higher universe is expected, so the parameter buys no expressiveness. And `minimize` takes least solutions *subject to the recorded constraints*, so a level that genuinely depends on an argument still lands there: `List(A : Type u) : Type v` keeps `v = u`, because constructor sizing constrains it, rather than collapsing to zero.
+/// Minimizing instead is sound for two reasons. Cumulativity already lets a declaration sitting at `Type 0` be used where a higher universe is expected, so the parameter buys no expressiveness. And `minimize` takes least solutions *subject to the recorded constraints*, so a level that genuinely depends on an argument still lands there rather than collapsing to zero.
 ///
 /// A level occurring in both a binder domain and the result sort stays in the interface — the caller chooses it, and the result merely mentions it.
+///
+/// Only a terminal that *is* a sort states a result sort. A terminal applying a name carries that occurrence's instance, which `UniverseSolver::finalize` settles by the occurrence's bounds; read as a result sort, a witness goal's levels went to zero whether a caller could choose them or not.
 fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
     fn peel<'a>(term: &'a Term, domains: &mut Vec<&'a Term>) -> &'a Term {
         match &**term {
@@ -471,6 +473,9 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
 
     let mut domains = Vec::new();
     let terminal = peel(type_, &mut domains);
+    if !matches!(&**terminal, Subterm::Type(_)) {
+        return BTreeSet::new();
+    }
     let mut result = context.universe_metas_in(terminal);
     for domain in domains {
         for meta in context.universe_metas_in(domain) {

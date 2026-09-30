@@ -180,6 +180,72 @@ fn a_witness_leaves_its_method_levels_to_its_callers() {
     assert_eq!(run(source), b"large");
 }
 
+// **An occurrence sits where its argument does.** `List(Nat)` checks `Nat : Type 0` against the level its occurrence of `List` mints, which records nothing a store keeps; standing in a signature, that level counted as interface and was generalized, so `pair_of` carried a parameter per occurrence, each above the `Type 0` both checkers had sized the enclosing tuple and `Io` by — a tuple type is sized from its parts' reducts, where the occurrence is gone. `UniverseSolver::finalize` settles an occurrence's level at its recorded floor instead, which is its argument's level, so the written type sits where its reduct does. `Tree` holds a list of itself and settles the same way rather than generalizing the list's level above the family's own. `keep` is the control: its `A` is a binder a caller chooses, and the occurrence of `List` over it settles at `A`'s level, which stays the one parameter.
+#[test]
+fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
+    let source = r#"
+        use /std/{List, Nat, Io};
+        induct Tree : pub Type
+        | leaf(Nat)
+        | node(List(Tree))
+        end
+        let pair_of(x: List(Nat)) -> Io({List(Nat), List(Nat)}) = Io/pure((x, x));
+        let keep(@A: Type, x: List(A)) -> List(A) = x;
+        /std/print("settled")
+        "#;
+
+    let parameters = universe_parameters(source);
+
+    assert_eq!(
+        parameters.get("/pair_of"),
+        Some(&0),
+        "an occurrence's level was generalized above its argument's: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/Tree"),
+        Some(&0),
+        "a family's occurrence of a former over itself was generalized: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/keep"),
+        Some(&1),
+        "a level a caller chooses stopped generalizing, so the control no longer separates the two: {parameters:?}",
+    );
+}
+
+// **A goal deferred past its declaration settles at its least levels.** `rewrap`'s `!` asks for `Monad(Box)` before the unit has registered one, so the goal defers and is retried only after `rewrap`'s scheme has closed, where the witness it finds can be pinned to a level the goal already fixes and a constraint the witness brings reaches no scheme at all. `UniverseSolver::finalize` therefore makes a deferred goal ground — the levels it names settle, and so does every level a settlement lands on, `A`'s included — so a witness declared after its use leaves `rewrap` at `Type 0`. Left at `A`'s level instead, `/std/tcp/Socket/close_raising` offered its `A` at every level while the `Lift(Io, Io)` its `!` resolved later exists at one, and the kernel refused it. The control declares the witness first: the goal resolves while `rewrap`'s levels are open, and `A` stays the caller's. Ordering an item after the witnesses its `!` dispatches through would make the two agree.
+#[test]
+fn a_goal_deferred_past_its_declaration_settles_at_its_least_levels() {
+    let rewrap = "let rewrap(@A: Type, b: Box(A)) -> Box(A) = let a = b!; Box { value = a };";
+    let witness =
+        "satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }";
+    let program = |first: &str, second: &str| {
+        format!(
+            r#"
+            use /std/{{Monad}};
+            pub struct Box(A: Type): pub Type {{ value: A }}
+            {first}
+            {second}
+            /std/print("settled")
+            "#
+        )
+    };
+
+    let deferred = universe_parameters(&program(rewrap, witness));
+    let resolved = universe_parameters(&program(witness, rewrap));
+
+    assert_eq!(
+        deferred.get("/rewrap"),
+        Some(&0),
+        "a goal deferred past its declaration kept a level its later witness can constrain: {deferred:?}",
+    );
+    assert_eq!(
+        resolved.get("/rewrap"),
+        Some(&1),
+        "a goal resolved in time no longer leaves the caller's level free, so the control no longer separates the two: {resolved:?}",
+    );
+}
+
 /// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. Both of `U`'s levels are carried by its body alone, so they are minimized as `a_body_carried_level_is_minimized_rather_than_generalized` pins: `X` ranges over level 0 and `U` sits at level 1.
 const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
     let Pow(A: Type) -> Type = (A) -> Type;
@@ -274,7 +340,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter its constraints leave free, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Three more of its levels are bounded by zero and are solved to the constant when the scheme is generalized, and six were the second level each occurrence of a `List`-bearing declaration minted — `List`'s body level, bounded only by its result level, which finalization identifies with it (`UniverseSolver::identify_bounded_choices`) — which is why the count is thirteen; the context is otherwise the same, bound for bound.
+// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Every other level is an occurrence's, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is two.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
     super::typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
@@ -283,7 +349,7 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
-        Some(&13),
+        Some(&2),
         "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
     );
 }
