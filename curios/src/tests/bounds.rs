@@ -436,3 +436,28 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let silent = refusal("b: Bool", "Bool/Holds(b)");
     assert!(!silent.contains("facts in scope"), "{silent}");
 }
+
+#[test]
+fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
+    let goal = |binders: &str| {
+        let program = format!(
+            "{HEADER}\nlet row({binders}) -> Nat = List/get(@Nat, xs, i, @?);\nIo/pure(())"
+        );
+        typecheck(&program).expect_err("a written goal never compiles")
+    };
+
+    // Where the facts prove the bound, the proof is a candidate the author can paste.
+    let proved = goal("xs: List(Nat), i: Nat, m: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, List/len(xs))");
+    assert!(
+        proved.contains("? \u{2248}") && proved.contains("add("),
+        "{proved}"
+    );
+
+    // Where they do not, the goal says what a refused bound says: the facts, and where the bound fails.
+    let refused = goal("xs: List(Nat), i: Nat, m: Nat, q: Nat/Le(m, List/len(xs))");
+    assert!(
+        refused.contains("it does not follow from the facts in scope")
+            && refused.contains("it fails at"),
+        "{refused}"
+    );
+}

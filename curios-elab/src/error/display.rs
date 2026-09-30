@@ -48,6 +48,9 @@ pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String 
         text.push_str(&format!("\n  {shown} : {}", clause(type_)));
     }
     text.push_str(&format!("\n  ? : {}", clause(&report.goal)));
+    if let Some(refusal) = &report.refusal {
+        text.push_str(&refused(refusal, &spelling));
+    }
     if let Some(solution) = &report.solution {
         text.push_str(&format!("\n  ? = {}", clause(solution)));
     }
@@ -956,6 +959,7 @@ impl fmt::Display for Displayed<'_> {
                     solution: solution.as_deref().cloned(),
                     obligations: Vec::new(),
                     candidates: Vec::new(),
+                    refusal: None,
                 };
                 Displayed(&Error::Goals(vec![report]), Rc::clone(spelling)).fmt(f)
             }

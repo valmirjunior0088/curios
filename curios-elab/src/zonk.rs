@@ -911,10 +911,13 @@ pub(crate) fn collect_goal_reports(
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
     let goal_sites: Vec<(MetavarId, Option<Span>, Option<Global>)> = goals.borrow().clone();
     context.restore_budget();
-    let mut all_candidates: Vec<Vec<Term>> = Vec::with_capacity(goal_sites.len());
+    let mut all_candidates: Vec<super::Suggestions> = Vec::with_capacity(goal_sites.len());
     for (id, _, owner) in &goal_sites {
         if context.metavar_solution(*id).is_some() {
-            all_candidates.push(Vec::new());
+            all_candidates.push(super::Suggestions {
+                candidates: Vec::new(),
+                refusal: None,
+            });
             continue;
         }
         let (telescope, refinements, result) = {
@@ -949,7 +952,7 @@ pub(crate) fn collect_goal_reports(
     goal_sites
         .iter()
         .zip(all_candidates)
-        .map(|((id, span, owner), candidates)| {
+        .map(|((id, span, owner), suggestions)| {
             // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
             let entry = context
                 .metavar_entry(*id)
@@ -972,7 +975,8 @@ pub(crate) fn collect_goal_reports(
                     .filter(|obligation| obligation.goals.contains(id))
                     .map(|obligation| (display(&obligation.this), display(&obligation.that)))
                     .collect(),
-                candidates: candidates.iter().map(display).collect(),
+                candidates: suggestions.candidates.iter().map(display).collect(),
+                refusal: suggestions.refusal,
             }
         })
         .collect()

@@ -30,6 +30,8 @@ pub struct GoalReport {
     pub obligations: Vec<(Term, Term)>,
     /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
     pub candidates: Vec<Term>,
+    /// Why the procedure that proves a bound from the facts in scope proved nothing, where the goal is a bound: the facts it considered and what its search concluded, rendered as a refused bound's report renders them.
+    pub refusal: Option<Refusal>,
 }
 
 impl GoalReport {
@@ -50,6 +52,9 @@ impl GoalReport {
         }
         for candidate in &self.candidates {
             names.add(candidate);
+        }
+        for term in self.refusal.iter().flat_map(Refusal::terms) {
+            names.add(term);
         }
         Rc::new(build_rename(&names, spelling))
     }
@@ -1659,6 +1664,7 @@ impl Error {
                     out.push(&report.goal);
                     out.extend(report.solution.as_ref());
                     out.extend(&report.candidates);
+                    out.extend(report.refusal.iter().flat_map(Refusal::terms));
                 }
             }
             Self::AmbiguousWitness {

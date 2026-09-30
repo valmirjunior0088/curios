@@ -8,12 +8,14 @@
 //!
 //! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with a shared `?`-named hole standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
 //!
+//! A goal that is a bound is also put to the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox: a proof it finds is a complete fit of pool 0, and a refusal is kept for the report, which then says beside the goal what it says beside an omitted bound.
+//!
 //! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq()(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal ever saw an application fit — which is every goal outside a function body, and almost no goal in a proof.
 
 use {
     super::{
-        Context, Outcome, Probe, Refinements, check, convert_outcome, probe_match, reduce_with,
-        zonk_solved_term_metas,
+        Context, Entailed, Outcome, Probe, Refinements, Refusal, check, convert_outcome, entail,
+        probe_match, reduce_with, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
@@ -28,6 +30,12 @@ const CANDIDATES: usize = 3;
 
 /// The attempt cap per goal across the application-fit pools — a hard bound on error-path work, not a completeness promise.
 const ATTEMPTS: usize = 128;
+
+/// What a goal's report offers: the candidates that fit it, and — where the goal is a bound the procedure proves nothing about — why.
+pub(crate) struct Suggestions {
+    pub(crate) candidates: Vec<Term>,
+    pub(crate) refusal: Option<Refusal>,
+}
 
 /// A found fit: the display term, its residual hole count, and its pool rank (scope values, constructors, scope functions, module definitions, referenced globals, imported bindings — in that order).
 struct Candidate {
@@ -47,7 +55,7 @@ pub(crate) fn suggest_candidates(
     module: &Module,
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
-) -> Vec<Term> {
+) -> Suggestions {
     context.with_frame(|context| {
         for (name, type_) in telescope {
             context.assume(name, type_);
@@ -65,8 +73,25 @@ fn suggest_in_scope(
     module: &Module,
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
-) -> Vec<Term> {
+) -> Suggestions {
     let mut candidates: Vec<Candidate> = Vec::new();
+
+    // Pool 0 as well — a proof from the facts in scope, where the goal is a bound: verified as the fill verifies one, and materialized before the rollback as every hit is.
+    let mut refusal = None;
+    if let Ok(reduced) = reduce_with(context, goal_type) {
+        let mark = context.solution_mark();
+        match entail(context, goal_type, &reduced) {
+            Ok(Entailed::Proved(proof)) => candidates.push(Candidate {
+                term: zonk_solved_term_metas(context, &proof),
+                holes: 0,
+                pool: 0,
+            }),
+            Ok(Entailed::Refused(refused)) if !refused.is_silent() => refusal = Some(refused),
+            _ => {}
+        }
+        context.rollback_solutions(mark);
+        context.end_solutions(mark);
+    }
     // One shared hole identity per goal, so every unsolved slot spells the same bare `?`.
     let hole_name = context.fresh(Some("?"));
     let hole = Term::free_var(&hole_name);
@@ -130,7 +155,7 @@ fn suggest_in_scope(
     // Complete fits first, then fewest holes, then pool order; discovery order breaks the remaining ties (the sort is stable). Structural dedup follows: a referenced global can rediscover a constructor the local pass already found.
     candidates.sort_by_key(|candidate| (candidate.holes, candidate.pool));
     let mut seen: Vec<Term> = Vec::new();
-    candidates
+    let candidates = candidates
         .into_iter()
         .filter(|candidate| {
             if seen.contains(&candidate.term) {
@@ -142,7 +167,11 @@ fn suggest_in_scope(
         })
         .take(CANDIDATES)
         .map(|candidate| candidate.term)
-        .collect()
+        .collect();
+    Suggestions {
+        candidates,
+        refusal,
+    }
 }
 
 /// Pools 3 to 5: the entry module's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each with its recorded type. The goal's owning definition is excluded.
