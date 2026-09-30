@@ -1,10 +1,14 @@
-//! One unit compiled over a baseline: what the closure covers, what is reused untouched, and that the result agrees with a whole compile of the same text.
+//! One unit compiled over a baseline: what the closure covers, what is reused untouched, and that the result agrees with a whole compile of the same text — its lints included, which a reused item's credits are carried into.
 //!
 //! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, and the specification says so.
 
-use super::test_support::{
-    assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body, unit_of,
-    written,
+use {
+    super::test_support::{
+        assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body,
+        unit_of, written,
+    },
+    curios_text::LintKind,
+    curios_unit::Unit,
 };
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
@@ -174,5 +178,44 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
     assert_eq!(
         incremental, whole,
         "a recompile answers what the whole compile of the same text answers"
+    );
+}
+
+/// A hypothesis only a proof the elaborator writes reads, in `below`, beside one nothing reads, in `idle`.
+const CREDITED: &str = "use /std/{Nat, proved};
+
+pub let below(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Le(i, n) = proved();
+
+pub let idle(i: Nat, q: Nat/Lt(i, 3)) -> Nat = i;
+
+pub let unrelated: Nat = 7;
+";
+
+/// The binders a unit's `unused-binder` lints name.
+fn unused_binders(unit: &Unit) -> Vec<String> {
+    unit.text()
+        .lints()
+        .iter()
+        .filter(|lint| lint.kind == LintKind::UnusedBinder)
+        .map(|lint| lint.report.message.clone())
+        .collect()
+}
+
+#[test]
+fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
+    let baseline = unit_of(CREDITED);
+    assert_eq!(
+        unused_binders(&baseline),
+        ["unused binder `q`; name it `_q` to keep it"],
+        "`p` is read by the proof `proved` stands for, and `q` by nothing"
+    );
+
+    let edited = CREDITED.replace("= 7", "= 8");
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(reuses_body(&baseline, &incremental, "below"));
+    assert_eq!(
+        unused_binders(&incremental),
+        unused_binders(&unit_of(&edited))
     );
 }

@@ -484,6 +484,19 @@ impl<'a> Context<'a> {
         )
     }
 
+    /// [`Context::fresh_binder`] for a binder written in source, at `written` among its declaration's written binders — see [`curios_core::Free::local_written`].
+    pub(super) fn fresh_written_binder(
+        &self,
+        hint: Option<&str>,
+        written: u32,
+    ) -> curios_core::Free {
+        curios_core::Free::local_written(
+            u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
+            hint,
+            Some(written),
+        )
+    }
+
     pub(super) fn syntax(&self) -> SyntaxRegistry {
         *self.syntax
     }

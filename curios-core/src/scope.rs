@@ -426,14 +426,17 @@ pub fn stamp_declaration_instance<B: Bound>(
 
 /// What a scope remembers of one binder it closed over: a global's name, which means the same in every compilation, or a local's display hint.
 ///
-/// **Never a local's identity.** That was minted by the compilation that closed the scope, and a stored scope that kept it carried a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint.
+/// **Never a local's identity.** That was minted by the compilation that closed the scope, and a stored scope that kept it carried a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub(crate) enum Label {
     /// A global a `rec` group's binder closes over, rendered as its path as a free occurrence of it would be.
     Global(Global),
-    /// A local binder: its display hint, `None` where it was minted hintless.
-    Local(Option<Symbol>),
+    /// A local binder: its display hint, `None` where it was minted hintless, and where it sits among its declaration's written binders, when the lowering wrote it.
+    Local {
+        hint: Option<Symbol>,
+        written: Option<u32>,
+    },
 }
 
 impl Label {
@@ -441,7 +444,10 @@ impl Label {
     fn of(binder: Free) -> Self {
         match binder {
             Free::Global(global) => Label::Global(global),
-            Free::Local(mint) => Label::Local(mint.hint_symbol()),
+            Free::Local(mint) => Label::Local {
+                hint: mint.hint_symbol(),
+                written: mint.written(),
+            },
         }
     }
 
@@ -450,7 +456,10 @@ impl Label {
     /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
     fn relabelled(&self, hint: &str) -> Self {
         match self {
-            Label::Local(_) => Label::Local((!hint.is_empty()).then(|| Symbol::new(hint))),
+            Label::Local { written, .. } => Label::Local {
+                hint: (!hint.is_empty()).then(|| Symbol::new(hint)),
+                written: *written,
+            },
             Label::Global(_) => *self,
         }
     }
@@ -458,7 +467,15 @@ impl Label {
     /// The hint a local binder was written with; `None` for a global, whose rendering is its path, and for a hintless local.
     pub(crate) fn hint(&self) -> Option<&'static str> {
         match self {
-            Label::Local(hint) => hint.map(|hint| hint.as_str()),
+            Label::Local { hint, .. } => hint.map(|hint| hint.as_str()),
+            Label::Global(_) => None,
+        }
+    }
+
+    /// Where a local binder sits among its declaration's written binders, when the lowering wrote it.
+    pub(crate) fn written(&self) -> Option<u32> {
+        match self {
+            Label::Local { written, .. } => *written,
             Label::Global(_) => None,
         }
     }
@@ -553,6 +570,11 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// What the binder at position `index` was called where it was written — a rendering aid a rebuild carries onto the binder it re-mints, never a way to recognize which binder this is.
     pub fn hint(&self, index: usize) -> Option<&'static str> {
         self.label(index)?.hint()
+    }
+
+    /// Where the binder at position `index` sits among its declaration's written binders, when the lowering wrote it: what a local opened from it carries, so a proof reading the local credits the binder a lint names.
+    pub fn written(&self, index: usize) -> Option<u32> {
+        self.label(index)?.written()
     }
 
     pub fn first_hint(&self) -> Option<&'static str> {

@@ -58,6 +58,8 @@ impl fmt::Display for WitnessId {
 pub struct Mint {
     index: u32,
     hint: Option<Symbol>,
+    /// Where the binder sits among its declaration's written binders, when the lowering wrote it — diagnostic metadata excluded from identity as the hint is, which a local opened from its scope inherits so a lint can be credited with a proof's reads.
+    written: Option<u32>,
 }
 
 impl Mint {
@@ -65,6 +67,7 @@ impl Mint {
         Self {
             index,
             hint: hint.map(Symbol::new),
+            written: None,
         }
     }
 
@@ -78,6 +81,11 @@ impl Mint {
     /// The hint as the interned symbol it is kept as, for a scope that remembers it without re-interning its spelling.
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
         self.hint
+    }
+
+    /// Where the binder sits among its declaration's written binders, when the lowering wrote it.
+    pub(crate) fn written(&self) -> Option<u32> {
+        self.written
     }
 }
 
@@ -195,9 +203,21 @@ impl Free {
         Free::Local(Mint::new(index, hint))
     }
 
+    /// [`Free::local`] for a binder written in source, at `written` among its declaration's written binders — or for a local opened from one, which inherits the place so a lint can trace a read of it back.
+    pub fn local_written(index: u32, hint: Option<&str>, written: Option<u32>) -> Self {
+        Free::Local(Mint {
+            written,
+            ..Mint::new(index, hint)
+        })
+    }
+
     /// [`Free::local`] for a caller that already holds the hint as a symbol — a printer reopening a scope under the hint it remembers.
     pub(crate) fn local_hinted(index: u32, hint: Option<Symbol>) -> Self {
-        Free::Local(Mint { index, hint })
+        Free::Local(Mint {
+            index,
+            hint,
+            written: None,
+        })
     }
 
     /// A definition at an authored path.
@@ -241,13 +261,18 @@ impl Free {
     }
 
     /// What a diagnostic should call this, if there is anything better than its rendered form: a local's minting hint, or nothing for a global, whose rendering the printer shortens against the module it appears in.
-    pub(crate) fn hint(&self) -> Option<&str> {
+    pub fn hint(&self) -> Option<&str> {
         self.as_local().and_then(Mint::hint)
     }
 
     /// [`Free::hint`] as the interned symbol it is kept as.
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
         self.as_local().and_then(Mint::hint_symbol)
+    }
+
+    /// Where a local's binder sits among its declaration's written binders: see [`Free::local_written`].
+    pub fn written(&self) -> Option<u32> {
+        self.as_local().and_then(Mint::written)
     }
 }
 

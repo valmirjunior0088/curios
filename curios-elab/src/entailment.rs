@@ -99,7 +99,7 @@ pub(crate) fn entail(
         return Ok(Entailed::Refused(Refusal::default()));
     };
 
-    context.with_entailing(|context| {
+    let entailed = context.with_entailing(|context| {
         if let Goal::Decision(decision) = &goal
             && let Some(candidate) = tautology(context, decision)
             && let Some(proof) = check(context, &candidate, bound)?
@@ -107,7 +107,12 @@ pub(crate) fn entail(
             return Ok(Entailed::Proved(proof));
         }
         linear(context, &goal, bound)
-    })
+    })?;
+    // The binders the proof reads are used, though the author wrote no reference to them.
+    if let Entailed::Proved(proof) = &entailed {
+        context.credit(proof);
+    }
+    Ok(entailed)
 }
 
 /// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for. An absurd goal has no target and no negation: the facts must refute each other alone.

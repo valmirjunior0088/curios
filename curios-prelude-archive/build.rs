@@ -95,7 +95,7 @@ fn lower(root: &str, modules: &curios_text::RootSource, scope: &[&PreparedText])
 /// `arena` is the previous root's, not a fresh one: each unit's erasure resumes over what the one before it produced, so the arena a unit carries is the whole prefix's and the split between images is a split of items rather than of operands.
 fn archive(
     root: &str,
-    prepared: PreparedText,
+    mut prepared: PreparedText,
     established: Established<'_>,
     scope: &[&curios_core::Module],
     arena: ErasedArena,
@@ -129,6 +129,8 @@ fn archive(
             error.format_with(&lowered, scope, &SYNTAX)
         )
     });
+    // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
+    prepared.credit(&context.credited());
 
     // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_unit` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)

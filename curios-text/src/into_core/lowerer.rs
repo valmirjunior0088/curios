@@ -2,8 +2,8 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
-        Let, LetBinding, LetGroup, LetSignature, Lint, ListEntry, Name, Nat, NatLiteral, NumLit,
-        Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
+        Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name, Nat,
+        NatLiteral, NumLit, Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
     },
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
@@ -33,6 +33,8 @@ pub(super) struct Hoisted {
 
 pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
+    /// The declaration this lowers, which a lint names its binders by: the one identity a later lowering of the declaration unchanged gives them too. `None` for an entry's final term.
+    declaration: Option<curios_core::Global>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
     scope: RefCell<Vec<Binder>>,
     /// Every written binder a reference could reach, with where it was written — the `unused-binder` lint's candidates, decided by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
@@ -63,9 +65,10 @@ struct Signature {
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
-    pub(super) fn new(context: &'a Context<'b>) -> Self {
+    pub(super) fn new(context: &'a Context<'b>, declaration: Option<curios_core::Global>) -> Self {
         Self {
             context,
+            declaration,
             scope: RefCell::new(Vec::new()),
             candidates: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
@@ -104,15 +107,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .candidates
             .borrow()
             .iter()
-            .filter(|candidate| !used.contains(&candidate.id))
-            .filter(|candidate| {
+            .enumerate()
+            .filter(|(_, candidate)| !used.contains(&candidate.id))
+            .filter(|(_, candidate)| {
                 !candidate.signature.is_some_and(|signature| {
                     signatures[signature]
                         .output_mentions
                         .contains(&candidate.name)
                 })
             })
-            .map(|candidate| Lint::unused_binder(&candidate.name, &candidate.span))
+            .map(|(ordinal, candidate)| {
+                let binder = LintedBinder {
+                    declaration: self.declaration,
+                    ordinal: u32::try_from(ordinal).expect("a declaration's binders fit a u32"),
+                };
+                Lint::unused_binder(&candidate.name, &candidate.span, binder)
+            })
             .collect::<Vec<_>>();
         self.context.report(lints);
     }
@@ -139,18 +149,23 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         labels
             .into_iter()
             .map(|(name, span)| {
-                let id = self.context.fresh_binder(bindable(&name).then_some(&name));
-                if let Some(span) = span
-                    && bindable(&name)
-                    && !name.starts_with('_')
-                {
-                    self.candidates.borrow_mut().push(Candidate {
-                        name: name.clone(),
-                        id,
-                        span,
-                        signature,
-                    });
-                }
+                let hint = bindable(&name).then_some(name.as_str());
+                let candidate = span.filter(|_| bindable(&name) && !name.starts_with('_'));
+                let Some(span) = candidate else {
+                    let id = self.context.fresh_binder(hint);
+                    return (name, id);
+                };
+                // A candidate is minted with its place among the declaration's candidates, which every local opened from it inherits: how a read no written name makes is traced back to the lint it answers.
+                let mut candidates = self.candidates.borrow_mut();
+                let written =
+                    u32::try_from(candidates.len()).expect("a declaration's binders fit a u32");
+                let id = self.context.fresh_written_binder(hint, written);
+                candidates.push(Candidate {
+                    name: name.clone(),
+                    id,
+                    span,
+                    signature,
+                });
                 (name, id)
             })
             .collect()

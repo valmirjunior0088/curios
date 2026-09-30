@@ -964,7 +964,7 @@ impl<'a> Frame<'a> {
     fn label(&self, label: Option<&Label>) -> Free {
         let name = match label {
             Some(Label::Global(global)) => Free::Global(*global),
-            Some(Label::Local(hint)) => self.mint.local(*hint),
+            Some(Label::Local { hint, .. }) => self.mint.local(*hint),
             None => self.mint.local(None),
         };
         self.mint.record(&name);

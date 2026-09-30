@@ -235,8 +235,10 @@ pub struct PreparedText {
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// How this unit's names can be written: every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports` — and every absolute path the unit may write for each global. What a goal report's candidate pool reaches beyond the names the program already mentions, and what every report spells a name by.
     spellings: curios_core::Spellings,
-    /// Every lint the lowering found, in reading order — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
+    /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
     lints: Vec<Lint>,
+    /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again.
+    credited: Vec<LintedBinder>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
@@ -256,6 +258,35 @@ pub struct BrokenItem {
 impl PreparedText {
     pub fn lints(&self) -> &[Lint] {
         &self.lints
+    }
+
+    /// Drop the `unused-binder` lint of every binder in `credited`: read by a proof the elaborator wrote, which no written name reaches, so used. Called once the unit has elaborated, since only elaboration writes such a proof.
+    pub fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
+        self.credit_where(|binder| credited.contains(&(binder.declaration, binder.ordinal)));
+    }
+
+    /// Credit, in every declaration `reused` keeps as `baseline` elaborated it, the binders `baseline`'s elaboration credited: a declaration a recompile does not elaborate again has its lowering unchanged, so its binders sit where they sat.
+    pub fn credit_reused(
+        &mut self,
+        baseline: &PreparedText,
+        reused: impl Fn(&curios_core::Global) -> bool,
+    ) {
+        let credited = baseline
+            .credited
+            .iter()
+            .filter(|binder| binder.declaration.as_ref().is_some_and(&reused))
+            .collect::<BTreeSet<_>>();
+        self.credit_where(|binder| credited.contains(binder));
+    }
+
+    /// Drop the `unused-binder` lint of every binder `read` holds of, and record which each was.
+    fn credit_where(&mut self, read: impl Fn(&LintedBinder) -> bool) {
+        let (credited, kept) = std::mem::take(&mut self.lints)
+            .into_iter()
+            .partition::<Vec<_>, _>(|lint| lint.binder.as_ref().is_some_and(&read));
+        self.lints = kept;
+        self.credited
+            .extend(credited.into_iter().filter_map(|lint| lint.binder));
     }
 
     /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.
@@ -664,10 +695,9 @@ fn process_items(
                 let mut items = ls
                     .iter()
                     .map(|let_item| {
-                        context.record_import_scope(Some(&curios_core::Global::Authored(
-                            context.prefixed(&let_item.label),
-                        )));
-                        let lower = Lowerer::new(context);
+                        let name = curios_core::Global::Authored(context.prefixed(&let_item.label));
+                        context.record_import_scope(Some(&name));
+                        let lower = Lowerer::new(context, Some(name));
                         lower.enter_signature(&let_item.signature);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
@@ -689,10 +719,9 @@ fn process_items(
             }
             // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
             TopItem::Test(test) => {
-                context.record_import_scope(Some(&curios_core::Global::Authored(
-                    context.prefixed(&test.label),
-                )));
-                let lower = Lowerer::new(context);
+                let name = curios_core::Global::Authored(context.prefixed(&test.label));
+                context.record_import_scope(Some(&name));
+                let lower = Lowerer::new(context, Some(name));
                 lower.enter_sugar();
                 let output = curios_core::Term::var(curios_core::Var::free(
                     curios_core::Free::global(context.syntax().test.test_type.qualifier()),
@@ -716,8 +745,9 @@ fn process_items(
                 let path = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, path.join());
 
-                context.record_import_scope(Some(&curios_core::Global::Authored(path)));
-                let lower = Lowerer::new(context);
+                let name = curios_core::Global::Authored(path);
+                context.record_import_scope(Some(&name));
+                let lower = Lowerer::new(context, Some(name));
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Authored,
@@ -735,7 +765,7 @@ fn process_items(
                     .map(|u| {
                         let name = curios_core::Global::Authored(context.prefixed(&u.label));
                         context.record_import_scope(Some(&name));
-                        let lower = Lowerer::new(context);
+                        let lower = Lowerer::new(context, Some(name.clone()));
 
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
@@ -896,10 +926,11 @@ fn process_items(
                 // Step 2: constructor bindings. Each is a function whose body injects the variant as a tagged tuple.
                 for u in group {
                     for c in &u.cases {
-                        context.record_import_scope(Some(&curios_core::Global::Authored(
+                        let name = curios_core::Global::Authored(
                             context.prefixed(&u.label).with(&c.label),
-                        )));
-                        let lower = Lowerer::new(context);
+                        );
+                        context.record_import_scope(Some(&name));
+                        let lower = Lowerer::new(context, Some(name));
 
                         // Per-case payload binder names: the declared name, or a positional placeholder.
                         let payload_name = |i: usize, n: &Option<String>| {
@@ -1008,7 +1039,7 @@ fn process_items(
                 for s in group {
                     let name = curios_core::Global::Authored(context.prefixed(&s.label));
                     context.record_import_scope(Some(&name));
-                    let lower = Lowerer::new(context);
+                    let lower = Lowerer::new(context, Some(name.clone()));
 
                     // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                     let module = context.prefixed(&s.label).without_last();
@@ -1119,7 +1150,7 @@ fn process_items(
                     let module = context.prefixed(&concept.label).without_last();
 
                     context.record_import_scope(Some(&name));
-                    let lower = Lowerer::new(context);
+                    let lower = Lowerer::new(context, Some(name.clone()));
                     let param_binders =
                         lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
                     let param_tys = concept
@@ -1380,7 +1411,7 @@ fn process_items(
                             None => signature.type_(),
                         };
 
-                        let lower = Lowerer::new(context);
+                        let lower = Lowerer::new(context, Some(name.clone()));
                         lower.enter_signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
@@ -1709,7 +1740,7 @@ fn into_core_unit_within(
     context.record_import_scope(None);
     let entry = {
         // Scoped so the lowerer drops, and reports its lints, before the tables the context borrows are moved into the result below.
-        let lower = Lowerer::new(&context);
+        let lower = Lowerer::new(&context, None);
         match source.entrypoint() {
             Some(entrypoint) => Some(curios_core::Entrypoint {
                 body: lower.value(&entrypoint.tail)?,
@@ -1801,6 +1832,7 @@ fn into_core_unit_within(
                 .chain(dead)
                 .collect(),
         ),
+        credited: Vec::new(),
         reached: reached.into_inner(),
         documentation,
     };

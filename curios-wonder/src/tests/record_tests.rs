@@ -153,6 +153,26 @@ fn lints_are_reported_after_a_goal_and_after_an_error() {
     assert_eq!(severities, [Severity::Error, Severity::Lint]);
 }
 
+/// A binder only a proof the elaborator wrote reads is used: `p` is read by the proof `proved` stands for and `q` by nothing, and that holds beside an error elsewhere as beside none.
+#[test]
+fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
+    let credited = "use /std/{Nat, proved};\nlet _f(i: Nat, n: Nat, p: Nat/Lt(i, n), q: Nat/Lt(i, 3)) -> Nat/Le(i, n) = proved();\n";
+    let lints = |source: &str| {
+        of(source)
+            .into_iter()
+            .filter(|report| report.severity == Severity::Lint)
+            .map(|report| report.report.message)
+            .collect::<Vec<_>>()
+    };
+    let only_q = ["unused binder `q`; name it `_q` to keep it"];
+
+    assert_eq!(lints(&format!("{credited}/std/print(\"\")")), only_q);
+    assert_eq!(
+        lints(&format!("{credited}let _m : Nat = true;\n/std/print(\"\")")),
+        only_q
+    );
+}
+
 /// A program that does not lower has nothing to read lints off: the error alone.
 #[test]
 fn a_program_that_does_not_lower_reports_the_error_alone() {

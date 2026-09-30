@@ -34,7 +34,7 @@ pub fn compile_unit_over(
     let text = scope.text();
     let cores = scope.cores();
 
-    let lowered = into_core_unit(source, &text, syntax)
+    let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let closure = invalidated(baseline, lowered.core());
@@ -69,6 +69,9 @@ pub fn compile_unit_over(
             })
         }),
     )?;
+    // What the closure's proofs read, and what the baseline's read in the declarations reused from it.
+    lowered.credit(&context.credited());
+    lowered.credit_reused(baseline.text(), |name| !closure.contains(name));
 
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;

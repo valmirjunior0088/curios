@@ -40,7 +40,7 @@ pub(super) fn elaborate_let(
                     (type_elaborated, body_elaborated)
                 }
             };
-            let label = context.fresh(let_.tail.hint_iter().nth(index).flatten());
+            let label = context.fresh_for(let_.tail.hint(index), let_.tail.written(index));
 
             // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original.
             context.define_assuming(&label, &type_elaborated, &body_elaborated, None);
@@ -1030,7 +1030,7 @@ pub(super) fn elaborate_func_check(
                         // Consume both. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
                         let w_domain = crate::check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
-                        let name = context.fresh(w_hint);
+                        let name = context.fresh_for(w_hint, written.written());
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);
                         domains.push((e_plicity, name, e_domain));
@@ -1103,7 +1103,8 @@ pub(super) fn elaborate_func_infer(
             };
 
             let plicity = plicities[domains.len()];
-            let name = cursor.advance_fresh(|hint| context.fresh(hint));
+            let written = cursor.written();
+            let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
             match plicity {
                 Plicity::Witness => {
                     check_witness_domain(context, &domain)?;

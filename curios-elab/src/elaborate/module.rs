@@ -858,6 +858,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     let mut bodies = Vec::with_capacity(defs.len());
     for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
         let outer_site = context.set_checked_site(&format!("'{}'", def.name));
+        context.enter_declaration(Some(def.name));
         let body = check(context, &def.body, type_.clone())?;
         context.restore_checked_site(outer_site);
         context.fill_rec_slot(slot, body.clone());
@@ -1173,6 +1174,7 @@ fn elaborate_module_item(
 
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
+    context.enter_item(owner.copied());
 
     let elaborated = match item {
         Item::Let(definition) => elaborate_module_let(context, definition),
@@ -1459,6 +1461,7 @@ fn elaborate_entry(
     let Some(entry) = entry else {
         return Ok(None);
     };
+    context.enter_item(None);
     let mode = match &entry.type_ {
         Some(stated) => Mode::Check(check_is_sort(context, stated)?.0),
         None => Mode::Infer,

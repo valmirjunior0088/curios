@@ -388,3 +388,25 @@ fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
         "the name costs what it costs a context that reduced nothing first"
     );
 }
+
+#[test]
+fn a_proof_credits_the_written_binder_a_local_was_opened_from_and_a_rollback_withdraws_it() {
+    let mut context = context();
+    let declaration = Global::Authored(Qualifier::from(["f"]));
+    context.enter_item(Some(declaration));
+    let opened = context.fresh_for(Some("p"), Some(2));
+    let unrelated = context.fresh(Some("q"));
+
+    let mark = context.solution_mark();
+    context.credit(&Term::free_var(&opened));
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    assert!(
+        context.credited().is_empty(),
+        "a proof written inside what is rolled back reads nothing that stands"
+    );
+
+    context.credit(&Term::free_var(&opened));
+    context.credit(&Term::free_var(&unrelated));
+    assert_eq!(context.credited(), BTreeSet::from([(Some(declaration), 2)]));
+}

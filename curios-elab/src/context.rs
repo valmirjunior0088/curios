@@ -110,6 +110,7 @@ impl Drop for UniverseMutation<'_> {
 pub(crate) struct SolutionMark {
     term_solution_log_len: usize,
     universe: UniverseMark,
+    credited_len: usize,
 }
 
 /// Which top-level item raised a deferred witness goal: the item's position in its module's order, with the entry after the last item. What attributes a refusal that surfaces only once later items have elaborated — a witness that never registered — to the declaration that raised it rather than to the item the sweep happened to run after.
@@ -142,6 +143,12 @@ pub struct Context {
     island: Option<Qualifier>,
     /// Whether the procedure that proves a bound from the facts in scope is running ([`crate::entail`]). It does not run inside itself: what it elaborates is its own candidate, and a bound one of the candidate's operands carries is not the one it was asked about.
     entailing: bool,
+    /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
+    declaration: Option<Global>,
+    /// The declaration each local opened from a written binder was opened in, kept while one item elaborates: whose written binders the place the local carries counts among. Read from the local rather than from what is current when a proof reads it, since a group's parked bounds are retried once every member has elaborated.
+    opened: BTreeMap<Free, Option<Global>>,
+    /// The written binders a proof the elaborator wrote reads, each by its declaration and its place among that declaration's written binders, in the order they were credited ([`Context::credit`]): each is used though no written reference reaches it, so `unused-binder` does not report it. A list rather than a set so a rollback truncates it with the solutions it was credited beside.
+    credited: Vec<(Option<Global>, u32)>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
     checked: Vec<(Term, Term, Rc<str>)>,
     /// The item that recorded each entry of `checked`, in parallel, so a retracted item's terms can be taken out from among the others'.
@@ -213,6 +220,9 @@ impl Context {
             program: Program::new(),
             island: Some(Qualifier::empty()),
             entailing: false,
+            declaration: None,
+            opened: BTreeMap::new(),
+            credited: Vec::new(),
             checked: Vec::new(),
             checked_by: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
@@ -391,9 +401,44 @@ impl Context {
     ///
     /// The counter starts above every index the unit's lowering minted ([`Context::seed_binders`]), so a lowered binder and an elaborated one can never be the same identity.
     pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
+        self.fresh_for(hint, None)
+    }
+
+    /// [`Context::fresh`] for a local opened from a scope's binder, which carries where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
+    pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
         let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
 
-        Free::local(index, hint)
+        let local = Free::local_written(index, hint, written);
+        if written.is_some() {
+            self.opened.insert(local, self.declaration);
+        }
+        local
+    }
+
+    /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates.
+    pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
+        self.opened.clear();
+        self.enter_declaration(declaration);
+    }
+
+    /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.
+    pub(crate) fn enter_declaration(&mut self, declaration: Option<Global>) {
+        self.declaration = declaration;
+    }
+
+    /// Credit every written binder `proof` reads: a proof the elaborator wrote, which the author did not, reads it where no written name reaches it.
+    pub(crate) fn credit(&mut self, proof: &Term) {
+        let read = proof
+            .free_vars_shared()
+            .iter()
+            .filter_map(|local| Some((*self.opened.get(local)?, local.written()?)))
+            .collect::<Vec<_>>();
+        self.credited.extend(read);
+    }
+
+    /// The written binders proofs the elaborator wrote read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
+    pub fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
+        self.credited.iter().copied().collect()
     }
 
     /// Start the binder counter above the `minted` binders the unit's lowering handed out.
@@ -1780,6 +1825,7 @@ impl Context {
         SolutionMark {
             term_solution_log_len: self.solutions.solved_len(),
             universe: self.universe_solver.mark(),
+            credited_len: self.credited.len(),
         }
     }
 
@@ -1813,6 +1859,8 @@ impl Context {
         let universes_before = self.universe_solver.state_token();
         self.solutions.unwind_to(mark.term_solution_log_len);
         self.universe_solver.rollback(mark.universe);
+        // A proof written inside what is rolled back reads nothing that stands.
+        self.credited.truncate(mark.credited_len);
 
         if unwinds_terms {
             self.caches.invalidate_for_rollback();

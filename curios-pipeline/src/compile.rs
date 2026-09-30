@@ -23,7 +23,7 @@ use {
     std::{collections::BTreeSet, fmt},
 };
 
-/// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Read off the lowering before elaboration consumes it, so a question about a program has them whether or not elaboration then accepted it.
+/// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
 #[derive(Debug, Clone, Default)]
 pub struct Findings {
     pub lints: Vec<Lint>,
@@ -31,7 +31,7 @@ pub struct Findings {
 }
 
 impl Findings {
-    /// A stored unit's, as its lowering left them.
+    /// A stored unit's, as its lowering left them and its elaboration credited them.
     pub fn of_text(text: &PreparedText) -> Self {
         Self {
             lints: text.lints().to_vec(),
@@ -44,6 +44,11 @@ impl Findings {
             lints: std::mem::take(&mut lowered.lints),
             reached: std::mem::take(&mut lowered.reached),
         }
+    }
+
+    /// Drop the `unused-binder` lint of every binder a proof the elaborator wrote read — see [`PreparedText::credit`].
+    fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
+        self.lints.retain(|lint| !lint.is_credited(credited));
     }
 }
 
@@ -386,12 +391,12 @@ pub(crate) fn elaborate_and_zonk<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(Program, ForeignStore, Vec<TestRecord>), CompileError>
+) -> Result<Elaborated, CompileError>
 where
     O: FnMut(Stage<'_>),
 {
     let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
-    elaborate_lowered(budget, scope, syntax, lowered, tail, observe)
+    elaborate_lowered(budget, scope, syntax, lowered, tail, observe).1
 }
 
 /// The lowering half of the prologue: the surface tree to a core module, observed as the `text` rung.
@@ -412,20 +417,42 @@ where
         .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// The elaborating half of the prologue, over an entry already lowered — split from [`lower_entry`] so a check can read the lowering's findings before elaboration consumes it.
+/// An entry elaborated: its program, the `foreign` rows it declares, and one record per test it schedules.
+type Elaborated = (Program, ForeignStore, Vec<TestRecord>);
+
+/// The elaborating half of the prologue, over an entry already lowered: the lowering's findings, credited with what elaboration's proofs read whatever its verdict, beside that verdict.
 fn elaborate_lowered<O>(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
-    lowered: LoweredEntry,
+    mut lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(Program, ForeignStore, Vec<TestRecord>), CompileError>
+) -> (Findings, Result<Elaborated, CompileError>)
 where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("elaborate_and_zonk");
 
+    let mut findings = Findings::take(&mut lowered);
+    let mut context = Context::new(budget, *syntax);
+    let verdict = elaborate_entry(&mut context, scope, syntax, lowered, tail, observe);
+    findings.credit(&context.credited());
+    (findings, verdict)
+}
+
+/// [`elaborate_lowered`]'s elaboration, in `context`, which the caller reads its credits from however this ends.
+fn elaborate_entry<O>(
+    context: &mut Context,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    lowered: LoweredEntry,
+    tail: EntryTail,
+    observe: &mut O,
+) -> Result<Elaborated, CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
     let cores = scope.cores();
     let LoweredEntry {
         program: mut lowered,
@@ -465,13 +492,12 @@ where
         EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
     };
 
-    let mut context = Context::new(budget, *syntax);
     context.set_imports(spellings.imports.clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let (module, entry) = with_broken(
         &broken,
         elaborate_and_zonk_program(
-            &mut context,
+            context,
             Established::over(&cores),
             &lowered.module,
             &minted,
@@ -506,13 +532,12 @@ pub fn check_entrypoint(
     loader: &RootSource,
     tail: EntryTail,
 ) -> Result<Checked, CompileError> {
-    let mut lowered = lower_entry(scope, syntax, entrypoint, loader, &mut |_| {})?;
-    let entry = Findings::take(&mut lowered);
-    let verdict =
-        check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {}).and_then(|judged| {
-            erase_checked(budget, scope, syntax, &judged)?;
-            Ok(judged.program.as_program().clone())
-        });
+    let lowered = lower_entry(scope, syntax, entrypoint, loader, &mut |_| {})?;
+    let (entry, judged) = check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {});
+    let verdict = judged.and_then(|judged| {
+        erase_checked(budget, scope, syntax, &judged)?;
+        Ok(judged.program.as_program().clone())
+    });
 
     Ok(Checked { entry, verdict })
 }
@@ -574,10 +599,11 @@ where
     O: FnMut(Stage<'_>),
 {
     let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
-    check_lowered(budget, scope, syntax, lowered, tail, observe)
+    // Compiling reports no lint, so the findings go unread.
+    check_lowered(budget, scope, syntax, lowered, tail, observe).1
 }
 
-/// The back half of [`check_observed`], from a lowered entry: elaborate, zonk, and put the result to the kernel.
+/// The back half of [`check_observed`], from a lowered entry: elaborate, zonk, and put the result to the kernel — beside the lowering's findings, credited by elaboration.
 fn check_lowered<O>(
     budget: u64,
     scope: Prefix<'_>,
@@ -585,13 +611,24 @@ fn check_lowered<O>(
     lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<Judged, CompileError>
+) -> (Findings, Result<Judged, CompileError>)
 where
     O: FnMut(Stage<'_>),
 {
-    let (program, foreigns, records) =
-        elaborate_lowered(budget, scope, syntax, lowered, tail, observe)?;
+    let (findings, elaborated) = elaborate_lowered(budget, scope, syntax, lowered, tail, observe);
+    (
+        findings,
+        elaborated.and_then(|elaborated| judge(budget, scope, syntax, elaborated)),
+    )
+}
 
+/// Put an elaborated program to the kernel.
+fn judge(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    (program, foreigns, records): Elaborated,
+) -> Result<Judged, CompileError> {
     // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = curios_core::Zonked::project(&program)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
@@ -663,7 +700,7 @@ pub fn compile_unit(
     let text = scope.text();
     let cores = scope.cores();
 
-    let lowered = into_core_unit(source, &text, syntax)
+    let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let mut context = Context::new(budget, *syntax);
@@ -689,6 +726,7 @@ pub fn compile_unit(
             })
         }),
     )?;
+    lowered.credit(&context.credited());
 
     let core = curios_core::Zonked::project(&core)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;

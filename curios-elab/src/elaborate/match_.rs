@@ -212,8 +212,8 @@ fn elaborate_nat_match(
         check_fold_arm(context, &head_elaborated, &result, &zero_value, zero_case)
     })?;
 
-    let pred_label = context.fresh(succ_case.first_hint());
-    let ih_label = context.fresh(succ_case.second_hint());
+    let pred_label = context.fresh_for(succ_case.hint(0), succ_case.written(0));
+    let ih_label = context.fresh_for(succ_case.hint(1), succ_case.written(1));
 
     let succ_body = context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Intrinsic(Intrinsic::NatType).into());
@@ -289,9 +289,9 @@ fn elaborate_list_match(
         check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
     })?;
 
-    let head_label = context.fresh(cons_case.first_hint());
-    let tail_label = context.fresh(cons_case.second_hint());
-    let ih_label = context.fresh(cons_case.third_hint());
+    let head_label = context.fresh_for(cons_case.hint(0), cons_case.written(0));
+    let tail_label = context.fresh_for(cons_case.hint(1), cons_case.written(1));
+    let ih_label = context.fresh_for(cons_case.hint(2), cons_case.written(2));
 
     let cons_body = context.with_frame(|context| {
         context.assume(&head_label, &elem);
@@ -370,9 +370,9 @@ fn elaborate_bin_match(
         check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
     })?;
 
-    let head_label = context.fresh(cons_case.first_hint());
-    let tail_label = context.fresh(cons_case.second_hint());
-    let ih_label = context.fresh(cons_case.third_hint());
+    let head_label = context.fresh_for(cons_case.hint(0), cons_case.written(0));
+    let tail_label = context.fresh_for(cons_case.hint(1), cons_case.written(1));
+    let ih_label = context.fresh_for(cons_case.hint(2), cons_case.written(2));
 
     let cons_body = context.with_frame(|context| {
         let atom_type: Term = Subterm::Intrinsic(match grain {
@@ -971,13 +971,8 @@ fn elaborate_induct_match(
         }
 
         // Open the telescope with fresh names paralleling the arm's binder labels; each binder is assumed at its declared (dependent) type.
-        let hints = scope
-            .hint_iter()
-            .map(|l| l.map(str::to_string))
-            .collect::<Vec<_>>();
-        let labels = hints
-            .iter()
-            .map(|hint| context.fresh(hint.as_deref()))
+        let labels = (0..scope.arity())
+            .map(|index| context.fresh_for(scope.body.hint(index), scope.body.written(index)))
             .collect::<Vec<_>>();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 

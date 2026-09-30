@@ -262,6 +262,11 @@ impl<'a, B: Bound> Cursor<'a, B> {
         }
     }
 
+    /// Where the binder at this position sits among its declaration's written binders, when the lowering wrote it — see [`Scope::written`].
+    pub fn written(&self) -> Option<u32> {
+        self.label()?.written()
+    }
+
     /// Whether anything after the entry at this position names its binder. Read off the unopened remainder, which opening earlier binders does not change.
     pub(crate) fn binder_used(&self) -> bool {
         match self.at {
