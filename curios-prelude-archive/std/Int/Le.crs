@@ -49,7 +49,14 @@ pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Le(a, b), q: Le(+0, k)) -> Le(a 
 --- `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`: the product of two bounds' differences is not negative.
 ---
 --- The step a proof the elaborator writes multiplies two facts by, where a multiplier is no literal. It is [`mul_mono_r`] by `d - c`, which `q` shows is not negative, once conversion distributes the products.
-pub let mul(@a: Int, @b: Int, @c: Int, @d: Int, p: Le(a, b), q: Le(c, d)) -> Le(a * d + b * c, a * c + b * d) =
+pub let mul(
+    @a: Int,
+    @b: Int,
+    @c: Int,
+    @d: Int,
+    p: Le(a, b),
+    q: Le(c, d),
+) -> Le(a * d + b * c, a * c + b * d) =
     mul_mono_r(@a, @b, d - c, p, q);
 
 --- Two bounds facing each other pin one value.

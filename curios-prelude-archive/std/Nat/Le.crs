@@ -189,7 +189,14 @@ pub let sub_zero(a: Nat, b: Nat, p: Le(a, b)) -> Le(a - b, 0) =
 --- `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`: the product of two bounds' differences is not negative.
 ---
 --- The step a proof the elaborator writes multiplies two facts by, where a multiplier is no literal. With `d` read as `c + (d - c)`, which [`add_sub_cancel`] states under `q`, it is [`mul_mono_r`] by `d - c`, once conversion distributes the products.
-pub let mul(@a: Nat, @b: Nat, @c: Nat, @d: Nat, p: Le(a, b), q: Le(c, d)) -> Le(a * d + b * c, a * c + b * d) =
+pub let mul(
+    @a: Nat,
+    @b: Nat,
+    @c: Nat,
+    @d: Nat,
+    p: Le(a, b),
+    q: Le(c, d),
+) -> Le(a * d + b * c, a * c + b * d) =
     Eq/subst(
         (x: Nat) => Le(a * x + b * c, a * c + b * x),
         add_sub_cancel(c, d, q),
