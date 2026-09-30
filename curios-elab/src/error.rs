@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, WitnessKey},
+    super::{Erased, Refusal, WitnessKey},
     curios_core::{
         Atom, CalleeId, DisplayNames, Free, Global, Item, Level, Module, Polarity, ReaderNames,
         ReaderPosition, ReduceError, Rename, Spelling, Spellings, Subterm, Term,
@@ -437,6 +437,8 @@ pub enum Error {
         proposition: bool,
         /// What `bound` reduced to when it was asked at the mint, kept when that is an inductive type: `Has(spec, "prot")` reduces to `False`, and the reduct is the sentence the spelling alone does not say.
         reduct: Option<Box<Term>>,
+        /// Why the procedure that proves a bound from the facts in scope proved nothing: the facts it considered, and what its search concluded.
+        refusal: Option<Box<Refusal>>,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
@@ -1009,6 +1011,7 @@ impl Error {
         bound: Term,
         proposition: bool,
         reduct: Option<Term>,
+        refusal: Option<Refusal>,
     ) -> Self {
         Self::UninferredImplicit {
             callee,
@@ -1016,6 +1019,7 @@ impl Error {
             bound: Box::new(bound),
             proposition,
             reduct: reduct.map(Box::new),
+            refusal: refusal.map(Box::new),
         }
     }
 
@@ -1603,10 +1607,18 @@ impl Error {
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
-            Self::UninferredImplicit { bound, reduct, .. } => {
+            Self::UninferredImplicit {
+                bound,
+                reduct,
+                refusal,
+                ..
+            } => {
                 out.push(bound);
                 if let Some(reduct) = reduct {
                     out.push(reduct);
+                }
+                if let Some(refusal) = refusal {
+                    out.extend(refusal.terms());
                 }
             }
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),

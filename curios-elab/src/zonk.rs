@@ -1057,6 +1057,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
                             entry.and_then(|entry| entry.reduct.clone()),
+                            entry.and_then(|entry| entry.refusal.as_deref().cloned()),
                         )
                         .in_scope(
                             entry

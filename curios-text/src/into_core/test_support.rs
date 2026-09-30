@@ -7,8 +7,8 @@ use curios_abi::host_ops;
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
     EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
-    OrdDerivation, ProofSyntax, Qualifier, ResultSyntax, RootKind, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
+    OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
 };
 use std::{fs, path::Path};
 
@@ -108,6 +108,25 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     entailment: EntailmentSyntax {
         holds_of_eq: registry_name(&["std", "Bool", "holds_of_eq"]),
         refl: registry_name(&["std", "Eq", "refl"]),
+        equality: registry_name(&["std", "Eq", "Eq"]),
+        sym: registry_name(&["std", "Eq", "sym"]),
+        range: registry_name(&["std", "Nat", "Le", "of_in_range"]),
+        nat: OrderSyntax {
+            add: registry_name(&["std", "Nat", "Le", "add"]),
+            scale: registry_name(&["std", "Nat", "Le", "mul_mono_r"]),
+            of_eq: registry_name(&["std", "Nat", "Le", "of_eq"]),
+            eq_of_eql: registry_name(&["std", "Nat", "eq_of_eql"]),
+            of_not_lt: registry_name(&["std", "Nat", "Le", "of_not_lt"]),
+            of_not_le: registry_name(&["std", "Nat", "Lt", "of_not_le"]),
+        },
+        int: OrderSyntax {
+            add: registry_name(&["std", "Int", "Le", "add"]),
+            scale: registry_name(&["std", "Int", "Le", "mul_mono_r"]),
+            of_eq: registry_name(&["std", "Int", "Le", "of_eq"]),
+            eq_of_eql: registry_name(&["std", "Int", "eq_of_eql"]),
+            of_not_lt: registry_name(&["std", "Int", "Le", "of_not_lt"]),
+            of_not_le: registry_name(&["std", "Int", "Lt", "of_not_le"]),
+        },
     },
 };
 

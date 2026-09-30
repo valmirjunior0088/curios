@@ -7,7 +7,7 @@ mod tests;
 
 use {
     super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
-    crate::ordinal,
+    crate::{Conclusion, Origin, Refusal, ordinal},
     curios_core::{CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId},
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
@@ -117,6 +117,68 @@ fn renamed_level(level: &Level, names: &HashMap<UniverseMetaId, String>) -> Stri
 }
 
 /// A name spelled under the names in scope: a global meets the shorten map and the unit's import spellings, a local binder is already the name the reader wrote, so neither can surface a path no program may write.
+/// What the procedure that proves a bound from the facts in scope says beside a bound it refused, one line per clause under the bound's own: the facts it read, those it could not, and what its search concluded. A refusal that read nothing and searched nothing says nothing, so a bound the procedure reads nothing in reports as it did before there was one.
+fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
+    if refusal.is_silent() {
+        return String::new();
+    }
+    let origin = |origin: &Origin| match origin {
+        Origin::Hypothesis(name) => name.spelled(spelling).to_string(),
+        Origin::Field(name, label) => format!("{}.{label}", name.spelled(spelling)),
+        Origin::Guard(written, true) => format!("a guard, {}", written.spelled(spelling)),
+        Origin::Guard(written, false) => {
+            format!("a guard's false arm, {}", written.spelled(spelling))
+        }
+        Origin::Natural | Origin::Negated => String::new(),
+    };
+    let mut lines = String::new();
+    if !refusal.considered.is_empty() {
+        let heading = match refusal.conclusion {
+            Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
+            Conclusion::Certified | Conclusion::Unwritten | Conclusion::Rejected => {
+                "it follows from the facts in scope:"
+            }
+            Conclusion::Unsearched | Conclusion::Counterexample(_) => {
+                "it does not follow from the facts in scope:"
+            }
+        };
+        lines += &format!("\n  {heading}");
+        for (from, statement) in &refusal.considered {
+            lines += &format!("\n    {}: {}", origin(from), statement.spelled(spelling));
+        }
+    }
+    for (from, statement) in &refusal.unread {
+        lines += &format!(
+            "\n  not read: {}: {}",
+            origin(from),
+            statement.spelled(spelling)
+        );
+    }
+    match &refusal.conclusion {
+        Conclusion::Counterexample(assignment) if !assignment.is_empty() => {
+            let values = assignment
+                .iter()
+                .map(|(atom, value)| format!("{} = {value}", atom.spelled(spelling)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            lines += &format!("\n  it fails at {values}");
+        }
+        Conclusion::Exhausted(cap) => {
+            lines +=
+                &format!("\n  the search for a proof ran out of its bound of {cap} derived rows");
+        }
+        Conclusion::Unwritten => lines += "\n  the lemmas a proof would use are not in scope here",
+        Conclusion::Certified => {
+            lines += "\n  by a refutation of its negation, which this compiler does not write yet";
+        }
+        Conclusion::Rejected => {
+            lines += "\n  a proof was found and did not check, which is the compiler's fault: please report it";
+        }
+        Conclusion::Unsearched | Conclusion::Counterexample(_) => {}
+    }
+    lines
+}
+
 fn spelled_free(name: &Free, spelling: &Spelling) -> String {
     match name {
         Free::Global(global) => spelling.symbol(global),
@@ -737,17 +799,24 @@ impl fmt::Display for Displayed<'_> {
                 bound,
                 proposition,
                 reduct,
+                refusal,
             } => {
                 let bound = bound.spelled(spelling);
                 // A proposition is a bound, and what was asked for is the fact nothing established. Anything else is a value or a type the arguments and the expectation left undetermined, which is a different fault with a different remedy.
                 let why = match proposition {
-                    true => match reduct {
-                        Some(reduct) => {
-                            let reduct = reduct.spelled(spelling);
-                            format!("nothing discharged {bound}, which reduces to {reduct}")
+                    true => {
+                        let nothing = match reduct {
+                            Some(reduct) => {
+                                let reduct = reduct.spelled(spelling);
+                                format!("nothing discharged {bound}, which reduces to {reduct}")
+                            }
+                            None => format!("nothing discharged {bound}"),
+                        };
+                        match refusal {
+                            Some(refusal) => nothing + &refused(refusal, spelling),
+                            None => nothing,
                         }
-                        None => format!("nothing discharged {bound}"),
-                    },
+                    }
                     false => {
                         format!("no argument or expected type determined it (its type is {bound})")
                     }

@@ -4,13 +4,13 @@
 //!
 //! **Each row names the stage of `documentation/roadmap/algebra/02-bounds-from-facts-spec.md` that fills it.** A row whose stage has landed must compile; a row whose stage has not must be refused for its bound, and nothing else — a row refused for a misspelling would pass as refused, so the refusal must name what nothing discharged. A control is refused for its bound at every stage: it states what the procedure's fragment leaves out.
 
-use super::typecheck;
+use super::{core_elab, typecheck};
 
 /// The last stage of algebra part 2 that has landed.
-const LANDED: u8 = 2;
+const LANDED: u8 = 3;
 
 /// The imports every program opens with, and the two entry points each declares for itself.
-const HEADER: &str = "use /std/{Nat, Int, Bool, List, Eq, Io};
+const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io};
 let hold(@P: Prop, @p: P) -> P = p;
 let refute(@p: Bool/False) -> Bool/False = p;";
 
@@ -129,6 +129,33 @@ const ROWS: &[Row] = &[
         "m: Nat, n: Nat, i: Int, p: Nat/Lt(m, n), q: Int/Le(i, Nat/to_int(m))",
         "Int/Lt(i, Nat/to_int(n))",
     ),
+    // A conjunction in a hypothesis, through a function unfolding to one and through `&&`.
+    claim(
+        3,
+        "c: Char, h: Bool/Holds(Char/is_upper(c))",
+        "Nat/Lt(c.code, 0x5B)",
+    ),
+    claim(3, "x: Nat, h: Bool/Holds(x >= 3 && x <= 9)", "Nat/Le(x, 9)"),
+    // A range check's guard, and a guard on a function unfolding to one: `Char/to_ascii_lower`'s bound.
+    body(
+        3,
+        "n: Nat",
+        "{}",
+        "match Nat/in_range(n, 0, 0x7F) | true => let _: Nat/Lt(n, 0x80) = hold(); () | false => () end",
+    ),
+    body(
+        3,
+        "c: Char",
+        "{}",
+        "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = hold(); () | false => () end",
+    ),
+    // An `==` guard's true arm, as the equation it gives.
+    body(
+        3,
+        "x: Nat, y: Nat, p: Nat/Lt(y, 5)",
+        "{}",
+        "match x == y | true => let _: Nat/Lt(x, 5) = hold(); () | false => () end",
+    ),
     // A goal that needs the negated goal scaled: the refuting form.
     claim(4, "a: Nat, b: Nat, p: Nat/Le(a * 2, b * 2)", "Nat/Le(a, b)"),
     claim(4, "x: Nat, p: Nat/Le(x * 3, 10)", "Nat/Le(x, 3)"),
@@ -228,29 +255,30 @@ const CONTROLS: &[Row] = &[
     ),
 ];
 
-impl Row {
-    /// The programs stating the row: a claim at insertion and at retry, a body once.
-    fn programs(&self) -> Vec<String> {
-        let item = |result: &str, body: &str| {
-            format!(
-                "{HEADER}\nlet row({}) -> {result} = {body};\nIo/pure(())",
-                self.binders
-            )
-        };
-        match self.ask {
-            Ask::Claim(claim) => vec![
-                item(claim, &format!("hold(@{claim})")),
-                item(claim, "hold()"),
-            ],
-            Ask::Body { result, body } => vec![item(result, body)],
-        }
+/// The programs stating what `ask` asks under `binders`: a claim at insertion and at retry, a body once.
+fn programs(binders: &str, ask: &Ask) -> Vec<String> {
+    let item = |result: &str, body: &str| {
+        format!("{HEADER}\nlet row({binders}) -> {result} = {body};\nIo/pure(())")
+    };
+    match *ask {
+        Ask::Claim(claim) => vec![
+            item(claim, &format!("hold(@{claim})")),
+            item(claim, "hold()"),
+        ],
+        Ask::Body { result, body } => vec![item(result, body)],
     }
 }
 
 /// Every program of `rows` the compiler puts on the other side than `filled` says, with the compiler's answer.
 fn misplaced(rows: &[&Row], filled: bool) -> Vec<String> {
-    rows.iter()
-        .flat_map(|row| row.programs())
+    let all = rows.iter().flat_map(|row| programs(row.binders, &row.ask));
+    verdicts(all, filled)
+}
+
+/// Every one of `programs` the compiler puts on the other side than `filled` says: refused where it should compile, or compiled — or refused for anything but its bound — where it should be refused for its bound.
+fn verdicts(programs: impl IntoIterator<Item = String>, filled: bool) -> Vec<String> {
+    programs
+        .into_iter()
         .filter_map(|program| match (typecheck(&program), filled) {
             (Ok(()), true) => None,
             (Err(error), false) if error.contains("nothing discharged") => None,
@@ -285,4 +313,126 @@ fn every_control_is_refused_for_its_bound() {
     let rows = CONTROLS.iter().collect::<Vec<_>>();
     let found = misplaced(&rows, false);
     assert!(found.is_empty(), "{}", found.join("\n\n"));
+}
+
+/// The binders of a row, split where a comma is not inside a type's brackets.
+fn binders(row: &Row) -> Vec<&'static str> {
+    let (mut depth, mut start, mut found) = (0usize, 0usize, Vec::new());
+    for (index, character) in row.binders.char_indices() {
+        match character {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                found.push(row.binders[start..index].trim());
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    found.push(row.binders[start..].trim());
+    found
+}
+
+/// Whether a binder states a fact: its type is a comparison, an equation or a decision, which nothing but the bound refers to.
+fn is_fact(binder: &str) -> bool {
+    let type_ = binder.split_once(':').map_or("", |(_, type_)| type_.trim());
+    [
+        "Nat/Lt(",
+        "Nat/Le(",
+        "Int/Lt(",
+        "Int/Le(",
+        "Eq()(",
+        "Bool/Holds(",
+    ]
+    .iter()
+    .any(|head| type_.starts_with(head))
+}
+
+#[test]
+fn every_fact_of_a_filled_row_is_needed() {
+    // The spec's mutation check: a filled row with one of its facts dropped is refused for its bound, so no row is filled by a fact it does not state. A guard is no binder, and is left in place.
+    let mut found = Vec::new();
+    for row in ROWS.iter().filter(|row| row.stage <= LANDED) {
+        let all = binders(row);
+        for dropped in all.iter().filter(|binder| is_fact(binder)) {
+            let kept = all
+                .iter()
+                .filter(|binder| binder != &dropped)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ");
+            found.extend(
+                verdicts(programs(&kept, &row.ask), false)
+                    .into_iter()
+                    .map(|report| format!("without `{dropped}`:\n{report}")),
+            );
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n\n"));
+}
+
+/// The byte row: two hex digits make a byte, a fact scaled by a literal summed with another.
+const BYTE: &str = "use /std/{Nat, Io};
+let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = PROOF;
+Io/pure(())";
+
+#[test]
+fn a_filled_row_files_the_same_proof_every_time() {
+    // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
+    let omitted = "use /std/{Nat, Io};
+let hold(@P: Prop, @p: P) -> P = p;
+let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = hold(@Nat/Lt(a * 16 + b, 256));
+Io/pure(())";
+    let first = core_elab(omitted);
+    assert_eq!(core_elab(omitted), first);
+    assert!(
+        first.contains("mul_mono_r"),
+        "the byte row is proved by a sum over a scaled fact:\n{first}"
+    );
+}
+
+#[test]
+fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
+    // The byte row's proof in the shape the procedure writes it, `16 · (a + 1) <= 16 · 16` summed with `b + 1 <= 16`, then with the multiplier moved off 16 and the two facts swapped: a wrong certificate is a term that does not check.
+    let proof = |k: u32, first: &str, second: &str| {
+        format!(
+            "Nat/Le/add(@(a + 1) * {k}, @16 * {k}, @b + 1, @16, Nat/Le/mul_mono_r(@a + 1, @16, {k}, {first}), {second})"
+        )
+    };
+    let program = |proof: String| BYTE.replace("PROOF", &proof);
+    assert_eq!(typecheck(&program(proof(16, "p", "q"))), Ok(()));
+    for (k, first, second) in [(15, "p", "q"), (17, "p", "q"), (16, "q", "p")] {
+        assert!(
+            typecheck(&program(proof(k, first, second))).is_err(),
+            "a certificate scaled by {k} over {first} and {second} checked"
+        );
+    }
+}
+
+#[test]
+fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
+    let refusal = |binders: &str, claim: &str| {
+        let program =
+            format!("{HEADER}\nlet row({binders}) -> {claim} = hold(@{claim});\nIo/pure(())");
+        typecheck(&program).expect_err("the control is refused")
+    };
+
+    // A fact too weak for the goal: named, and a counterexample at the one value it leaves.
+    let weak = refusal("i: Nat, n: Nat, p: Nat/Le(i, n)", "Nat/Lt(i, n)");
+    assert!(
+        weak.contains("it does not follow from the facts in scope:\n    p: i <= n"),
+        "{weak}"
+    );
+    assert!(weak.contains("it fails at"), "{weak}");
+
+    // A contradiction only the integers see: the counterexample is a fraction.
+    let rational = refusal(
+        "x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)",
+        "Nat/Le(x, 0)",
+    );
+    assert!(rational.contains("3/2"), "{rational}");
+
+    // A decision the procedure reads nothing in says nothing new.
+    let silent = refusal("b: Bool", "Bool/Holds(b)");
+    assert!(!silent.contains("facts in scope"), "{silent}");
 }

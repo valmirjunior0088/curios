@@ -160,3 +160,33 @@ fn a_widened_natural_is_read_as_the_natural_it_widens() {
     assert_eq!(natural, widened);
     assert_eq!(natural.form().nonnegative.len(), 2);
 }
+
+// A reader tells the carrier it read a comparison at, which the view alone does not, and spells each atom of the view as the term it was handed out for.
+#[test]
+fn a_reader_reports_the_carrier_and_spells_each_atom() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let mut views = LinearViews::default();
+    let (carrier, view) = views
+        .read(&Intrinsic::nat_lt(add(x.clone(), nat(1)), y.clone()))
+        .expect("a `Nat` ordering");
+    assert_eq!(carrier, Carrier::Natural);
+
+    let spelled = view
+        .form()
+        .terms
+        .iter()
+        .flat_map(|(_, monomial)| {
+            monomial
+                .atoms()
+                .iter()
+                .map(|atom| views.term(*atom).clone())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(spelled.len(), 2);
+    assert!(spelled.contains(&x) && spelled.contains(&y));
+
+    let (carrier, _) = views
+        .read(&Intrinsic::IntLe(int(0), int_of_nat(&x)))
+        .expect("an `Int` ordering");
+    assert_eq!(carrier, Carrier::Integer);
+}

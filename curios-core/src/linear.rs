@@ -25,7 +25,7 @@
 //!
 //! **It decides nothing else about a comparison whose view keeps an atom** — `x + 1 <= y`, `0 < x`, `i + 1 > 0` stay open. Each clause is a held row of `curios`'s law grid, carrier "What conversion decides about a comparison", with its complement a control beside it.
 //!
-//! A view is read-only: it prepares and reports, and it neither searches nor commits anything.
+//! A view is read-only: it prepares and reports, and it neither searches nor commits anything. A procedure outside the converters reads the carrier beside a view and the term behind an atom through the same reader, and never rebuilds either.
 
 use {
     super::{
@@ -55,8 +55,8 @@ impl LinearViews {
         self.read(comparison).map(|(_, view)| view)
     }
 
-    /// [`LinearViews::view`], beside the carrier the comparison is at, which a view does not keep: it does not tell a natural from its image.
-    fn read(&mut self, comparison: &Intrinsic) -> Option<(Carrier, LinearView)> {
+    /// [`LinearViews::view`], beside the carrier the comparison is at, which a view does not keep: it does not tell a natural from its image. A procedure that writes a proof over the comparison needs the carrier its lemmas are stated at.
+    pub fn read(&mut self, comparison: &Intrinsic) -> Option<(Carrier, LinearView)> {
         let Declaration::Operation {
             carrier,
             operation,
@@ -101,6 +101,11 @@ impl LinearViews {
             self.respell(this_carrier, this_relation, &this_form),
             self.respell(that_carrier, that_relation, &that_form),
         ))))
+    }
+
+    /// The first term `atom` was handed out for by this reader: how a caller spells an atom of a view it read.
+    pub fn term(&self, atom: Atom) -> &Term {
+        self.atoms.term(atom)
     }
 
     /// The comparison an aligned view spells: the positive part of its difference on the left, the negated negative part on the right, at the comparison's own carrier — or at `Nat` where every atom is a widened natural, which is what makes an `Int` comparison of widened naturals the `Nat` comparison of their preimages. Rebuilt through the carriers' own sums, so the operands are in the normal form a fold leaves.

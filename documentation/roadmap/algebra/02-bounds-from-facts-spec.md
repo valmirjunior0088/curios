@@ -44,7 +44,7 @@ Not at the end of an item, as Lean runs tactic blocks after everything else: an 
 - **Hypotheses** in the hole's telescope whose types reduce to a decided comparison, a conjunction or range of comparisons (`Nat/in_range` among them), or `Eq` at `Nat` or `Int`.
 - **Proof fields** of struct-typed hypotheses, one level down: `v.counted`, `hi.ok`.
 - **Local definitions**, unfolded as the kernel sees them, so a fact stated over a `let` meets a goal stated over its value.
-- **Guards**, at insertion only: a comparison scrutinee with its case value, and a refined variable with the constructor it was refined to.
+- **Guards**: the arm's at insertion, and at a retry the ones the hole was born under, which is what re-validation judges its solution by. A comparison scrutinee with its case value — an `==` scrutinee's true arm as the equation it gives, a range check's true arm through `Le/of_in_range` — and a refined variable with the constructor it was refined to, which every statement read reduced sees.
 - **The negated goal**, for the refuting form below.
 
 Each fact is read through part 1's view. A fact the view cannot read is not admitted, and the report says which facts were left out.
@@ -70,13 +70,13 @@ Fourier–Motzkin elimination or the simplex method over the rationals finds non
 - an equation as the two `Le`s it gives;
 - a fact scaled by a literal through `Le/mul_mono_r`.
 
-One lemma, `add_le_add`, adds two of them. Conversion's cancellation does the rest: a combination whose sides differ by a constant reduces to `Bool/True` or `Bool/False`, which is part 1's published contract.
+One lemma, `Le/add`, adds two of them. Conversion's cancellation does the rest: a combination whose sides differ by a constant reduces to `Bool/True` or `Bool/False`, which is part 1's published contract.
 
-**The direct form.** When the combination's view is the goal's, the sum is the proof. `Nat/Le/trans` is one `add_le_add`, because `a + b <= b + c` cancels to `a <= c`, and a bound fed from `Nat/Lt(i, m)` and `Nat/Le(m, len)` is one `add_le_add` of the strict fact's successor with the second.
+**The direct form.** When the combination's view is the goal's plus a constant `s >= 0`, the sum with the literal fact `0 <= s` is the proof. `Nat/Le/trans` is one `Le/add`, because `a + b <= b + c` cancels to `a <= c`, a bound fed from `Nat/Lt(i, m)` and `Nat/Le(m, len)` is one `Le/add` of the strict fact's successor with the second, and `a <= c + 5` from `a <= b` and `b <= c` is that sum with `0 <= 5`.
 
-**The refuting form.** Otherwise the proof splits on the goal's own comparison, spelled as the refinement it will be keyed on. The true arm is `Bool/True/qed()`. The refuting arm eliminates, with a zero-arm match, the sum of the facts with the negated goal, whose type reduces to `Bool/False` — `a <= c + 5` from `a <= b` and `b <= c` leaves `6 <= 0`. Both forms check against the compiler this campaign starts from, with `add_le_add` written from `Nat/Le`'s `trans` and `add_mono_l`.
+**The refuting form.** Otherwise the proof splits on the goal's own comparison, spelled as the refinement it will be keyed on. The true arm is `Bool/True/qed()`. The refuting arm eliminates, with a zero-arm match, the sum of the facts with the negated goal, whose type reduces to `Bool/False` — `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`. Both forms check against the compiler this campaign starts from, with `Le/add` written from `Nat/Le`'s `trans` alone, whose cancellation does what `add_mono_l` would.
 
-**Vocabulary.** The names the procedure writes — `add_le_add`, the scaling and bridge lemmas, `Bool/holds_of_eq`, `Eq/refl`, and the entry points below — are `SyntaxRegistry` slots beside `ProofSyntax`'s, filled by `curios-prelude-archive`. Inside `/std`, the procedure stays off in an item compiled before its vocabulary is elaborated, which gets today's behavior; the scheduler gains no edge, unlike a derived witness body, whose vocabulary it must order before the witness.
+**Vocabulary.** The names the procedure writes — `Le/add`, the scaling and bridge lemmas, `Bool/holds_of_eq`, `Eq/refl`, and the entry points below — are `SyntaxRegistry` slots beside `ProofSyntax`'s, filled by `curios-prelude-archive`. Inside `/std`, the procedure stays off in an item compiled before its vocabulary is elaborated, which gets today's behavior; the scheduler gains no edge, unlike a derived witness body, whose vocabulary it must order before the witness.
 
 **Reflection** — a checker written in Curios and proved sound once, each proof then its application to a closed certificate with `Bool/True/qed()` for the check — is deferred. It trades a one-time proof for smaller terms, and Chaieb and Nipkow measured it one to two orders of magnitude faster in Isabelle (2008). A proof size or check time measured in stage 7's sweep is what reopens it.
 
@@ -106,8 +106,9 @@ Prelude elaboration and certification are read from the two profile streams `car
 | --- | --- | --- | --- |
 | The baseline, `bb28989d` | 34 123.3 MB | 5 003.0 MB | — |
 | Stage 2 | 34 111.8 MB | 5 002.4 MB | 0 |
+| Stage 3 | 34 169.3 MB | 5 007.2 MB | 0 |
 
-Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be.
+Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be. Stage 3's growth is the six lemmas it adds to `/std` — `Le/add`, `Le/of_eq` and `Lt/of_not_le` at each carrier — elaborated and certified, and not the procedure, which is still never asked.
 
 ## Census
 

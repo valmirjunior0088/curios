@@ -1478,6 +1478,11 @@ impl Context {
         self.solutions.note_reduct(id, reduct);
     }
 
+    /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
+    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: crate::Refusal) {
+        self.solutions.note_refusal(id, refusal);
+    }
+
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.
     pub(crate) fn fresh_witness_metavar(
         &mut self,

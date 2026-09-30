@@ -349,13 +349,66 @@ pub struct EntailmentSyntax {
     pub holds_of_eq: SyntaxName,
     /// The constructor of propositional equality, which such a tautology is closed by.
     pub refl: SyntaxName,
+    /// Propositional equality itself, which a hypothesis states an equation in.
+    pub equality: SyntaxName,
+    /// An equation read the other way round, for its second bound.
+    pub sym: SyntaxName,
+    /// A range check's two bounds, as a pair: how a range check's guard is read, where a split on it would meet the guard's own key.
+    pub range: SyntaxName,
+    /// The order vocabulary at `Nat`.
+    pub nat: OrderSyntax,
+    /// The order vocabulary at `Int`.
+    pub int: OrderSyntax,
 }
 
 impl EntailmentSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self { holds_of_eq, refl } = self;
+        let Self {
+            holds_of_eq,
+            refl,
+            equality,
+            sym,
+            range,
+            nat,
+            int,
+        } = self;
 
-        [holds_of_eq, refl].into_iter()
+        [holds_of_eq, refl, equality, sym, range]
+            .into_iter()
+            .chain(nat.targets())
+            .chain(int.targets())
+    }
+}
+
+/// One carrier's order lemmas, as the procedure applies them: each takes its operands as arguments, and the procedure passes them all, so nothing is left to inference.
+#[derive(Debug, Clone, Copy)]
+pub struct OrderSyntax {
+    /// `a <= b` and `c <= d` give `a + c <= b + d`: how a certificate's facts are summed.
+    pub add: SyntaxName,
+    /// A bound scaled by a literal, `a * k <= b * k`: how a fact enters a certificate with a multiplier.
+    pub scale: SyntaxName,
+    /// An equation's bound: `a = b` gives `a <= b`.
+    pub of_eq: SyntaxName,
+    /// A decided equality as an equation: an `==` guard's true arm.
+    pub eq_of_eql: SyntaxName,
+    /// `a < b` failing gives `b <= a`: a `<` guard's false arm, and the negated goal of a strict one.
+    pub of_not_lt: SyntaxName,
+    /// `a <= b` failing gives `b < a`: a `<=` guard's false arm, and the negated goal of a loose one.
+    pub of_not_le: SyntaxName,
+}
+
+impl OrderSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            add,
+            scale,
+            of_eq,
+            eq_of_eql,
+            of_not_lt,
+            of_not_le,
+        } = self;
+
+        [add, scale, of_eq, eq_of_eql, of_not_lt, of_not_le].into_iter()
     }
 }
 

@@ -4,7 +4,7 @@
 
 use {
     super::{FrozenFrame, ItemStamp, SharedRefinements, SharedTelescope},
-    crate::{Mode, Problem},
+    crate::{Mode, Problem, Refusal},
     curios_core::{
         Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
         WitnessOrigin,
@@ -32,6 +32,8 @@ pub(crate) struct MetaEntry {
     pub proposition: bool,
     /// What `result` reduced to when the mint — or a later attempt at a parked discharge — asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
     pub reduct: Option<Term>,
+    /// Why the procedure that proves a bound from the facts in scope proved nothing, the last time it was asked: the facts it considered and what its search concluded, which the unsolved report states beside the bound and cannot ask for itself.
+    pub refusal: Option<Rc<Refusal>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +201,7 @@ impl Solutions {
             kind,
             proposition: false,
             reduct: None,
+            refusal: None,
         });
     }
 
@@ -213,6 +216,13 @@ impl Solutions {
     pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.reduct = Some(reduct);
+        }
+    }
+
+    /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
+    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.refusal = Some(Rc::new(refusal));
         }
     }
 

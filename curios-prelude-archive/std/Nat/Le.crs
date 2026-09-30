@@ -58,6 +58,10 @@ pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
     | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => of_not_lt(ap, bp, p) end
     end;
 
+--- An equation's bound: `a = b` gives `a <= b`.
+pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Le(a, b) =
+    Eq/subst((x: Nat) => Le(a, x), e, refl(a));
+
 --- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     match a
@@ -76,6 +80,12 @@ pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
 --- `a <= b` gives `n + a <= n + b`.
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Le(a, b)) -> Le(n + a, n + b) =
     p;
+
+--- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
+---
+--- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
+pub let add(@a: Nat, @b: Nat, @c: Nat, @d: Nat, p: Le(a, b), q: Le(c, d)) -> Le(a + c, b + d) =
+    trans(@a + c, @b + c, @b + d, p, q);
 
 --- `a <= b` gives `a * k <= b * k`.
 ---

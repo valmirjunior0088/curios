@@ -8,6 +8,15 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     | false => Option/none()
     end;
 
+--- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
+---
+--- The dual of `Le/of_not_lt`: the bridge out of a `<=` guard's false arm, where `Bool/True/qed()` inhabits the hypothesis.
+pub let of_not_le(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a <= b))) -> Lt(b, a) =
+    match b
+    | 0 => match a | 0 => match p end | _ + 1 => Bool/True/qed() end
+    | bp + 1 => match a | 0 => match p end | ap + 1 => of_not_le(ap, bp, p) end
+    end;
+
 --- `a < b` gives `0 < b - a`: what lies between a value and a strict bound on it is not empty.
 pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
     match a

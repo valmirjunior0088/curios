@@ -12,6 +12,12 @@ pub let try(a: Int, b: Int) -> Option(Lt(a, b)) =
     | false => Option/none()
     end;
 
+--- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
+---
+--- The dual of `Le/of_not_lt`, and as it is, the hypothesis itself: conversion reads a negated `Int` comparison as its dual.
+pub let of_not_le(a: Int, b: Int, p: Bool/Holds(Bool/not(a <= b))) -> Lt(b, a) =
+    p;
+
 --- Transitivity.
 pub let trans(@a: Int, @b: Int, @c: Int, p: Lt(a, b), q: Lt(b, c)) -> Lt(a, c) =
     floor_succ(Int/to_nat(b - a - 1, @p), Int/to_nat(c - b - 1, @q));

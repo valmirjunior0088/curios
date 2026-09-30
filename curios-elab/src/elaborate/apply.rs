@@ -132,12 +132,14 @@ pub(super) fn insert_auto_argument(
             // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
             let proposition = crate::is_prop(context, type_).unwrap_or(false);
             let waiting = proposition && waits_on_metavariable(context, &reduced);
-            if proposition
-                && !waiting
-                && let Some(proof) = crate::entail(context, type_, &reduced)
+            let mut refusal = None;
+            if proposition && !waiting {
+                match crate::entail(context, type_, &reduced)
                     .map_err(|error| bound_exhausted(context, error, type_, &provenance))?
-            {
-                return Ok(proof);
+                {
+                    crate::Entailed::Proved(proof) => return Ok(proof),
+                    crate::Entailed::Refused(refused) => refusal = Some(refused),
+                }
             }
             let reduct =
                 (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
@@ -148,6 +150,9 @@ pub(super) fn insert_auto_argument(
                 proposition,
                 reduct,
             );
+            if let Some(refusal) = refusal {
+                context.note_refusal(slot, refusal);
+            }
             if waiting && !context.parking_suppressed() {
                 context.park(
                     ParkedWork::Discharge {
@@ -200,12 +205,15 @@ pub(crate) fn attempt_discharge(
     if waits_on_metavariable(context, &reduced) {
         return Ok(true);
     }
-    let proof = context
+    match context
         .with_refinements(&birth, |context| crate::entail(context, bound, &reduced))
-        .map_err(|error| bound_exhausted(context, error, bound, provenance))?;
-    if let Some(proof) = proof {
-        context.solve_metavar(slot, proof);
-        return Ok(false);
+        .map_err(|error| bound_exhausted(context, error, bound, provenance))?
+    {
+        crate::Entailed::Proved(proof) => {
+            context.solve_metavar(slot, proof);
+            return Ok(false);
+        }
+        crate::Entailed::Refused(refusal) => context.note_refusal(slot, refusal),
     }
     if matches!(&*reduced, Subterm::InductType(_)) {
         context.note_reduct(slot, reduced);

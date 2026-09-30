@@ -4,15 +4,45 @@
 //!
 //! **It runs only where the elaborator would otherwise report the bound**: at insertion, with the arm's refinements live, and at a parked bound's retry once the bound waits on nothing, under the refinements its slot was born under — which is what re-validation judges a solution by, so a guard is a fact for a bound born in its arm and not for one born outside it. It does not run after an item closes, which would lose the guards, since a guard here is a refinement and not a binder.
 //!
-//! **What it proves.** A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
+//! **What it proves.**
+//!
+//! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
+//! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
+//!
+//! **What failure is.** Today's refusal, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
 //! **What it is not.** The fill stays what its documentation says it is, a unique answer and no search. This procedure is a separate, fallible step after it.
 
+mod facts;
+use facts::*;
+
+mod proof;
+use proof::*;
+
+mod report;
+pub use report::*;
+
+mod search;
+use search::*;
+
+#[cfg(test)]
+mod tests;
+
 use {
     crate::{Context, Error, Mode, elaborate, reduce_with},
-    curios_core::{Cases, Free, Global, Match, Subterm, Term, Var},
+    curios_core::{Cases, Free, Global, LinearViews, Match, Subterm, Term, Var},
     curios_utilities::SyntaxName,
 };
+
+pub use facts::Origin;
+
+/// What the procedure concluded about a bound.
+pub(crate) enum Entailed {
+    /// A proof of the bound, elaborated against it.
+    Proved(Term),
+    /// No proof, and why: what the report the hole becomes says beside the bound.
+    Refused(Refusal),
+}
 
 /// The decision `reduced` states is `true`, or `None` for a proposition the procedure reads nothing in. `/sys` states `Holds(b)` as `match b | true => True | false => False end`, so a bound it did not decide reduces to that match stuck on its decision. A weak head normal form leaves a match's arms as elaborated, so the true arm is reduced before it is compared with the truth.
 fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Error> {
@@ -30,26 +60,70 @@ fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Er
     Ok(holds.then(|| head.clone()))
 }
 
-/// A proof of `bound`, whose reduct `reduced` the fill found no inhabitant in, from the facts in scope — under whatever refinements are live, which the caller has made the ones a solution for the bound's slot is judged under. `None` where the procedure proves nothing.
+/// A proof of `bound`, whose reduct `reduced` the fill found no inhabitant in, from the facts in scope — under whatever refinements are live, which the caller has made the ones a solution for the bound's slot is judged under.
 ///
 /// An exhausted budget propagates: running out is not evidence the bound is false, and collapsing it into a refusal would report the author's fault at the argument for what is the resource limit.
 pub(crate) fn entail(
     context: &mut Context,
     bound: &Term,
     reduced: &Term,
-) -> Result<Option<Term>, Error> {
+) -> Result<Entailed, Error> {
     curios_profile::profile!("entailment::entail");
     if context.entailing() {
-        return Ok(None);
+        return Ok(Entailed::Refused(Refusal::default()));
     }
     let Some(decision) = decision_of(context, reduced)? else {
-        return Ok(None);
+        return Ok(Entailed::Refused(Refusal::default()));
     };
 
-    context.with_entailing(|context| match tautology(context, &decision) {
-        Some(candidate) => check(context, &candidate, bound),
-        None => Ok(None),
+    context.with_entailing(|context| {
+        if let Some(candidate) = tautology(context, &decision)
+            && let Some(proof) = check(context, &candidate, bound)?
+        {
+            return Ok(Entailed::Proved(proof));
+        }
+        linear(context, &decision, bound)
     })
+}
+
+/// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for.
+fn linear(context: &mut Context, decision: &Term, bound: &Term) -> Result<Entailed, Error> {
+    let mut views = LinearViews::default();
+    let mut reader = Reader::new(&mut views);
+    // A decision that is no `Nat` or `Int` `<` or `<=` is not a goal of the fragment: an equality's negation is a disjunction, and nothing else is a comparison the view reads. The goal is read first, so its atoms are handed out before any fact's.
+    let Some(target) = reader.target(context, decision)? else {
+        return Ok(Entailed::Refused(Refusal::default()));
+    };
+    let facts = reader.collect(context, &target)?;
+    let negated = negated(context, &mut views, &target)?;
+
+    let forms = facts
+        .facts
+        .iter()
+        .chain(&negated)
+        .map(|fact| fact.form.clone())
+        .collect::<Vec<_>>();
+    let refused = |views: &LinearViews, outcome: SearchOutcome| -> Result<Entailed, Error> {
+        Ok(Entailed::Refused(Refusal::of(&facts, views, outcome)))
+    };
+    let mut budget = DERIVED_ROWS;
+    let multipliers = match refute(&forms, &mut budget) {
+        Search::Refuted(multipliers) => multipliers,
+        Search::Satisfied(assignment) => {
+            return refused(&views, SearchOutcome::Counterexample(assignment));
+        }
+        Search::Exhausted => return refused(&views, SearchOutcome::Exhausted(DERIVED_ROWS)),
+    };
+    let candidate = match write(context, &facts.facts, &target, &multipliers) {
+        Written::Proof(candidate) => candidate,
+        Written::Refuting => return refused(&views, SearchOutcome::Certified),
+        Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
+    };
+    match check(context, &candidate, bound)? {
+        Some(proof) => Ok(Entailed::Proved(proof)),
+        // A certificate whose proof does not check is the procedure's mistake, surfaced as the refusal it has to be and named as what it is.
+        None => refused(&views, SearchOutcome::Rejected),
+    }
 }
 
 /// `Bool/holds_of_eq(decision, Eq/refl())`: the decision holds because it is `true`, which conversion's probe-side decisions settle where reduction does not — `b || Bool/not(b)`. `None` where the two names are not in scope.
@@ -67,7 +141,7 @@ fn tautology(context: &Context, decision: &Term) -> Option<Term> {
 
 /// Elaborate `candidate` against `bound` as written code is, under the refinements live now, keeping what it solved when it checks and undoing it when it does not.
 ///
-/// Inside the oracle package: parking is suppressed, so a candidate that would wait on a metavariable is a mismatch rather than a leak, and representation privacy is not re-adjudicated for the operands a candidate carries over from the bound, which elaboration already judged.
+/// Inside the oracle package: parking is suppressed, so a candidate that would wait on a metavariable is a mismatch rather than a leak, and representation privacy is not re-adjudicated for the operands a candidate carries over from the bound and the facts, which elaboration already judged. The fields a fact projects are read only where the item may open them ([`Reader`]).
 fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option<Term>, Error> {
     curios_profile::profile!("entailment::check");
     let refinements = context.refinement_snapshot();

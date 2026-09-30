@@ -32,6 +32,16 @@ pub let trans(@a: Int, @b: Int, @c: Int, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
 pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Le(a, b)) -> Le(n + a, n + b) =
     p;
 
+--- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
+---
+--- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
+pub let add(@a: Int, @b: Int, @c: Int, @d: Int, p: Le(a, b), q: Le(c, d)) -> Le(a + c, b + d) =
+    trans(@a + c, @b + c, @b + d, p, q);
+
+--- An equation's bound: `a = b` gives `a <= b`.
+pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Le(a, b) =
+    Eq/subst((x: Int) => Le(a, x), e, refl(a));
+
 --- `a <= b` gives `a * k <= b * k` for a `k` no smaller than zero.
 pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Le(a, b), q: Le(+0, k)) -> Le(a * k, b * k) =
     floor_mul(Int/to_nat(b - a, @p), Int/to_nat(k, @q));

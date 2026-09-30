@@ -1328,11 +1328,12 @@ fn root_blocker_error(
     }
 
     let (id, origin, span) = root?;
-    let (bound, proposition, reduct) = context.metavar_entry(id).map(|entry| {
+    let (bound, proposition, reduct, refusal) = context.metavar_entry(id).map(|entry| {
         (
             entry.result.clone(),
             entry.proposition,
             entry.reduct.clone(),
+            entry.refusal.as_deref().cloned(),
         )
     })?;
 
@@ -1348,6 +1349,7 @@ fn root_blocker_error(
             resolved_for_display(context, &bound),
             true,
             reduct,
+            refusal,
         )
         // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept a span; the waiting goal's origin is then the nearest honest place to point.
         .at_opt(span.or(fallback)),

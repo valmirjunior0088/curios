@@ -3,8 +3,8 @@
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
     EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
-    OrdDerivation, ProofSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
-    SyntaxRegistry, TestSyntax,
+    OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -102,5 +102,24 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     entailment: EntailmentSyntax {
         holds_of_eq: name(&["std", "Bool", "holds_of_eq"]),
         refl: name(&["std", "Eq", "Eq", "refl"]),
+        equality: name(&["std", "Eq", "Eq"]),
+        sym: name(&["std", "Eq", "sym"]),
+        range: name(&["std", "Nat", "Le", "of_in_range"]),
+        nat: OrderSyntax {
+            add: name(&["std", "Nat", "Le", "add"]),
+            scale: name(&["std", "Nat", "Le", "mul_mono_r"]),
+            of_eq: name(&["std", "Nat", "Le", "of_eq"]),
+            eq_of_eql: name(&["std", "Nat", "eq_of_eql"]),
+            of_not_lt: name(&["std", "Nat", "Le", "of_not_lt"]),
+            of_not_le: name(&["std", "Nat", "Lt", "of_not_le"]),
+        },
+        int: OrderSyntax {
+            add: name(&["std", "Int", "Le", "add"]),
+            scale: name(&["std", "Int", "Le", "mul_mono_r"]),
+            of_eq: name(&["std", "Int", "Le", "of_eq"]),
+            eq_of_eql: name(&["std", "Int", "eq_of_eql"]),
+            of_not_lt: name(&["std", "Int", "Le", "of_not_lt"]),
+            of_not_le: name(&["std", "Int", "Lt", "of_not_le"]),
+        },
     },
 };
