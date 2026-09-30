@@ -88,13 +88,12 @@ fn slice_proof_aligns_with_byte_walk() {
     assert_eq!(run(source), b"ok");
 }
 
-// The UTF-8 decode lemmas and the order lemmas they rest on. Their bodies are checked when the prelude is built; naming them here pins that each is still exported under its name. `count_scalars`/`decode_head` are the cursor-free decode core: `count_scalars` is the codepoint count `len` is built on, and `decode_head` walks the bytes its decided validity says follow the head, each continuation byte's range check being `step`'s own guard, and ends the character at a scalar value because the lead byte's range can only end at one — which `of_in_range`, `sub_mono_r`, `add_mono_l` and `mul_mono_r` narrow byte by byte, and `of_le_lt` closes.
+// The UTF-8 decode lemmas and the order lemmas the proofs the elaborator writes for them apply. Their bodies are checked when the prelude is built; naming them here pins that each is still exported under its name. `count_scalars`/`decode_head` are the cursor-free decode core: `count_scalars` is the codepoint count `len` is built on, and `decode_head` walks the bytes its decided validity says follow the head, each continuation byte's range check being `step`'s own guard, and ends the character at a scalar value because the lead byte's range can only end at one — which the elaborator proves byte by byte from the range checks in scope, reading each through `of_in_range`, scaling with `mul_mono_r` and summing with `add`.
 #[test]
 fn decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
-        let lemmas = (Str/Valid/from_bad, Nat/Le/trans, Nat/Lt/of_le_lt,
-            Nat/Le/add_mono_l, Nat/Le/mul_mono_r, Nat/Le/sub_mono_r, Nat/Le/of_in_range,
+        let lemmas = (Str/Valid/from_bad, Nat/Le/add, Nat/Le/mul_mono_r, Nat/Le/of_in_range,
             Str/count_scalars, Str/Valid/decode_head);
         /std/print("ok")
         "#;

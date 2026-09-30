@@ -25,47 +25,9 @@ pub let of_not_le(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a <= b))) -> Lt(b, a) =
         end
     end;
 
---- `a < b` gives `0 < b - a`: what lies between a value and a strict bound on it is not empty.
-pub let sub_positive_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Lt(0, b - a) =
-    match a
-    | 0 => p
-    | ap + 1 =>
-        match b
-        | 0 => match p end
-        | bp + 1 => sub_positive_of_lt(ap, bp, p)
-        end
-    end;
-
---- `a < b <= n` gives `n - b < n - a`: what is left of a bound shrinks as the value under it grows. The measure a walk up to a bound descends on.
-pub let sub_lt_sub(a: Nat, b: Nat, n: Nat, lt: Lt(a, b), le: Nat/Le(b, n)) -> Lt(n - b, n - a) =
-    match a
-    | 0 =>
-        match b
-        | 0 => match lt end
-        | bp + 1 =>
-            match n
-            | 0 => match le end
-            | np + 1 => Le/sub_le(np, bp)
-            end
-        end
-    | ap + 1 =>
-        match b
-        | 0 => match lt end
-        | bp + 1 =>
-            match n
-            | 0 => match le end
-            | np + 1 => sub_lt_sub(ap, bp, np, lt, le)
-            end
-        end
-    end;
-
 --- A strict bound composed with a loose one stays strict.
 pub let of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
     Le/trans(p, q);
-
---- A loose bound composed with a strict one stays strict.
-pub let of_le_lt(a: Nat, b: Nat, c: Nat, p: Nat/Le(a, b), q: Lt(b, c)) -> Lt(a, c) =
-    Le/trans(@a + 1, @b + 1, @c, p, q);
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 ---

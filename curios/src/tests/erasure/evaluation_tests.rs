@@ -20,17 +20,17 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
 #[test]
 fn a_let_bound_proof_leaves_no_computation_behind() {
     let source = r#"
-        use /std/{Nat, List, Io, proc};
+        use /std/{Nat, Bool, List, Io, proc};
         use /std/Nat/{Le};
         let use_it(a: Nat, b: Nat, _p: Nat/Le(a, b)) -> Nat = a + b;
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
-            let p = Le/succ_r(n, n, Le/refl(n));
+            let p = Le/trans(@n, @n, @n + 1, Le/refl(n), Bool/True/qed());
             proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(
-        !optimized.contains("succ_r"),
+        !optimized.contains("trans"),
         "the proof's recursion reached the optimized program:\n{optimized}"
     );
 }
@@ -39,20 +39,20 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
 #[test]
 fn a_top_level_proof_does_not_run_before_the_program() {
     let source = r#"
-        use /std/{Nat, print};
+        use /std/{Nat, Bool, print};
         use /std/Nat/{Le};
-        let p: Nat/Le(300, 301) = Le/succ_r(300, 300, Le/refl(300));
+        let p: Nat/Le(300, 301) = Le/trans(@300, @300, @301, Le/refl(300), Bool/True/qed());
         print("ok")
         "#;
     let optimized = cont_optm(source);
     assert!(
-        !optimized.contains("succ_r"),
+        !optimized.contains("trans"),
         "the proof's recursion reached the optimized program:\n{optimized}"
     );
     assert_eq!(run(source), b"ok");
 }
 
-// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `Le/succ_r`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
+// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `Le/trans`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
 #[test]
 fn a_let_bound_value_is_still_computed() {
     let source = r#"

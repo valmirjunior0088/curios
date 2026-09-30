@@ -5,17 +5,6 @@ use /std/Nat/{Le, Lt};
 pub let refl(n: Nat) -> Le(n, n) =
     Bool/True/qed();
 
---- `a <= b` gives `a <= b + 1`.
-pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
-    match a
-    | 0 => Bool/True/qed()
-    | ap + 1 =>
-        match b
-        | 0 => match p end
-        | bp + 1 => succ_r(ap, bp, p)
-        end
-    end;
-
 --- `a <= a + k`.
 pub let add_r(a: Nat, k: Nat) -> Le(a, a + k) =
     Bool/True/qed();
@@ -25,13 +14,6 @@ pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
     match a <= b: (r) => Option(Bool/Holds(r))
     | true => Option/some(Bool/True/qed())
     | false => Option/none()
-    end;
-
---- `0 < n` gives `1 <= n`.
-pub let one_of_positive(@n: Nat, p: Lt(0, n)) -> Le(1, n) =
-    match n
-    | 0 => match p end
-    | _ + 1 => Bool/True/qed()
     end;
 
 --- `a < b` gives `a <= b`.
@@ -59,6 +41,8 @@ pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
     end;
 
 --- An equation's bound: `a = b` gives `a <= b`.
+---
+--- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
 pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Le(a, b) =
     Eq/subst((x: Nat) => Le(a, x), e, refl(a));
 
@@ -100,26 +84,15 @@ pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Le(a, b)) -> Le(a * k, b * k) =
         end
     end;
 
---- `a <= b` gives `a - k <= b - k`: `Nat` subtraction truncates, and truncating both sides by one amount keeps their order. It is the bound a digit `x - lo` takes from `x <= hi`, which needs no `lo <= x`; that half is what makes `x - lo` the digit rather than a truncation, through [`add_sub_cancel`].
-pub let sub_mono_r(@a: Nat, @b: Nat, k: Nat, p: Le(a, b)) -> Le(a - k, b - k) =
-    match k
-    | 0 => p
-    | kp + 1 =>
-        match a
-        | 0 => Bool/True/qed()
-        | ap + 1 =>
-            match b
-            | 0 => match p end
-            | bp + 1 => sub_mono_r(@ap, @bp, kp, p)
-            end
-        end
-    end;
-
 --- `n - k <= n`: `Nat` subtraction never grows what it takes from.
 pub let sub_le(n: Nat, k: Nat) -> Le(n - k, n) =
     match k
     | 0 => refl(n)
-    | kp + 1 => match n | 0 => Bool/True/qed() | np + 1 => succ_r(np - kp, np, sub_le(np, kp)) end
+    | kp + 1 =>
+        match n
+        | 0 => Bool/True/qed()
+        | np + 1 => trans(@np - kp, @np, @np + 1, sub_le(np, kp), Bool/True/qed())
+        end
     end;
 
 --- A decided range check as its two bounds: `in_range(c, lo, hi)` gives `lo <= c` and `c <= hi`.

@@ -51,12 +51,6 @@ pub let view(i: Int) -> Sign(i) =
 let floor(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
     Bool/True/qed();
 
-let floor_succ(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y) + 1) =
-    Bool/True/qed();
-
-let floor_one(x: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + 1) =
-    Bool/True/qed();
-
 let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
     Bool/True/qed();
 

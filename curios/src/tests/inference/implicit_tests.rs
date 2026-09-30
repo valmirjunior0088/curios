@@ -421,7 +421,7 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
-        use /std/{Bytes, Nat, Bool, Eq, print};
+        use /std/{Bytes, Nat, Bool, Eq, print, proved};
 
         let hop(@b: Bytes, some: Nat/Lt(0, Bytes/len(b))) -> Nat =
             match b
@@ -430,7 +430,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
             end;
 
         let reach(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b))) -> Nat =
-            k + hop(@Bytes/drop(b, k, @within), Nat/Lt/sub_positive_of_lt(k, Bytes/len(b), here));
+            k + hop(@Bytes/drop(b, k, @within), proved());
 
         pub let same(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b)))
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =

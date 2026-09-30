@@ -1,5 +1,5 @@
 use /std/{Nat, Int, Bool, Option, Eq};
-use /std/Int/{Lt, floor, floor_mul, floor_one, positive};
+use /std/Int/{floor, floor_mul, positive};
 
 --- That `a` is below `b` or equal to it, decided.
 pub let Le(a: Int, b: Int) -> Prop =
@@ -16,10 +16,6 @@ pub let try(a: Int, b: Int) -> Option(Le(a, b)) =
     | false => Option/none()
     end;
 
---- `a < b` gives `a <= b`.
-pub let of_lt(a: Int, b: Int, p: Lt(a, b)) -> Le(a, b) =
-    floor_one(Int/to_nat(b - a - 1, @p));
-
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 pub let of_not_lt(a: Int, b: Int, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
     p;
@@ -28,10 +24,6 @@ pub let of_not_lt(a: Int, b: Int, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
 pub let trans(@a: Int, @b: Int, @c: Int, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));
 
---- `a <= b` gives `n + a <= n + b`.
-pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Le(a, b)) -> Le(n + a, n + b) =
-    p;
-
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
 ---
 --- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
@@ -39,6 +31,8 @@ pub let add(@a: Int, @b: Int, @c: Int, @d: Int, p: Le(a, b), q: Le(c, d)) -> Le(
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- An equation's bound: `a = b` gives `a <= b`.
+---
+--- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
 pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Le(a, b) =
     Eq/subst((x: Int) => Le(a, x), e, refl(a));
 

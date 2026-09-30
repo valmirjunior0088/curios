@@ -1,4 +1,4 @@
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Nat/{Le};
 
 --- `x` is accessible under `R`: everything below it is.
@@ -86,7 +86,7 @@ let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat
             | 0 => match lt end
             | _ + 1 => match le end
             end)
-    | kp + 1 => Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(lt, le)))
+    | kp + 1 => Accessible/intro((m, lt) => lt_below(kp, m, proved()))
     end;
 
 --- `<` on `Nat` is well-founded.

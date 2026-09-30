@@ -56,7 +56,7 @@ pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
 
 --- The element at `i`, under the evidence that `i < n`.
 pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Nat/Lt(i, n)) -> T =
-    List/get(@T, v.list, i, @Eq/subst((x: Nat) => Nat/Lt(i, x), Eq/sym(v.counted), ok));
+    List/get(@T, v.list, i);
 
 --- The first element of a nonempty vector.
 pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =

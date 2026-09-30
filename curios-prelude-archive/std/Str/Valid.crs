@@ -1,6 +1,6 @@
 use /std/Str/{classify, Scan, step, scan_from, pending, concluded, advanced, begins_scalars_of,
     continues, classify_continues, step_of_continuing};
-use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
+use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str, proved};
 
 --- Whether a scan has come to rest between characters.
 let at_lead(s: Scan) -> Bool =
@@ -94,17 +94,10 @@ let interrupted(
     match Nat/in_range(n, lo, hi)
     | false => Eq/refl()
     | true =>
-        let range = Nat/Le/of_in_range(n, lo, hi, Bool/True/qed());
         match 0x80 <= lo
         | false => match h end
         | true =>
-            let continuing =
-                Nat/Le/to_in_range(
-                    n,
-                    0x80,
-                    0xBF,
-                    Nat/Le/trans(Bool/True/qed(), range.low),
-                    Nat/Le/trans(range.high, h));
+            let continuing = Nat/Le/to_in_range(n, 0x80, 0xBF, proved(), proved());
             match Nat/in_range(n, 0x80, 0xBF)
             | true => match q end
             | false => match continuing end
@@ -280,25 +273,11 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
         -- `C2..=DF`: the lead byte's payload is at least `2`, since the code point is at least `0x80`, and below `0x20`.
         | true =>
             match c.code / 0x40 >= 2
-            | false =>
-                match Nat/Lt/of_lt_le(
-                    c.code / 0x40,
-                    2,
-                    c.code / 0x40,
-                    Bool/True/qed(),
-                    Nat/div_mod/le_div_of_mul_le(2, c.code, 0x40, Bool/True/qed()))
-                end
+            | false => match Bool/False/refuted() end
             | true =>
                 match c.code / 0x40 <= 0x1F
                 | true => Bool/True/qed()
-                | false =>
-                    match Nat/Lt/of_le_lt(
-                        0x20,
-                        c.code / 0x40,
-                        0x20,
-                        Bool/True/qed(),
-                        Nat/div_mod/div_lt_of_lt_mul(0x20, c.code, 0x40, Bool/True/qed()))
-                    end
+                | false => match Bool/False/refuted() end
                 end
             end
         | false =>
@@ -306,41 +285,17 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
             -- `E0..=EF`, the lead byte's payload being below `0x10`.
             | true =>
                 match c.code / 0x1000 <= 0xF
-                | false =>
-                    match Nat/Lt/of_le_lt(
-                        0x10,
-                        c.code / 0x1000,
-                        0x10,
-                        Bool/True/qed(),
-                        Nat/div_mod/div_lt_of_lt_mul(0x10, c.code, 0x1000, Bool/True/qed()))
-                    end
+                | false => match Bool/False/refuted() end
                 | true =>
                     match c.code / 0x1000 == 0
                     -- `E0`: the code point is at least `0x800` with nothing above its low twelve bits, so its next six are at least `0x20`.
                     | true =>
                         match c.code / 0x1000 == 0xD
-                        | true =>
-                            match Eq/subst(
-                                (k: Nat) => Bool/Holds(k == 0xD),
-                                Nat/eq_of_eql(c.code / 0x1000, 0, Bool/True/qed()),
-                                Bool/True/qed())
-                            end
+                        | true => match Bool/False/refuted() end
                         | false =>
                             match c.code % 0x1000 / 0x40 >= 0x20
                             | true => Bool/True/qed()
-                            | false =>
-                                let low: Nat/Le(0x800, c.code % 0x1000) =
-                                    Eq/subst(
-                                        (k: Nat) => Nat/Le(0x800, k * 0x1000 + c.code % 0x1000),
-                                        Nat/eq_of_eql(c.code / 0x1000, 0, Bool/True/qed()),
-                                        Bool/True/qed());
-                                match Nat/Lt/of_lt_le(
-                                    c.code % 0x1000 / 0x40,
-                                    0x20,
-                                    c.code % 0x1000 / 0x40,
-                                    Bool/True/qed(),
-                                    Nat/div_mod/le_div_of_mul_le(0x20, c.code % 0x1000, 0x40, low))
-                                end
+                            | false => match Bool/False/refuted() end
                             end
                         end
                     | false =>
@@ -350,24 +305,9 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                             match c.code % 0x1000 / 0x40 <= 0x1F
                             | true => Bool/True/qed()
                             | false =>
-                                let below_end: Nat/Lt(c.code, 0xE000) =
-                                    Eq/subst(
-                                        (k: Nat) => Nat/Lt(k * 0x1000 + c.code % 0x1000, 0xE000),
-                                        Eq/sym(
-                                            Nat/eq_of_eql(c.code / 0x1000, 0xD, Bool/True/qed())),
-                                        Bool/True/qed());
-                                let high: Nat/Lt(0xD * 0x1000 + c.code % 0x1000, 0xD800) =
-                                    Eq/subst(
-                                        (k: Nat) => Nat/Lt(k * 0x1000 + c.code % 0x1000, 0xD800),
-                                        Nat/eq_of_eql(c.code / 0x1000, 0xD, Bool/True/qed()),
-                                        Char/Valid/below_surrogates_of(c.code, c.valid, below_end));
-                                match Nat/Lt/of_le_lt(
-                                    0x20,
-                                    c.code % 0x1000 / 0x40,
-                                    0x20,
-                                    Bool/True/qed(),
-                                    Nat/div_mod/div_lt_of_lt_mul(0x20, c.code % 0x1000, 0x40, high))
-                                end
+                                let high =
+                                    Char/Valid/below_surrogates_of(c.code, c.valid, proved());
+                                match Bool/False/refuted() end
                             end
                         | false => Bool/True/qed()
                         end
@@ -377,49 +317,17 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
             | false =>
                 let top = Char/Valid/at_most(c.code, c.valid);
                 match c.code / 0x40000 <= 4
-                | false =>
-                    match Nat/Lt/of_le_lt(
-                        5,
-                        c.code / 0x40000,
-                        5,
-                        Bool/True/qed(),
-                        Nat/div_mod/div_lt_of_lt_mul(
-                            5,
-                            c.code,
-                            0x40000,
-                            Nat/Lt/of_le_lt(c.code, 0x10FFFF, 0x140000, top, Bool/True/qed())))
-                    end
+                | false => match Bool/False/refuted() end
                 | true =>
                     match c.code / 0x40000 == 0
                     -- `F0`: the code point is at least `0x10000` with nothing above its low eighteen bits, so its next six are at least `0x10`.
                     | true =>
                         match c.code / 0x40000 == 4
-                        | true =>
-                            match Eq/subst(
-                                (k: Nat) => Bool/Holds(k == 4),
-                                Nat/eq_of_eql(c.code / 0x40000, 0, Bool/True/qed()),
-                                Bool/True/qed())
-                            end
+                        | true => match Bool/False/refuted() end
                         | false =>
                             match c.code % 0x40000 / 0x1000 >= 0x10
                             | true => Bool/True/qed()
-                            | false =>
-                                let low: Nat/Le(0x10000, c.code % 0x40000) =
-                                    Eq/subst(
-                                        (k: Nat) => Nat/Le(0x10000, k * 0x40000 + c.code % 0x40000),
-                                        Nat/eq_of_eql(c.code / 0x40000, 0, Bool/True/qed()),
-                                        Bool/True/qed());
-                                match Nat/Lt/of_lt_le(
-                                    c.code % 0x40000 / 0x1000,
-                                    0x10,
-                                    c.code % 0x40000 / 0x1000,
-                                    Bool/True/qed(),
-                                    Nat/div_mod/le_div_of_mul_le(
-                                        0x10,
-                                        c.code % 0x40000,
-                                        0x1000,
-                                        low))
-                                end
+                            | false => match Bool/False/refuted() end
                             end
                         end
                     | false =>
@@ -428,29 +336,7 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         | true =>
                             match c.code % 0x40000 / 0x1000 <= 0xF
                             | true => Bool/True/qed()
-                            | false =>
-                                let high: Nat/Le(4 * 0x40000 + c.code % 0x40000, 0x10FFFF) =
-                                    Eq/subst(
-                                        (k: Nat) =>
-                                            Nat/Le(k * 0x40000 + c.code % 0x40000, 0x10FFFF),
-                                        Nat/eq_of_eql(c.code / 0x40000, 4, Bool/True/qed()),
-                                        top);
-                                match Nat/Lt/of_le_lt(
-                                    0x10,
-                                    c.code % 0x40000 / 0x1000,
-                                    0x10,
-                                    Bool/True/qed(),
-                                    Nat/div_mod/div_lt_of_lt_mul(
-                                        0x10,
-                                        c.code % 0x40000,
-                                        0x1000,
-                                        Nat/Lt/of_le_lt(
-                                            c.code % 0x40000,
-                                            0xFFFF,
-                                            0x10000,
-                                            high,
-                                            Bool/True/qed())))
-                                end
+                            | false => match Bool/False/refuted() end
                             end
                         | false => Bool/True/qed()
                         end

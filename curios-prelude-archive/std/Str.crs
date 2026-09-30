@@ -1,4 +1,4 @@
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord, proved};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -101,29 +101,17 @@ let step_of_continuing(
     q: Bool/Holds(continues(c)),
 ) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
     let n = Byte/to_nat(c);
-    let range = Nat/Le/of_in_range(n, 0x80, 0xBF, q);
     match Nat/in_range(n, 0x0, 0x7F)
-    | true =>
-        match Nat/Le/trans(range.low, Nat/Le/of_in_range(n, 0x0, 0x7F, Bool/True/qed()).high) end
+    | true => match Bool/False/refuted() end
     | false =>
         match Nat/in_range(n, 0xC2, 0xDF)
-        | true =>
-            match Nat/Le/trans(Nat/Le/of_in_range(n, 0xC2, 0xDF, Bool/True/qed()).low, range.high)
-            end
+        | true => match Bool/False/refuted() end
         | false =>
             match Nat/in_range(n, 0xE0, 0xEF)
-            | true =>
-                match Nat/Le/trans(
-                    Nat/Le/of_in_range(n, 0xE0, 0xEF, Bool/True/qed()).low,
-                    range.high)
-                end
+            | true => match Bool/False/refuted() end
             | false =>
                 match Nat/in_range(n, 0xF0, 0xF4)
-                | true =>
-                    match Nat/Le/trans(
-                        Nat/Le/of_in_range(n, 0xF0, 0xF4, Bool/True/qed()).low,
-                        range.high)
-                    end
+                | true => match Bool/False/refuted() end
                 | false => Eq/refl()
                 end
             end
@@ -199,7 +187,7 @@ let scalars_within(
     | true =>
         match max2 < 0xD800
         | true => Bool/True/qed()
-        | false => match Nat/Lt/of_le_lt(max2, max, 0xD800, high, Bool/True/qed()) end
+        | false => match Bool/False/refuted() end
         end
     | false =>
         match min >= 0xE000
@@ -212,12 +200,11 @@ let scalars_within(
                 | true => Bool/True/qed()
                 | false =>
                     match min2 >= 0xE000
-                    | false => match Nat/Le/trans(@0xE000, @min, @min2, Bool/True/qed(), low) end
+                    | false => match Bool/False/refuted() end
                     | true =>
                         match max2 <= 0x10FFFF
                         | true => Bool/True/qed()
-                        | false =>
-                            match Nat/Le/trans(@max2, @max, @0x10FFFF, high, Bool/True/qed()) end
+                        | false => match Bool/False/refuted() end
                         end
                     end
                 end
@@ -240,12 +227,8 @@ let concluded(
         partial * 0x40 + (c - 0x80),
         partial * 0x40 + (c - 0x80),
         p,
-        Nat/Le/add_mono_l(
-            partial * 0x40,
-            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).low)),
-        Nat/Le/add_mono_l(
-            partial * 0x40,
-            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).high)));
+        proved(),
+        proved());
 
 --- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
 let advanced(
@@ -258,14 +241,6 @@ let advanced(
     inside: Bool/Holds(Nat/in_range(c, lo, hi)),
     more: Bool/Holds(Bool/not(rem == 1)),
 ) -> Bool/Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
-    let low =
-        Nat/Le/add_mono_l(
-            partial * 0x40,
-            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).low));
-    let high =
-        Nat/Le/add_mono_l(
-            partial * 0x40,
-            Nat/Le/sub_mono_r(0x80, Nat/Le/of_in_range(c, lo, hi, inside).high));
     match rem
     | 0 => match p end
     | r1 + 1 =>
@@ -280,8 +255,8 @@ let advanced(
                     (partial * 0x40 + (c - 0x80)) * 0x40,
                     (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
                     p,
-                    Nat/Le/mul_mono_r(0x40, low),
-                    Nat/Le/mul_mono_r(0x40, high))
+                    proved(),
+                    proved())
             | r3 + 1 =>
                 match r3
                 | 0 =>
@@ -291,8 +266,8 @@ let advanced(
                         (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
                         ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
                         p,
-                        Nat/Le/mul_mono_r(0x40, Nat/Le/mul_mono_r(0x40, low)),
-                        Nat/Le/mul_mono_r(0x40, Nat/Le/mul_mono_r(0x40, high)))
+                        proved(),
+                        proved())
                 | _ + 1 => match p end
                 end
             end
@@ -329,7 +304,7 @@ let begins_below(
             | false =>
                 Eq/subst(
                     (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/Le/antisym(mp, n, Nat/Le/of_not_lt(n, mp, Bool/True/qed()), inside),
+                    Nat/Le/antisym(mp, n, proved(), inside),
                     Bool/True/qed())
             end
         end
@@ -596,16 +571,7 @@ let meets(
                         match have.char == want.char
                         | true =>
                             match again(have.past, have.progress)(want.past)
-                            | some(met) =>
-                                Option/some((
-                                    past = met.past,
-                                    reach =
-                                        Nat/Le/trans(
-                                            Nat/Le/of_lt(
-                                                at.offset,
-                                                have.past.offset,
-                                                have.progress),
-                                            met.reach)))
+                            | some(met) => Option/some((past = met.past, reach = proved()))
                             | none() => Option/none()
                             end
                         | false => Option/none()
@@ -637,15 +603,7 @@ pub let span(
                 match pred(n.char)
                 | true =>
                     let rest = again(n.past, n.progress);
-                    (
-                        past = rest.past,
-                        reach =
-                            Nat/Le/trans(
-                                @at.offset,
-                                @n.past.offset,
-                                @rest.past.offset,
-                                Nat/Le/of_lt(at.offset, n.past.offset, n.progress),
-                                rest.reach))
+                    (past = rest.past, reach = proved())
                 | false => (past = at, reach = Nat/Le/refl(at.offset))
                 end
             | none() => (past = at, reach = Nat/Le/refl(at.offset))
@@ -712,10 +670,7 @@ let occurrence(
                         Option/some((
                             start = found.start,
                             past = found.past,
-                            ordered =
-                                Nat/Le/trans(
-                                    Nat/Le/of_lt(at.offset, onward.past.offset, onward.progress),
-                                    found.ordered),
+                            ordered = proved(),
                             progress = found.progress))
                     | none() => Option/none()
                     end;
@@ -732,13 +687,7 @@ let occurrence(
                                 start = at,
                                 past = met.past,
                                 ordered = Nat/Le/refl(at.offset),
-                                progress =
-                                    Nat/Lt/of_lt_le(
-                                        at.offset,
-                                        have.past.offset,
-                                        met.past.offset,
-                                        have.progress,
-                                        met.reach)))
+                                progress = proved()))
                         | none() => later()
                         end
                     end
@@ -756,15 +705,6 @@ let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)})
         | none() => Option/none()
         end
     end;
-
---- The position past an occurrence found from `from` lies past `from`: what a walk that cuts at each occurrence recurs with.
-let passed(@s: Str, from: At(s), found: Found(s, from)) -> Nat/Lt(from.offset, found.past.offset) =
-    Nat/Lt/of_le_lt(
-        from.offset,
-        found.start.offset,
-        found.past.offset,
-        found.ordered,
-        found.progress);
 
 --- Where `needle` first occurs in `s`, or `none`; an empty needle occurs at the start.
 pub let index_of_substr(s: Str, needle: Str) -> Option(At(s)) =
@@ -832,9 +772,7 @@ pub let split(s: Str, sep: Str) -> List(Str) =
             (at, again) =>
                 match occurrence(s, at, sep, first)
                 | some(found) =>
-                    [
-                        between(s, at, found.start, @found.ordered),
-                        ..again(found.past, passed(at, found))]
+                    [between(s, at, found.start, @found.ordered), ..again(found.past, proved())]
                 | none() => [after(s, at)]
                 end,
             At/start(s))
@@ -853,7 +791,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
                     flatten([
                         between(s, at, found.start, @found.ordered),
                         to,
-                        again(found.past, passed(at, found))])
+                        again(found.past, proved())])
                 | none() => after(s, at)
                 end,
             At/start(s))
@@ -869,15 +807,7 @@ pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
                 | none() => between(s, run, at, @ordered)
                 | some(n) =>
                     match with(n.char)
-                    | none() =>
-                        again(n.past, n.progress)(
-                            run,
-                            Nat/Le/trans(
-                                @run.offset,
-                                @at.offset,
-                                @n.past.offset,
-                                ordered,
-                                Nat/Le/of_lt(at.offset, n.past.offset, n.progress)))
+                    | none() => again(n.past, n.progress)(run, proved())
                     | some(replacement) =>
                         flatten([
                             between(s, run, at, @ordered),
@@ -897,9 +827,7 @@ pub let lines(s: Str) -> List(Str) =
         (at, again) =>
             match occurrence(s, at, "\n", newline)
             | some(found) =>
-                [
-                    strip(between(s, at, found.start, @found.ordered)),
-                    ..again(found.past, passed(at, found))]
+                [strip(between(s, at, found.start, @found.ordered)), ..again(found.past, proved())]
             | none() =>
                 let rest = after(s, at);
                 match is_empty(rest) | true => [] | false => [strip(rest)] end

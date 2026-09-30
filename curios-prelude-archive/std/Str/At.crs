@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, WellFounded};
+use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, WellFounded, proved};
 use /std/ops/{Eql, Cmp};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
@@ -55,15 +55,7 @@ pub let to_offset(@s: Str, at: At(s)) -> Nat =
 
 --- A position in the text after `at` as the position in `s` it is.
 pub let of_after(s: Str, at: At(s), p: At(Str/after(s, at))) -> At(s) =
-    At {
-        offset = at.offset + p.offset,
-        within =
-            Eq/subst(
-                (n: Nat) => Nat/Le(at.offset + p.offset, n),
-                Nat/Le/add_sub_cancel(at.offset, Bytes/len(s.bytes), at.within),
-                Nat/Le/add_mono_l(at.offset, p.within)),
-        boundary = p.boundary,
-    };
+    At { offset = at.offset + p.offset, within = proved(), boundary = p.boundary };
 
 --- A position at or after `at` as the position in the text after `at` it is: [`of_after`] read backwards.
 ---
@@ -77,15 +69,14 @@ pub let to_after(
     let back = Eq/sym(Nat/Le/add_sub_cancel(at.offset, p.offset, ordered));
     At {
         offset = p.offset - at.offset,
-        within = Nat/Le/sub_mono_r(at.offset, p.within),
+        within = proved(),
         boundary =
             Eq/subst(
                 (n: Nat) =>
                     (within: Nat/Le(n, Bytes/len(s.bytes))) -> Bool/Holds(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
-                (_) => p.boundary)(
-                Eq/subst((n: Nat) => Nat/Le(n, Bytes/len(s.bytes)), back, p.within)),
+                (_) => p.boundary)(proved()),
     };
 
 --- How many bytes continuing a character open `rest`.
@@ -141,7 +132,7 @@ pub let skip(
     @here: Nat/Lt(at.offset, Bytes/len(s.bytes)),
 ) -> {past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
     let rest = Str/after(s, at);
-    let hopped = hop(@rest.bytes, Nat/Lt/sub_positive_of_lt(at.offset, Bytes/len(s.bytes), here));
+    let hopped = hop(@rest.bytes, proved());
     (
         past =
             of_after(
@@ -158,10 +149,7 @@ pub let next(
 ) -> {char: Char, past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
     let rest = Str/after(s, at);
     let stepped = skip(s, at, @here);
-    (
-        char = lead(rest.valid, Nat/Lt/sub_positive_of_lt(at.offset, Bytes/len(s.bytes), here)),
-        past = stepped.past,
-        progress = stepped.progress);
+    (char = lead(rest.valid, proved()), past = stepped.past, progress = stepped.progress);
 
 --- The character at `at`, the position past it and the proof that it lies past, or `none` at the end of `s`.
 pub let try_next(
@@ -188,8 +176,8 @@ let floor(
                 at = At { offset = j + 1, within = within, boundary = Bool/True/qed() },
                 below = Nat/Le/refl(j + 1))
         | false =>
-            let back = floor(s, j, Nat/Le/trans(Nat/Le/add_r(j, 1), within));
-            (at = back.at, below = Nat/Le/succ_r(back.at.offset, j, back.below))
+            let back = floor(s, j, proved());
+            (at = back.at, below = proved())
         end
     end;
 
@@ -202,10 +190,8 @@ pub let prev(
     match at.offset
     | 0 => match here end
     | j + 1 =>
-        let back = floor(s, j, Nat/Le/trans(Nat/Le/add_r(j, 1), at.within));
-        let inside =
-            Nat/Le/trans(@back.at.offset + 1, @j + 1, @Bytes/len(s.bytes), back.below, at.within);
-        (char = next(s, back.at, @inside).char, past = back.at, progress = back.below)
+        let back = floor(s, j, proved());
+        (char = next(s, back.at).char, past = back.at, progress = back.below)
     end;
 
 --- The character before `at`, the position before it and the proof that it lies before, or `none` at the start of `s`.
@@ -220,8 +206,7 @@ let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Nat/Lt(q.offset, p.off
     let left: WellFounded((p: At(s), q: At(s)) =>
         Nat/Lt(Bytes/len(s.bytes) - p.offset, Bytes/len(s.bytes) - q.offset)) =
         WellFounded/on((p: At(s)) => Bytes/len(s.bytes) - p.offset, WellFounded/lt);
-    WellFounded/narrow(left, (p, q, ahead) =>
-        Nat/Lt/sub_lt_sub(q.offset, p.offset, Bytes/len(s.bytes), ahead, p.within));
+    WellFounded/narrow(left, (p, q, ahead) => proved());
 
 --- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
 pub let forward(
@@ -249,12 +234,7 @@ let starts_before(
     within: Nat/Le(k, Bytes/len(a)),
     at: Bool/Holds(starts(Bytes/drop(a, k, @within))),
     begins: Bool/Holds(starts(rest)),
-) -> Bool/Holds(
-    starts(
-        Bytes/drop(
-            x[..a, ..rest],
-            k,
-            @Nat/Le/trans(within, Nat/Le/add_r(Bytes/len(a), Bytes/len(rest)))))) =
+) -> Bool/Holds(starts(Bytes/drop(x[..a, ..rest], k))) =
     match k
     | 0 => match a | x[] => begins | x[_, .._] => at end
     | j + 1 =>
@@ -268,7 +248,7 @@ let starts_before(
 pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
     At {
         offset = at.offset,
-        within = Nat/Le/trans(at.within, Nat/Le/add_r(Bytes/len(s.bytes), Bytes/len(t.bytes))),
+        within = proved(),
         boundary =
             starts_before(
                 @s.bytes,
@@ -281,11 +261,7 @@ pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
 
 --- A position in `t` as the position it is in `s` followed by `t`.
 pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =
-    At {
-        offset = Bytes/len(s.bytes) + at.offset,
-        within = Nat/Le/add_mono_l(Bytes/len(s.bytes), at.within),
-        boundary = at.boundary,
-    };
+    At { offset = Bytes/len(s.bytes) + at.offset, within = proved(), boundary = at.boundary };
 
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {

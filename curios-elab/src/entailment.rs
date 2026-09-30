@@ -187,6 +187,19 @@ fn linear(
         Written::Proof(candidate) => facts.respell(&candidate),
         Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
     };
+    // What a written proof costs its checkers grows with its size: the nodes of each proof, as written and before either checks it.
+    curios_profile::sample!("entailment::written", {
+        let mut nodes = 0usize;
+        candidate.walk(
+            &mut nodes,
+            |nodes, _| {
+                *nodes += 1;
+                curios_core::Enter::Descend
+            },
+            |_, _, _| (),
+        );
+        nodes
+    });
     match check(context, &candidate, bound)? {
         Some(proof) => Ok(Entailed::Proved(proof)),
         // A certificate whose proof does not check is the procedure's mistake, surfaced as the refusal it has to be and named as what it is.

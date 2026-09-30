@@ -1,5 +1,6 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice, replicate, and, or, xor, to_bits};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, WellFounded};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, WellFounded,
+    proved};
 use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
@@ -29,7 +30,7 @@ struct Split(n: Nat): Type {
 
 -- Every number has one, by successor induction.
 --
--- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — `Nat/Le/of_not_lt` for the half the guard refuted and the carrier's own bound for the other.
+-- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — the half the guard refuted, proved from the guard, and the carrier's own bound for the other.
 let split(n: Nat) -> Split(n) =
     match n
     | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
@@ -43,11 +44,7 @@ let split(n: Nat) -> Split(n) =
             }
         | false =>
             let filled: Eq()(Byte/to_nat(prev.low), 255) =
-                Nat/Le/antisym(
-                    Byte/to_nat(prev.low),
-                    255,
-                    Bool/True/qed(),
-                    Nat/Le/of_not_lt(Byte/to_nat(prev.low), 255, Bool/True/qed()));
+                Nat/Le/antisym(Byte/to_nat(prev.low), 255, Bool/True/qed(), proved());
             Split {
                 high = prev.high + 1,
                 low = 0,
@@ -65,15 +62,7 @@ let euclid(n: Nat) -> Eq()(256 * (n / 256) + n % 256, n) =
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
 let high_below(n: Nat, positive: Nat/Lt(0, n)) -> Nat/Lt(n / 256, n) =
-    let s = split(n);
-    let p: Nat/Lt(0, 256 * s.high + Byte/to_nat(s.low)) =
-        Eq/subst((m) => Nat/Lt(0, m), s.joined, positive);
-    let inner: Nat/Lt(s.high, 256 * s.high + Byte/to_nat(s.low)) =
-        match s.high: (h) => Nat/Lt(h, 256 * h + Byte/to_nat(s.low))
-        | 0 => p
-        | _ + 1 => Bool/True/qed()
-        end;
-    Eq/subst((m) => Nat/Lt(m / 256, m), Eq/sym(s.joined), inner);
+    proved();
 
 -- The two halves of a cons, as total functions so congruence can take one apart.
 --
