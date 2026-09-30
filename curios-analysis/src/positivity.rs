@@ -2,7 +2,7 @@
 //!
 //! An `induct` declaration is a claim that a functor has an initial algebra, and the eliminator it hands back is the statement that the algebra is initial. Strict positivity is a syntactic sufficient condition for that functor being polynomial, hence accessible, hence for the initial algebra existing. Without it, `induct Bad | c(f : (Bad) -> False) end` yields a closed inhabitant of `False` in four lines with no recursion at all.
 //!
-//! "Modulo polarity" is load-bearing on day one, not a later refinement. A check that only recognizes recursive occurrences in immediate payload positions rejects `/std/Toml`, whose recursion travels `Toml → Map(Toml) → struct field → Option → Node → leaf`. Polarity does not weaken the rule — every functor it admits was polynomial already; it only lets the checker recognize that fact through abstraction.
+//! "Modulo polarity" is load-bearing, not a refinement. A check that only recognizes recursive occurrences in immediate payload positions rejects `/std/Toml`, whose recursion travels `Toml → Map(Toml) → struct field → Option → Node → leaf`. Polarity does not weaken the rule — every functor it admits was polynomial already; it only lets the checker recognize that fact through abstraction.
 //!
 //! The pass computes two facts over the same walk (`occurrences`). The **parameter polarities** — how each type former uses its *i*th parameter — are what composition consumes, and they persist on [`curios_core::InductDecl`] and [`curios_core::StructDecl`] so the prelude's are computed once at archive-build time rather than re-derived per compilation. The **occurrence relation** — at what polarity declaration `D` appears inside declaration `E`, transitively closed — is transient; it exists to answer the acceptance test and is discarded.
 //!
@@ -12,7 +12,7 @@
 //!
 //! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept: a set refused after one is reported as the driver's refusal, since reading the term at `Mixed` may be all that refused it. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
 //!
-//! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`. And termination and productivity for `rec` remain unchecked at both the type and value layers. Nothing in the corpus takes a type-former parameter, so the first is co-scheduled with `Mu`; the second is a separate mechanism, not a refinement of this one.
+//! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`, and nothing in the corpus takes such a parameter. And whether a `rec` terminates is size-change totality's question (`totality`), a separate mechanism rather than a refinement of this one.
 
 #[cfg(test)]
 mod tests;
@@ -56,7 +56,7 @@ type Registries<'a> = (
 ///
 /// **Both halves are analyzed, not merely consulted.** A module carries only its own declarations, so the two arrive in separate maps — but that is a fact about where the maps live, never about which of them is believed. Every vector this pass reports it recomputed, the base's included, which is what [`Coverage::Complete`] means and what keeps the kernel from inheriting a conclusion some other pass reached. Reading the base's carried [`InductDecl::polarities`] instead would be exactly the archived-vector trust the two coverage modes exist to keep apart.
 ///
-/// A name in both halves resolves to the unit's own. That cannot arise on any path here — an entry program cannot reuse a prelude name — and the rule is stated so the type has an answer rather than a precondition.
+/// A name in both halves resolves to the unit's own. That cannot arise on any path here — a unit's mounts are disjoint from every predecessor's, so it cannot declare a name one of them holds — and the rule is stated so the type has an answer rather than a precondition.
 #[derive(Clone, Copy)]
 pub struct Declarations<'a> {
     /// `None` when nothing is already in scope, which differs from empty maps only in needing no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.
@@ -133,7 +133,7 @@ impl<'a> Declarations<'a> {
 
 /// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — reported as [`PositivityRefusal::Exhausted`] when the driver refused a reduction on the way to it.
 ///
-/// The set is exactly what to analyze: the whole program when the kernel re-checks or the prelude is being built, and the unit's own declarations alone when the elaborator replays a prelude. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the replay boundary because prelude items cannot mention user code, so every out-of-set declaration is a sink of the occurrence relation.
+/// The set is exactly what to analyze: everything in scope when the kernel re-checks, and the unit's own declarations alone when the elaborator elaborates a unit over its predecessors. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the unit boundary because a predecessor cannot mention a successor, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     declarations: Declarations<'_>,
@@ -456,7 +456,7 @@ type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
 /// Whether the declarations handed to the analysis are every declaration the program has, or only a suffix of them.
 ///
-/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator holding one unit while every predecessor was analyzed as it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result rather than another's. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, which is the same one an unknown name has always taken.
+/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator holding one unit while every predecessor was analyzed as it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result rather than another's. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, the one any unknown name takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
     /// Every declaration the program has.
@@ -530,9 +530,9 @@ impl<E: Env> Walk<'_, E> {
             .or_insert(polarity);
     }
 
-    /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `pub let Fiber : Type = () -> Async({})` mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)` inside `struct Str` — into the type former it actually names.
+    /// Weak-head-reduce `term` when its head could reduce, which is what unfolds a type-level `let` — `pub let Fiber : Type = Async({})` mentioned as `struct Job { resume : Fiber, … }`, or `Valid(bytes)` inside `struct Str` — into the type former it actually names.
     ///
-    /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
+    /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Step` group reads as `Mixed` and is rejected.
     ///
     /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) does not stop the walk: the refusal is kept in [`Walk::refused`], and the flag says so, because [`Walk::walk`] then follows the term's definitions at `Mixed` itself — a refused name would otherwise stand as a bare `Var` that records nothing, and a payload type the driver could not read would be admitted through.
     fn forced(&mut self, term: &Term) -> (Term, bool) {
@@ -636,7 +636,7 @@ impl<E: Env> Walk<'_, E> {
             false => self.forced(term),
         };
 
-        // A reduction the driver refused leaves the term as written, and what it names is then read here rather than lost: a bare name would fall to the `Var` arm below and record nothing, which admitted `c(f : D)` with `D` an alias of `(Bad) -> False` whenever unfolding `D` ran out of budget. Following its definitions at `Mixed` is what `opaque` does for every other stuck shape, and it keeps a refusal in the refusing direction.
+        // A reduction the driver refused leaves the term as written, and what it names is then read here rather than lost: a bare name would fall to the `Var` arm below and record nothing, which would admit `c(f : D)` with `D` an alias of `(Bad) -> False` whenever unfolding `D` ran out of budget. Following its definitions at `Mixed` is what `opaque` does for every other stuck shape, and it keeps a refusal in the refusing direction.
         if refused {
             self.definitions(&term);
         }
@@ -732,7 +732,7 @@ impl<E: Env> Walk<'_, E> {
             //
             // A description of a `T` is operationally the delayed `T` its thunk erasure makes it — `{} -> T`, whose codomain is a strictly positive position. What decides the polarity is what the eliminations can extract, and `Io`'s are *weaker* than `List`'s: `List/at` hands back a `T` outright, while `bind` never exposes the `A` except inside another `Io`, and there is no `Io(T) -> T` for any other rule to lean on. A carrier whose only reader is stricter than a covariant carrier's cannot be less positive than it.
             //
-            // This is the rule that admits a suspension whose continuation is computed by performing an effect — `Step(A) | step(Pause, next: Io(Step(A)))`, which is what `/std/Async` is once its hand-rolled delay is replaced by the typed one.
+            // This is the rule that admits a suspension whose continuation is computed by performing an effect — `/std/Async`'s `Step(A) | step(pause: Pause, next: Io(Step(A)))`.
             Intrinsic::IoType(result) => self.walk(result, polarity),
 
             // Everything remaining is a value or an operation over values, not a type former. Its operands are terms; whatever they mention, they mention at `Mixed`.

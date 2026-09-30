@@ -10,11 +10,11 @@
 //!
 //! The entry gate is [`accelerable`] — no local frees and no metavariables, two bits cached per node — plus a host-side condition the hosts enforce at their call sites: no case-equation refinements in scope, because inside an arm a closed scrutinee *is* the arm's assumed value, definitionally, and evaluating it would answer a different question. A term that fails the gate takes the ordinary recursive strategy, unchanged.
 //!
-//! # How the machine differs from the strategy it replaces, and why each difference is safe
+//! # How the machine differs from the recursive strategy, and why each difference is safe
 //!
 //! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it. Once an arm does demand it, its value is recorded in the run-scoped memo under the hypothesis term, so an arm projecting a tuple-valued hypothesis several times runs the tail fold once rather than once per projection.
 //!
-//! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. This was learned rather than assumed: a first version skipped the probe on the theory that conversion decides eta anyway, and the elaborator's witness keying — which reads rigid heads off weak-head forms — stopped finding `Async` under `(A) => Async(A)` and failed the prelude at `/std/File`.
+//! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Async` under `(A) => Async(A)`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
 //!
@@ -546,7 +546,7 @@ impl Machine {
                 demand,
                 memo_key,
             } => {
-                // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. The eval arm used to defer the decision on two grounds and only one of them survives: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm alone left unrecorded each level doubled: a `Bits` fold returning a pair cost 7,546,746 units at sixteen bits against a single-value twin's 8,622, and costs 11,829 once this records.
+                // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. Deferring the decision to the arms would rest on two grounds, and only one holds: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm left unrecorded each level would double the work: a fold returning a pair would cost exponentially more than its single-value twin.
                 if let Some(key) = memo_key {
                     self.push(host, Frame::Memo { key, demand })?;
                 }

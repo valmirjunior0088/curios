@@ -4,11 +4,11 @@
 //!
 //! **Why the binary's contents, and not its version.** A version string does not move while a compiler is being developed, so keying on it would let a verdict outlive the kernel that reached it — the direction that *admits*, and the only one of the two that is a soundness question. GHC, Coq and Lean all tie their interface files to a version, which works because their users receive releases; it does not work for the machine the compiler is being written on.
 //!
-//! **Why not a per-build nonce.** It is trivially sound and it throws away every cache hit a reproducible rebuild should have kept, which for a compiler whose certification costs twelve seconds a unit is most of the point. A digest moves exactly when the binary does and no more.
+//! **Why not a per-build nonce.** It is trivially sound and it throws away every cache hit a reproducible rebuild should have kept, which for a compiler whose certification is the expensive step is most of the point. A digest moves exactly when the binary does and no more.
 //!
 //! **Why not a fingerprint over chosen sources.** That is a list somebody maintains, and the failure of forgetting an entry is silent admission. There is nothing to forget here.
 //!
-//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves — 0.37s for a 570 MiB debug build, which a language server would pay on every keystroke — so the digest is recorded beside the store against a stamp of the binary, and recomputed only when the stamp moves. The common path is one `stat`.
+//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves — about 0.4 s for a 700 MiB debug build (`time sha256sum target/debug/curios` retakes it), which a language server would pay on every keystroke — so the digest is recorded beside the store against a stamp of the binary, and recomputed only when the stamp moves. The common path is one `stat`.
 //!
 //! **What the stamp identifies, and why size and modification time are not enough.** Those two alone are what `sccache` uses, and they are forgeable by the ordinary means of moving a binary about: `cp -p`, `rsync -a`, `tar -x` and a restored artifact cache all preserve a modification time, so two builds that happen to agree on length would share a stamp and the second would be handed the first's digest — a verdict believed on behalf of a compiler that never reached it, which is the one direction that admits. The stamp therefore also carries the inode and the *status change* time, which the kernel writes on every modification and no copying tool can set. What is identified is the file this compiler is running from, not merely how large it is and when someone says it was written.
 

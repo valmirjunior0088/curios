@@ -12,7 +12,7 @@ use {
 
 /// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
 ///
-/// This replaces a rule that compared the two sides through `project_erased_universes` and accepted on projection equality, on the premise that a universe instance cannot affect computation. That premise is false (see `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances — and the projection accepted such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
+/// Comparing the two sides through `project_erased_universes` and accepting on projection equality would rest on the premise that a universe instance cannot affect computation, and that premise is false (see `documentation/design/soundness/elimination/case-equations-and-their-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances, and the projection would accept such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
 ///
 /// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
 pub(super) fn identify_universe_levels(
@@ -262,7 +262,7 @@ pub(super) fn apply_param_types(
     Ok(Some(types))
 }
 
-/// Report a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and exists to answer whether the concept-wrapper universe failures originate in these fallbacks rather than in how a wrapper is generalized.
+/// Report, under `profile`, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
 #[cfg(feature = "profile")]
 pub(super) fn probe_level_fallback(site: &'static str, type_: &Term) {
     curios_profile::note!(

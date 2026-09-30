@@ -22,7 +22,7 @@ const READS_EVERY_CARRIER: &str = r#"
 
 /// Every carrier's read refuses a position past the value's own length, and the three agree.
 ///
-/// A leaf would trap in the engine reading its own payload, and that is what the `List` and `Bytes` helpers rested on while the bit grain's twin opened with a compare. It is not the same guarantee: a *view* reads `base.payload[offset + i]`, so a position past the window is a position the base array still holds, and the engine sees nothing wrong with it. The read answered a neighbouring element where the bit grain refused.
+/// A leaf would trap in the engine reading its own payload, but that is not the guarantee a compare gives: a *view* reads `base.payload[offset + i]`, so a position past the window is a position the base array still holds, and the engine sees nothing wrong with it — the read would answer a neighbouring element.
 ///
 /// No well-typed program reaches it — `get` takes a proof that its index is within the length, and `slice` supplies the window's own — so what this asserts is the backstop: the check is there for a wrong erasure or a wrong checker, and the claim is that the three carriers make the same promise rather than two of them making a weaker one. A test that compiled a read and watched it answer would be testing the proof, not the backstop.
 #[test]

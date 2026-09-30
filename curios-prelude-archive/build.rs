@@ -104,7 +104,6 @@ fn archive(
     let mut context = Context::with_default_budget(SYNTAX);
     // An item the parser could not read is absent from `lowered`, so what names it is withheld as a refused item's dependent is, rather than reported unbound once per mention: the seeding the compile pipeline does before it elaborates a unit.
     context.set_broken(prepared.broken_names());
-    // Grown explicitly, where the whole-module spelling this replaced grew for its caller: a root is the deepest module the compiler ever elaborates, and a build script's thread is the smallest stack it is ever elaborated on.
     let elaborated = curios_utilities::grown(|| {
         elaborate_and_zonk_unit(&mut context, established, &lowered, prepared.minted())
     });

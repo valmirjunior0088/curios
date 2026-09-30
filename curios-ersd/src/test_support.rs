@@ -73,7 +73,7 @@ pub fn census_settles_constructor_field(
 
 /// A structural digest of `module`: one line per node, bodies nested at the statement that introduces them, every node named by the Rust variant holding it.
 ///
-/// The oracle for a test whose subject is what a stage *built*. [`Module`]'s `Display` answers a different question — how a reader of `wonder stage ersd` sees the program — so a test in another crate that pins it turns a presentation change into a behavioral failure there: one layout rework broke twenty-one tests across `curios-elab` and `curios-pipeline` without a single erasure changing. This spelling reaches no user and cannot drift from the enums it names, so it moves when the representation moves, which is exactly when an erasure test should be re-read.
+/// The oracle for a test whose subject is what a stage *built*. [`Module`]'s `Display` answers a different question — how a reader of `wonder stage ersd` sees the program — so a test in another crate that pins it turns a presentation change into a behavioral failure there, though no erasure changed. This spelling reaches no user and cannot drift from the enums it names, so it moves when the representation moves, which is exactly when an erasure test should be re-read.
 ///
 /// Identities keep the `~v0$hint` scheme the printer spells them with, because that names an arena slot rather than a layout. The header is not rendered: a schema is referred to by identity here, and a test whose subject is the schema itself asks [`Module::products`] or [`Module::families`], where the answer is the arena rather than a rendering of it.
 ///

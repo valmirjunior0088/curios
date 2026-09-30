@@ -13,7 +13,7 @@ const TARGET: &str = "TARGET";
 
 /// Every command, as the command line that invokes it.
 ///
-/// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_is_listed`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
+/// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_the_parser_knows_is_in_the_table`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
 fn commands() -> Vec<&'static [&'static str]> {
     #[allow(unused_mut)]
     let mut lines: Vec<&'static [&'static str]> = vec![

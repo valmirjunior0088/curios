@@ -3,7 +3,7 @@ name = "curios-analysis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The analyses both Curios checkers run: the Env/Judge seam, index inversion, strict positivity, size-change totality, universe satisfiability, and the chain conversion runs when two intrinsics meet"
+description = "The analyses both Curios checkers run behind the Env/Judge seam: index inversion and the locals a case re-types, case-equation recording, strict positivity, size-change totality, which half of the erased program a position belongs to, and the chain conversion runs when two intrinsics meet"
 
 [lints]
 workspace = true
@@ -20,17 +20,10 @@ curios-algebra = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
 
-# The kernel, for the tests in `tests/` that drive these analyses through a real
-# checker. It is a cycle — `curios-cert` depends on this crate — and Cargo permits
-# it because dev-dependencies do not participate in the library build. It works for
-# *integration* tests only: a `#[cfg(test)]` module inside the lib compiles this
-# crate a second time, so `Kernel`'s `Judge` implementation would be against the
-# other copy and the bound would not hold.
+# The kernel, for the tests in `tests/` that drive these analyses through a real checker. It is a cycle — `curios-cert` depends on this crate — and Cargo permits it because dev-dependencies do not participate in the library build. It works for *integration* tests only: a `#[cfg(test)]` module inside the lib compiles this crate a second time, so `Kernel`'s `Judge` implementation would be against the other copy and the bound would not hold.
 [dev-dependencies]
 # The foreign row `tests/driven.rs` forges to put a call in a foreign call's argument, the one child position no `curios-core` constructor reaches without one.
 curios-abi = { workspace = true }
 curios-cert = { workspace = true }
-# This crate on itself, only to turn `test-support` on for its own tests: `tests/driven.rs`
-# links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it
-# and the feature is the only switch that does.
+# This crate on itself, only to turn `test-support` on for its own tests: `tests/driven.rs` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
 curios-analysis = { path = ".", features = ["test-support"] }

@@ -1,154 +1,37 @@
 # CLAUDE.md
 
-Operational guide for working on Curios. Read it before investigating or changing the repository.
+Curios is a dependently typed functional language implemented in Rust 2024, compiled from `.crs` through Core, an erased IR and a continuation IR to WebAssembly-GC and run under Wasmtime. What a crate owns is its `Cargo.toml` description and `README.md`; why the language and toolchain are the way they are is `documentation/design/`; what exists and what is pending is `documentation/roadmap.md`. Read the owner, never a copy.
 
-## Working with the user
+## Working here
 
-- **Mutation requires explicit authorization, narrowly scoped.** Investigation, explanation and proposals are read-only. Do not edit, format, generate, delete, stage, commit or otherwise mutate the repository unless the user has authorized that specific change. Authorization for one change covers neither adjacent refactors, cleanup, dependency upgrades or unrelated fixes, nor a broader scope that would make the change easier. When the boundary is ambiguous, stop and ask. Once a change is authorized, keeping formatters and linters passing on the touched code is in scope.
-- **Report, don't fix, problems you were not asked to solve.** A discovered bug, inefficiency or cleanup opportunity is a finding to surface; the user decides whether it becomes work.
-- **Run every decision through the user.** Where more than one design is reasonable, present the alternatives and their trade-offs, recommend one plainly, and wait for the choice.
-- **Preserve existing work.** Every uncommitted change belongs to the user. Do not overwrite, revert, reformat, stage or incorporate it unless the user includes it in the task.
-- **Commit only when asked, as a single line.** One imperative, capitalized, descriptive subject — no body, no bullets, no trailer, and never a co-author. Include only the authorized changes; commit to `main` directly.
-- **State findings plainly, once.** Name an uncertainty with its evidence and let the user resolve it. Do not reopen settled decisions, hedge in loops, or delegate to subagents unless asked.
+- Investigate, explain and propose freely; change the repository only as the user authorized, narrowly. Keeping formatters and linters passing on touched code is in scope.
+- A problem you were not asked to solve is a finding: state it once, with its evidence, and the user decides whether it becomes work. Don't reopen settled decisions.
+- Where more than one design is reasonable, present the alternatives with their trade-offs, recommend one, and wait.
+- Uncommitted changes are the user's, and other sessions commit to `main` while you work: never revert, reformat or stage what you did not write, and stage explicit paths. Never discard work with a reset or a checkout, and never rewrite history.
+- Commit only when asked: one imperative, capitalized line — no body, trailer or co-author — on `main`.
+- Don't delegate to subagents unless asked. Stop only your own processes, by exact PID.
 
-## Interacting with a Curios codebase
+## The compiler is the interface
 
-The compiler is the interface. A claim about what a Curios program means is a hypothesis until the compiler has answered it, and the tools below are how it is asked.
+A claim about what a Curios program means is a hypothesis until this tree's compiler answers it: `cargo run --package curios --`, after `cargo x runtime` once per checkout. An installed `curios` is another build.
 
-**Test a theory on standard input.** `run` and every `wonder` query take `-` for a program on standard input, so a probe is a heredoc, never a file left in the tree:
+- Probe on standard input, never with a file left in the tree: `cargo run --package curios -- run - <<'CRS' … CRS`.
+- `wonder diagnostics -` reports every error and goal as `run` would. It stops at the first failure, so iterate.
+- `?` is the type oracle: `let y: ? = e` reports `e`'s type; a bare `?` reports the scope, the expected type, what blocks it and candidate fits.
+- `wonder stage <rung> -` reprints the program at one pipeline rung, `text` through `wasm-optm`.
+- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude-archive/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit.
 
-```sh
-cargo run --package curios -- run - <<'CRS'
-/std/print("hello\n")
-CRS
-```
+Every other fact is on disk: `documentation/syntax.md` for the surface language, `curios-prelude-archive/std/` for idiom and signatures, `.curios/sources/` for dependencies.
 
-**Derive facts with `wonder`.** `curios wonder <query> [target]` answers a question from the compilation that would build the target and executes nothing. The answer goes to stdout; exit 0 means it was answered, including when the answer is a list of errors.
+## Build and check
 
-- `wonder diagnostics -` is the loop: every error and goal, rendered as `run` reports it. A snapshot stops at the first failure, so iterate one error at a time.
-- `?` is the type oracle, addressed by text rather than by coordinate. `let y: ? = e` reports `? = ` the type of `e`; a bare `?` reports the local scope, the expected type, the obligations holding it up and candidate fits. Several `?` in one program report in one compile. This is how the type of a binder, an expression or a hole is learned — never by guessing from the surrounding code.
-- `wonder stage <stage> -` reprints the program at one pipeline rung (`text`, `core`, `core-elab`, `ersd`, `ersd-optm`, `cont`, `cont-optm`, `wasm`, `wasm-optm`): the way to see what a lowering or an optimization actually produced.
-- A file target is placed in the unit whose `mod` lines declare it: a module `lib.crs` reaches is analysed as that package's library, an executable's entry or a module it reaches as that executable, and a file nothing declares on its own — as a module when it has no final term — behind a note saying so. A file under `curios-prelude-archive/std/` is placed in the package named `std`, which is the standard library by the meaning of the name: the fold withholds the archived root and compiles the package over the archived unit as its baseline, reusing every declaration the edit did not reach, so a question about one of its modules costs the closure of the edit rather than the library.
+- `cargo x <recipe>` runs every build step; `cargo x runtime` builds the launcher the compiler embeds, once per checkout.
+- Between the steps of a larger effort, and as the whole check for a focused change: `cargo x clippy` and `cargo x fmt`, plus the change's own tests by name. Clippy already elaborates, erases and certifies all of `/std`, so a Text, Core, Ersd or certifier change needs nothing more; a change to `curios-cont`, `curios-emit` or `curios-wasm` adds the `curios` corpus tests that reach it. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
+- Run a long command as a tracked background task writing `cmd > log 2>&1; echo "EXIT=$?" >> log`, and read the exit code from the log. Never detach one with `&` or add a shell that waits on it.
+- Keep the feature set constant within a session: `--all-features` builds a second prelude archive, and the two evict each other.
+- Before handing off code: `/full-gate`, once, after the last step, on the user's go-ahead.
 
-**Read the sources for the rest.** Every fact `wonder` does not answer is on disk: `documentation/syntax.md` is the normative surface reference, `curios-prelude-archive/std/` is the idiom reference and where a standard-library signature is read, and a dependency's sources are materialized under `.curios/sources/`. Search with `rg`, read the narrowest authoritative source, and widen only when the evidence requires it. Do not reconstruct from memory what a file states.
+## Where the rest is
 
-**The binary is the tree's.** `cargo run --package curios --` runs the compiler this checkout builds, which is the one a change is being made to; it needs `cargo x runtime` once per checkout for the launcher it embeds. An installed `curios` on `PATH` is a different build and answers for it, not for the tree.
-
-## Before changing anything
-
-- Read [roadmap.md](documentation/roadmap.md) before proposing or implementing a capability, and confirm whether the work is new, pending, or already represented differently.
-- Identify the subsystem that owns the behavior and read its crate-level and module-level `//!` documentation before changing Rust.
-- Read [syntax.md](documentation/syntax.md) in full immediately before writing or modifying Curios source. This holds even when no `.crs` file has been opened yet.
-- Trace a public contract to its consumers before changing it. Pipeline stages, the host ABI, the runtime, the JavaScript harness and the embedded standard library impose downstream obligations.
-
-## System at a glance
-
-Curios is a functional, dependently typed language implemented in Rust 2024. It compiles `.crs` source through several intermediate representations to WebAssembly and executes precompiled modules with Wasmtime: `curios-text` parses and lowers to core, `curios-elab` elaborates and erases, `curios-ersd` optimizes and lowers to continuations, `curios-cont` optimizes them, `curios-emit` lowers them to WebAssembly, `curios-wasm` encodes it. Beside that chain, `curios-core` owns the term representation, `curios-algebra` the carriers' algebra over abstract atoms, `curios-analysis` the rules both checkers run over them, and `curios-cert` the kernel that only one of them does.
-
-Data flows downward; Rust dependencies between stages point **upward**, because a lowering depends on the representation it constructs. `curios-elab` takes `curios-cert` as a *dev*-dependency only, so nothing whose build script reaches elaboration reaches the kernel through it.
-
-What each crate owns is its `description` in its `Cargo.toml` and its `README.md`. Read those rather than a copy kept here.
-
-### Change routing
-
-The obligations below are the ones a search does not reveal.
-
-| Changing… | Also inspect… |
-| --- | --- |
-| Surface grammar, syntax tree, or printing | `into_core/`, parser tests, `documentation/syntax.md` |
-| Elaboration, typing, or conversion | Text lowering, erasure, diagnostics, integration tests |
-| Kernel judgments (`curios-cert`) | `curios-core`'s representation, `recheck.rs`, `documentation/design/language/the-soundness-perimeter.md` |
-| A shared analysis (`curios-analysis`) | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — and `curios-analysis/tests/driven.rs` |
-| The carriers' algebra: a law family, an operation's declaration, or `curios-algebra` | `Intrinsic::algebra` and the `atoms` module in `curios-core`, `curios-analysis`'s `conversion` chain, the generated law grid and its audit under `curios/src/tests/laws/`, and the perimeter entry that owns the family |
-| A numeric carrier or its arithmetic | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), `curios-emit`'s fast paths and its `big_emitter` and `flt_emitter` libraries, `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md`, and for `Flt` the Curios twin of `curios_num::Floating`'s rounding in `/std/Flt/exact`, which the rounding tests hold to it line for line |
-| Concepts or witness resolution | Surface declarations, standard-library witnesses, syntax documentation |
-| A derivation (`curios-elab/src/derive.rs`) | The `DerivationSyntax` roster in `curios-utilities` and its three fills, the concept's own `/std` vocabulary, `curios/src/tests/derive.rs`, `curios-text/src/into_core/ordering_tests.rs`. The scheduler's edges read the roster, so `order.rs` needs no edit of its own |
-| Host operations or foreign calls | `curios-abi`'s row, compiler use, native runtime implementation, JavaScript implementation |
-| What a unit hands its successors | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, the store's stored-unit format |
-| A `wonder` query, a record, or what a diagnostic carries | `curios-utilities`'s `Report`, every stage's `report`/`reports_with_hints`, `CompileError` and `Fold::check`, both transports (`curios-wonder/src/ask.rs`, `server.rs`), `curios-package`'s `Selection` |
-| The documentation record or its pages | `curios-document`'s `record.rs` and `pages.rs` with the Askama templates and static files beside them, the builder in `curios-text/src/into_core/document.rs` and its tests in `curios/src/tests/document.rs`, the engine in `curios-wonder/src/document.rs` and the build `curios document` runs in `curios/src/pipeline.rs`, the store's verdict schema tag when the record's layout changes, `documentation/usage.md`'s Documenting, and `documentation/syntax.md`'s comments section when the `---` grammar moves |
-| Manifests, dependency resolution, or the store | The CLI subcommands wrapping it, `Qualifier`/`Mount`, `curios-verdicts` for what is read and written through the store's keys, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when those keys are involved |
-| Runtime or bundle format | Slim-launcher dependency boundary, bundle integration tests |
-| A build recipe (`xtask`) | `curios/build.rs`, the CI workflows calling the recipe, `README.md`'s build steps |
-| Binaryen version, build, or FFI | Shared cache behavior, native compiler linkage, optimize round-trip tests |
-
-## Architectural invariants
-
-- Compiler stages own their representations. A lowering belongs to the crate holding its source representation, or to the stage crate built over it — `into_ersd` in `curios-elab`, `into_wasm` in `curios-emit` — and depends on the crate holding the destination representation.
-- `curios-pipeline` is the compiler boundary: no dependency on Binaryen, Wasmtime, the runtime or the CLI. It may name the fixed prelude in `standard.rs` alone; `compile_entrypoint` takes a scope and cannot tell which unit is `/std`.
-- `curios-package` sits beside that boundary, never under it. `curios-pipeline` must not depend on it, and `curios-js` must not touch it.
-- `curios-verdicts` and `curios-wonder` sit above `curios-pipeline` and `curios-package` and below `curios`: `cargo tree -p <crate> --edges normal` must contain neither `curios-binaryen` nor `curios-runtime`, so neither a store read nor a question links a back end. What each needs from above is handed in — the engine a payload is addressed under by `curios`, which owns the runtime, and the rendering of the `wasm-optm` rung by the transport that owns Binaryen.
-- `curios-emit` sits beside the prelude build, never under it: `cargo tree -p curios-prelude-archive --edges build` must contain neither `curios-emit` nor `curios-wasm`, because the erased stage lowers into `curios-cont` and a build script that reached the emitter would re-elaborate the whole standard library on every emitter edit. The optimizer stays in `curios-cont` because its passes rewrite the representation's private arenas.
-- `curios-unit` sits below the kernel: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`, because a build script that reached the certifier would re-elaborate the whole standard library on every kernel edit.
-- `curios-runtime` is runtime-only in its default feature set: no `curios`, no Binaryen, and no Cranelift. Its `cranelift` feature exists for `curios` and never enters `default`; `curios/src/bundle.rs` enforces this on the shipped launcher image.
-- `curios` is the only crate combining Binaryen with Cranelift-enabled Wasmtime. It names no wasmtime type, reaching the runtime through `curios_runtime::validate` and `curios_runtime::precompile`. The Wasmtime pin lives in `curios-runtime/Cargo.toml` and nowhere else.
-- Crate boundaries, not Cargo features, separate the compiler, runtime and browser products.
-- `curios-abi` is the source of truth for the host/guest wire contract. A host operation is complete only when its ABI row, compiler use, native runtime implementation and JavaScript implementation agree.
-- `curios-algebra` depends directly on `curios-num` alone and names no `Term`, `Intrinsic`, elaborator context or kernel type: `cargo tree -p curios-algebra --edges normal --depth 1` lists `curios-num` and nothing else. Which operation an intrinsic is and which terms are one atom are `curios-core`'s (`Intrinsic::algebra`, the `atoms` module), and the chain both checkers run when two intrinsics meet is `curios-analysis`'s. A search — for a bound's proof, a certificate, a solution — stays on the elaborator's side of the certifier's dependency closure and reads the views Core publishes.
-- `Intrinsic::signature` is the source of truth for what an intrinsic demands and produces; both checkers walk it rather than restate it. `/sys`'s declarations state the same types a second time, deliberately, and the prelude build checks them against the table. A new operation is typed by adding a row.
-- `/sys` and `/std` are owned by `curios-prelude-archive` and compiled into one rkyv image of an `Uncertified` unit each, `sys.rkyv` and `std.rkyv` under its build script's `OUT_DIR`. They are two units in that order — `/sys` names nothing above it, `/std` names `/sys` — each image framed as a store slot is, with the record of the tree it was built from ahead of the unit before certification; `curios-prelude`'s build certifies them and files the certifier's record as `certification.rkyv` under its own `OUT_DIR`, and that crate turns each into a `Unit` as it restores it. `curios document --std` renders the documentation record `/std`'s unit carries, off the prelude the compiler embeds. A `/std` module joins the library only through a `mod` declaration in its parent header — `lib.crs` for a top-level module, the parent module's own file for a submodule, as `Str.crs` declares `Str/Valid` — and nothing else enumerates them: the build watches exactly the files lowering read, and a `.crs` file no header declares is never compiled, linted or archived — `the_std_record_names_every_authored_source_and_no_other` refuses it, since the image's record must name every source the tree authors.
-- Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The archived prelude is in scope unconditionally, with one exception: a package named `std` is the standard library, and `curios-pipeline`'s `standard` module withholds the archived `/std` for it when it is the first unit of the fold, handing the archived unit over as its baseline and compiling every later unit against it. Every other unit claiming a prefix the prelude mounts collides with it and is refused, exactly as two source units claiming one prefix are, and a package named `std` placed later in a fold collides the same way. The name is reserved for this, as it is in every language with a standard library; it is not a way to swap `/std` under a dependency, which means what it means against the `/std` it was compiled after.
-- Every name the compiler emits is declared in `/sys` or `/std` and reached through the `SyntaxRegistry`, never spelled by a stage. A root of the compiler's own for those names is what `/syn` was, and it is gone: nothing below `curios-prelude-archive` names a prelude declaration except through a filled registry slot.
-- Binaryen is built from a verified pinned source release, shared through the locked cache under `curios-binaryen/.artifacts/<triple>`, never a fingerprint-specific `OUT_DIR`.
-- Recursive lowering and packed-value interpretation must work on the default test-thread stack. Never use `RUST_MIN_STACK` to hide a regression.
-- Generated `.wasm` files and other build products are not source and are not committed. `Cargo.lock` is source. `editors/grammar/src/` is the one committed generated artifact, because git is Zed's distribution channel for it: it is committed with the `grammar.js` it was generated from, and `editors/grammar`'s `npm test` refuses any drift between them.
-
-## Build and validation
-
-The build recipes are `cargo x <recipe>`, reached through the alias in `.cargo/config.toml`. The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`, and that launcher must be built in its own Cargo invocation so workspace feature unification keeps Cranelift and Binaryen out: `cargo x runtime` does that stage alone and files the launcher at `curios/.artifacts/<triple>`; `cargo x build` does both stages in order. Building `curios` without that stage fails naming the recipe to run. A `curios-runtime` binary from a workspace build is not evidence the isolated launcher is slim.
-
-### While iterating
-
-- Run the smallest check or test that exercises the changed behavior, and prefer stage-local crate checks.
-- **In a multi-step task, run the full gate once, after the last step.** Between steps, `cargo x clippy` plus `cargo x fmt` is the check, even when each step is its own commit. Do not add `cargo check` beside it.
-- Keep the feature set constant within a work session: `--all-features` enables `profile` and a plain `cargo build` does not, and alternating maintains two prelude archives that evict each other.
-- The full suite can take more than five minutes. Run it in the background with output redirected to a file, and read the file after completion.
-
-`cargo x clippy` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont`, `curios-emit` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
-
-### Before handing off code changes
-
-Run this gate, in order. All commands must pass; Clippy warnings are errors in CI.
-
-```sh
-cargo x runtime
-cargo x fmt-check
-cargo x clippy
-cargo x test
-cargo x doctest
-cargo x docs
-cargo x js-test
-cargo x grammar-install
-cargo x grammar-test
-cargo x vscode-install
-cargo x vscode-test
-cargo x vscode-package
-cargo x zed-fmt-check
-cargo x zed-clippy
-cargo x zed-build
-cargo x zed-test
-```
-
-Why the gate holds these steps and no others — what each is the sole check for, and what was left out — is [every gate step catches what no other step does](documentation/design/toolchain/every-gate-step-catches-what-no-other-step-does.md). The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets installed and Node 22 or later and `npm` on `PATH`. Measure a step and name the step; never quote a whole-gate total.
-
-### Additional gates
-
-- Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint.
-- Changes to runtime dependencies must rebuild through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates.
-- Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
-- Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` builds the compiler with its `profile` feature — in debug, the build iterating already has, unless `--profile release` asks for the shipped compiler's timings — runs the program with `--profile <PATH>`, and folds what that run filed. The feature instruments; the flag is what makes something listen, and it takes the destination — so a build with the feature on and no flag records nothing, which is what keeps `--all-features` harmless across the gate.
-
-## Repository conventions
-
-- Do not mix vendored changes, generated files or unrelated formatting into a feature commit.
-- Use non-interactive Git, and never discard work with a destructive reset or checkout unless the user requests that exact action. Never rewrite history.
-- Keep source files focused. Prefer extending an existing ownership boundary over creating a parallel abstraction for the same responsibility.
-- `rust-toolchain.toml` pins the toolchain; the floor is Wasmtime's, so bump it when the pin in `curios-runtime/Cargo.toml` moves past it.
-- `curios-binaryen` builds a pinned Binaryen release with CMake, which needs a C++ toolchain.
-- A build product that outlives the build that made it lives in `.artifacts/` beside its owner, never under `target/`. `cargo clean` never removes them; delete one by hand to force a rebuild.
-- `target/debug/incremental` is pure rustc cache and safe to delete when no build is running; `CARGO_INCREMENTAL=0` suppresses it per invocation.
-- `curios-js` is built by `cargo x js`; do not introduce `wasm-pack` or `wasm-opt` without a design decision.
-
-## Conventions that load on demand
-
-Three rule files in `.claude/rules/` hold the only copy of their subject and load when a matching file is read: [rust.md](.claude/rules/rust.md) for Rust layout, tests and naming, [curios.md](.claude/rules/curios.md) for `.crs` source, and [documentation.md](.claude/rules/documentation.md) for which document owns which fact.
+- `.claude/rules/` loads by itself when a matching file is read: the Rust, Curios and documentation conventions, and one file per area of the workspace with what a change there must also inspect.
+- Before proposing a capability, read `documentation/roadmap.md`. Before changing a public contract — a pipeline stage, the host ABI, the runtime, the JavaScript harness, the embedded standard library — trace it to its consumers.

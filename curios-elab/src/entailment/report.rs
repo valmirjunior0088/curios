@@ -46,7 +46,7 @@ pub(super) enum SearchOutcome {
 }
 
 impl Refusal {
-    /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it did before there was one.
+    /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it would with no procedure.
     pub fn is_silent(&self) -> bool {
         self.considered.is_empty()
             && self.unread.is_empty()

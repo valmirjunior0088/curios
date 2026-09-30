@@ -287,7 +287,7 @@ impl Lift for Vec<Poll> {
     }
 }
 
-/// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape now that a handle is bytes.
+/// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape, a handle being its token's bytes.
 fn lift_bytes_array(
     caller: &mut Caller<'_, ()>,
     param: &Val,

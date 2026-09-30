@@ -64,7 +64,7 @@ impl Euclid {
 ///
 /// **`NatShl` has no bound**, for the reason `Operation::upper_bound` records: what reaches here as a `NatShl` is a shift by a *symbolic* count, which no operand bounds, since a literal count is [`then_coefficient`]'s and arrives as a `NatMul` with its coefficient already charged.
 ///
-/// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so a bound added to the algebra owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md`.
+/// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so a bound added to the algebra owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/design/soundness/conversion/the-bounds-oracle-and-the-division-family.md`.
 pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;

@@ -85,7 +85,7 @@ fn the_head_rules_still_decide_a_bare_sort() {
 
 /// An argument reaches the *checked* rules, not merely inference and subsumption.
 ///
-/// `check` dispatches let-descent, Π-introduction and Σ-introduction before falling through to infer-then-subsume, and an argument position must reach them. For a period it did not: typing drove its child obligations through an explicit worklist that called the node rule and `subsumes` directly, and every argument, constructor payload and record field lost all three rules. Nothing in the prelude or the corpus reached a shape that shows it, so the whole gate passed for two weeks — which is why this fixture is written against the *rule* rather than against a program.
+/// `check` dispatches let-descent, Π-introduction and Σ-introduction before falling through to infer-then-subsume, and an argument position must reach them. A typing walk driving its child obligations through an explicit worklist that calls the node rule and `subsumes` directly loses all three rules at every argument, constructor payload and record field, and nothing in the prelude or the corpus reaches a shape that shows it — which is why this fixture is written against the *rule* rather than against a program.
 ///
 /// Mutation-checked: replacing the `check` call at the application arm of `infer_within` with an inference and a `subsumes` refuses this term with a mismatch between `(Type, Nat)` and the dependent pair.
 #[test]

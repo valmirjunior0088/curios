@@ -21,7 +21,7 @@ use {
     },
 };
 
-/// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about, now that it is more than one unit.
+/// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about.
 fn items<'a>(prelude: &'a [&'a Uncertified]) -> impl Iterator<Item = &'a Item> {
     prelude.iter().flat_map(|root| root.core().items.iter())
 }
@@ -43,9 +43,7 @@ fn the_stored_prelude_declares_no_tests() {
 
 /// The declarations a literal expands into, and those its proof is checked by running, are monomorphic, so no occurrence mints universe metavariables in the data's length.
 ///
-/// A literal's type is `Str` at a single level. It used to expand into one constructor application per byte, and when those carried universe parameters every application instantiated fresh levels — a declaration's level count grew with literal *length* and elaboration went quartic in it: a 500-byte literal took 50s in release and put `long_str_literal_compiles_on_the_default_test_stack` beyond any test budget. Pinning the per-byte targets at zero is what keeps that linear.
-///
-/// A literal now emits `True/qed()` against a decided `Valid` — once, whatever the length, and `True` has no level to mint — so what stays pinned is what checking that proof reduces: each carrier's `Valid`, the `Valid/from` a string's unfolds to, and the `scan_from` fold under it, on which a level would be minted once per literal or once per byte.
+/// A literal's type is `Str` at a single level, and its proof is `True/qed()` against a decided `Valid` — once, whatever the length, and `True` has no level to mint. What stays pinned is what checking that proof reduces: each carrier's `Valid`, the `Valid/from` a string's unfolds to, and the `scan_from` fold under it, on which a level would be minted once per literal or once per byte, and a declaration's level count would grow with literal *length* — which is what makes `long_str_literal_compiles_on_the_default_test_stack` a test.
 #[test]
 fn string_literal_machinery_is_monomorphic() {
     // `Str` and `Char` are the carriers a literal builds; the rest is what its proof is discharged by running. None of the reduced names is in `curios-prelude-archive/src/syntax.rs`: nothing in Rust emits them, they are reached through the carriers' field types.
@@ -243,19 +241,9 @@ fn class(error: &KernelError) -> String {
 ///
 /// Not an assertion — a measurement, run on demand. `recheck_module` stops at the first refusal and so says nothing about what lies past it; this walks to the end with each verdict independent of the others (see `recheck_module_verdicts`), which is what makes the classes countable rather than discovered one build at a time.
 ///
-/// # Why it lives here
+/// The restored image is the subject, named directly: a compiled module carries only its own items, so no fixture reaches the standard library by compiling. What asserts the prelude is acceptable is `curios-prelude`'s own build script, which runs this same walk and panics on the first refusal; this is the inventory beside it.
 ///
-/// It used to sit in `curios/src/tests/kernel.rs` and reach the prelude by compiling a fixture, because a compiled module carried the standard library spliced in front of the user's items. It no longer does, so the subject has to be named directly — and the restored image is what the subject *is*. Walking it from an empty environment is not the path production takes, which is exactly why this is an inventory and not an assertion: what asserts the prelude is acceptable is `curios-prelude`'s own build script, which runs this same walk and panics on the first refusal.
-///
-/// # It used to abort in a debug build, and that was the defect
-///
-/// Judgment depth once scaled with a `Str` literal's *length* — 103 nested judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is one certified-UTF-8 link per scalar and `infer`/`check` descended two frames per link. At roughly 21.5KiB of stack per level in a debug build that exhausted a 2MiB thread partway through `/std/Toml`, and no reduction budget could prevent it: a budget bounds steps, and depth is not steps.
-///
-/// `infer` now defers the child obligations of an application, a constructor, and a record onto a stack rather than descending into them, so depth is bounded by written nesting. Both profiles complete, and both report the same verdicts — which is the check that this was a restructuring rather than a change of rule.
-///
-/// The measurement that found it is worth keeping: a backtrace at depth 300 showed the stack was 300 `infer` and 298 `check` frames and *nothing else*, which retired an earlier diagnosis naming four functions that were never on it. Stack size is not something to hide behind either: raising `RUST_MIN_STACK` would have concealed this rather than fixed it.
-///
-/// An abort rather than a tally is a finding, not noise: nothing here is wrapped in a catch, because a kernel that aborts is a kernel to fix.
+/// An abort rather than a tally is a finding, not noise: nothing here is wrapped in a catch, because a kernel that aborts is a kernel to fix, and raising `RUST_MIN_STACK` would conceal one rather than fix it.
 #[test]
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
@@ -295,11 +283,11 @@ fn kernel_disagreements() {
     });
 }
 
-/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdict lists identical — the same instrument that validated the defunctionalized judgment (identical counts across profiles).
+/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdict lists identical.
 ///
-/// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing, so an uncached walk spends at least as much as a cached one and the two may reach different *exhaustion* points; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points here would be asserting the design that was replaced.
+/// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing, so an uncached walk spends at least as much as a cached one and the two may reach different *exhaustion* points; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points would assert what the design gives up.
 ///
-/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. That it walks from an empty environment rather than production's is beside the point here: what is under test is the memo, which both walks use.
+/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has.
 #[test]
 #[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
 fn kernel_memo_parity() {
@@ -319,11 +307,9 @@ fn kernel_memo_parity() {
     });
 }
 
-/// Every figure the projects specification's appendix leans on, taken over the stored image.
+/// The costs of the stored prelude, taken over the image: the figures `curios-package`'s README and `curios-elab`'s budget floors cite.
 ///
-/// # Why it is in-tree
-///
-/// That appendix exists because two items in a predecessor document were designed against unattributed numbers and both were wrong — a 471 ms eager restore that is 34.4 ms, and an estimated 60–70 s saving on an operation that takes 11.8 s. Its own remedy was to record the date, the profile, and how to retake each figure; but "how to retake it" was a throwaway probe nobody kept, so retaking meant writing it again, and a figure nobody can cheaply reproduce is a figure that quietly decays into a claim about history. This is that probe, kept.
+/// Kept in-tree so a figure is retaken by running it rather than by writing a probe again: a figure nobody can cheaply reproduce decays into a claim about history.
 ///
 /// # How to read it
 ///
@@ -335,38 +321,21 @@ fn kernel_memo_parity() {
 ///
 /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory is a term walk this does not do.
 ///
+/// A range is two runs, and the spread between them is part of the figure. The clone alone is averaged, over 100, because at a few milliseconds one sample is inside the noise band.
+///
 /// # What it last printed
 ///
-/// Taken **2026-08-10**, **release**, immediately after the erased arena gained its compaction pass. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+/// The latest reading of each row, in release, with the run it came from; different runs may come from different hosts, so wall clocks compare only within one run. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
 ///
-/// | What | Measured | Against |
+/// | What | Measured | Run |
 /// | --- | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | 34.4 ms — confirmed |
-/// | Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | 1.4 ms — see below |
-/// | Re-erasing one whole unit over the stored Core | 661–682 ms | 608 ms — up, partly spread |
-/// | Certifying one whole unit, from an empty environment | 11.9–12.0 s, 0 refusals | 11.8 s — confirmed |
+/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | A |
+/// | Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | A |
+/// | Re-erasing one whole unit over the stored Core | 621 ms | B |
+/// | Certifying one whole unit | 12.6 s, 0 refusals | C |
+/// | Heaviest declaration that certification makes | 512 455 units, peak depth 6 | C |
 ///
-/// Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts.
-///
-/// **Ranges, not points**, because those are two runs and the spread between them is part of what the figure is: the re-erasure alone moved 21 ms between consecutive readings, which is half of what separates it from the number it replaces. Nobody should read 608 → 682 as a 12% regression on that evidence.
-///
-/// **The clone's old figure was a single sample, and that was the defect.** Taken once the same way it read 3.7 ms, which would have looked like a 2.6× regression from the compaction pass; averaged over 100 it is 2.0 ms. At one-to-four milliseconds the noise band swallows the signal, which is why this one is averaged and the others are not. The 1.4 ms it replaces was never wrong so much as never repeated.
-///
-/// **The certification figure was owed a retake and got one.** It was taken before the kernel's level substitution changed, and the kernel calls it — so the doubt was right to raise, and the answer is that nothing moved. Roughly twelve seconds is what a whole-unit certification costs, and it is the number the caching half is designed against.
-///
-/// # Certification, retaken 2026-08-15
-///
-/// A partial retake, of the certification row alone, taken on both sides of the kernel's `whnf`/`forced` memo hits becoming free — which came with those two tables cleared at every declaration boundary, so 1107 clearings over this walk is what needed checking. **6.2 s before, 6.1 s after**, 0 refusals both times, and `kernel_memo_parity` passing on both sides. The clearing costs nothing measurable.
-///
-/// **It also says the twelve seconds above is stale by roughly a factor of two, for reasons that are not this.** Both readings here are of the unchanged kernel and both are near six seconds. Nothing in that change could halve a whole-unit walk — it only ever *reduces* what a judgment spends, and this corpus exhausts nowhere — so the drift belongs to something between 2026-08-10 and now that the row above has not been re-run against. The rest of the table is not retaken and is not corrected on the strength of one row.
-///
-/// # Re-erasure, retaken 2026-08-22
-///
-/// Taken on `x86_64-unknown-linux-gnu`, on this test's own thread. **Re-erasing one whole unit: 621 ms**, where the same binary read 2.5 s the day before and every retake since 2026-08-12 had read 2.3–3.4 s against the 661–682 ms above. The bisect landed on the commit that gave both reducers a growing stack: `curios-utilities`' `recurse` grows when less than its four-mebibyte reserve remains, and a Rust test thread has two in total, so every outermost guarded call on such a thread mapped and unmapped a thirty-two-mebibyte segment of its own. The identical binary read 629 ms on a sixty-four-mebibyte thread, which is what named the cause. Each stage's entry now takes its segment once through `grown`; the cross-stage corpus in `curios` went from 253 s to 198 s on the same change.
-///
-/// # Certification, retaken 2026-08-16
-///
-/// Taken on `x86_64-unknown-linux-gnu` — a different host from every figure above, so wall clocks compare only within this section — on both sides of the closed machine entering the kernel's reduction path. **Certifying one whole unit: 12.6 s, 0 refusals**, in release, with the machine live. The units-denominated rows moved where wall clock cannot be compared: the heaviest declaration a whole-unit certification makes went from **189 294 to 512 455 units**, peak depth 6 on both sides, and total retention stayed at 108.4M units. That rise is the machine re-deriving within a run where the strategy's memo hits replayed for free — the trade that buys a closed fold's check back a thousandfold — and at sixty times under the default budget it decides nothing; it is recorded so the next reader of the heaviest-declaration figure knows which evaluator produced it.
+/// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at sixty times under the default budget it decides nothing.
 #[test]
 #[ignore = "measurement: reports timings over the stored image rather than asserting"]
 fn stored_prelude_measurements() {
@@ -479,7 +448,7 @@ fn stored_prelude_measurements() {
     });
 }
 
-/// Every mark vector in the restored standard library sits beside a telescope of the same length. The pairing is a construction invariant — `FuncType::new`, `Func::new`, `InductArm::new` and `InductParam::new` assert it — and the archive restores exactly the constructor-built value its build wrote, so this is not a defense the compiler runs but the one place the claim is checked against the real image, once per test run. The retired kernel guard in `curios-cert`'s `sort.rs` rests on it.
+/// Every mark vector in the restored standard library sits beside a telescope of the same length. The pairing is a construction invariant — `FuncType::new`, `Func::new`, `InductArm::new` and `InductParam::new` assert it — and the archive restores exactly the constructor-built value its build wrote, so this is not a defense the compiler runs but the one place the claim is checked against the real image, once per test run. `curios-cert`'s `sort.rs` slices marks with no guard of its own on the strength of it.
 #[test]
 fn the_restored_prelude_pairs_every_mark_with_its_binder() {
     with_prelude(|prelude| {
@@ -557,7 +526,7 @@ fn universe_parameter_census() {
     });
 }
 
-/// A `/sys` former is levelled by its one argument alone. `List`, `Io`, `Cell` and `Channel` each take `T: Type u` to `Type u`, and each carried a second level besides — the one its body's binder was written at, bounded only by `u` — which every occurrence of the former then minted. `UniverseSolver::identify_bounded_choices` identifies a chosen level bounded only by one other chosen level with it, so each takes one.
+/// A `/sys` former is levelled by its one argument alone. `List`, `Io`, `Cell` and `Channel` each take `T: Type u` to `Type u`, and the level its body's binder is written at, bounded only by `u`, would be a second parameter every occurrence of the former mints. `UniverseSolver::identify_bounded_choices` identifies a chosen level bounded only by one other chosen level with it, so each takes one.
 #[test]
 fn every_sys_former_takes_one_universe_parameter() {
     with_prelude(|prelude| {

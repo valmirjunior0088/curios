@@ -125,7 +125,7 @@ const DOC_TWICE: &str = "two documentation comments precede one declaration; joi
 pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
 
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
-    // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner used to nest N native frames.
+    // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner would otherwise nest N native frames.
     take_while(|char| char.is_whitespace())
         .and(many0(|| {
             // The head is recoverable, because the absence of a comment is how the loop ends and a `---` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
@@ -241,7 +241,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
 //
-// A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. `let match : Nat = 1;` was accepted and then unreachable — every later `match` is the keyword, so the binding reported only as unused, and in expression position the tail read as a match with no scrutinee.
+// A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. Accepted, `let match : Nat = 1;` would be unreachable — every later `match` is the keyword, so the binding would report only as unused, and in expression position the tail would read as a match with no scrutinee.
 //
 // Safe as the last alternative of a choice because every keyword-valued spelling the grammar does admit is parsed by an earlier one: `parse_bool_match_pattern` precedes `parse_binder` in `parse_match_pattern_inner`, exactly as it already precedes `parse_name`'s identical refusal.
 fn parse_label<'a>() -> Parser<'a, Label> {
@@ -250,7 +250,7 @@ fn parse_label<'a>() -> Parser<'a, Label> {
 
 // A *declaration's own* name — the word after `let`, `mod`, `induct`, `struct`, `concept`, `foreign` or `test`, and each selector of a `use` group. [`parse_label`] with its keyword refusal committed: these positions sit past the prefix that discriminates them, so the refusal is the branch's diagnosis rather than a guess, and `Parser::or` must not discard it for a sibling that happened to read further before giving up.
 //
-// Uncommitted it was discarded every time. `let match : Nat = 1;` reported at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` reported as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
+// Uncommitted, it would be discarded every time: `let match : Nat = 1;` would report at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
 pub(super) fn parse_declared_label<'a>() -> Parser<'a, Label> {
     parse_label_owning(true)
 }
@@ -320,11 +320,11 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
     })
 }
 
-// The word is read *raw* and the whitespace after it consumed only once it matched, so a mismatch is reported against the word rather than wherever that whitespace ended — which for a line-final keyword is the next line, or past the end of the file. `end` and `and` are habitually written line-final, so a misspelled one used to put its caret on the innocent declaration below it. `parse_top_item` reads its head raw for the same reason.
+// The word is read *raw* and the whitespace after it consumed only once it matched, so a mismatch is reported against the word rather than wherever that whitespace ended — which for a line-final keyword is the next line, or past the end of the file. `end` and `and` are habitually written line-final, so reading the whitespace first would put a misspelled one's caret on the innocent declaration below it. `parse_top_item` reads its head raw for the same reason.
 //
 // Commitment is unchanged: `parse_identifier_raw` rejects an empty run, so a mismatch has consumed at least one character and stays fatal past the choice point, while the empty case fails *at* the choice point either way.
 //
-// Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report was its bare `Expected identifier`, which named neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's did.
+// Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report would be its bare `Expected identifier`, which names neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's is.
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
     mark()
         .and(take_while(is_identifier_char))

@@ -26,7 +26,7 @@ struct PrinterState<'a, 'b> {
     width: Option<usize>,
     /// Text pending for the current line, flushed just before the next newline (or at the document's end) — how a comment rides the end of whatever line it was paid onto. Filled by [`PrinterState::reached`] and by nothing else.
     suffix: String,
-    /// Source-derived text still owed a place, ascending by the offset it was written at — a formatter's comments, each flagged `own_line` when it must take a line of its own rather than ride one. Empty for every ordinary `Display`, which is what keeps a document with no marks rendering exactly as it always did.
+    /// Source-derived text still owed a place, ascending by the offset it was written at — a formatter's comments, each flagged `own_line` when it must take a line of its own rather than ride one. Empty for every ordinary `Display`, which is what keeps a document with no marks rendering as a pretty printer's.
     ///
     /// **The reason this lives in the renderer.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there, which is frequently punctuation the enclosing printer emits and no node of the tree owns, and one on its own line must be placed where a line can begin. The renderer is the only thing that knows both how far into the source the output has got — [`Printer::Mark`] tells it — and where its lines start and end.
     owed: Vec<Owed>,
@@ -77,7 +77,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
                     self.write(owed.text.trim_start())?;
                     self.write("\n")?;
                 }
-                // **One per line, and the rest wait.** Two line comments sharing an output line are *one* comment when it is read back — a line comment runs to the end of its line — so a line already owing one takes no more, and the next keeps its place until a later line pays it. Enforced here because here is the only place that knows what a line already holds; the alternative is every builder knowing, which is how the rule came to be missed.
+                // **One per line, and the rest wait.** Two line comments sharing an output line are *one* comment when it is read back — a line comment runs to the end of its line — so a line already owing one takes no more, and the next keeps its place until a later line pays it. Enforced here because here is the only place that knows what a line already holds; the alternative is every builder knowing it.
                 false => match self.suffix.is_empty() {
                     true => {
                         let owed = self.owed.remove(0);
@@ -134,7 +134,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
 
 /// One entry of [`run_printer`]'s work stack.
 ///
-/// `Dedent` is what replaces the closure nesting that used to restore the indentation level on the way out: pushed under a document, it runs after it. `Print`'s flag is the layout mode the document renders under: `true` inside a fitting [`Printer::Group`], where every soft [`Printer::Line`] emits its flat spelling.
+/// `Dedent` restores the indentation level on the way out: pushed under a document, it runs after it. `Print`'s flag is the layout mode the document renders under: `true` inside a fitting [`Printer::Group`], where every soft [`Printer::Line`] emits its flat spelling.
 enum Step {
     Print(Printer, bool),
     /// The remaining items of a [`Printer::Fill`], resumed after the one before them has been emitted — the gap decision needs the column the previous item actually left behind, which only exists once it is printed.
@@ -144,7 +144,7 @@ enum Step {
 
 /// One piece of source-derived text a formatter owes the output, and where it was written.
 ///
-/// **What a formatter hands a renderer that a pretty printer never needs.** The document says what the program *is*; this says what the source also held and where, so the renderer can put it back on a line of the output. A comment is the only instance today.
+/// **What a formatter hands a renderer that a pretty printer never needs.** The document says what the program *is*; this says what the source also held and where, so the renderer can put it back on a line of the output. A comment is the only instance.
 pub struct Owed {
     /// The source offset it was written at. The queue is ascending, so the renderer pays in written order.
     pub at: usize,
@@ -173,7 +173,7 @@ struct Measured<'a> {
     filling: bool,
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does a [`Printer::Mark`] that a comment is due at once any text follows it inside the group: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation. A due mark that nothing inside the group follows leaves the group flat — the comment rides the end of the line either way, and only text after it within the group would be carried past the comment by a flat rendering, which is what the break exists to prevent.
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does a [`Printer::Mark`] that a comment is due at once any text follows it inside the group: a group containing a mandatory break never renders flat. A due mark that nothing inside the group follows leaves the group flat — the comment rides the end of the line either way, and only text after it within the group would be carried past the comment by a flat rendering, which is what the break exists to prevent.
 ///
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
 ///
@@ -302,7 +302,7 @@ fn fits(
                     return filling;
                 }
             }
-            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end before anything inside the group follows it. That is the comment-is-a-hard-break law, and this is the only place it is stated now that a comment is never a node of the document.
+            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end before anything inside the group follows it. That is the comment-is-a-hard-break law, stated here alone because a comment is never a node of the document.
             Printer::Mark { at, begins } => {
                 // Only a comment this mark would actually place ends the line, by the same rule `PrinterState::reached` pays by: a mark that merely reports how far the source has been consumed pays nothing waiting for the next element to begin, so it must not break a line on its behalf either.
                 if inside
@@ -353,7 +353,7 @@ fn fits(
 
 /// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`](crate::indent) level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] and hands it here.
 ///
-/// Unbounded width: every [`group`](crate::group) renders flat, so a document without `line`s renders exactly as it did before the layout variants existed. [`run_printer_within`] is the width-fitting entry.
+/// Unbounded width: every [`group`](crate::group) renders flat. [`run_printer_within`] is the width-fitting entry.
 ///
 /// Iterative by construction: the work stack holds what is left to emit, so a document's nesting costs heap rather than native frames.
 pub fn run_printer<'b, 'c>(

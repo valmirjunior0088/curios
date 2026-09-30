@@ -8,7 +8,7 @@ const FOLD_ALLOWANCE_BITS: u64 = 65_536 * 8;
 
 /// Fold one intrinsic over literal operands, or decline.
 ///
-/// **A proven trap declines here, where `curios-ersd`'s fold records it.** This answer is two-way — a literal or nothing — so an operation whose value leaves its carrier is left standing, and the guard `into_wasm` emits for it traps at the execution point instead. Recording the trap would be more precise and is what the erased fold does with its three-way outcome; declining is correct either way, and it is the convention `NatDiv` already established for a zero divisor.
+/// **A proven trap declines here, where `curios-ersd`'s fold records it.** This answer is two-way — a literal or nothing — so an operation whose value leaves its carrier is left standing, and the guard `into_wasm` emits for it traps at the execution point instead. Recording the trap would be more precise and is what the erased fold does with its three-way outcome; declining is correct either way, and it is the convention `NatDiv` follows for a zero divisor.
 ///
 /// A growth decline uses that same answer. The carriers are unbounded from `curios-ersd` down, so multiplication and the left shifts are the two operations that can be asked to build without bound; past [`FOLD_ALLOWANCE_BITS`] they leave the operation standing exactly as a trap does.
 pub(super) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {

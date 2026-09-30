@@ -10,7 +10,7 @@ struct Carrier {
     refused: &'static [&'static str],
 }
 
-/// Every reader of the carriers' algebra keys an atom on its spelling, so two atoms equal only once their arguments are forced — `f(a + b)` and `f(b + a)` — met only where the positional congruence's hash order happened to pair them, and a verdict turned on the order the binders were declared in. Conversion reads a pair it decided nothing about once more with every atom's arguments forced (`force_atoms`), so each row below is stated under both orders.
+/// Every reader of the carriers' algebra keys an atom on its spelling, so two atoms equal only once their arguments are forced — `f(a + b)` and `f(b + a)` — would meet only where the positional congruence's hash order happened to pair them, and a verdict would turn on the order the binders were declared in. Conversion reads a pair it decided nothing about once more with every atom's arguments forced (`force_atoms`), so each row below is stated under both orders.
 const ATOM_BINDERS: &str = "a: Nat, b: Nat, c: Nat, d: Nat, n: Nat, m: Nat, f: (Nat) -> Nat, g: (Nat) -> Nat, i: Int, j: Int, k: Int, l: Int, h: (Int) -> Int, e: (Int) -> Int, p: (Nat) -> Bool, q: (Nat) -> Bool";
 
 /// [`ATOM_BINDERS`] declared the other way round, which mints every binder's identity in the opposite order.
@@ -40,7 +40,7 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(p(a + b) || (p(b + a) && q(c)), p(a + b))",
 ];
 
-// A candidate, and the gap forcing leaves: an atom that is no application keeps its insides as written, so two stuck `match`es whose branches commute a sum are two atoms, and the congruence pairs them by position. `documentation/roadmap/algebra/05-decided-by-spelling-or-cap-spec.md` holds what would take it.
+// A candidate, and the gap forcing leaves: an atom that is no application keeps its insides as written, so two stuck `match`es whose branches commute a sum are two atoms, and the congruence pairs them by position. `documentation/roadmap/04-arithmetic/01-decided-by-spelling-or-cap.md` holds what would take it.
 const ATOMS_REFUSED: &[&str] = &[
     "Eq()((match n | 0 => a + b | _ => c end) + (match m | 0 => c + d | _ => a end), (match m | 0 => d + c | _ => a end) + (match n | 0 => b + a | _ => c end))",
 ];
@@ -52,9 +52,9 @@ const CARRIERS: &[Carrier] = &[
         held: &[
             // Congruence under an opaque head: the arguments are compared as numbers.
             "Eq()(f(x + y), f(y + x))",
-            // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so this was refused by the elaborator alone, as `x` against `y` under the positional congruence, until the solved ones were substituted before the peel.
+            // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so the solved ones are substituted before the peel, without which the elaborator alone would refuse this as `x` against `y` under the positional congruence.
             "Eq()(f(x + 1) + f(y + 1), f(y + 1) + f(x + 1))",
-            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` never met `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` still takes no reducer — what forces the summands' arguments is `force_atoms`, the conversion chain's one retry for every reader of atoms, asked only once the pair has decided nothing as it stood.
+            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` would never meet `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` takes no reducer: what forces the summands' arguments is `force_atoms`, the conversion chain's one retry for every reader of atoms, asked only once the pair has decided nothing as it stood.
             "Eq()(f(x + y) + g(y + z), g(z + y) + f(y + x))",
         ],
         refused: &[],
@@ -250,7 +250,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()((256 * q + Byte/to_nat(b)) % 256, Byte/to_nat(b))",
             // The control for the pair below: the same split over a bound the oracle reads off the term directly.
             "Eq()((16 * q + Nat/and(x, 15)) / 16, q)",
-            // The transparency pair, which moved here when the narrowing took its domain. `Nat/to_byte` states `nat < 256`, so the constructor is invertible and `Byte/to_nat` reduces back through it — which is what lets the second row hold: it is the control above with the operand sent through `Byte` and back, the arithmetic identical and the round trip no longer erasing what the oracle could read.
+            // The transparency pair. `Nat/to_byte` states `nat < 256`, so the constructor is invertible and `Byte/to_nat` reduces back through it — which is what lets the second row hold: it is the control above with the operand sent through `Byte` and back, the arithmetic identical and the round trip erasing nothing the oracle could read.
             "Eq()(Byte/to_nat(Nat/to_byte(Nat/and(x, 255))), Nat/and(x, 255))",
             "Eq()((16 * q + Byte/to_nat(Nat/to_byte(Nat/and(x, 15)))) / 16, q)",
         ],
@@ -448,7 +448,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Bytes/get(x[..bs, k], Bytes/len(bs)), k)",
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
             "Eq()(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
-            // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which still counts only literal runs.
+            // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which counts only literal runs.
             "Eq()(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
             // A window past every operand but the last is that window into the last operand, under the caller's own bound.
             "Eq()(Bytes/get(x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
@@ -614,14 +614,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
             "Eq()(Bytes/len(Flt/to_le_bytes(f)), 8)",
         ],
-        // A candidate law, refused because nothing decides it: true of the model now that every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/algebra/03-declared-operations-spec.md` states it among the decided laws to land.
+        // A candidate law, refused because nothing decides it: true of the model, in which every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/04-arithmetic/02-declared-operations.md` states it among the decided laws to land.
         refused: &["Eq()(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
     },
     Carrier {
         name: "Flt, commutative",
         binders: "a: Flt, b: Flt, c: Flt",
         held: &[],
-        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/algebra/03-declared-operations-spec.md` declares them symmetric, decided by operand order in the judgment rather than by sorting in a fold, which would respell a term a guard's refinement is keyed on.
+        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/04-arithmetic/02-declared-operations.md` declares them symmetric, decided by operand order in the judgment rather than by sorting in a fold, which would respell a term a guard's refinement is keyed on.
         refused: &[
             "Eq()(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
             "Eq()(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",
@@ -646,7 +646,7 @@ const CARRIERS: &[Carrier] = &[
         name: "Flt, sign operations and roundings",
         binders: "a: Flt, b: Flt, c: Flt",
         held: &[],
-        // Candidate laws, each a declaration `documentation/roadmap/algebra/03-declared-operations-spec.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
+        // Candidate laws, each a declaration `documentation/roadmap/04-arithmetic/02-declared-operations.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
         refused: &[
             "Eq()(Flt/neg(Flt/neg(a)), a)",
             "Eq()(Flt/abs(Flt/abs(a)), Flt/abs(a))",

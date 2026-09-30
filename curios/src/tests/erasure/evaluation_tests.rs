@@ -2,7 +2,7 @@
 
 use crate::tests::{cont_optm, run};
 
-// Regression: a `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` used to keep it, so rebuilding the constructor computed the field from binders the same erasure had dropped — `Eq/cong` erased to `apply f(unit)`, and a proof bound as a top-level item, which then ran at initialization, fed that unit to a `Bits` fold and trapped. Such an item is no longer computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this still holds is the classification.
+// A `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` would keep it, and rebuilding the constructor would compute the field from binders the same erasure had dropped — `Eq/cong` erasing to `apply f(unit)`. A proof bound as a top-level item is not computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this holds is the classification.
 #[test]
 fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     let source = r#"
@@ -35,7 +35,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
     );
 }
 
-// A top-level item that is not a function is a value computed at initialization, and a proof there is a kept slot like a local one. Pruning already drops an unused item whose evaluation the erased program calls pure; a lemma that recurses is one it has to keep, since a recursive call may diverge for all it knows, and that lemma ran — here three hundred steps — before the program's first instruction.
+// A top-level item that is not a function is a value computed at initialization, and a proof there is a kept slot like a local one. Pruning drops an unused item whose evaluation the erased program calls pure; a lemma that recurses is one it would have to keep, since a recursive call may diverge for all it knows, and computed it would run — here three hundred steps — before the program's first instruction.
 #[test]
 fn a_top_level_proof_does_not_run_before_the_program() {
     let source = r#"
@@ -87,7 +87,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
 
 /// A program pays only for what it names: the standard library's parser web reaches a trivial entry not at all.
 ///
-/// **Pruning is what stands between a program and the whole prelude**, and it was defeated by one spelling. `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, so the effect summary took its conservative top, pruning read the item as observably effectful and kept it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web. Every program carried it: this entry optimized to 3723 lines of Cont, and to 80 once the alias resolves.
+/// **Pruning is what stands between a program and the whole prelude**, and one spelling can defeat it: `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, and an effect summary taking its conservative top there would read the item as observably effectful and keep it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web, in every program.
 ///
 /// Asserted on the *optimized* Cont, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
 #[test]
@@ -109,7 +109,7 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
     }
 }
 
-// A well-founded recursion runs as its step and nothing else: the accessibility proof it descends on is erased, and `recurse` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` that passed `step` to itself survived to the optimized program as a function of its own, calling the step through a closure at every level.
+// A well-founded recursion runs as its step and nothing else: the accessibility proof it descends on is erased, and `recurse` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` passing `step` to itself would survive to the optimized program as a function of its own, calling the step through a closure at every level.
 #[test]
 fn a_well_founded_recursion_is_fused_with_its_step() {
     let source = r#"

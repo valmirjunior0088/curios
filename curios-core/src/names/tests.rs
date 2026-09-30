@@ -27,7 +27,7 @@ fn witnesses_sharing_a_module_stay_distinct() {
     assert_eq!(witnesses.collect::<HashSet<_>>().len(), 9);
 }
 
-// The collision B1 exists to remove: two units elaborated in separate compilations both mint from zero, so the ordinal alone cannot tell their witnesses apart. The declaring module is what does — and two modules of two units are disjoint by the same argument two mounts are, since a module lies within a mount.
+// The collision a module-scoped ordinal removes: two units elaborated in separate compilations both mint from zero, so the ordinal alone cannot tell their witnesses apart. The declaring module is what does — and two modules of two units are disjoint by the same argument two mounts are, since a module lies within a mount.
 #[test]
 fn one_ordinal_under_two_modules_is_two_witnesses() {
     let here = Global::Witness(WitnessId::new(Qualifier::from(["std", "Nat"]), 0));
@@ -38,7 +38,7 @@ fn one_ordinal_under_two_modules_is_two_witnesses() {
     assert_eq!(there.to_string(), "/json/Value/witness@0");
 }
 
-// A global and a local are different kinds of thing, not two spellings — the distinction `has_local_free` used to draw by testing for a marker character, and which a marker collision has already broken once.
+// A global and a local are different kinds of thing, not two spellings — a distinction a test for a marker character would draw, and a marker collision break.
 #[test]
 fn a_global_never_equals_a_local() {
     assert_ne!(

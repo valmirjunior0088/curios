@@ -1,6 +1,6 @@
-//! Runtime measurements for the death-birth churn campaign, whose conclusion is `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` behind lever A, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
+//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
 //!
-//! What the sixteen-mebibyte initial heap was measured to buy, three arms on one x86-64 box, same method, best of three — wasmtime 46 stock, 47 without the knob, 47 with it: the pin alone costs the allocation-heavy rows several percent (`chain` +10%, `spines` +7%, `churn` +5%) while `lcg` improves by 4%; the size then buys 2.7× on `chain` (831 → 311 ms at K = 1600) and 1.55× on `spines` (737 → 475 ms at N = 75 000), moves the allocation-free `churn` not at all — the empirical pin on its exit from the churn class — and gives `trees` only 3%, because an all-live tree must outgrow any constant.
+//! What the sixteen-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
     crate::to_cwasm,
@@ -144,22 +144,7 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, x86-64 Linux dev machine, the command above:
-///
-/// ```text
-/// == chain collection decomposition (K = 400)
-///   stock: churn 0.472 ms/round, 1.580 collections/round, -> grew GC heap by 0x80000 bytes: new size is 0x100000 bytes
-///   ballast 250k (~16 MiB heap): churn 0.171 ms/round, 0.040 collections/round, -> grew GC heap by 0x800000 bytes: new size is 0x1000000 bytes
-///   ballast 4M (~256 MiB heap): churn 0.324 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
-/// ```
-///
-/// # The reading
-///
-/// The engine grows the heap only when a single post-collection allocation cannot fit, so under a workload whose live set is tiny the heap parks barely above that live set — the stock arrangement's ~320 KB chain in a 1 MiB heap leaves the semi-space half ~190 KB of allocation room, a collection fires about 1.6 times per round, and every cell is copied more often than it is born. Right-sizing the heap (the 16 MiB arm) removes almost every collection and with it roughly two thirds of the churn cost, at a few MB of RSS; over-sizing it (the 256 MiB arm) gives half that win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
-///
-/// # Retaken under the sizing decision
-///
-/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default this measurement chose (see `curios-runtime/README.md`):
+/// x86-64 Linux dev machine, wasmtime 47.0.3 with the sixteen-mebibyte default (see `curios-runtime/README.md`), the command above:
 ///
 /// ```text
 /// == chain collection decomposition (K = 400)
@@ -168,7 +153,9 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 ///   ballast 4M (~256 MiB heap): churn 0.345 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
-/// Stock now *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it reproduces the old 16 MiB ballast arm's figure, which is the ballast-to-initial-size equivalence this probe's method assumed, verified. The 250k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and the 256 MiB arm still carries the cold-sweep tax. The 46-era figures above stay as the record of what admitted the lever.
+/// # The reading
+///
+/// The engine grows the heap only when a single post-collection allocation cannot fit, so a heap left unsized parks barely above a tiny live set, a collection fires more than once a round, and every cell is copied more often than it is born. Under the default, stock *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it matches the 16 MiB ballast arm, which is the ballast-to-initial-size equivalence this probe's method assumes. The 250k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and over-sizing (the 256 MiB arm) gives the win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
 #[test]
 #[ignore = "measurement: times the churn workload rather than asserting"]
 fn chain_collection_decomposition() {
@@ -205,7 +192,7 @@ fn chain_collection_decomposition() {
     }
 }
 
-/// The `churn` workload's threaded record travels as fields: over a million spread-update steps the emitted program allocates so little that the collector never runs, because continuation scalar replacement and the known-function field split erase the reconstruction the source spells. The workload's Curios column therefore prices dispatch and checked arithmetic rather than allocation, and the campaign's record-update question narrows to records at rest — which is what the specification's `spines` workload and the census exist to reach. Collection counts are deterministic, which is what makes the absence assertable rather than merely measurable; the anchor is cross-checked against the Rust and Node contestants.
+/// The `churn` workload's threaded record travels as fields: over a million spread-update steps the emitted program allocates so little that the collector never runs, because continuation scalar replacement and the known-function field split erase the reconstruction the source spells. The workload's Curios column therefore prices dispatch and checked arithmetic rather than allocation, and a record update worth measuring is a record at rest — what `spines` and the census reach. Collection counts are deterministic, which is what makes the absence assertable rather than merely measurable; the anchor is cross-checked against the Rust and Node contestants.
 #[test]
 fn threaded_record_allocates_nothing() {
     let cwasm = cwasm_of(CHURN);
@@ -277,41 +264,11 @@ match input: (_) => Io({})
 end
 "#;
 
-/// The `spines` half of lever A's class evidence, by the method `chain_collection_decomposition` documents — `--release`, `--all-features`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so the stock arrangement's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
+/// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents — `--release`, `--all-features`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, x86-64 Linux dev machine:
-///
-/// ```text
-/// == spines collection decomposition
-///   stock, N=12500: churn 6.04 us/insert, 15.9 collections per 1000 inserts, -> grew GC heap by 0x200000 bytes: new size is 0x400000 bytes
-///   stock, N=25000: churn 6.82 us/insert, 10.0 collections per 1000 inserts, -> grew GC heap by 0x400000 bytes: new size is 0x800000 bytes
-///   ballast 250k, N=25000: churn 2.26 us/insert, 0.2 collections per 1000 inserts, -> grew GC heap by 0x800000 bytes: new size is 0x1000000 bytes
-///   ballast 4M, N=25000: churn 2.29 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
-/// ```
-///
-/// # The reading
-///
-/// Same policy, same verdict as `chain`: the heap parks within a doubling of the live set, and about two thirds of the churn cost is collection work — 6.82 µs per insert falling to 2.26 pre-grown. Two facts are new. The stock per-insert cost is superlinear (6.04 at half the inserts, 6.82 at all of them) because every collection copies the *growing* map, which is what a plateauing live set under churn buys the collector. And the two ballast arms tie, where `chain`'s split by two: a trie walk is cache-scattered whichever heap it runs in, so the cold-page tax that made chain's sizing non-monotonic barely registers here — the non-monotonicity is a hot-loop artifact, not a law of the lever.
-///
-/// # Retaken under the sizing decision
-///
-/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default:
-///
-/// ```text
-/// == spines collection decomposition
-///   stock, N=12500: churn 2.65 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
-///   stock, N=25000: churn 2.70 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
-///   ballast 250k, N=25000: churn 2.36 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
-///   ballast 4M, N=25000: churn 2.17 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
-/// ```
-///
-/// The sized stock reproduces the pre-grown arms — collections effectively gone, and the per-insert cost flat across N where it was superlinear — with the small residual over the 46-era ballast figure being the 47 pin's own cost plus first-touch. The figures above stay as the admission record.
-///
-/// # Retaken 2026-08-20, as the map-distance decomposition's first cut
-///
-/// Same box, release, after the single-walk map, the two-way branch, exact tuple reads, and the per-arity typed closure tables:
+/// x86-64 Linux dev machine, release, under the sixteen-mebibyte default:
 ///
 /// ```text
 /// == spines collection decomposition
@@ -321,7 +278,7 @@ end
 ///   ballast 4M, N=25000: churn 1.08 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
-/// What the figure decided: **the collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns, on the post-campaign code. The remaining ~744 ns/insert (`map_wall_spines_slope`) is mutator work, so the decomposition's rebuild-and-collection candidate is measured out for this workload, the generational nursery is demoted with it, and what is left to rank is the representation tax against per-insert key construction — both owned by the typed-fields campaign's instruments.
+/// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`map_wall_spines_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
 #[test]
 #[ignore = "measurement: times the spines workload rather than asserting"]
 fn spines_collection_decomposition() {

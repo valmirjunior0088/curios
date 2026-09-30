@@ -1,0 +1,15 @@
+# A call fills one parameter group
+
+**Decision.** A call supplies exactly one parameter list, the one its head's type opens with, and a function whose result is a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`. A list whose parameters are all hidden is no exception; its call carries its `@` and `use` arguments or none, so `Eq`, whose `@A` is a list ahead of its indices, is `Eq()(x, y)` or `Eq(@Nat)(x, y)`. Hidden arguments are optional inside the call that owns them. A family with both parameters and indices is a function of its parameters returning a function of its indices: `induct Sized(T: Type): (length: Nat) -> Type` has type `(T: Type) -> (length: Nat) -> Type` and is applied `Sized(T)(n)`, and Core keeps the two apart — `InductDecl::arity` ends in the index telescope, and `InductType` carries `params` and `indices` — so the printer writes `Sized(Nat)(1)`, and a lambda over exactly a family's indices prints as the family at its parameters, `Accessible(@A, R)`. A concept method's wrapper takes the concept's parameters and its witness in the method's own list, so a method is called once: `Show/show(value)`, `Fun/name(@Pair)`.
+
+**Rationale.**
+
+- **A call's shape is read off its head's type alone**, so every call has one spelling and a declaration's parameter lists are the calls a use site writes. Lambdas take one list each (`(@A) => (x) => x` against `(@A: Type) -> (A) -> A`), so introduction and elimination group alike.
+- **Parameters are uniform across constructors and indices are not.** A constructor's target states only indices and a motive binds only indices, so `Sized(T)` is the family a match eliminates, and a partially applied family is first-class without a lambda: `Accessible(R)` is the predicate `WellFounded` quantifies and whose proofs `recurse` descends on. The header separates the two at the colon, as Lean 4 and Agda do, where application is juxtaposition and the question of where a call ends never arises.
+
+**Rejected.**
+
+- **Spilling plain arguments past a hidden-only list into the next**, which makes `G(1, 2)`, `G(@Nat, 1, 2)`, `G()(1, 2)` and `G(@Nat)(1, 2)` one call spelled four ways.
+- **Letting a hidden-only list always join the next call.** Its trigger is the shape of the list's result, which a metavariable can hide, so whether `f()` is a call or half of one would change with elaboration order.
+- **A flat family binding, `Sized(T, n)`**, where declaration and use disagree and a family's index-only part cannot be named; a flat declaration syntax to match it erases the split the eliminator, the motive and the targets rest on.
+- **Currying every parameter separately**, which makes `Pair(A)(B)` of a two-parameter struct for nothing the one split does not give.

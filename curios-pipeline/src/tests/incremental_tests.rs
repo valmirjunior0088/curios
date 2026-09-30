@@ -1,6 +1,6 @@
 //! One unit compiled over a baseline: what the closure covers, what is reused untouched, and that the result agrees with a whole compile of the same text — its lints included, which a reused item's credits are carried into.
 //!
-//! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, and the specification says so.
+//! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, as `documentation/design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md` states.
 
 use {
     super::test_support::{
@@ -158,7 +158,7 @@ fn an_all_changed_closure_equals_the_whole_compile() {
 
 /// An item the parser could not read withholds its dependents, which report nothing and leave no refusal behind them — so a recompile reassembling the lowered order has items in it that the closure's elaboration never produced. It leaves them out, exactly as a whole compile of the same text does, and answers with the parse error either way.
 ///
-/// This is the crossing the two features never had a fixture for: recovery was written against the whole-unit path, where a withheld item simply falls out of the module, and the recompile was written against a run that either kept everything or refused something.
+/// This is where the two features cross: recovery lets a withheld item fall out of a whole unit's module, and the recompile reassembles a run that either kept everything or refused something.
 #[test]
 fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does() {
     let baseline = unit_of(BASE);

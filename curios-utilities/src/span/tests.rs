@@ -36,7 +36,7 @@ fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
 fn caret_padding_reproduces_the_tabs_the_printed_line_keeps() {
     let source = Source::inline("\t\tvalue\n");
 
-    // The line is printed verbatim, so the padding carries the same two tabs rather than two spaces: a space each moved the caret one column where the text moved eight.
+    // The line is printed verbatim, so the padding carries the same two tabs rather than two spaces: a space each would move the caret one column where the text moves eight.
     let offset = source.text.find("value").unwrap();
     let span = Span::new(Arc::clone(&source), offset, offset + 5);
     assert_eq!(

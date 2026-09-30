@@ -1,8 +1,8 @@
-//! The immediate layout: that the derived quantities are the constants the emitters used to spell by hand, and that the packing round-trips.
+//! The immediate layout: that the derived quantities are the constants the emitters rely on, and that the packing round-trips.
 
 use super::*;
 
-/// The values every site transcribed before this module owned them. Stated as literals rather than recomputed, so a change to the derivation is a failure here rather than a silently different program.
+/// The layout's quantities, stated as literals rather than recomputed, so a change to the derivation is a failure here rather than a silently different program.
 #[test]
 fn the_derived_quantities_are_the_transcribed_constants() {
     let bytes = ImmediateLayout::of(Grain::X);

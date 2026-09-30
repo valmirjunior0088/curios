@@ -37,7 +37,7 @@ pub(crate) fn sys_source() -> RootSource {
 
 /// The `/std` root, read from the package at `manifest/std` — the second unit, compiled against `/sys`.
 ///
-/// Two sources rather than one because they are two units: `/std` references `/sys` and `/sys` references nothing above it, so the fold has an order and each half is lowered against what precedes it. What `/syn` once made impossible was exactly this — it sat between them and referenced both.
+/// Two sources rather than one because they are two units: `/std` references `/sys` and `/sys` references nothing above it, so the fold has an order and each half is lowered against what precedes it.
 ///
 /// **Read the way a package is read, because `/std` is one.** Its header is `lib.crs` beside its own `curios.toml` and its namespace *is* that directory, which is the exception `curios-package`'s layout states for a library; nothing here enumerates its modules, because a module enters a unit by being declared `mod` in a header and the resolver reads each one when discovery asks for it.
 pub(crate) fn std_source(manifest: &Path) -> RootSource {

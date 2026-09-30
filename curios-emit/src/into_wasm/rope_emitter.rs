@@ -1,4 +1,4 @@
-//! The shared rope helper functions — the only module-level functions the emitter mints beyond the program's own (everything else is inlined at its use site — straight-line sequences only; anything the emitter lowers to a *loop* lives here, so its mutable scratch locals are zeroed by the fresh activation instead of leaking across executions of one call site). Eight rows:
+//! The shared rope helper functions. Straight-line sequences are inlined at their use site; anything the emitter lowers to a *loop* is a helper here instead, so its mutable scratch locals are zeroed by the fresh activation rather than leaking across executions of one call site. Among them:
 //!
 //! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else fills a fresh payload by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
@@ -394,7 +394,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// view{2, n, r, s}
     /// ```
     ///
-    /// The count arrives as an operand, so nothing here computes one — and a reversed window, which the `(start, end)` form had to reject, cannot be spelled.
+    /// The count arrives as an operand, so nothing here computes one — and a reversed window cannot be spelled.
     ///
     /// The node arm's force is what maintains the read-through invariant: every `view` base is flat-available from birth, and stays so (a cache is written once, never cleared).
     pub(crate) fn emit_slice_func(
@@ -412,7 +412,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         let mut instrs = Vec::new();
 
-        // Bounds: the pre-window trap `slice` always had (an out-of-range window must not become a deferred — or never-taken — trap). A window is `(start, count)`, so the reversed range it also used to reject cannot be spelled, and only running past the end is left.
+        // Bounds: the eager trap (an out-of-range window must not become a deferred — or never-taken — trap). A window is `(start, count)`, so a reversed range cannot be spelled, and only running past the end is left.
         //
         // Spelled `s > len || n > len - s` rather than `s + n > len` because the sum is i32 arithmetic and would wrap. The subtraction underflows when `s > len`, but the first test has already decided that case and both are evaluated before the `or`.
         instrs.extend([
@@ -568,7 +568,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// (r.cache ?? force(r))[i]                        ;; node: answer the memo, fill it once
     /// ```
     ///
-    /// The node arm probes the cache before reaching for `force`: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays, per the map-wall decomposition.
+    /// The node arm probes the cache before reaching for `force`: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays.
     ///
     /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `List` elements are the top type (`array.get`).
     pub(crate) fn emit_read_func(
@@ -609,7 +609,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         };
 
         let instrs = vec![
-            // The eager bounds trap, as the bit grain's twin opens with. A leaf would trap in the engine on its own payload, but a *view* reads `base.payload[offset + i]`, and a position past the window is a position the base array still holds — so without this a read past the end answers a neighbouring element instead of refusing. What makes every read well-placed is the proof its caller discharged; this is the backstop for a wrong erasure or a wrong checker, and the one place the three carriers' reads did not agree.
+            // The eager bounds trap, as the bit grain's twin opens with. A leaf would trap in the engine on its own payload, but a *view* reads `base.payload[offset + i]`, and a position past the window is a position the base array still holds — so without this a read past the end answers a neighbouring element instead of refusing. What makes every read well-placed is the proof its caller discharged; this is the backstop for a wrong erasure or a wrong checker, and what makes the three carriers' reads agree.
             get(&i),
             get(&r),
             field_get(&rope.base, &rope.len_field),
@@ -907,7 +907,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         curios_wasm::Instr::ArrayGet {
                             type_name: elems.clone(),
                         },
-                        // An element is small-canonical, so an immediate is boxed before the deep force — the box is the cast this arm used to make, plus the materialisation.
+                        // An element is small-canonical, so an immediate is boxed before the deep force — the box is a cast plus the materialisation.
                         curios_wasm::Instr::Call {
                             func_name: box_func,
                         },
@@ -1147,16 +1147,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`.
-    ///
-    /// ```wat
-    /// selems := force(src); count := selems.len
-    /// out    := array.new_default <payload> count
-    /// loop: while i < count, out[i] := f(selems[i]), i += 1
-    /// leaf { tag 0, count, out }
-    /// ```
-    ///
-    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the table index from its special field.
     /// `$bin/and` / `/or` / `/xor (ref $payload) (ref $payload) (i32 len) -> (ref $rope/bin)`: two forced payloads combined byte for byte, sealed at `len`.
     ///
     /// **Three helpers rather than six, because a payload does not know its grain.** The operands arrive already forced, so what is left is a walk over two byte arrays — the same walk whether the generators are bits or bytes — and the grain survives only in which `force` the caller reached for and which length it hands over. The `eql` pair above is two functions for the opposite reason: equality compares *logical* lengths, and a bit grain's final byte carries padding a comparison must not read.
@@ -1417,6 +1407,16 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`.
+    ///
+    /// ```wat
+    /// selems := force(src); count := selems.len
+    /// out    := array.new_default <payload> count
+    /// loop: while i < count, out[i] := f(selems[i]), i += 1
+    /// leaf { tag 0, count, out }
+    /// ```
+    ///
+    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the table index from its special field.
     pub(crate) fn emit_map_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1525,7 +1525,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/box` / `$bits/box (ref null any) -> (ref $rope/bin)`: a small-canonical packed value as a rope. An immediate — the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null exactly as the cast this call replaced did. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
+    /// `$bytes/box` / `$bits/box (ref null any) -> (ref $rope/bin)`: a small-canonical packed value as a rope. An immediate — the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null as a bare cast would. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
     pub(crate) fn emit_box_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
         let layout = ImmediateLayout::of(grain);
         let (len_shift, payload_mask, slots, unit) = (

@@ -10,7 +10,7 @@ use {
 
 use super::test_support::*;
 
-/// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. The machine evaluated every beta argument and substituted its value, which on a function-valued global inlined the definition once per occurrence — and a web of definitions each naming the one before it twice came back as a graph whose tree was `2^n`, retained by the unfold memo and opened as a tree by the strategy's own beta. The strategy substitutes the argument as written, so the two reducts were never identical here, and this fixture is the one that sees it.
+/// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. A machine that evaluates every beta argument and substitutes its value would inline a function-valued global's definition once per occurrence — and a web of definitions each naming the one before it twice would come back as a graph whose tree is `2^n`. The strategy substitutes the argument as written, so the two reducts would differ here, and this fixture is the one that sees it.
 #[test]
 fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     let g = Free::global(Qualifier::from(["g"]));
@@ -66,7 +66,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
 
 /// **The differential fixture the machine's perimeter entry names.** The same closed terms are put to a kernel with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term, **at both demands**. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Both evaluators determine these completely — a first-order value at the forced demand, and at the plain one either that or the folded spelling the demand stops at — so equality here is syntactic rather than up-to-anything.
 ///
-/// It asked `reduce_forced` alone until the plain demand was found to be where the machine and the strategy could disagree, on `forced_then_plain` below. Every recursive term in the battery before it is a `rec` block that both evaluators leave unopened at a plain demand, so the comparison ran but reached nothing.
+/// Both demands are asked because the plain one is where the machine and the strategy can disagree, on `forced_then_plain` below: a `rec` block both evaluators leave unopened at a plain demand is compared there but reaches nothing.
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
     let bin_type = Term::intrinsic(Intrinsic::BinType(Grain::X));
@@ -193,7 +193,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
-    // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term because the machine's value memo is run-scoped: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. The memo is keyed on the term alone, so a projection recorded at the forced demand was answered to the plain probe, and the machine ran the whole fold where the strategy stops at the folded spelling.
+    // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term because the machine's value memo is run-scoped: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. Keyed on the term alone, the memo would answer a projection recorded at the forced demand to the plain probe, and the machine would run the whole fold where the strategy stops at the folded spelling.
     let forced_then_plain = {
         let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
@@ -229,7 +229,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
-    // The same order through a call and through a match rather than a bare selection: the `let` value's operand is forced, so the call — or the match whose arm is the call — is remembered with the value the fold computes, and the tail asks the same term plainly, where the folded call is the answer. Keyed on the term alone, the memo served the forced value; mutation-checked by reading the forced table at a plain demand.
+    // The same order through a call and through a match rather than a bare selection: the `let` value's operand is forced, so the call — or the match whose arm is the call — is remembered with the value the fold computes, and the tail asks the same term plainly, where the folded call is the answer. Keyed on the term alone, the memo would serve the forced value; mutation-checked by reading the forced table at a plain demand.
     let forced_then_plain_through = |through_a_match: bool| {
         let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
@@ -277,10 +277,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
-    // A group whose one member never mentions itself: opening its tail reduces past the projection to
-    // the member's own value, so what the head exposes is a `Func` and the application is ordinary
-    // beta. The machine takes it from the apply arm; the strategy reaches it through the branch that
-    // used to demand a projection and decline everything else.
+    // A group whose one member never mentions itself: opening its tail reduces past the projection to the member's own value, so what the head exposes is a `Func` and the application is ordinary beta. The machine takes it from the apply arm, the strategy through `expose_rec_tail`.
     let dissolved_group = {
         let (n, unused) = (binder(0, "n"), binder(1, "unused"));
         let identity = Term::func([(n, nat_type())], Term::free_var(&n));
@@ -298,7 +295,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
-    // A member whose result is a function, called past its own parameters: `f(2)(3)` is the call `f(2)` applied to `3`. The plain demand stops at the folded spine, and the forced one reaches through it to the call — which the machine's head frame, evaluating a head at the plain demand, handed back unforced while the strategies unfolded it.
+    // A member whose result is a function, called past its own parameters: `f(2)(3)` is the call `f(2)` applied to `3`. The plain demand stops at the folded spine, and the forced one reaches through it to the call — which a head frame evaluating its head at the plain demand would hand back unforced while the strategy unfolds it.
     let past_parameters = {
         let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
         let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
@@ -331,7 +328,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
-    // The same call demanded plainly and then forced, in one run: the `let` value is released at the plain demand, where the folded spine is the answer, and the tail's operand is forced. A forced probe reads the plain table as well, so the memo's guard must recognize the spine as folded and decline to record it — read one application deep, it recorded the spine and served it to the forced probe, and the sum stuck on it.
+    // The same call demanded plainly and then forced, in one run: the `let` value is released at the plain demand, where the folded spine is the answer, and the tail's operand is forced. A forced probe reads the plain table as well, so the memo's guard must recognize the spine as folded and decline to record it — read one application deep, it would record the spine and serve it to the forced probe, and the sum would stick on it.
     let plain_then_forced = {
         let call = past_parameters.clone();
         let released = binder(6, "released");
@@ -369,7 +366,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
             "the machine and the strategy disagreed on {term}",
         );
 
-        // The plain demand is a separate contract, not a weaker reading of the one above: it is where a folded recursive spelling is the answer rather than a step on the way to one, so a machine that unfolds here computes a value the strategy never offers. Asking only the forced demand left that whole half of the machine uncompared.
+        // The plain demand is a separate contract, not a weaker reading of the one above: it is where a folded recursive spelling is the answer rather than a step on the way to one, so a machine that unfolds here computes a value the strategy never offers. Asking only the forced demand would leave that whole half of the machine uncompared.
         let mut machined = kernel();
         let mut strategy = strategy_kernel();
 

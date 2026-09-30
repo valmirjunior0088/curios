@@ -297,7 +297,7 @@ fn rejects_cyclic_re_export_with_no_concrete_target() {
     );
 }
 
-// Two declarations of the same label in the same namespace conflict at phase 2, before any elaboration. The refusal is about the name occupying a slot, so it holds whatever the two wrote for visibility and says nothing about it — and it points at the one that arrived second, which is the one the reader deletes.
+// Two declarations of the same label in the same namespace conflict at discovery, before any elaboration. The refusal is about the name occupying a slot, so it holds whatever the two wrote for visibility and says nothing about it — and it points at the one that arrived second, which is the one the reader deletes.
 #[test]
 fn rejects_a_duplicate_declaration() {
     let report = run_err_report(

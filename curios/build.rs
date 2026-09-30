@@ -35,7 +35,7 @@ fn main() {
 
     // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
     //
-    // The sources are what `cargo x runtime` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. A list this script kept by hand named whole crates, so an edit to a runtime *test* file left a warning that `cargo x runtime` could not clear, having nothing to rebuild; the recipe now refreshes the launcher's timestamp in exactly that case, which is why the comparison below is against the listed files and the recipe's, and not some third set.
+    // The sources are what `cargo x runtime` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. The recipe refreshes the launcher's timestamp when a listed file is newer but the bytes did not change, so the comparison below is against exactly the listed files — the recipe's own set — and never leaves a warning `cargo x runtime` cannot clear.
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")

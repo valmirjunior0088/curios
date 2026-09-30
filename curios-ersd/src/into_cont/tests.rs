@@ -12,7 +12,7 @@ fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
 
 /// Every completed lowering has already passed `curios_cont::Module::verify` inside `lower_to_cont`; the shape assertions on top ask the graph.
 ///
-/// They ask the graph rather than the printed text, which they once did. A spelling belongs to the printer, and when the printer changed, every one of these turned out to have been a claim about a Rust variant name — three of them would have gone quietly vacuous rather than failing. The printed module is still what a failure reports, because that is what a reader needs in front of them.
+/// They ask the graph rather than the printed text: a spelling belongs to the printer, so an assertion over it is a claim about how a Rust variant is rendered, which a printer change can turn quietly vacuous rather than failing. The printed module is still what a failure reports, because that is what a reader needs in front of them.
 fn lowered(module: &Module) -> curios_cont::Module {
     lower_to_cont(module)
 }
@@ -383,7 +383,7 @@ fn an_immediate_constructor_rides_its_payload() {
         ),
         "{cont}"
     );
-    // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path built a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emitted.
+    // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path builds a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emits.
     assert!(
         intrinsics(&cont).contains(&curios_cont::Intrinsic::ImmediateGet),
         "{cont}"
@@ -501,7 +501,7 @@ fn two_immediate_constructors_decline_the_encoding() {
     let module = builder.finalize().expect("verifies");
 
     let cont = lowered(&module);
-    // Two immediate constructors would collide on the same i31 values, so the family stays tagged — which since family keying means a `Variant` of its own family rather than a structural tuple.
+    // Two immediate constructors would collide on the same i31 values, so the family stays tagged — a row of its own family rather than a structural tuple.
     assert!(
         has_value(
             &cont,
@@ -816,7 +816,7 @@ fn a_sequence_fold_reads_through_its_grain() {
         has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinGet(_))),
         "{cont}"
     );
-    // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BinSlice` here would mean one had gone back to deriving one.
+    // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BinSlice` here would mean a lowering derives one.
     assert!(
         has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinRest(_))),
         "{cont}"
@@ -832,7 +832,7 @@ fn a_sequence_fold_reads_through_its_grain() {
 
 /// A fold whose step ignores its suffix pays nothing for it.
 ///
-/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold`, `List/fold`, and `/std/Str/fold`'s per-character walk, whose `t` survives only in erased `Prop` positions), so emitting it unconditionally put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
+/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold`, `List/fold`, and `/std/Str/fold`'s per-character walk, whose `t` survives only in erased `Prop` positions), so emitting it unconditionally would put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
 ///
 /// **No later pass can undo that**, which is why the check belongs at the point of emission: `BinSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
 #[test]
@@ -1020,7 +1020,7 @@ fn io_constants_ride_the_binary_carrier() {
 
 #[test]
 fn a_knot_member_read_only_by_an_item_is_kept() {
-    // rec { lazy = Pair { force: fn() = lazy, mark: 0 } }; let read = lazy.mark — the only read is a top-level item, which lives in no block. A member is dropped when nothing outside its initializer reads it, and a scan of the blocks alone missed this read, so the member vanished and the item's operand lowered to a value the arena lacked.
+    // rec { lazy = Pair { force: fn() = lazy, mark: 0 } }; let read = lazy.mark — the only read is a top-level item, which lives in no block. A member is dropped when nothing outside its initializer reads it, and a scan of the blocks alone would miss this read, dropping the member and lowering the item's operand to a value the arena lacks.
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),

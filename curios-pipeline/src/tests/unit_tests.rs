@@ -36,7 +36,7 @@ fn an_entry_module_colliding_with_a_mount_is_diagnosed() {
     assert!(error.contains("lib"), "unexpected error: {error}");
 }
 
-/// A mount wins over the entry's empty prefix, which is the whole of what longest match decides now that a prefix is one segment: `/json/answer` is the mounted unit's, not a name the entry failed to declare.
+/// A mount wins over the entry's empty prefix, which is the whole of what longest match decides, a prefix being one segment: `/json/answer` is the mounted unit's, not a name the entry failed to declare.
 #[test]
 fn a_mount_wins_over_the_entrys_empty_prefix() {
     compile_with_units(
@@ -88,7 +88,7 @@ fn an_entry_reaches_a_mounted_units_public_name() {
 ///
 /// A witness declared in ordinary unit `A` for a concept declared in ordinary unit `B` over a type declared in ordinary unit `C` is an orphan: no unit involved owns the pair, and two unrelated authors could otherwise each `satisfy` it and collide unfixably once both are linked. Written as modules of one unit the same three declarations are accepted, because one unit owns all of them.
 ///
-/// Either half alone proves nothing. The refusal could come from a malformed fixture; the acceptance could come from a rule that never runs. Only together do they say the boundary is where coherence is enforced — which is why the earlier claim that N units compile identically to N modules was exactly backwards.
+/// Either half alone proves nothing. The refusal could come from a malformed fixture; the acceptance could come from a rule that never runs. Only together do they say the boundary is where coherence is enforced.
 #[test]
 fn the_orphan_rule_fires_across_units_and_not_across_modules() {
     let concept = "pub concept Show(A: Type): pub Type {\n    show(A) -> /std/Nat,\n}";
@@ -115,7 +115,7 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
 
 /// A unit's stored bytes do not change with what was compiled before it.
 ///
-/// `/lib` is compiled twice: with only the prelude beneath it, and after `/pre`, which mints binders and universe metavariables of its own. Nothing a unit mints resumes above a predecessor's count, so the lowered and the elaborated module serialize to the same bytes either way, and the lowering hands elaboration the same counts. What legitimately moves is left out: the spellings a unit may write for its scope's names, which are its scope's interface, and the erased arena, which is cumulative from the first unit until the verdicts campaign's part 6 deletes it.
+/// `/lib` is compiled twice: with only the prelude beneath it, and after `/pre`, which mints binders and universe metavariables of its own. Nothing a unit mints resumes above a predecessor's count, so the lowered and the elaborated module serialize to the same bytes either way, and the lowering hands elaboration the same counts. What legitimately moves is left out: the spellings a unit may write for its scope's names, which are its scope's interface, and the erased arena, which is cumulative from the first unit.
 #[test]
 fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     let pre = mounted(

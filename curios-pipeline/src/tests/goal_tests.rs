@@ -92,7 +92,7 @@ fn report_includes_the_local_scope() {
 fn goal_in_synthesis_position_reports_a_meta_type() {
     // A bare `?` with nothing to check against: a fresh metavariable stands in as its type, so the goal still reaches zonk's report (instead of dying with `CannotInfer` during elaboration) and shows the undetermined stand-in.
     //
-    // The synthesis position is a typeless local `let`, not the entrypoint tail: the tail is always *checked* now — against the fixture's stated type here, against `Io({})` in a real program — so it can no longer host a term with nothing to check against.
+    // The synthesis position is a typeless local `let`, not the entrypoint tail: the tail is always *checked* — against the fixture's stated type here, against `Io({})` in a real program — so it cannot host a term with nothing to check against.
     let source = r#"
         let anything = ?;
         0
@@ -170,7 +170,7 @@ fn solved_and_unsolved_goals_share_one_batch() {
 
 #[test]
 fn each_goal_in_a_batch_names_its_binders_as_written() {
-    // Two items each bind `n`. The rename map is per report, so both goals say `n`; a batch-wide map suffixed the second `n2` — a collision with a binder from a goal this one cannot see.
+    // Two items each bind `n`. The rename map is per report, so both goals say `n`; a batch-wide map would suffix the second `n2` — a collision with a binder from a goal this one cannot see.
     let source = r#"
         use /std/{Nat};
         let first(n : Nat) -> Nat = ?;
@@ -206,7 +206,7 @@ fn types_spell_operators_as_infix_not_witness_projections() {
 
 #[test]
 fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obligation() {
-    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; then, parked, it survived the drain as a postponed-conversion error. Now a survivor held up by written goals alone is the goals' own report: the batch names the hole, its type, and — as `? such that` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
+    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. A survivor held up by written goals alone is the goals' own report — neither a hard `type mismatch` telling the author the program is wrong nor a postponed-conversion error: the batch names the hole, its type, and — as `? such that` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;

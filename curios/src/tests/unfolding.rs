@@ -1,6 +1,6 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Two measurements, for four compiler cliffs `documentation/roadmap.md` records closed: how a case refinement is keyed, how a reified closure is shared, what the Cont fixpoint costs (measured in `tests::fixpoint`), and what an index inversion reduces. What is left of them here is the before-and-after each probe carries. A third measured a fifth cliff, what filling the compilation's retention allowance cost, and went with the allowance once no memo outlived the declaration that filled it. The measurements are here rather than in prose because those specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
+//! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the Cont fixpoint's cost is `tests::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
 //!
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
@@ -131,7 +131,7 @@ pub(super) enum Consumed {
     ScrutinizedClosed,
     /// Named in the index of an `Eq` the declaration takes a proof of, and eliminated. No case equation is registered for the web at all — the scrutinee is the proof, a bare variable — and the web is reduced anyway, by `invert_indices` unifying `(top(n), true)` against `refl`'s `(z, z)` through `Judge::convert_at`.
     ///
-    /// The second door onto the same reduction, and the one no refinement key reaches. Both checkers paid it, which is what made it a different defect rather than the same one — the third of the compiler cliffs `documentation/roadmap.md` records, closed: the cost was never the inverter's but weak-head reduction's, which normalized a `&&`/`||` tree whole to decide a fold a stuck left had already settled, and the closed machine's, which substituted a global's value for its name. [`numerics`] is the same door over `Nat`, where the first of those is the fold laws' to keep.
+    /// The second door onto the same reduction, and the one no refinement key reaches, in both checkers; what keeps it flat is weak-head reduction's and the closed machine's, not the inverter's, as [`scrutinee_refinement_measurements`] states. [`numerics`] is the same door over `Nat`, whose fold laws read both operands.
     Proved,
 }
 
@@ -217,67 +217,17 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// Release only. The wall clocks are dominated by `curios_cont::optimize`, which a debug build prices differently; the *counts* are deterministic and hold in either profile.
 ///
-/// The tables below carry a fourth row, every rule eta-expanded through `Parse { run = … }`, that this test no longer takes: `Parse`'s representation has since been sealed, so the spelling is not one a user can write — which is the sealing's point rather than a loss to the measurement, since the row only ever reported what a `delay` combinator would cost, and `Parse` exports none.
-///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a replacement's residual group bound at item level.
+/// **Release**, `aarch64-apple-darwin`.
 ///
 /// | spelling | `Parse/bind` copies at 16 rules | emitted functions | compile | growth of copies |
 /// | --- | --- | --- | --- | --- |
 /// | no application inside a continuation | 18 | 166 | 0.69 s | `n + 2` |
 /// | **as written** — applications inside the continuation | **18** | **262** | **1.52 s** | **`n + 2`** |
 /// | applications hoisted to items | 18 | 262 | 1.54 s | `n + 2` |
-/// | every rule eta-expanded, applications left in place | 18 | 278 | 1.64 s | `n + 2` |
 ///
-/// **Where the application is written no longer decides anything.** The as-written row and the hoisted row agree to the copy, to the function, and to within a hundredth of a second, at every size — 4/108, 6/130, 10/174, 14/218, 18/262. The hoisted spelling was the cure emulated in source and therefore a ceiling; this is that ceiling reached.
-///
-/// # What it printed before let-insertion
-///
-/// Same day, same host, with a block-owned candidate's group spliced into its own block.
-///
-/// | spelling | copies at 16 rules | emitted functions | compile | growth |
-/// | --- | --- | --- | --- | --- |
-/// | no application inside a continuation | 18 | 166 | 0.63 s | `n + 2` |
-/// | applications hoisted to items | 18 | 262 | 1.29 s | `n + 2` |
-/// | every rule eta-expanded | 18 | 312 | 4.58 s | `n + 2` |
-/// | **as written** | **258** | **566** | **24.23 s** | **`n² + 2`** |
-///
-/// The quadratic was exact over `n` ∈ {2, 4, 8, 12, 16}: 6, 18, 66, 146, 258. Sixteen rules cost 14× the copies and 16× the wall clock of the identical grammar with the same applications named as items first.
-///
-/// **Eta-expansion improved too, and by less**, which is the same reading the earlier table gave: 312 functions to 278, 4.58 s to 1.64 s. Eta declines the folds rather than sharing them, so it gains only what its remaining block candidates share — hoisting performs the folds *and* shares the result, and is still the cheaper of the two.
-///
-/// # What the landed memo bought
-///
-/// Taken against a worktree at the commit before the reification memo, with this file grafted in — the two trees differ by exactly the two files that memo touched:
-///
-/// ```sh
-/// git worktree add <dir> <the commit before the memo>
-/// cp curios/src/tests/unfolding.rs <dir>/curios/src/tests/unfolding.rs   # and register the module
-/// cd <dir> && CARGO_TARGET_DIR=<scratch> cargo test --release --package curios --lib \
-///     -- --ignored --nocapture combinator_sharing_measurements
-/// ```
-///
-/// `Parse/bind` copies at each size, before the memo against after:
-///
-/// | spelling | 2 | 4 | 8 | 12 | 16 | |
-/// | --- | --- | --- | --- | --- | --- | --- |
-/// | no application in a continuation | 5 | 12 | 38 | 80 | **138** | before |
-/// | | 4 | 6 | 10 | 14 | **18** | after |
-/// | hoisted to items | 7 | 24 | 94 | 212 | **378** | before |
-/// | | 4 | 6 | 10 | 14 | **18** | after |
-/// | in a continuation | 7 | 24 | 94 | 212 | **378** | before |
-/// | | 6 | 18 | 66 | 146 | **258** | after |
-/// | every rule eta-expanded | 4 | 6 | 10 | 14 | 18 | before |
-/// | | 4 | 6 | 10 | 14 | 18 | after |
-///
-/// Three things this says that a before-and-after on one spelling would not.
-///
-/// **The memo carries the ordinary case, not the pathological one.** On the spelling with no application inside a continuation — the well-behaved one — the series was quadratic and is now exactly `n + 2`; at sixteen rules the module went from 302 emitted functions to 166 and the compile from 3.23 s to 0.52 s. On the pathological spelling it buys 378 → 258, which is real and modest.
-///
-/// **Before the memo, where the application was written made no difference at all.** `hoisted to items` and `in a continuation` measured identically at every size. The asymmetry between them is something the memo *created*, by reaching item-level candidates and not block-level ones — which is why widening its reach is the cure rather than replacing it.
-///
-/// **The eta spelling is untouched by the memo**, to the copy, which is the check that it declines the folds rather than sharing them.
+/// **Where the application is written decides nothing.** The as-written row and the hoisted row agree to the copy, to the function, and to within a hundredth of a second, at every size — 4/108, 6/130, 10/174, 14/218, 18/262. The hoisted spelling is the sharing emulated in source and therefore a ceiling, and the as-written spelling reaches it because a replacement's residual group is bound at item level. Bound inside the candidate's block, the as-written row grows as `n² + 2`.
 ///
 /// # Where the time goes
 ///
@@ -287,7 +237,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// cargo x profile --profile release <file>
 /// ```
 ///
-/// Same date and host, with the group bound at item level:
+/// Same host:
 ///
 /// | | as written | hoisted |
 /// | --- | --- | --- |
@@ -296,10 +246,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// | `cont_optimize` allocations | 7 889 915 | 7 889 915 |
 /// | `evaluate_closed_terms` | 12 ms | 12 ms |
 ///
-/// **The allocation counts are identical**, which says more than the wall clocks: the two spellings now hand the fixpoint the same module, so what it does with them cannot differ. As written, `curios_cont::optimize` was **21 998 ms of a 22 193 ms** compile — 99.1%, at 15.2 GB and 223.8 M allocations — against **602 ms of 737 ms** hoisted. It is 891 ms and 7.9 M allocations now: 25× less time and 28× fewer allocations, all of it from handing that pass a module a quarter the size.
-///
-/// `evaluate_closed_terms`, the pass this measurement is about, was 19 ms and is 12 ms; it never was the cost. What it *produces* was, because the fixpoint below it was super-quadratic in module size — still 97.6% of an ordinary `Toml/decode` compile, with no point-free code in it anywhere. That cliff is closed too, and `tests::fixpoint` carries what it was and what is left of it.
-///
+/// **The allocation counts are identical**, which says more than the wall clocks: the two spellings hand the fixpoint the same module, so what it does with them cannot differ. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::fixpoint` carries that measurement.
 #[test]
 #[ignore = "measurement: reports what a spelling costs rather than asserting"]
 fn combinator_sharing_measurements() {
@@ -329,12 +276,12 @@ fn combinator_sharing_measurements() {
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture scrutinee_refinement_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture scrutinee_refinement_measurements
 /// ```
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-24**, **debug**, `aarch64-apple-darwin`, with a product of two symbolic sums left as its own weak-head form and distributed only where a value is asked for by name (`262e5387`, `82f424bc`), one node per distinct monomial and factor inside a product, a term comparison answering before it allocates, and a traversal re-entering its stack guard per level. Debug rather than release deliberately: debug has been the canary for exhaustion that release hid, and the 3.3 s every row shares is the debug prelude restore plus a trivial compile — read the columns against each other, not against the release tables below.
+/// **Debug**, `aarch64-apple-darwin`. Debug rather than release deliberately: debug is the canary for exhaustion that release hides, and the 3.3 s every row shares is the debug prelude restore plus a trivial compile — read the columns against each other.
 ///
 /// | definitions | applied | scrutinized | proved | numeric, proved |
 /// | --- | --- | --- | --- | --- |
@@ -343,77 +290,11 @@ fn combinator_sharing_measurements() {
 /// | 12 | 3.30 s | 3.32 s | 3.35 s | 3.37 s |
 /// | 13 | 3.30 s | 3.33 s | 3.37 s | 3.37 s |
 ///
-/// **Every door is flat, and the numeric one is now indistinguishable from the rest.** The `once` and `closed` scrutinized columns read the same and are omitted. This is the section that replaces one that had decayed: the table below it was taken twenty hours *before* `3a624381` distributed multiplication in full, and after that commit the numeric door at ten definitions did not finish — seven minutes and ten gigabytes on this host, then a stack fault — while the recorded figure still read 0.15 s. A figure whose method no longer reproduces it is what `documentation/roadmap.md`'s measurement rule forbids, and it cost a day's investigation a wrong premise before it was dated. `a_ten_definition_numeric_web_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse that regression now, so this table has a control that the last did not.
+/// **Every door is flat.** The `once` and `closed` scrutinized columns read the same and are omitted. `a_ten_definition_numeric_web_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse a regression.
 ///
-/// # What it printed before distribution in full
+/// Each door stays flat for a reason held where it stands. A case refinement is keyed at the written spelling, so keying never demands the scrutinee's reduction — a web nothing reduces is flat however it fans out, and what makes a reduction unaffordable is a subject that mentions a binder, the term `Memos::storable` may not remember and the closed machine may not take. `&&` and `||` reduce their right operand only behind a literal left, and the closed machine keeps a global argument as a name rather than substituting its value, both in `curios-core`, which the two checkers share. A `Nat` fold must read its right operand for its identity laws, so its web's weak-head form is its normalization: it stays linear because the kernel's `Memos` keeps a local-bearing reduct while the equations in force stand, the elaborator's cache admits a universe metavariable, the kernel's `capture` is memoized on node and depth, `Term::eq` remembers the pairs it has entered, and a product of two symbolic sums is its own weak-head form, distributed only where a value is asked for.
 ///
-/// Taken **2026-08-22**, **release**, `x86_64-unknown-linux-gnu`, twenty hours before `3a624381` made `NatMul` distribute in full — which is why the numeric column below is flat on a compiler that did not yet build the polynomial — with the kernel remembering a local-bearing reduct for as long as the equations in force stand, the elaborator's cache admitting a universe metavariable, `capture` and `Term::eq` each walking a graph in its own size, and — from the day before — `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
-///
-/// | definitions | proved | numeric, proved |
-/// | --- | --- | --- |
-/// | 8 | 0.14 s | 0.15 s |
-/// | 10 | 0.15 s | 0.15 s |
-/// | 12 | 0.15 s | 0.15 s |
-/// | 13 | 0.15 s | 0.15 s |
-///
-/// The first four columns of the earlier table did not move and are omitted. **Both doors are flat.** Under the profiler at thirteen definitions the numeric web is a 106 ms compile, `recheck` 12 ms and `elaborate_and_zonk` 16 ms, where the day before it was 4 452 ms with `recheck` 4 370 and elaboration 165.
-///
-/// # What it printed with the boolean cure alone
-///
-/// Taken **2026-08-21**, the day before, on the same host.
-///
-/// | definitions | proved | numeric, proved |
-/// | --- | --- | --- |
-/// | 8 | 0.15 s | 0.19 s |
-/// | 10 | 0.15 s | 0.42 s |
-/// | 12 | 0.15 s | 1.78 s |
-/// | 13 | 0.16 s | 4.01 s |
-///
-/// **The proved door was flat**, and on the same host it read 0.23, 0.57, 2.55 and 5.53 s the same morning. Under `--features profile` at 13 definitions `recheck` is **13.6 ms of a 108 ms compile**, 120 k allocations, where it was 5 842 ms of 6 138 ms, 72 M allocations, 6.3 GB; `elaborate_and_zonk` is 13.8 ms where it was 220 ms.
-///
-/// The cost was never the inverter's. Conversion is weak-head-and-compare, and `true` against a stuck term stops at the heads; what the inverter's `force` paid for was weak-head reduction itself, twice over. `reduce_bool_binary` reduced both operands of a `&&`/`||` before it could know the fold was settled by a stuck left, so the weak-head form of the web's top was its full normalization, `2^n` with nothing remembering a local-bearing term — the whole of the elaborator's share and most of the kernel's. And the closed machine, handed the *closed* `both(r11, anyof(r11, r11))`, substituted `r11`'s value where the strategy keeps the name, so every definition's value held the previous one's twice, a graph whose tree was `2^n`, stored by the unfold memo at the tree's footprint and opened as a tree by the strategy's own beta — the 1.3 s that survived the first cure alone, and the whole of [`scrutinee_retention_measurements`]' retention ladder. Each is closed where it stood: `reduce_bool_binary` and the machine's `args`, in `curios-core`, which both checkers share.
-///
-/// **The numeric column was the same door over `Nat`, and it was the cliff that was left.** `reduce_nat_binary` reads its right operand for its identity laws — `x + 0` is `x` whatever the left — so a stuck left does not settle its fold the way a `Bool`'s does, and the web's weak-head form is its normalization: a graph whose tree is `2^n`, and ×2.2 per definition for every walk that saw the tree. Four of them did, and each is closed in its own place. The kernel re-derived the graph at every demand, remembering nothing local-bearing; `Memos` now keeps such a reduct for as long as the equations in force stand. The elaborator's cache refused every term naming a universe metavariable, which inside the declaration instantiating a polymorphic web is all of them; reduction is parametric in levels, and the cache admits them. The kernel's conversion history captured every goal's terms as trees; `capture` is memoized on node and depth. And the elaborator's cache lookup compared a forced graph against an equal, distinct key pair by pair along the tree; `Term::eq` remembers the pairs it has entered.
-///
-/// # What it printed with the key at the written spelling and both operands eager
-///
-/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a case refinement keyed at the written spelling.
-///
-/// | definitions | applied | named once, scrutinized | named twice, scrutinized | scrutinized at a literal | proved |
-/// | --- | --- | --- | --- | --- | --- |
-/// | 8 | 0.10 s | 0.07 s | 0.07 s | 0.07 s | 0.11 s |
-/// | 10 | 0.07 s | 0.08 s | 0.08 s | 0.08 s | 0.28 s |
-/// | 12 | 0.07 s | 0.08 s | 0.08 s | 0.08 s | 1.25 s |
-/// | 13 | 0.08 s | 0.08 s | 0.08 s | 0.08 s | 2.89 s |
-/// | 14 | 0.08 s | 0.08 s | 0.08 s | 0.08 s | — |
-/// | 20 | 0.08 s | 0.08 s | 0.08 s | 0.08 s | — |
-///
-/// Flat in the first four columns, and they are each other's controls: what a `match` is written over no longer decides anything, at any size, and fourteen definitions compile where they refused. The first row is the first compile of the run and carries its warm-up.
-///
-/// **The last column was the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq()(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It was unchanged by that commit, to the wall clock, and it was exponential in *both* checkers rather than one; the section above is where it went.
-///
-/// Under `--features profile` at 13 definitions — `cargo x profile --profile release <the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
-///
-/// # What it printed with the key at the reduced spelling
-///
-/// Taken the same day on the same host, before `Scope::refine` stopped reducing. The `applied` column was the same then and is omitted; the last column did not exist.
-///
-/// | definitions | named once, scrutinized | named twice, scrutinized |
-/// | --- | --- | --- |
-/// | 8 | 0.26 s | 0.29 s |
-/// | 10 | 0.28 s | 0.42 s |
-/// | 12 | 0.28 s | 1.21 s |
-/// | 13 | 0.30 s | 2.60 s |
-/// | 14 | 0.31 s | **refused** — the kernel's reduction budget |
-/// | 20 | 0.99 s | **refused** |
-///
-/// Both conditions were necessary and neither was sufficient. A web nothing scrutinized was flat however it fanned out; a web that *was* scrutinized cost what its fan-out was — the middle column still names each definition twice across the chain, once as the previous rule and once as the older one, and grew accordingly, just far more slowly than naming it twice within one rule.
-///
-/// Under `--features profile` at 13 definitions, `recheck` was 2 881 ms of a 3 061 ms compile — 94.1%, allocating 6 955 MB across 74.8 M allocations — against `elaborate_and_zonk`'s 13 ms and 134 k allocations. The two checkers were deciding the same terms; only one of them reduced. It is now 7.9 ms and 112 k allocations: a 364× fall in time and 668× in allocation, on the judgment rather than on the program.
-///
-/// **The `scrutinized at a literal` column is the control that identified the trigger, and it was not in the earlier table.** The same web under the same `match`, with the scrutinee applied to `7` rather than to the declaration's binder, was already flat at every size — same call site, same full reduction, nothing folded away by elaboration. What made the reduction unaffordable was never the `match`; it was that its subject mentioned a binder, which is exactly the term `Memos::storable` may not remember and the closed machine may not take.
-///
-/// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them. That is also why they are lower across the board than the earlier table's.
+/// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them.
 #[test]
 #[ignore = "measurement: reports what a scrutinee costs rather than asserting"]
 fn scrutinee_refinement_measurements() {
@@ -429,7 +310,6 @@ fn scrutinee_refinement_measurements() {
         (true, Consumed::ScrutinizedClosed, "scrutinized, closed"),
         (true, Consumed::Proved, "proved"),
     ] {
-        // The proved door is exponential in both checkers and is not this measurement's subject; four rungs are enough to show it did not move. `scrutinee_retention_measurements` is where it is measured properly.
         let sizes: &[usize] = match consumed {
             Consumed::Proved => &[8, 10, 12, 13],
             _ => &[8, 10, 12, 13, 14, 20],
@@ -450,7 +330,7 @@ fn scrutinee_refinement_measurements() {
         }
     }
 
-    // The same web over `Nat`, proved — the shape the boolean cure does not reach, because a `Nat` fold must read its right operand for its identity laws where a `Bool` fold behind a stuck left need not.
+    // The same web over `Nat`, proved — the shape a `Bool` fold's short-circuit does not reach, because a `Nat` fold must read its right operand for its identity laws where a `Bool` fold behind a stuck left need not.
     for &rules in &[8usize, 10, 12, 13] {
         let (outcome, elapsed) = compile_only(&numerics(rules));
         let verdict = match &outcome {
@@ -500,7 +380,7 @@ fn numerics(rules: usize) -> String {
     source
 }
 
-/// **The decision's own probe.** Deciding `Eq()(top(n), 0)` for a symbolic `n` needs the sum's head, not its normal form: a stuck sum whose summands are not literal zero is not zero. Under eager folding the fold built the linear combination first — ~φ²ⁿ monomials, since the web's degree is Fibonacci in its size — and the units grew with it. The folds now answer the weak-head form and the peel clashes from the head, so the units grow with the weak-head DAG, which memoization keeps linear in `n`. The control is the increment: each further definition costs about what the previous one did.
+/// **The decision's own probe.** Deciding `Eq()(top(n), 0)` for a symbolic `n` needs the sum's head, not its normal form: a stuck sum whose summands are not literal zero is not zero. Eager folding would build the linear combination first — ~φ²ⁿ monomials, since the web's degree is Fibonacci in its size — and the units would grow with it. The folds answer the weak-head form and the peel clashes from the head, so the units grow with the weak-head DAG, which memoization keeps linear in `n`. The control is the increment: each further definition costs about what the previous one did.
 #[test]
 fn a_symbolic_web_compares_against_zero_in_linear_units() {
     let units = |rules: usize| {
@@ -526,7 +406,7 @@ fn a_symbolic_web_compares_against_zero_in_linear_units() {
     );
 }
 
-/// The numeric door at a size that used to be unreachable: ten definitions took between three and seven minutes, ten gigabytes, and then a `SIGBUS`, where eight took thirteen seconds — the recorded flat table in [`scrutinee_refinement_measurements`] predates distribution in full, which doubles the sum's summands per definition. Four things closed it, and this is their positive control — the last being the decision that a product of two symbolic sums is its own weak-head form, distributed by `Nat::normalize` only where a value is asked for, which is what took this from 87 s and six gigabytes to four seconds and a tenth of one: a monomial and each of its factors are one node per distinct structure inside a product, so a merge is a pointer test and a fresh spine is never cache-warmed; and a traversal re-enters `recurse` per level, so capturing the normal form for a conversion goal chains stack segments instead of running one to its guard page. Not a measurement — a refusal to regress to not compiling.
+/// The numeric door at ten definitions, where distribution in full doubles the sum's summands per definition. It compiles because a product of two symbolic sums is its own weak-head form, distributed by `Nat::normalize` only where a value is asked for; because a monomial and each of its factors are one node per distinct structure inside a product, so a merge is a pointer test and a fresh spine is never cache-warmed; and because a traversal re-enters `recurse` per level, so capturing the normal form for a conversion goal chains stack segments instead of running one to its guard page. Without them this size runs for minutes, fills gigabytes and faults. Not a measurement — a refusal to regress to not compiling.
 #[test]
 fn a_ten_definition_numeric_web_compiles() {
     let (outcome, _) = compile_only(&numerics(10));
@@ -536,9 +416,9 @@ fn a_ten_definition_numeric_web_compiles() {
 
 /// **The guard [`combinator_sharing_measurements`] cannot be**, because a probe is ignored and nothing runs it.
 ///
-/// What it holds is the growth *law* rather than a number: a combinator application written inside a `!` continuation must cost what the identical application written as a top-level item costs — and what not writing it at all costs, since a shared residual group is bound once and reused. The spellings denote the same grammar, and before that group was bound at item level the first differed from the others by an order of magnitude at this size and by fourteen times at sixteen rules — `n²` copies against `n`.
+/// What it holds is the growth *law* rather than a number: a combinator application written inside a `!` continuation must cost what the identical application written as a top-level item costs — and what not writing it at all costs, since a shared residual group is bound once and reused. The spellings denote the same grammar, and a group bound inside the candidate's block instead would make the first differ from the others by an order of magnitude at this size — `n²` copies against `n`.
 ///
-/// **The baseline is measured, never written down.** A count here is the grammar's `n` plus whatever `/std/Parse` and its own users spell, and that second term is no part of this claim. Written as a literal it said `10`, ordinary standard-library growth carried it to `23`, and a test about sharing then failed for a reason that has nothing to do with sharing. [`Inner::None`] *is* that term, taken at the same size and in the same run, so the library may grow — it moves all three counts together — while a spelling that stopped sharing still stands out at once: quadratic is 66 against 23 at eight rules.
+/// **The baseline is measured, never written down.** A count here is the grammar's `n` plus whatever `/std/Parse` and its own users spell, and that second term is no part of this claim. A literal baseline fails a test about sharing as the standard library grows, for a reason that has nothing to do with sharing. [`Inner::None`] *is* that term, taken at the same size and in the same run, so the library may grow — it moves all three counts together — while a spelling that stopped sharing still stands out at once: quadratic is 66 against 23 at eight rules.
 ///
 /// Eight rules rather than sixteen because this one is not ignored.
 #[test]

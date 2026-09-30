@@ -154,7 +154,7 @@ pub(super) fn reify(
 
 /// Materialize a closure: reify each captured value to an atom (nesting captured closures), then deep-copy the closure's function with those atoms substituted for its free values, introduced by a `Functions` statement. A free value the captures do not cover is a top-level identity kept verbatim.
 ///
-/// The copy is memoized on the substitution it would apply, because the substitution *is* the copy: two closures over one function with equal captures deep-copy to functions differing only in their fresh identities. A combinator grammar reaches the same specialization over and over — one folded TOML document materialized `Parse/fail(\"bare carriage return\")` 462 times, and 51.5% of that module's 8,818 emitted functions were exact twins — so the memo is the difference between copying a parser tree and naming it.
+/// The copy is memoized on the substitution it would apply, because the substitution *is* the copy: two closures over one function with equal captures deep-copy to functions differing only in their fresh identities. A combinator grammar reaches the same specialization over and over, so the memo is the difference between copying a parser tree and naming it.
 fn reify_closure(
     module: &mut Module,
     closure: &Rc<Closure>,
@@ -170,7 +170,7 @@ fn reify_closure(
     if !scope.free_values_settled(module, closure) {
         return Err(Bail::Unsupported);
     }
-    // A closure capturing nothing has an empty substitution, so the "specialized" copy would be byte-identical to a function the module already holds. Name the original instead -- provided it is item-bound, so it is in scope wherever this reification is spliced. Measured on a combinator-heavy prelude: 4,850 of 10,024 closure reifications in one round took this path.
+    // A closure capturing nothing has an empty substitution, so the "specialized" copy would be byte-identical to a function the module already holds. Name the original instead -- provided it is item-bound, so it is in scope wherever this reification is spliced. On a combinator-heavy prelude about half of a round's closure reifications take this path.
     let captures = closure.env.borrow().clone();
     if captures.is_empty() && scope.is_item_bound(module, closure.function) {
         return Ok(Atom::Function(closure.function));
@@ -223,15 +223,14 @@ pub(super) fn reify_all(
     Ok(atoms)
 }
 
-/// Whether every function the region rooted at `root` references outside itself is bound by a top-level item.
 /// One closure copy's identity: the source function and the captures already reduced to atoms. Equal keys deep-copy to functions that differ only in their fresh identities.
 type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
 
 /// What a reification pass may compute once, and what only one replacement in it may reuse.
 ///
-/// The first three facts are stable while a pass reifies -- it only appends, and the item list is rebuilt afterwards -- and all three were previously recomputed per closure: the item-bound set walked every item, and the copy weight walked the whole region, each on the probe *and* again on the real run. On a combinator-heavy module that is thousands of full walks per round.
+/// The first three facts are stable while a pass reifies -- it only appends, and the item list is rebuilt afterwards -- so each is computed once per pass rather than per closure, where the item-bound set would walk every item and the copy weight the whole region, each on the probe *and* again on the real run: thousands of full walks per round on a combinator-heavy module.
 ///
-/// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Measured on a generated grammar, the first axis costs `2^depth` copies without [`ReifyScope::local`] and one per level with it; the second costs five functions per referencing definition without [`ReifyScope::shared`]. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
+/// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Without [`ReifyScope::local`] the first axis costs `2^depth` copies where it costs one per level with it, and without [`ReifyScope::shared`] the second costs a copy per referencing definition. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
 pub(super) struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
     /// The values top-level items bind, computed on first use like [`ReifyScope::item_bound`]. See [`ReifyScope::free_values_settled`].
@@ -252,7 +251,7 @@ pub(super) struct ReifyScope {
 }
 
 impl ReifyScope {
-    /// Every fact here is computed on first use, not on construction. A caller that reifies no closure -- a literal constructor spine, typically -- must not pay for the item walk at all, which is what an eager scope charged it.
+    /// Every fact here is computed on first use, not on construction. A caller that reifies no closure -- a literal constructor spine, typically -- must not pay for the item walk at all, which an eager scope would charge it.
     pub(super) fn new() -> Self {
         Self {
             item_bound: None,
@@ -312,7 +311,7 @@ impl ReifyScope {
 
     /// Withdraw everything this replacement contributed to the module-wide memo.
     ///
-    /// **For a group that turned out not to be bindable at item level.** The position is chosen before reification, because [`ReifyScope::record`] needs it; whether the group it produces is *closed* at item level can only be read off the group afterwards. A replacement that loses that bet keeps its copies — they are spliced into its own block, exactly as before — but must take back the claim that a later candidate can name them, which is what `local` holds the keys for.
+    /// **For a group that turned out not to be bindable at item level.** The position is chosen before reification, because [`ReifyScope::record`] needs it; whether the group it produces is *closed* at item level can only be read off the group afterwards. A replacement that loses that bet keeps its copies — they are spliced into its own block — but must take back the claim that a later candidate can name them, which is what `local` holds the keys for.
     pub(super) fn withdraw_replacement(&mut self) {
         for specialization in self.local.keys() {
             self.shared.remove(specialization);
@@ -338,9 +337,9 @@ impl ReifyScope {
 
     /// Whether every value the copy would still name after substitution is one it can name from anywhere.
     ///
-    /// **The assumption [`reify_closure`] states but nothing checked.** A free value the captures do not cover is kept verbatim on the reasoning that it is a top-level identity — and when it is not, the copy leaves the block that bound it still naming it. The source module verifies, so such a value is in scope *there*; the copy is spliced at the group's splice point and may be reused from any later candidate, and neither has to be inside that block. `outward_ok` asks this question about functions and deliberately not about values, because a free value is ordinarily substituted away; this asks it about the ones that are not.
+    /// **The assumption [`reify_closure`] states, checked.** A free value the captures do not cover is kept verbatim on the reasoning that it is a top-level identity — and when it is not, the copy leaves the block that bound it still naming it. The source module verifies, so such a value is in scope *there*; the copy is spliced at the group's splice point and may be reused from any later candidate, and neither has to be inside that block. `outward_ok` asks this question about functions and deliberately not about values, because a free value is ordinarily substituted away; this asks it about the ones that are not.
     pub(super) fn free_values_settled(&mut self, module: &Module, closure: &Closure) -> bool {
-        // Cached per function like [`ReifyScope::outward_ok`]'s answer and for the same reason: this walks the whole region, it is asked on the probe and again on the real run for every closure, and reification only appends, so a region's free set does not move within a pass. Uncached, it cost a hello-world compile three times its former wall clock.
+        // Cached per function like [`ReifyScope::outward_ok`]'s answer and for the same reason: this walks the whole region, it is asked on the probe and again on the real run for every closure, and reification only appends, so a region's free set does not move within a pass. Uncached, it triples a hello-world compile's wall clock.
         let free = self
             .free_values
             .entry(closure.function)
@@ -362,7 +361,7 @@ impl ReifyScope {
 
     /// Whether every function reachable from `function`'s region is in scope at an arbitrary splice site.
     ///
-    /// Walks the whole region, and ran on the probe *and* again on the real run for every closure -- the last un-hoisted region walk in this path. Stable for a pass on the same argument as the others: reification only appends, and statements are rewritten in the tail.
+    /// Walks the whole region, and is asked on the probe *and* again on the real run for every closure, so it is cached. Stable for a pass on the same argument as the others: reification only appends, and statements are rewritten in the tail.
     pub(super) fn outward_ok(&mut self, module: &Module, function: FunctionId) -> bool {
         if let Some(&known) = self.outward.get(&function) {
             return known;
@@ -423,9 +422,9 @@ fn knot_bound_functions(module: &Module) -> BTreeMap<FunctionId, BlockId> {
     bound
 }
 
-/// Every function bound at item level.
+/// Every value bound at item level: an item's result and the binders of its right-hand side, and a recursive group's computed members.
 ///
-/// Computed once for a reification pass and handed to each check, because the item list does not change while a pass reifies: rebuilding it per closure walked the whole item list ten thousand times a round on a combinator-heavy module, which is a second cost with the same shape as the copying itself.
+/// Computed once for a reification pass and handed to each check, because the item list does not change while a pass reifies: rebuilding it per closure would walk the whole item list ten thousand times a round on a combinator-heavy module, a second cost with the same shape as the copying itself.
 pub(super) fn item_bound_values(module: &Module) -> BTreeSet<ValueId> {
     let mut bound = BTreeSet::<ValueId>::new();
     for &item in module.items() {
@@ -535,6 +534,7 @@ pub(super) fn free_references(
     Some((functions, values))
 }
 
+/// Whether every function the region rooted at `root` references outside itself is bound by a top-level item.
 fn outward_functions_item_bound(
     module: &Module,
     root: FunctionId,

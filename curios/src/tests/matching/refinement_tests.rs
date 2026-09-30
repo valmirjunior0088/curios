@@ -5,9 +5,9 @@ use {
     curios_runtime::MockHost,
 };
 
-// A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. They did not when the scrutinee carried an *inferred* metavariable: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness keyed differently and the arm silently refined nothing. Solved metavariables are now materialized into the key, which is what makes the two spellings one.
+// A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. A scrutinee carrying an *inferred* metavariable is the hard case: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness would key differently and the arm would silently refine nothing. Solved metavariables are materialized into the key, which is what makes the two spellings one.
 //
-// Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one the kernel's refinement store reads, which a function parameter stopped being once `an_effect_behind_a_function_parameter_does_not_refine` landed. A concept dispatch is all three at once, and it is what `/std/Str/fold` and `/std/Str/Valid`'s decoder refine on in production — their `rem == 1` guard — rather than a shape invented here.
+// Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one the kernel's refinement store reads. A concept dispatch is all three at once, and it is what `/std/Str/fold` and `/std/Str/Valid`'s decoder refine on in production — their `rem == 1` guard — rather than a shape invented here.
 //
 // Mutation-checked: dropping `zonk_solved_term_metas` from `canonical_scrutinee` refuses this program, with `p`'s expected type still reading the unrefined method body.
 #[test]
@@ -37,7 +37,7 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
     assert_eq!(run(source), b"refined");
 }
 
-// A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the escalation has to match the two through their canonical forms — every operand reduced, on both sides. That is the form the elaborator's `refined_after_fold` and the kernel's `refined_reduct` both bring a probed value to, which is what keeps them reaching the same occurrences now that `&&` leaves its right operand as written behind a stuck left. Before the connectives were tagged in `Term::head_key`, an operator-spelled scrutinee registered a key nothing could look up, and not even `x && g(7)` itself refined — a gap that comment recorded.
+// A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the escalation has to match the two through their canonical forms — every operand reduced, on both sides. That is the form the elaborator's `refined_after_fold` and the kernel's `refined_reduct` both bring a probed value to, which is what keeps them reaching the same occurrences when `&&` leaves its right operand as written behind a stuck left. The connectives are tagged in `Term::head_key`: untagged, an operator-spelled scrutinee would register a key nothing looks up, and not even `x && g(7)` itself would refine.
 //
 // Two occurrences, two routes to the same intrinsic. `x && h(7)` arrives at each reducer as the witness projection the scrutinee was written as; `Bool/and(x, h(7))` arrives under the wrapper's own head, which no key is gated on, and becomes the intrinsic only once the wrapper unfolds. In the elaborator both are decided at the probe *before* decomposition, which re-runs on every continued term and canonicalizes on a miss; in the kernel both are decided at the stuck reduct, brought to operand-canonical form by `refined_reduct`.
 //
@@ -65,7 +65,7 @@ fn a_boolean_refinement_reaches_an_occurrence_spelled_differently_on_its_right()
     assert_eq!(run(source), b"refined");
 }
 
-// An arm is opened at the forced constructor's own payload, so a matched payload reduces to the value that constructor carried. Opening it at projections of the scrutinee instead reduces to the same value but leaves a residual Core cannot type — `Proj` has no rule for an inductive — and the difference is invisible until such a residual reaches conversion as a metavariable solution candidate, where re-validation refuses it as `NotATuple`: a hard verdict that fails the goal outright rather than parking it. A parameterized family is what keeps the projection from reducing away first, and a phantom parameter suffices, so this reached `/std/Option/map` and every container whose operation returns what a match arm bound.
+// An arm is opened at the forced constructor's own payload, so a matched payload reduces to the value that constructor carried. Opening it at projections of the scrutinee instead reduces to the same value but leaves a residual Core cannot type — `Proj` has no rule for an inductive — and the difference is invisible until such a residual reaches conversion as a metavariable solution candidate, where re-validation refuses it as `NotATuple`: a hard verdict that fails the goal outright rather than parking it. A parameterized family is what keeps the projection from reducing away first, and a phantom parameter suffices, so the shape reaches `/std/Option/map` and every container whose operation returns what a match arm bound.
 #[test]
 fn a_matched_payload_converts_against_the_value_it_carried() {
     let source = r#"
@@ -112,9 +112,9 @@ fn a_matched_payload_still_refuses_a_false_equation() {
 
 /// An immediate-encoded arm binds its payload through a read of its own rather than aliasing the scrutinee.
 ///
-/// `stop(Nat)` beside `cons(Nat, L)` takes the `Immediate` family encoding, so `stop`'s payload rides bare and its arm's binder used to *be* the scrutinee. `total`'s `acc + z` then demanded a raw carrier of the scrutinee itself; the representation analysis admitted it because a continuation parameter has no producer to contradict it, carried the demand back along the loop edge to `build`'s accumulator, and the emitter coerced a freshly built `struct.new $tuple/3` with `ref.cast (ref i31)` — a trap for every input above zero, where zero alone answered correctly because the list is then just the bare `stop`.
+/// `stop(Nat)` beside `cons(Nat, L)` takes the `Immediate` family encoding, so `stop`'s payload rides bare. Were its arm's binder the scrutinee itself, `total`'s `acc + z` would demand a raw carrier of the scrutinee; the representation analysis would admit it, since a continuation parameter has no producer to contradict it, and carry the demand back along the loop edge to `build`'s accumulator, where the emitter's cast of a freshly built cell to `(ref i31)` traps for every input above zero — zero alone answers correctly, because the list is then just the bare `stop`.
 ///
-/// The depth is host-tainted deliberately: a closed program folds at compile time and never reaches the emitter, so the fixture would pass while the bug stood.
+/// The depth is host-tainted deliberately: a closed program folds at compile time and never reaches the emitter, so a closed fixture would pass whatever the emitter did.
 #[test]
 fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
@@ -227,7 +227,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
     );
 }
 
-// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying. The kernel used to meet the resolved spelling only as the reduct of the written one, after the fold, and refused what the elaborator had accepted. `/std/Str/Valid`'s three-byte decoding is this shape.
+// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying: a kernel meeting the resolved spelling only as the reduct of the written one, after the fold, would refuse what the elaborator accepts. `/std/Str/Valid`'s three-byte decoding is this shape.
 #[test]
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     let source = r#"
@@ -246,7 +246,7 @@ fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     assert_eq!(run(source), b"1");
 }
 
-// A guard answers its own definition one unfolding down. `small(k)` is `k < 10` by definition, so the arm's hypothesis `Holds(k < 10)` is the guard itself, and each checker answers it from the guard's reduced spelling — the kernel always has, and the elaborator refused it while it compared keys only as written, with their arguments reduced and their heads never opened. Certifying is what asserts the two agree.
+// A guard answers its own definition one unfolding down. `small(k)` is `k < 10` by definition, so the arm's hypothesis `Holds(k < 10)` is the guard itself, and each checker answers it from the guard's reduced spelling, where comparing keys only as written, with their arguments reduced and their heads never opened, would refuse it. Certifying is what asserts the two agree.
 #[test]
 fn a_guard_answers_its_definition_one_unfolding_down() {
     let source = r#"
@@ -265,7 +265,7 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     assert_eq!(run(source), b"3");
 }
 
-// The same unfolding met late: a struct literal whose parameter is inferred checks its fields before the parameter is known, so the proof's check parks on a metavariable already unfolded past the guard's head, and is retried as `k < 10` once the parameter is solved. Writing `Below(k) { … }` avoided the unfolding and hid the gap.
+// The same unfolding met late: a struct literal whose parameter is inferred checks its fields before the parameter is known, so the proof's check parks on a metavariable already unfolded past the guard's head, and is retried as `k < 10` once the parameter is solved. Writing `Below(k) { … }` would avoid the unfolding this pins.
 #[test]
 fn a_field_checked_before_its_struct_parameter_is_inferred_meets_the_guard() {
     let source = r#"
@@ -314,7 +314,7 @@ fn a_guard_whose_definition_is_a_match_answers_that_match() {
 
 // A guard decides a bound spelled across the `<`/`<=` seam. `List/slice`'s precondition is `s + l <= len`, so slicing one element at `i` asks for `i + 1 <= len(l)`, while the guard a program writes to establish it is `i < len(l)` — one proposition, two spellings, and the arm records only the one the author wrote. Both reducers retry a miss on the successor spelling, so a bound discharges without the author having to spell the comparison the way the standard library's signature happens to.
 //
-// It certifies, which is the half that matters: the elaborator discharged this first while the kernel still refused it, and the seam is a rule only when both checkers look in the same two places.
+// It certifies, which is the half that matters: the seam is a rule only when both checkers look in the same two places.
 #[test]
 fn a_guard_discharges_a_bound_across_the_successor_seam() {
     let source = r#"
@@ -378,7 +378,7 @@ fn a_bound_the_guards_do_not_imply_is_still_stuck() {
 
 // === A scrutinee bound by `let` ===============================================
 //
-// The kernel substitutes a `let` rather than binding it, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name — and a metavariable solved against the name is stored as the definition, which the arm never refined: `refl`'s implicit below became `x`, and `x` stayed apart from `xp + 1`. Refining a local binding refines its definition too, in both arms, whatever the scrutinee's type.
+// The kernel substitutes a `let` rather than binding it, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name, and a metavariable solved against the name is stored as the definition — so refining a local binding refines its definition too, in both arms, whatever the scrutinee's type, or `refl`'s implicit below, `x`, would stay apart from `xp + 1`.
 
 #[test]
 fn a_let_bound_scrutinee_is_refined_through_its_definition() {
@@ -466,7 +466,7 @@ fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
     assert_eq!(run(source), b"2");
 }
 
-// A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The elaborator's reducer once bound `n` as a fresh definition when it unfolded `outside`, so the guard it met was spelled over a name the arm's key never mentions, and the lookup never considered the key. The reducer substitutes a `let` as the kernel does, so the unfolded guard is the arm's own spelling.
+// A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The reducer substitutes a `let` as the kernel does, so the unfolded guard is the arm's own spelling rather than one over a fresh name the arm's key never mentions.
 #[test]
 fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
     assert_eq!(
@@ -486,7 +486,7 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
     );
 }
 
-// A guard written over the arm's own `let` meets the same guard reached through a definition that spells the value. The arm binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; `outside` spells that guard over `Byte/to_nat(c)` itself. The kernel substituted `n` before it recorded the arm's equation, and the elaborator recorded it over the name — so its lookup filter never let the probe, which names `c`, reach the key, and a settlement of the key unfolded `n` only where reduction touched it, leaving it named inside the branch `Bool/not`'s match keeps. The equation is recorded under the kernel's spelling too.
+// A guard written over the arm's own `let` meets the same guard reached through a definition that spells the value. The arm binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; `outside` spells that guard over `Byte/to_nat(c)` itself. The kernel substitutes `n` before it records the arm's equation, and the elaborator records the equation under the kernel's spelling too: recorded over the name alone, its lookup filter would never let the probe, which names `c`, reach the key, and a settlement of the key would unfold `n` only where reduction touched it, leaving it named inside the branch `Bool/not`'s match keeps.
 #[test]
 fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
     assert_eq!(

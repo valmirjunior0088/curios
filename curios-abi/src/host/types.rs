@@ -11,7 +11,7 @@ use {
     std::num::NonZeroU32,
 };
 
-/// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
+/// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for a resource it opened — a file, socket, TLS config, lookup, child or serial port. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
 #[derive(Debug, Clone)]
 pub enum Handle {
     Stdin,
@@ -150,7 +150,7 @@ pub enum Failure {
     AlreadyExists,
     /// A `socket_connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
-    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a fiber parks on: `/std`'s scheduler matches on it to reschedule the read/write instead of treating it as a real failure.
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a fiber parks on: `/std/Handle` matches on it to poll the handle and retry instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`tls_start`/`tls_start_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,

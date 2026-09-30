@@ -2,7 +2,7 @@
 
 use crate::tests::{error, run};
 
-// The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to `show_nat`.
+// The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to the `Show(Nat)` witness.
 #[test]
 fn concept_witness_resolves_through_wrapper() {
     let source = r#"
@@ -20,7 +20,7 @@ fn concept_witness_resolves_through_wrapper() {
     assert_eq!(run(source), b"42");
 }
 
-// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(List(?B)) ≡ Show(List(Nat))` to solve `?B := Nat`, then resolves the premise to `show_nat`.
+// A premised witness: `Show(List(A))`'s needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(List(?B)) ≡ Show(List(Nat))` to solve `?B := Nat`, then resolves the premise to the `Show(Nat)` witness.
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
@@ -42,7 +42,7 @@ fn premised_witness_resolves_recursively() {
     assert_eq!(run(source), b"[123");
 }
 
-// An explicit `use` argument overrides table resolution: a local dictionary value (an ordinary `let` of the concept's record type) is passed at the call site and used instead of the registered `show_nat`.
+// An explicit `use` argument overrides table resolution: a local dictionary value (an ordinary `let` of the concept's record type) is passed at the call site and used instead of the registered `Show(Nat)` witness.
 #[test]
 fn explicit_use_argument_overrides() {
     let source = r#"
@@ -129,7 +129,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
     assert!(message.contains("witness") || message.contains("infer"));
 }
 
-// The syn-homed operator concepts: `Add/add` resolves on an intrinsic type through the `/std` witness (also proving the cached-prelude replay path registers the syn concepts and std witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.
+// The operator concepts: `Add/add` resolves on an intrinsic type through the `/std` witness (also proving the cached-prelude replay path registers the operator concepts and their `/std` witnesses), on a user struct through a user witness, and in generic code through a local `use Add(A)` premise.
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
@@ -148,7 +148,7 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Eql` and `Cmp` resolve across intrinsics with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
+// `Eql` and `Cmp` resolve across intrinsics with the witnesses homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"

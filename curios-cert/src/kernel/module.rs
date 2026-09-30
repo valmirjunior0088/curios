@@ -53,7 +53,7 @@ pub(crate) fn check_definition(
 ///
 /// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
 ///
-/// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `kernel::calls`) — which is the verdict obligations (T) and (V) read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
+/// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `kernel::calls`) — which is the verdict obligations (T) and (V) read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
@@ -121,7 +121,7 @@ pub(crate) fn check_group<R>(
 ///
 /// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
 ///
-/// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`.
+/// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
     names: &[Free],
@@ -167,24 +167,16 @@ pub(crate) fn check_rec_group(
 /// 6. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
 /// 7. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
 /// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
-/// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
+/// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
 /// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](curios_analysis::positivity_vectors) rather than per entry.
 ///
 /// # What is unspellable rather than checked
 ///
-/// Two agreements used to need clauses and no longer exist to be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written — which also retired three `unreachable!`s that asserted exactly that.
+/// Two agreements need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's `plicities` has one entry per telescope binder by construction, which `InductParam::new` asserts; a restored entry bypasses that constructor, and a short vector there is a panic in `InductDecl::payload_plicities`' slice rather than a judgment this kernel makes — fail-closed.
 ///
 /// # The one repetition kept, and why
 ///
 /// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 7 is what makes it an enforced agreement rather than an assumed one.
-///
-/// # Not established here
-///
-/// One thing, found by reading every consumer of a registry entry against the clauses above rather than by probing, and recorded as a gap rather than assumed.
-///
-/// That `plicities` has one entry per telescope binder. Its only consumer is `curios-elab`'s `payload_plicities`, which slices at the parameter count, so a short vector is a panic in the elaborator rather than a judgment this kernel makes — fail-closed, and outside what a clause here would establish.
-///
-/// The other two are gone. That `result_sort` is a literal sort is clause 3, and that constructor tags are distinct is clause 5; each was probed, and the second was found admitting a term.
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub(crate) fn check_induct_decl(
@@ -214,7 +206,7 @@ pub(crate) fn check_induct_decl(
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
 ///
-/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` made the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion went on to tell a proposition's constructors apart, and the arm it excused as impossible was reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
+/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
 ///
 /// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
 fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
@@ -226,9 +218,9 @@ fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
 
 /// No two constructors share a tag.
 ///
-/// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match* — [`InductDecl::constructor`], and `constructor_index` with it. So a repeat does not add a constructor, it hides one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage is where that showed: asked whether each constructor is impossible at the scrutinee's indices, it resolved both entries to the first and reported a family empty at an index the declaration's own second entry constructs at — certifying a refutation of a constructor the same declaration states.
+/// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match* — [`InductDecl::constructor`], and `constructor_index` with it. So a repeat does not add a constructor, it hides one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage shows the cost: asked whether each constructor is impossible at the scrutinee's indices, it would resolve both entries to the first and could report a family empty at an index the declaration's own second entry constructs at — certifying a refutation of a constructor the same declaration states.
 ///
-/// Nothing exploited it, because construction resolves by first match too, so the shadowed entry has no inhabitant to hand that refutation. This clause is what replaces that accident: the elimination rule now ranges over constructors that are distinct, rather than being sound because an unrelated rule happens to be lossy in the same direction.
+/// Construction resolves by first match too, so the shadowed entry would have no inhabitant to hand that refutation, but that is an accident. With this clause the elimination rule ranges over constructors that are distinct, rather than being sound because an unrelated rule happens to be lossy in the same direction.
 fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
     // Scanned rather than collected into a set, for the reason [`InductDecl::constructor`] gives for scanning: constructor counts are small enough that the set costs more than it saves.
     for (position, tag) in declaration.constructor_order().enumerate() {
@@ -285,7 +277,7 @@ fn walk_arity<B: Bound>(
 
 /// A constructor's index targets must inhabit the family's index telescope, and its parameter prefix must be the family's own parameters.
 ///
-/// The terminal carries the targets and nothing else — the family and its parameters are fixed by the declaration, so a terminal naming another family or standing at other parameters is unspellable rather than refused. What remains is two typing clauses: the targets are checked here, and until they were, index inversion and the arm rule both read them without any judgment having seen them.
+/// The terminal carries the targets and nothing else — the family and its parameters are fixed by the declaration, so a terminal naming another family or standing at other parameters is unspellable rather than refused. What remains is two typing clauses: the targets are checked here, because index inversion and the arm rule both read them.
 fn check_constructed(
     kernel: &mut Kernel,
     declaration: &InductDecl,
@@ -407,7 +399,7 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 ///
 /// A `Prop`-sorted result imposes no *size* condition: `Prop` is impredicative, and what keeps that sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
 ///
-/// **Typing the domain is a separate clause from sizing it, and reading the two as one admitted a term.** `infer_type` used to run inside the size test, so a declaration whose `result_sort` is `Prop` had no domain typed at all — and nothing else covers them: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`. A field type that lies about its own sort therefore stood unexamined; see `recheck::tests::a_proposition_may_not_carry_a_computed_relevant_field`.
+/// **Typing the domain is a separate clause from sizing it.** Run inside the size test, `infer_type` would type no domain of a declaration whose `result_sort` is `Prop` — and nothing else covers them: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`, so a field type that lies about its own sort would stand unexamined; see `recheck::proposition_tests::a_proposition_may_not_carry_a_computed_relevant_field`.
 fn check_signature<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,

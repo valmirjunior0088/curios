@@ -282,7 +282,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
-            // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it. The old spelling-keyed lowering was safe only by accident — it emitted a bare `helper` while every definition carried a leading `/`.
+            // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it.
             None => Ok(self.context.unbound_binder(name.head())),
         }
     }
@@ -291,11 +291,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     //
     // # Why the proof is one constant
     //
-    // `/std/Str/Valid` is a decided proposition: reading the bytes from the first one lands back between characters. So the only inhabitant it has is `True/qed()`, which checks by *running* the scan over the literal rather than by traversing a derivation. It was once an inductive family whose canonical inhabitant is one link per byte, and writing that out made the *term* linear in the data: elaboration, zonking, both erasure obligations, the printer and the kernel's typing judgment all inherited it, five separate stack-overflow or quadratic defects traced to that one shape, and the reduction budget capped a literal near 23KiB regardless. A bridge from the scan's equation to the derivation followed, which the compiler had to name; with `Valid` decided there is nothing left for it to know about how the library proves a literal valid.
+    // `/std/Str/Valid` is a decided proposition: reading the bytes from the first one lands back between characters. So the only inhabitant it has is `True/qed()`, which checks by *running* the scan over the literal rather than by traversing a derivation. An inductive family whose canonical inhabitant is one link per byte would make the *term* linear in the data, and elaboration, zonking, both erasure obligations, the printer and the kernel's typing judgment would all inherit it. With `Valid` decided, the compiler has nothing to know about how the library proves a literal valid.
     //
-    // # What bounds a literal now
+    // # What bounds a literal
     //
-    // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than a native reduction level, and guarded depth is flat in the length. No figure is quoted here, because a figure quoted here has decayed twice; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling with their dates, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape. A native scan intrinsic is refused (see `documentation/design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md`): it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike.
+    // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than a native reduction level, and guarded depth is flat in the length. No figure is quoted here; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape. A native scan intrinsic is refused (see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`): it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::str_literal(&self.context.syntax().string, bytes)
     }
@@ -457,7 +457,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// An error at `term`'s span, where `term` has one and the error is not already placed — the counterpart of the stamping `region` and `collect` perform on the term they return. Only [`Self::term`] placed its errors, so a refusal the matrix compiler raised while lowering a `match` or `choose` in a value body — every arm-shape error it has — reached the reader with no location at all.
+    /// An error at `term`'s span, where `term` has one and the error is not already placed — the counterpart of the stamping `region` and `collect` perform on the term they return. Without it only [`Self::term`] would place its errors, and a refusal the matrix compiler raises while lowering a `match` or `choose` in a value body — every arm-shape error it has — would reach the reader with no location at all.
     fn located(error: Error, term: &Term) -> Error {
         match term.span() {
             Some(span) => error.at(span.clone()),
@@ -467,7 +467,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/std/Monad/bind` — see `wrap`.
     ///
-    /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so a value body rooted at a whole-term form reached elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
+    /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so unstamped, a value body rooted at a whole-term form would reach elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
     pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         let lowered = self
             .region_root(term)
@@ -551,7 +551,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Lowers one `let` statement — a lone binding or a `let … and …;` group — around `inner`, the lowering of what follows it in the statement's scope. `lower_value` lowers a member's value in that scope: `collect`, hoisting bangs into the binds this hands back, or `term` where there is no region to hoist into.
     ///
-    /// A statement is recursive when it has more than one member or when a member's type or value mentions a member — read off the lowered terms, never declared. It then becomes a core `rec`, whose member bodies are their own regions (hoisting an action out of a recursive binding would change how often it runs), and every member must be a plain, typed name whose value hoists nothing: a pattern binds no name its own value could use, a type cannot be inferred from a body that mentions it, and an action cannot name the result it is still producing. Each is refused by name. Otherwise the statement is the plain `let` it always was, its pattern desugared by [`Self::bind_pattern`].
+    /// A statement is recursive when it has more than one member or when a member's type or value mentions a member — read off the lowered terms, never declared. It then becomes a core `rec`, whose member bodies are their own regions (hoisting an action out of a recursive binding would change how often it runs), and every member must be a plain, typed name whose value hoists nothing: a pattern binds no name its own value could use, a type cannot be inferred from a body that mentions it, and an action cannot name the result it is still producing. Each is refused by name. Otherwise the statement is a plain `let`, its pattern desugared by [`Self::bind_pattern`].
     ///
     /// The binders are minted before any member is lowered — the whole point, since that is what puts a binding in scope of its own value — so a `let n = n + 1` names the binding it declares rather than an outer `n`, and is refused as the recursive value it now is.
     fn lower_let_group(
@@ -770,7 +770,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ///
     /// Each annotation sees the *preceding* parameters' binders, exactly as a dependent Π-type's domains do (the `Subterm::FuncType` arm), so a lambda may be written `(s, t, q : Eq()(s, t)) => …`. That is why the walk runs in declaration order under a progressively-extended scope: `Telescope::build` captures each earlier binder in every later domain, so the core side needs nothing further. A compound pattern binds no leaf name at the core binder — its leaves are projections off the synthetic binder — so a later annotation naming one of those leaves gets that pattern's field-`let` chain wrapped around the *domain* as well, mirroring what the body gets.
     ///
-    /// The chains wrap body and domains alike in reverse, so each pattern's chain wraps *before* an earlier pattern's chain wraps that, giving the declaration-order nesting the spec's motivating example expects.
+    /// The chains wrap body and domains alike in reverse, so each pattern's chain wraps *before* an earlier pattern's chain wraps that, giving declaration-order nesting.
     pub(super) fn lower_func_params(
         &self,
         params: &[FuncParam],
@@ -778,7 +778,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         body: curios_core::Term,
     ) -> Result<(LoweredParams, curios_core::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
-        // The binders already minted for the leaves, consumed in the same pre-order `param_names` produced them, plus the field-`let` chains that put the compound patterns in scope — both advance with the walk.
+        // The binders already minted for the leaves, consumed in the same pre-order `pattern_names` produced them, plus the field-`let` chains that put the compound patterns in scope — both advance with the walk.
         let mut seen = 0;
         let mut chains: Vec<(&[PatternField], curios_core::Free, &[Binder])> = Vec::new();
 
@@ -858,7 +858,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Builds `let pat = value : type_; tail` for a pattern in any of the three binder positions: `Pattern::Binder` is today's single core `let_` call, unchanged — the whole reason the plain-name path stays a zero-cost passthrough. A compound pattern mints one fresh synthetic binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's own annotation, so it is still checked), then projects each field off it via [`Self::lower_pattern_fields`]. The synthetic binder is minted unconditionally, even when `value` is already a bare variable reference: reusing it directly would risk silently dropping `type_`'s check (e.g. `let (x, y) : Point = pair;` must still check `pair : Point`). The extra trivial `let` this occasionally emits is exactly the shape `cont`'s copy-threading optimization already collapses, so it costs nothing at runtime. `binders` are the identities minted for this pattern's written leaves, in `pattern_names` order — the same ones the scope this `let` opened was entered with, so the tail's references land on them.
+    /// Builds `let pat = value : type_; tail` for a pattern in any of the three binder positions: `Pattern::Binder` is a single core `let_` call — the plain-name path is a zero-cost passthrough. A compound pattern mints one fresh synthetic binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's own annotation, so it is still checked), then projects each field off it via [`Self::lower_pattern_fields`]. The synthetic binder is minted unconditionally, even when `value` is already a bare variable reference: reusing it directly would risk silently dropping `type_`'s check (e.g. `let (x, y) : Point = pair;` must still check `pair : Point`). The extra trivial `let` this occasionally emits is exactly the shape `cont`'s copy-threading optimization already collapses, so it costs nothing at runtime. `binders` are the identities minted for this pattern's written leaves, in `pattern_names` order — the same ones the scope this `let` opened was entered with, so the tail's references land on them.
     pub(super) fn bind_pattern(
         &self,
         pattern: &Pattern,
@@ -997,7 +997,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `List` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_list_run`] and the whole becomes an n-ary `ListConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `ListConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
+    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `List`, `[]` included. With spreads, elements join the literal through [`Self::flush_list_run`] and the whole becomes an n-ary `ListConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `ListConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
     pub(super) fn lower_list_literal(
         &self,
         entries: &[ListEntry],
@@ -1029,7 +1029,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         self.flush_list_run(&mut operands, &mut run);
 
         match operands.len() {
-            // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` once collapsed to `true` and typechecked as `Bool`.
+            // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` would collapse to `true` and typecheck as `Bool`.
             1 => match &*operands[0] {
                 curios_core::Subterm::Intrinsic(
                     intrinsic @ (curios_core::Intrinsic::List { .. }
@@ -1135,7 +1135,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
         flush(&mut operands, &mut run);
 
-        // A lone packed-shaped operand at this literal's own grain is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` once collapsed to `true`, and a bits value spread into a bytes literal adopted the wrong grain.
+        // A lone packed-shaped operand at this literal's own grain is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` would collapse to `true`, and a bits value spread into a bytes literal would adopt the wrong grain.
         if operands.len() == 1
             && let curios_core::Subterm::Intrinsic(intrinsic) = &*operands[0]
             && matches!(

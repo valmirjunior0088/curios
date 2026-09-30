@@ -5,7 +5,7 @@ use curios_utilities::{Qualifier, RootKind};
 
 use super::test_support::*;
 
-// Phase 5: A.f references B.g and B.h references A.e, with e and g independent — no cycle, but no contiguous source order binds both references. The reorder must produce a valid binding order, leaving the lowered term with no free name.
+// A.f references B.g and B.h references A.e, with e and g independent — no cycle, but no contiguous source order binds both references. The reorder must produce a valid binding order, leaving the lowered term with no free name.
 #[test]
 fn orders_acyclic_bidirectional_value_graph() {
     assert!(
@@ -99,7 +99,7 @@ fn the_entry_reads_its_modules_from_its_stem_directory() {
         "#,
     );
     write_module(&base, "main/B.crs", "pub let x : Type = Type;");
-    // A sibling of the entry, which nothing may resolve to now that one rule governs every file.
+    // A sibling of the entry, which nothing may resolve to, since one rule governs every file.
     write_module(&base, "A.crs", "pub let wrong : Type = Type;");
 
     let entrypoint = r#"

@@ -223,7 +223,7 @@ pub struct TopWitness {
     pub body: Option<Vec<WitnessField>>,
 }
 
-/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to the same `() -> Test` thunk a nullary one used to: only the selected test's body is forced, and the parentheses that used to spell that are gone from the surface because they held a telescope that no longer has a meaning.
+/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
     pub label: Label,
@@ -346,7 +346,7 @@ pub struct Module {
 
 /// End of a module's item sequence: the input is exhausted, or the item parser explains why it is not.
 ///
-/// **A bare `take_eof` here reported the wrong thing.** A module has no tail expression, so anything left after the item loop is a failed item — but the loop drops a recoverable item failure (`curios_parse`'s repetition keeps only uncaught ones), leaving `take_eof` to invent `Expected 'end-of-file'` at the item's first column. Re-running the item parser recovers the diagnosis it already had; [`Parser::or`] then keeps whichever error reached further, so a genuine trailing token still reports as end-of-input while a malformed item reports at the token that broke it. The alternative never succeeds — the loop stopped here precisely because the item parser failed — so nothing is consumed twice.
+/// **A bare `take_eof` here would report the wrong thing.** A module has no tail expression, so anything left after the item loop is a failed item — but the loop drops a recoverable item failure (`curios_parse`'s repetition keeps only committed ones), which would leave `take_eof` to invent `Expected 'end-of-file'` at the item's first column. Re-running the item parser recovers the diagnosis it already had; [`Parser::or`] then keeps whichever error reached further, so a genuine trailing token still reports as end-of-input while a malformed item reports at the token that broke it. The alternative never succeeds — the loop stopped here precisely because the item parser failed — so nothing is consumed twice.
 fn parse_items_end<'a>() -> Parser<'a, ()> {
     take_eof().or(lazy(parse_top_item).map(|_| ()))
 }
@@ -428,7 +428,7 @@ impl Entrypoint {
         }
     }
 
-    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (today, the test suites) request `Check` rather than `Infer` mode — `into_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
+    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (the test suites) request `Check` rather than `Infer` mode — `into_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
     pub fn with_type(self, type_: Term) -> Self {
         Self {
             type_: Some(type_),
@@ -554,7 +554,7 @@ impl Entrypoint {
 
     /// The trivial program `Io/pure(())`, built rather than parsed.
     ///
-    /// What a unit with no written entry is compiled through. A library has none, so one is supplied for it, and every policy that does so replaces it with a synthesized tail before anything checks it — which is why the placeholder used to be the text `"()"`, chosen for being the shortest thing an entrypoint parses. That text is not a program: `()` has type `{}` and nothing lifts a pure value into `Io`, so it would be refused the moment a policy stopped replacing it, and the invariant holding it up lived in a comment.
+    /// What a unit with no written entry is compiled through. A library has none, so one is supplied for it, and every policy that does so replaces it with a synthesized tail before anything checks it. It is a program rather than the shortest text an entrypoint parses: `()` has type `{}` and nothing lifts a pure value into `Io`, so such a placeholder would be refused the moment a policy stopped replacing it.
     ///
     /// This is a program. It needs no text, so there is nothing to parse and nothing to fail; and it is the `IoPure` intrinsic rather than a path, so there is no name to resolve and no dependence on `/std` being reachable from a placeholder.
     pub fn trivial() -> Self {

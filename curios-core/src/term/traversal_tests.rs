@@ -124,7 +124,7 @@ fn any_metavar_visits_a_shared_subterm_once() {
 
 #[test]
 fn deep_terms_are_searched_without_native_recursion() {
-    // The shape neither prune stops: `has_metavar` is set on every ancestor of a hole, so a spine this tall is descended in full. Both walks used to do that natively at five debug frames per link and die as a bare `SIGSEGV` — *below* the depth at which the reduction budget refuses, so the same program crashed at eight thousand links and reported cleanly at sixty thousand. A regression here is a stack overflow rather than a failure.
+    // The shape neither prune stops: `has_metavar` is set on every ancestor of a hole, so a spine this tall is descended in full. Descended natively, at five debug frames per link, either walk would die as a bare `SIGSEGV` — *below* the depth at which the reduction budget refuses. A regression here is a stack overflow rather than a failure.
     let argument = Term::free_var(&Free::local(0, None));
     let mut term = Term::hole(1);
     for _ in 0..DEEP {
@@ -153,7 +153,7 @@ fn has_local_free_flags_locals_not_globals() {
     assert!(Term::free_var(&Free::local(3, Some("x"))).has_local_free());
     assert!(!global(["std", "Nat"]).has_local_free());
 
-    // A compiler-generated *global* is not context dependent and must not set the bit. This used to be a search for a marker character, so a witness that spelled itself `witness#N` misfired on every term mentioning one, silently disabling three elaboration caches. No spelling can do that now.
+    // A compiler-generated *global* is not context dependent and must not set the bit. A search for a marker character would misfire on every term mentioning a witness spelled `witness#N`, silently disabling the elaboration caches; the bit is a discriminant, so no spelling can.
     assert!(
         !Term::free_var(&Free::Global(Global::Witness(WitnessId::new(
             Qualifier::from(["std"]),

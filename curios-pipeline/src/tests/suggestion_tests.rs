@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn a_computed_equality_goal_suggests_refl() {
-    // The motivating base case: `? : Eq()(0 + 0, 0 * 2)` — the indices unify through reduction, so the report suggests the complete candidate. The step case used to get none, its sides being distinct stuck terms; since a sum is a linear combination, `(p + 1) + (p + 1)` and `(p + 1) * 2` both reduce to `2 · p + 2`, so it is suggested there too — the whole theorem is computation now, which is what makes the fixture a probe of the suggestion and no longer of its filtering.
+    // The motivating base case: `? : Eq()(0 + 0, 0 * 2)` — the indices unify through reduction, so the report suggests the complete candidate. The step case gets it too: a sum is a linear combination, so `(p + 1) + (p + 1)` and `(p + 1) * 2` both reduce to `2 · p + 2` — the whole theorem is computation, which makes the fixture a probe of the suggestion rather than of its filtering.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
@@ -103,7 +103,7 @@ fn a_module_function_fitting_the_goal_is_suggested_with_pinned_arguments() {
 
 #[test]
 fn an_application_fit_mentioning_a_scope_binder_is_suggested() {
-    // The same fit as above, but the goal sits inside a function body and mentions its binder: `mk`'s output `Eq()(n, n)` unifies with `Eq()(k, k)` by `n := k`. The suggestion pass used to run on the bare context, so `n`'s metavariable was born closed and the solution `k` failed the solver's scope check — every application fit inside a function body silently vanished, and only closed goals like the one above ever saw one. The pass now assumes the goal's telescope into a frame first.
+    // The same fit as above, but the goal sits inside a function body and mentions its binder: `mk`'s output `Eq()(n, n)` unifies with `Eq()(k, k)` by `n := k`. The suggestion pass assumes the goal's telescope into a frame first: run on the bare context, `n`'s metavariable would be born closed and the solution `k` would fail the solver's scope check, so every application fit inside a function body would silently vanish.
     let source = r#"
         use /std/{Nat, Eq};
         let mk(n : Nat) -> Eq()(n, n) = Eq/refl();
@@ -292,7 +292,7 @@ fn a_suggested_complete_candidate_compiles_when_pasted() {
     assert!(compile(source, Some("/std/Nat")).is_ok());
 }
 
-/// A goal inside an arm is offered what fits it under the arm's guard, as a paste there would be checked: `Eq/refl()` fits `Eq()(b, true)` only where the arm has `b` as `true`. Suggestions are computed after elaboration, with the arm long closed, so they reinstall the refinements the goal was born under beside its telescope; without them the fit was never offered.
+/// A goal inside an arm is offered what fits it under the arm's guard, as a paste there would be checked: `Eq/refl()` fits `Eq()(b, true)` only where the arm has `b` as `true`. Suggestions are computed after elaboration, with the arm long closed, so they reinstall the refinements the goal was born under beside its telescope; without them the fit would never be offered.
 #[test]
 fn a_goal_in_an_arm_is_offered_what_fits_under_its_guard() {
     let source = r#"

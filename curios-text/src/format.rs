@@ -4,11 +4,11 @@
 //!
 //! **A comment's place is decided by the renderer, not by the tree.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there — frequently punctuation the enclosing printer emits, which no node of the tree owns — and one on its own line must be placed where a line can begin. So the printer only reports *positions*, through [`Printer::Mark`], and the whole comment list is handed to the renderer as [`Owed`].
 //!
-//! That replaced a weave in which each node claimed the comments written before it. The claim had to be written by hand at every syntactic position, could not reach the ones no node owns, and depended on build order — a comment claimed by the wrong node reparsed somewhere new and moved again on the next run, which is the one way a formatter fails to converge.
+//! A weave in which each node claims the comments written before it would need the claim written by hand at every syntactic position, could not reach the ones no node owns, and would depend on build order — a comment claimed by the wrong node reparses somewhere new and moves again on the next run, which is the one way a formatter fails to converge.
 //!
 //! Comments are classified once, from the source text: one with source content earlier on its own line *rides* that line, and every other takes a line of its own. Nothing is classified twice and nothing is decided twice.
 //!
-//! **One document for the whole file.** [`emit`] builds it and renders once, which is what lets a comment between two items be placed at all — rendering item by item gave each its own renderer, and a comment belonging to neither had to be spliced in as text.
+//! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 
 use {
     super::{FormatInput, TopItem, parse_for_format},
@@ -76,7 +76,7 @@ struct Comment {
 thread_local! {
     /// The comments this run owes the renderer, by the offset each was written at — ascending, since `classify` walks the parse's own ascending spans.
     ///
-    /// Present only while [`Formatted::from_source`] renders, so `Display` printing never carries any and renders exactly as it always did.
+    /// Present only while [`Formatted::from_source`] renders, so `Display` printing never carries any and renders as a pretty printer would.
     static OWED: RefCell<Vec<Owed>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -115,7 +115,7 @@ fn render(printer: Printer) -> String {
 
 /// The parsed file as one document: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — and the tail last.
 ///
-/// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately gave each its own renderer, and a comment belonging to neither had to be spliced in as text by this function. Nothing here handles comments now; it marks where each item begins and lets the renderer do the rest.
+/// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments; it marks where each item begins and lets the renderer do the rest.
 pub(crate) fn emit(input: &FormatInput) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;

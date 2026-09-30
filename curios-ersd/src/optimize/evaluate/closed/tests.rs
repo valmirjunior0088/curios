@@ -72,11 +72,11 @@ fn live_functions(module: &Module) -> usize {
 
 /// One copy serves both candidates, though neither stands at item level.
 ///
-/// **The whole of what let-insertion buys, at the smallest size that shows it.** Both candidates fold to a closure over the same capture and so reach one specialization; the copy is bound ahead of the item enclosing the first, where the second can see it. Bound inside the first candidate's own block it would be in scope for nothing else, and the second would copy `inner` again — which is the `n² + 2` this pass used to produce on a grammar, one re-materialization per definition reaching the chain.
+/// **The whole of what let-insertion buys, at the smallest size that shows it.** Both candidates fold to a closure over the same capture and so reach one specialization; the copy is bound ahead of the item enclosing the first, where the second can see it. Bound inside the first candidate's own block it would be in scope for nothing else, and the second would copy `inner` again — which is the `n² + 2` block-local binding produces on a grammar, one re-materialization per definition reaching the chain.
 ///
 /// Counted in live functions because that is what a copy costs the module: `make`, `inner`, the two hosts, and *one* specialization.
 ///
-/// Mutation-checked two ways, and the second is the more interesting. Withholding the position from a block-owned candidate — the behaviour before let-insertion — makes the second candidate copy `inner` again and the delta two. Keeping the position while splicing back into the candidate's own block does not merely lose the sharing: it panics in `Module::verify` with `statement ~s5 references ~f4 out of scope`, because the second candidate then names a function bound in a block that does not dominate it. **The position and the placement are one decision, and the verifier is what says so** — which is the backstop the reification memo has always rested on, now with a second dependent.
+/// Mutation-checked two ways, and the second is the more interesting. Withholding the position from a block-owned candidate makes the second candidate copy `inner` again and the delta two. Keeping the position while splicing back into the candidate's own block does not merely lose the sharing: it panics in `Module::verify` with `statement ~s5 references ~f4 out of scope`, because the second candidate then names a function bound in a block that does not dominate it. **The position and the placement are one decision, and the verifier is what says so** — the same backstop the reification memo rests on.
 #[test]
 fn one_copy_serves_two_block_candidates() {
     let mut module = two_block_candidates();
@@ -172,7 +172,7 @@ fn define_knot(builder: &mut ErsdBuilder) -> (ValueId, FunctionId, FunctionId) {
     (dict, method, get)
 }
 
-/// A candidate outside the knot — `get(dict)` in a host of its own — folds to a closure over `method`, which is bound inside the knot's initializer. Copied out to the host it would carry the knot's dispatch with it: this is the shape that unrolled a mutually recursive witness group one level per round, exponentially once a member also reached itself. The candidate is left the call it was, and nothing is copied.
+/// A candidate outside the knot — `get(dict)` in a host of its own — folds to a closure over `method`, which is bound inside the knot's initializer. Copied out to the host it would carry the knot's dispatch with it: this is the shape that would unroll a mutually recursive witness group one level per round, exponentially once a member also reaches itself. The candidate is left the call it was, and nothing is copied.
 #[test]
 fn a_knots_function_is_not_copied_out_of_its_initializer() {
     let mut builder = ErsdBuilder::new();

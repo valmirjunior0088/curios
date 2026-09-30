@@ -51,7 +51,7 @@ fn an_entry_stating_no_type_is_refused() {
     );
 }
 
-/// An entry is checked against the type it states — the program contract a compile supplies, or an embedder's own — so a body that does not inhabit it is refused, where it used to be checked only when an author wrote the type. The control states the body's own type.
+/// An entry is checked against the type it states — the program contract a compile supplies, or an embedder's own — so a body that does not inhabit it is refused. The control states the body's own type.
 #[test]
 fn an_entry_is_checked_against_the_type_it_states() {
     let stated = |type_: Intrinsic| {

@@ -80,12 +80,12 @@ fn a_trailing_comment_rides_its_line() {
 
 #[test]
 fn a_comment_above_a_later_let_binding_stays_above_it() {
-    // The let-chain tail must not claim comments leading later bindings (it once built eagerly, ahead of the binding documents), and a binding-leading comment claims at the binding head, so this shape is a fixed point.
+    // The let-chain tail must not claim comments leading later bindings, as a tail built ahead of the binding documents would, and a binding-leading comment claims at the binding head, so this shape is a fixed point.
     let source = "let compute(n: /std/Nat) -> /std/Nat =\n    let a = n + n;\n    -- the second binding\n    let b = a + a;\n    b;\n\ncompute(1)\n";
     assert_eq!(formatted(source), source);
 }
 
-/// A clause joined by `and` records no span of its own, so a comment leading one used to fall to the first *descendant* that had one — printing between a parameter and its type. That relocation reparsed as a leading comment somewhere new, so the next run moved it again: the one shape in which this formatter failed to converge. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
+/// A clause joined by `and` records no span of its own, so a comment leading one could fall to the first *descendant* that has one — printing between a parameter and its type, reparsing as a leading comment somewhere new, and moving again on the next run: the one shape in which this formatter can fail to converge. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
 #[test]
 fn a_comment_above_a_let_group_clause_stays_above_and() {
     let source = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
@@ -105,7 +105,7 @@ fn a_comment_above_an_induct_clause_stays_above_and() {
     assert_eq!(formatted(source), source);
 }
 
-/// A member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — records no span of its own, exactly as an `and` clause does not. A comment leading one therefore used to fall to the first spanned *descendant*, which is the member's body, and printed *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
+/// A member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — records no span of its own, exactly as an `and` clause does not. A comment leading one could therefore fall to the first spanned *descendant*, which is the member's body, and print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
 #[test]
 fn a_comment_above_a_match_arm_stays_above_the_bar() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
@@ -150,7 +150,7 @@ fn a_comment_above_a_concept_field_stays_above_it() {
     assert_eq!(formatted(&output), output);
 }
 
-/// The repair half: a comment already sitting between a member's `=>` and its body is claimed by the member and lifted back out. That is what makes the fix retroactive — the corpus carries instances an earlier formatter run relocated, and re-running the formatter now returns each to the arm it documents.
+/// The repair half: a comment already sitting between a member's `=>` and its body is claimed by the member and lifted back out. That is what makes the placement self-repairing: a comment already relocated there is returned to the arm it documents by the next run.
 #[test]
 fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | p + 1 =>\n        -- what the successor case does\n        p\n    end;\n\nf(1)\n";
@@ -164,7 +164,7 @@ fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
 
 /// A trailing comment written after a separator — a local `let`'s `;`, a list element's, a call argument's or a tuple field's `,` — rides the line the separator ends, on every run.
 ///
-/// **The regression for a comment surfacing one construct down per run.** A term reported its reach up to the separator and no further, and the separator and the break after it are the enclosing printer's; so the comment was owed to no mark until the next element began, past the break, and each run carried it one line further — `-- after a` documented `b`, `-- one` closed the list, and the tail's comment was paid inside the call that followed.
+/// **A comment does not surface one construct down per run.** Were a term to report its reach up to the separator and no further — the separator and the break after it being the enclosing printer's — the comment would be owed to no mark until the next element began, past the break, and each run would carry it one line further: `-- after a` documenting `b`, `-- one` closing the list, and the tail's comment paid inside the call that follows.
 #[test]
 fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    let a = 1; -- after a\n    let b = [\n        1, -- one\n        2, -- two\n    ];\n    g(\n        a, -- first\n        n); -- the call\n\nf(1)\n";
@@ -191,7 +191,7 @@ fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
 
 /// A trailing comment stays on the arm it was written on, however many arms carry one.
 ///
-/// **The regression for a trailing comment drifting to the next break.** Claimed by the node that *follows* it, it was prefixed to that node's document and reached the suffix channel after the newline closing its own line had gone out — so each comment surfaced one arm down, and the last one, having no break left inside the construct, flushed at the document's end past `end;`. Here `-- affirmative` documented the negative arm and `-- negative` documented the declaration.
+/// **A trailing comment does not drift to the next break.** Claimed by the node that *follows* it, it would be prefixed to that node's document and reach the suffix channel after the newline closing its own line had gone out — so each comment would surface one arm down, and the last one, having no break left inside the construct, flush at the document's end past `end;`: `-- affirmative` would document the negative arm and `-- negative` the declaration.
 #[test]
 fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
     let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
@@ -225,7 +225,7 @@ fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
 
 /// A trailing comment inside a construct does not escape it, and a second one on the construct's own last line survives beside it.
 ///
-/// **The regression for the formatter refusing its own output.** Two comments driven onto one output line are *one* comment when it reparses — a line comment runs to the end of its line — so the verifier saw one fewer than it captured and refused to write. The shape below is exactly what the drift above used to produce, which is how a single `curios format` could leave a file that every later `curios format --check` rejected.
+/// **The regression for the formatter refusing its own output.** Two comments driven onto one output line are *one* comment when it reparses — a line comment runs to the end of its line — so the verifier saw one fewer than it captured and refused to write. The shape below is exactly what that drift would produce, and a single `curios format` would then leave a file that every later `curios format --check` rejects.
 #[test]
 fn an_interior_trailing_comment_does_not_escape_its_construct() {
     let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
@@ -302,7 +302,7 @@ const POSITIONS: [&str; 7] = [
 ///
 /// Every line of every fixture is tried twice, once with a comment on its own line above it and once riding its end, which is the whole space of positions a writer has.
 ///
-/// **This held at 7 of 54 failures while a comment's place was decided by whichever node's geometry happened to reach it**, and the claimant differed between the written form and the printed one. It reads zero now that a trailing comment is placed by the renderer, which is the only thing that knows where an output line ends.
+/// **A trailing comment is placed by the renderer**, the only thing that knows where an output line ends; decided by whichever node's geometry happened to reach it, the claimant would differ between the written form and the printed one.
 #[test]
 fn formatting_converges_from_every_comment_position() {
     let mut wandering = Vec::new();
@@ -376,7 +376,7 @@ fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
 
 /// A telescope that overflows breaks the way a `let`'s already did: one binder per line, a trailing comma, and the closer dedented to the declaration's own column.
 ///
-/// The closer used to ride the last binder, which left it and the first field of the brace body at one indent with only a mid-line `)` between them. `satisfy`, `struct`, `concept` and `induct` all took that shape; this pins all four against the `let` they now share it with.
+/// The closer does not ride the last binder, which would leave it and the first field of the brace body at one indent with only a mid-line `)` between them. This pins `satisfy`, `struct`, `concept` and `induct` against the `let` they share the shape with.
 #[test]
 fn an_overflowing_telescope_dedents_its_closer() {
     let source = concat!(
@@ -414,7 +414,7 @@ fn an_overflowing_telescope_dedents_its_closer() {
 
 #[test]
 fn an_inline_module_keeps_the_blank_lines_between_its_items() {
-    // One rule separates module items, and a file and an inline `mod … end` now share it. They did not: the inline printer joined its items with a single line, so every blank line written inside one was eaten on the first run while the file around it kept its own.
+    // One rule separates module items, and a file and an inline `mod … end` share it: an inline printer joining its items with a single line would eat every blank line written inside one on the first run while the file around it kept its own.
     let source = concat!(
         "pub mod Inner\n",
         "    use /std/{Nat};\n",

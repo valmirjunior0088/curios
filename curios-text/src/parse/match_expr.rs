@@ -7,7 +7,7 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
         }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("=>"))
-        // Past the arrow this is a lambda and nothing else, so its body owns the diagnosis. Left to backtrack, the parameter list was re-read as a tuple or a parenthesized term and the arrow itself became the complaint.
+        // Past the arrow this is a lambda and nothing else, so its body owns the diagnosis. Left to backtrack, the parameter list would be re-read as a tuple or a parenthesized term and the arrow itself would become the complaint.
         .and(commit(lazy(parse_term)))
         .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
@@ -16,14 +16,14 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
 pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     parse_keyword("match").and_keep(lazy(parse_term)).and(
         parse_literal(":")
-            // The `:` is what introduces a motive, so past it a term must follow. Recoverable, a malformed motive was read as no motive at all and the arms' `end` complained at the colon.
+            // The `:` is what introduces a motive, so past it a term must follow. Recoverable, a malformed motive would be read as no motive at all and the arms' `end` would complain at the colon.
             .and_keep(commit(lazy(parse_term)))
             .map(Some)
             .or(pure(None)),
     )
 }
 
-// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). Full enumeration only ("Path A" — see `into_core::match_compile`'s doc comment): a bare binder arm is legal alone (equivalent to a `let`), but lowering rejects mixing it with a concrete-shape arm in the same column, since that would be a catch-all/row-priority pattern this grammar doesn't otherwise support.
+// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`) and a final bare `_` after dispatching arms is the default, but lowering rejects a binder beside a concrete-shape arm in one column of one group, since arms have no priority order (see `into_core::match_compile`).
 pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     parse_literal("|")
         .and_keep(commit(
@@ -86,7 +86,7 @@ pub(super) fn parse_choose_arm<'a>() -> Parser<'a, ChooseArm> {
 
 // The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
 //
-// **A bare default here reported the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the arm grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
+// **A bare default here would report the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the arm grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
 pub(super) fn parse_choose_default<'a>() -> Parser<'a, Term> {
     parse_literal("|")
         .and_keep(parse_literal("_"))
@@ -103,7 +103,7 @@ pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
         .map(|(arms, default)| Subterm::Choose(Choose { arms, default }).into())
 }
 
-// A `match` is exactly one surface shape now: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), lowered by `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_list`/`compile_bin`. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under inversion (Rung C) every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
+// A `match` is exactly one surface shape: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), lowered by `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_list`/`compile_bin`. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
     parse_match_prefix()
         .and(many0(parse_induct_match_branch))

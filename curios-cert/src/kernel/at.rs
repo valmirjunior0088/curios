@@ -8,9 +8,9 @@
 //! 2. the parameter count;
 //! 3. for an inductive *type* occurrence, the index count.
 //!
-//! Spread over the call sites, that is three things to remember at each of them, and the record is that they get forgotten. `Sort::of` and `synth_neutral` checked the parameter count; `infer`'s projection rule, `check`'s record rule and `convert`'s structural eta did not, and each reached [`Telescope::open`] — which **asserts**. An occurrence at the wrong count therefore aborted the walk rather than refusing the item, losing every other verdict in the same run, which is what makes `recheck_module_verdicts`' count a count.
+//! Spread over the call sites, that is three things to remember at each of them, and a site that forgets one reaches [`Telescope::open`] — which **asserts** — so an occurrence at the wrong count aborts the walk rather than refusing the item, losing every other verdict in the same run, which is what makes `recheck_module_verdicts`' count a count.
 //!
-//! So the checks move into the constructor and the answers move behind it. A rule that holds an [`InductAt`] or a [`StructAt`] holds proof that all three passed, and it cannot open an arity at parameters other than the ones they were checked against, because the handle carries them and never takes them again.
+//! So the checks live in the constructor and the answers behind it. A rule that holds an [`InductAt`] or a [`StructAt`] holds proof that all three passed, and it cannot open an arity at parameters other than the ones they were checked against, because the handle carries them and never takes them again.
 //!
 //! # What this is *not* for
 //!

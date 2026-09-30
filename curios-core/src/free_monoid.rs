@@ -127,7 +127,7 @@ enum Front {
 
 /// One pending level of a leading-edge descent — what that level has to put back once the generator underneath it has been peeled. `Appended` is a `BinAppend`'s trailing atom; `Concat` is the operands a `BinConcat` carried after its first.
 ///
-/// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_utilities::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-emit`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
+/// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_utilities::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-emit`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
 enum BinLevel<'a> {
     Appended(&'a Term),
     Concat(&'a [Term]),
@@ -417,7 +417,7 @@ impl FreeMonoid {
     ///
     /// **The one place a carrier says what a measured node is.** The walks below are one walk over this, as the structural eliminator is one recursion over [`FreeMonoid::uncons`]: a carrier that could be measured differently by `get` than by `slice` is the shape this removes. `Unary` answers `None` throughout — its spine carries the value rather than operands, and nothing indexes into it.
     ///
-    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` today — conversion holds a window's very emptiness undecidable (`curios-algebra`'s word strip answers `Undecided` against the empty value) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
+    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to the rule it uses otherwise. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` — conversion holds a window's very emptiness undecidable (`curios-algebra`'s word strip answers `Undecided` against the empty value) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals.
     fn spine<'a>(self, value: &'a Term) -> Option<Spine<'a>> {
         match (self, &**value) {
             (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
@@ -508,7 +508,7 @@ impl FreeMonoid {
 
     /// A value read as a concatenation's operands, flattened: a concatenation's own, and an append's base beside the one-generator run it adds. `None` for anything that is neither.
     ///
-    /// **An append *is* a concatenation, and only the locator disagreed.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone therefore declined a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it, and the shape `Bytes/of_nat` then built with, so every base-256 encoding was outside what a window could locate. That encoding is a cons now and no longer reaches this, which changes nothing here: the law is the peel's, not one caller's, and a snoc still has to locate.
+    /// **An append *is* a concatenation, and the locator agrees.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone would decline a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it. The law is the peel's, not one caller's, so a snoc has to locate.
     ///
     /// **The reading flattens, so a seam is a seam however it is nested.** A carrier that flattened only its outermost node would present an inner seam as an operand's interior, which is a window it can already decide declined for the way it happens to be spelled.
     pub(crate) fn concatenated(self, value: &Term) -> Option<Vec<Term>> {
@@ -536,11 +536,11 @@ impl FreeMonoid {
 
     /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
     ///
-    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, and it replaces computing one by building `Bin/len(operand)` terms and handing them back to the reducer — which costs a full re-walk of each sub-spine, so a spine of depth n costs Σk = O(n²) where the answer is one linear pass.
+    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, where building `Bin/len(operand)` terms and handing them back to the reducer would cost a full re-walk of each sub-spine, so a spine of depth n would cost Σk = O(n²) where the answer is one linear pass.
     ///
     /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
     ///
-    /// **The notion is not new here — conversion has had it all along.** `curios-algebra`'s `Segment::Window` is documented as a stretch whose contents are unknown and whose length is known; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
+    /// **Conversion has the same notion.** `curios-algebra`'s `Segment::Window` is a stretch whose contents are unknown and whose length is known, so deciding equality measures what it cannot read, as reduction does here.
     fn segments(self, value: &Term) -> Option<Vec<(&Term, usize)>> {
         let mut segments = Vec::new();
         let mut pending = vec![value];
@@ -581,11 +581,11 @@ impl FreeMonoid {
 
 /// How many generators an already-reduced `Bin` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
 ///
-/// **Deliberately a superset of [`FreeMonoid::segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. Today that is `Flt/to_le_bytes` alone, which writes eight bytes for every float, NaN and both zeros included.
+/// **Deliberately a superset of [`FreeMonoid::segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. That is `Flt/to_le_bytes` alone, which writes eight bytes for every float, NaN and both zeros included.
 ///
-/// Crediting it as a segment instead would be wrong twice over: `bin_locate` would hand the node back to `Bin/get` as the operand holding the index, which re-enters this same node and never terminates, and `bin_window` would try to narrow a value it cannot read.
+/// Crediting it as a segment instead would be wrong twice over: locating an index would hand the node back to `Bin/get` as the operand holding it, which re-enters this same node and never terminates, and [`FreeMonoid::measured_window`] would try to narrow a value it cannot read.
 ///
-/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model now, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what survives is the case this was written for — a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
+/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what reaches it is a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
 fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];
@@ -597,7 +597,7 @@ fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
                 grain: found,
                 operands,
             }) if *found == grain => {
-                // Order is irrelevant to a sum, so this walk does not reverse the way `bin_segments` must.
+                // Order is irrelevant to a sum, so this walk does not reverse the way [`FreeMonoid::segments`] must.
                 pending.extend(operands.iter());
                 continue;
             }
@@ -649,7 +649,7 @@ fn window(
 ///
 /// **The cap is by *operand*, and that is the load-bearing half.** Under a cap on the *result* an accumulator is re-copied within every chunk, so the cost stays quadratic in the chunk size and is merely divided by the number of chunks. Under an operand cap the accumulator stops being fusible after a handful of steps whatever its chunk size, every later step is one node, and the leaves of a loop appending the same run share one payload.
 ///
-/// **Chosen from a census, not picked.** Instrumenting the two `merge` closures over a fixed-prelude build (elaboration *and* kernel certification of every `/std` and `/syn` module) and over `curios`'s 557-test corpus, taken **2026-08-14**:
+/// **Chosen from a census, not picked.** Instrumenting the two `merge` closures over a fixed-prelude build (elaboration *and* kernel certification of every `/sys` and `/std` module) and over `curios`'s test corpus:
 ///
 /// | Corpus | Fusing concatenations | Largest operand |
 /// | --- | --- | --- |
@@ -659,7 +659,7 @@ fn window(
 ///
 /// So the corpus fuses almost nothing, and what it does fuse is one to three generators; the pathological case is unbounded. Any cap of four or more leaves every normal form the corpus reaches untouched, and this one clears the observed maximum by more than an order of magnitude while stopping the accumulation within a handful of steps. The third row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
 ///
-/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that used to close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
+/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;
 
 /// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.

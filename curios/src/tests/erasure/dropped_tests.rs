@@ -173,7 +173,7 @@ fn erased_indexed_relevant_repro() {
     assert_eq!(run(source), b"ok");
 }
 
-// Regression: a type-valued *application* (`Box(m)`, here `absurd`'s explicit `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type; erasing it structurally used to leave `m` in the runtime term, so codegen demanded a value for an erased binder ("`into_cont` lacks value").
+// A type-valued *application* (`Box(m)`, here `absurd`'s explicit `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type; erasing it structurally would leave `m` in the runtime term, and codegen would demand a value for an erased binder.
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
@@ -243,7 +243,7 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
     );
 }
 
-// The seam in the other direction, found while landing course-of-values induction at a `Type`-valued motive, which `WellFounded/recurse` now carries. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda as the proof it has become — and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit trapped.
+// The seam in the other direction, which course-of-values induction reaches at a `Type`-valued motive, as `WellFounded/recurse` carries. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda as the proof it has become — and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit would trap.
 #[test]
 fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
     assert_eq!(

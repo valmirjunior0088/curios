@@ -76,7 +76,7 @@ fn spent_entry_beside_an_aliased_payload() -> Program {
 
 /// Strict positivity is judged on a budget of its own, not on what the entrypoint left.
 ///
-/// The entrypoint spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. Judged on the entrypoint's leftover, the unfold was refused, the alias was read at `Mixed`, and `Good` was refused — as not strictly positive, and once the analysis carried the driver's refusal, for a budget `Good` never spent.
+/// The entrypoint spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. Judged on the entrypoint's leftover, the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
 ///
 /// The entrypoint's own exhaustion is the control: without it the leftover would be most of a budget, and the fixture would pass whether or not positivity restores one.
 #[test]

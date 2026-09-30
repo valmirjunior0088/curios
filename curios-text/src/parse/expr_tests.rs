@@ -185,7 +185,7 @@ fn a_position_that_begins_no_term_names_the_input_rather_than_an_alternative() {
 
 #[test]
 fn a_long_operator_chain_parses_without_native_recursion() {
-    // Chain length was a stack bound twice over: the recursive infix spelling nested one native frame per operator (aborting at 1k on the default test-thread stack), and after that went iterative, the packrat cache's per-success deep clone of the Box-backed tree still recursed per level (aborting near 3k). The infix loop folds by move and `Term` is Rc-backed now, so this depth exercises both cures.
+    // Chain length must bound no stack: a recursive infix spelling would nest one native frame per operator, and a packrat cache deep-cloning a Box-backed tree per success would recurse per level. The infix loop folds by move and `Term` is Rc-backed, so this depth exercises both.
     let depth = 10_000;
     let source = "1".to_string() + &" + 1".repeat(depth);
     let mut term = source.parse::<Term>().unwrap();
@@ -259,7 +259,7 @@ fn implicit_marks_on_let_shorthand_and_inductive_params() {
 
 #[test]
 fn at_on_a_binder_type_is_a_parse_error() {
-    // Erasure is sort-driven now: the erasure axis is retired, so `@` on a binder's *type* (the old erased marker) no longer parses. `@` on a *name* is plicity and still parses; the two positions never collide.
+    // Erasure is sort-driven, with no erasure axis, so `@` on a binder's *type* does not parse. `@` on a *name* is plicity and still parses; the two positions never collide.
     let implicit = "(@n : Nat) -> Nat".parse::<Term>().unwrap();
     match &*implicit {
         Subterm::FuncType(ft) => assert_eq!(ft.params[0].plicity, Plicity::Implicit),
@@ -415,7 +415,7 @@ fn func_without_annotation_still_works() {
 
 #[test]
 fn let_bang_is_no_longer_grammar() {
-    // The `let ! = <bind>;` header is gone: `!` sequences through the `Monad` concept without one. `!` is not a binder identifier, so the old form is a parse error rather than a `let`.
+    // `!` sequences through the `Monad` concept with no `let ! = <bind>;` header, and `!` is not a binder identifier, so that form is a parse error rather than a `let`.
     assert!("let ! = bind; body".parse::<Term>().is_err());
 }
 

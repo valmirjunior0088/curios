@@ -1,13 +1,5 @@
 //! Coverage, strict positivity behind a record, the foreign wire contract, and the recorded agreement between the two checkers.
 
-//! End-to-end coverage for the soundness perimeter entries that nothing else guards.
-//!
-//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
-//!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
-//!
-//! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
-
 use {
     super::test_support::*,
     std::{fs, path::Path},
@@ -31,7 +23,7 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
     );
 }
 
-// The other support the argument names, at a shape positivity's own twelve probes did not spell: they run the negative and the double negative bare, through an `induct` parameter, through a `struct` parameter, through a type alias, under `List`, behind a type-level `match`, and at a higher-kinded parameter — never behind an anonymous Σ, which is the construct this row is about.
+// The other support the argument names, at a shape positivity's own probes do not spell: they run the negative and the double negative bare, through an `induct` parameter, through a `struct` parameter, through a type alias, under `List`, behind a type-level `match`, and at a higher-kinded parameter — never behind an anonymous Σ, which is the construct this row is about.
 //
 // The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out while `Prop` is impredicative, so this is the pairing the row rests on, checked where the row lives.
 #[test]
@@ -92,7 +84,7 @@ struct Tally {
 ///
 /// A row moving between quadrants — a disagreement closed, a kernel twin written — moves a number here, and deliberately: `the_kernel_refuses_alone` is what the second checker's incompleteness costs on this corpus, and `unasked_with_none` is how many rules the kernel is never put to anywhere. The elaborator refusing what the kernel accepts has no field, because no row may sit there.
 ///
-/// **`the_kernel_refuses_alone` is zero, and that is a weaker statement than it sounds.** Every disagreement this corpus *has* is closed; what the corpus does not have, it cannot count. Four sat here at once — two spine and struct-eta positions the kernel compared untyped, and a level entailment that read a constant before its hypotheses — and none was found by the checkers being run against each other. Three came from stating `/std`'s own laws and reading this table, one from a three-line group nobody had written down. Five more were found by the method the table lacks — programs written to set the checkers against each other. Four are a definition or a recursive function applied to two proofs, each sitting in this quadrant until both checkers compared the spines of one definition before unfolding it; they are among the rows from `a_definition_applied_to_two_proofs_converts_before_unfolding` to `two_accessibility_proofs_at_one_recursive_call_convert`, beside the universe-polymorphic definition the elaborator itself refused. The fifth is `an_inferred_value_under_a_refined_proof_keeps_its_universe_instance`, a solution the elaborator committed with its universe instance stripped. A zero here is therefore a fact about the corpus, and the differential the design record still calls a missing test is what would make it a fact about the checkers.
+/// **`the_kernel_refuses_alone` is zero, and that is a weaker statement than it sounds.** Every disagreement this corpus *has* is closed; what the corpus does not have, it cannot count. The disagreements it records were found by stating `/std`'s own laws and by programs written to set the checkers against each other, not by this table running them side by side. A zero here is therefore a fact about the corpus, and the differential the design record calls a missing test is what would make it a fact about the checkers.
 #[test]
 fn the_matrix_tallies_as_recorded() {
     let mut tally = Tally::default();

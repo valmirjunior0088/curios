@@ -87,9 +87,9 @@ enum Step {
 
 /// Reduce `term` until its head constructor is stable.
 ///
-/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. That is how the need was found — the elaborator was given its reserve first, and the abort simply moved here. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
+/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
-    // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which is the one resource this walk could previously consume without being counted.
+    // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
     kernel.enter_level()?;
     let reduct = recurse(|| whnf_within(kernel, term));
     kernel.leave_level();
@@ -100,9 +100,7 @@ pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     // **The memo is consulted here, at every level, and not only where something outside reduction asks for one.**
     //
-    // It used to sit on the two `Reducer` methods alone, so the fifteen internal calls below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-derived what the table already held, and `reduce_forced` re-derived its own weak-head half because it probed only the `forced` table before calling this directly. The elaborator's reducer has always probed at its own entry and recursed through that same entry, so the two strategies differed in reach rather than in rule; measured over a `Str` literal's UTF-8 scan the kernel charged 72× what the elaborator did for the *same* reduction, at the same peak depth, and the whole of that gap was this.
-    //
-    // What makes reaching further safe is that the table a term belongs to is decided inside [`Memos`](super::Memos), on the lookup as well as the store, so every new site here is protected by the same dispatch the two old ones were: a local-free term by the tables that live for the declaration, a local-bearing one by the tables that live only as long as the equations in force.
+    // Probing only at the two `Reducer` methods would leave every internal call below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-deriving what the table already holds; the elaborator's reducer probes at its own entry and recurses through it, so probing here keeps the two strategies alike in reach as well as in rule. Reaching every level is safe because the table a term belongs to is decided inside [`Memos`](super::Memos), on the lookup as well as the store: a local-free term by the tables that live for the declaration, a local-bearing one by the tables that live only as long as the equations in force.
     //
     // **The memo is asked before the case equations below, and that order rests on the recording rule.** A term the declaration-lived tables answer is local-free, and no equation is recorded under a local-free spelling (`curios_analysis::records_case_equation`), so no entry there can stand in for an answer an equation in force would give; a local-bearing entry is cleared wherever the equations in force change. `a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does` holds the first half, and fails once a local-free equation is recorded with this order kept; `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` holds the second.
     if let Some(replayed) = kernel.whnf_hit(&term, false) {
@@ -129,7 +127,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 
         // An arm's case equation is consulted *before* the term is taken apart, not only on the value it reduced to. Both points are sound for the same reason and by the same test: [`Scope::refinement_of`] matches by `Term`'s structural equality, universe instances included, so a hit means this term *is* the registered scrutinee and the arm's hypothesis applies to it directly — and the value it substitutes is a constructor, a normal form, so nothing cycles.
         //
-        // Asking only afterwards made the answer depend on affording the reduction. `Lt(i, len(b))` under a guard that refined exactly that comparison would fold the intrinsic first — evaluating `b` — and consult the equation about a value it had already spent the budget to compute. The elaborator's reducer asks first and this did not, which was a defect in its own right: a program the elaborator accepts and the kernel then refuses reads as a disagreement about the rule, and is not one.
+        // Asking only afterwards would make the answer depend on affording the reduction: `Lt(i, len(b))` under a guard that refined exactly that comparison would fold the intrinsic first — evaluating `b` — and consult the equation about a value it had already spent the budget to compute. The elaborator's reducer asks first as well, so a program the elaborator accepts is not refused here for a reason that reads as a disagreement about the rule and is not one.
         //
         // The written spelling alone here. An equation is *recorded* under it, so this point answers the scrutinee's own occurrences — the common case, and the one whose whole cost is this comparison. The reduced spelling is what [`refined_reduct`] escalates to, at the other point, where the terms that need it arrive.
         if let Some(refined) = kernel.refinement_of(&term) {
@@ -327,7 +325,7 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
 
 /// The spelling a dispatched scrutinee resolves to: its application spine opened a layer at a time through heads that reduce to functions — the intrinsic a concept method elaborates to, `(?w).1(a, hi)` reaching `NatLe(a, hi)` — or `None` where nothing opened, where what it reached carries no head a probe can present, or where sixteen layers did not settle it.
 ///
-/// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: the kernel used to meet a dispatched guard's intrinsic shape only through its lazily settled reduct — after the decision procedure had already folded the probe, and as that fold's result — so in an arm whose guard the procedure decides against, the elaborator answered a dual spelling from the arm's equation and the kernel from the procedure.
+/// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: met only through its lazily settled reduct — after the decision procedure has already folded the probe, and as that fold's result — a dispatched guard's intrinsic shape would be answered from the procedure in an arm whose guard the procedure decides against, where the elaborator answers the dual spelling from the arm's equation.
 pub(crate) fn resolved_spelling(
     kernel: &mut Kernel,
     scrutinee: &Term,
@@ -425,7 +423,7 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
 
 /// Zeta: substitute a `let`'s bindings into its tail.
 ///
-/// The elaborator's reducer substitutes by the same rule. It once bound each value as a fresh definition and opened the tail over *those*, which avoided copying a value into every use but spelled its reducts with names this copy of the reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
+/// The elaborator's reducer substitutes by the same rule. Binding each value as a fresh definition and opening the tail over *those* would avoid copying a value into every use, but spell reducts with names the other checker's reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
     // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
     let bindings = let_.bindings.len() as u64;
@@ -728,7 +726,7 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
     let head = whnf(kernel, head)?;
     let head = expose_rec_tail(kernel, head)?;
 
-    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and the elaborator's twin takes them the same way — an `induct`'s type constructor lowers into a `rec` whatever its arity, so a caller that reached the unfolded spelling saw a nominal type where one reaching the folded spelling saw a stuck application.
+    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and the elaborator's twin takes them the same way — an `induct`'s type constructor lowers into a `rec` whatever its arity, since otherwise a caller reaching the unfolded spelling would see a nominal type where one reaching the folded spelling sees a stuck application.
     let body = match head.as_rec_proj() {
         Some((group, index)) => {
             let body = whnf(kernel, group.member_body(index))?;
@@ -740,7 +738,7 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
 
     let telescope = match Term::unwrap_or_clone(body) {
         Subterm::Func(Func { telescope, .. }) => telescope,
-        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, as the elaborator's twin takes it — read one level deep, `f(a)(b)` was a neutral no demand unfolded.
+        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, as the elaborator's twin takes it — read one level deep, `f(a)(b)` would be a neutral no demand unfolds.
         Subterm::Apply(inner) => {
             return Ok(unfold_rec_apply(kernel, inner)?.map(|unfolded| {
                 Subterm::Apply(Apply {

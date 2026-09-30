@@ -20,7 +20,7 @@ where
 
 /// Like [`flat`] but interposes a separator between adjacent items; an empty sequence prints nothing, and no separator trails.
 ///
-/// The separator still comes from a closure rather than a value, which a document made of data no longer strictly needs — it is kept so the call sites do not change. It is now called while the document is built rather than while it is printed, which is the same thing for a separator that takes no arguments and can therefore depend on nothing that printing decides.
+/// The separator closure is called while the document is built, once per gap; it takes no arguments, so it can depend on nothing that printing decides.
 pub fn sep_flat<I, F>(i: I, mut f: F) -> Printer
 where
     I: IntoIterator<Item = Printer>,

@@ -95,7 +95,7 @@ fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
 
 #[test]
 fn exit_in_local_binding_halts() {
-    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write. Regression test: erasure used to collapse such bindings to the unit constant wholesale, silently dropping the exit. Post-retype `go` must return an `Io` for the force to have a region at all — an unforced `proc/exit(3)` would be an inert description, which is the whole point of the carrier.
+    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write, so erasure must not collapse such a binding to the unit constant. `go` returns an `Io` for the force to have a region at all — an unforced `proc/exit(3)` would be an inert description, which is the whole point of the carrier.
     let entrypoint = r#"
         use /std/{Nat, Str, Io};
         let go(n : std/Nat) -> Io(std/Nat) =
@@ -126,7 +126,7 @@ fn exit_in_local_binding_halts() {
 
 #[test]
 fn an_exit_ends_a_region_of_any_type() {
-    // `exit` yields whatever its region wants, so an arm that exits ends an `Io(Str)` region without producing a string, and the program exits with the code before the write. It used to be typed at `Io({})`, which refused this arm and forced the `let _ = exit(1)!;` detour in a unit region.
+    // `exit` yields whatever its region wants, so an arm that exits ends an `Io(Str)` region without producing a string, and the program exits with the code before the write.
     let entrypoint = r#"
         use /std/{Nat, Str, Io};
         let f(n : Nat) -> Io(Str) =
@@ -159,7 +159,7 @@ fn an_exit_ends_a_region_of_any_type() {
 
 #[test]
 fn an_exit_alone_in_the_tail_carries_its_code() {
-    // A program needing no nominal rows used to emit an empty recursion group, which Binaryen's reader refuses; the roster group is omitted when there is nothing to declare.
+    // A program needing no nominal rows emits no roster group, since Binaryen's reader refuses an empty recursion group.
     let entrypoint = r#"
         /std/proc/exit(3)
         "#

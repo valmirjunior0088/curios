@@ -216,7 +216,7 @@ fn function_field_sugar_runs_end_to_end() {
     assert_eq!(run(source), b"8");
 }
 
-// A parameter whose type is universe-polymorphic. The former's body is the `StructType` node over its own parameters, checked against the registry arity — which the lowerer files as the *written* telescope, carrying no universe instances. The binders that body meets come from the former's elaborated type and do carry them, and the two can never be reconciled: a universe-polymorphic global reached through a bare `Var` does not unfold, because there is no instance to substitute into its body. So the raw side is irreducible and conversion is handed a problem no reduction decides. The declared type's telescope is the one both sides now share.
+// A parameter whose type is universe-polymorphic. The former's body is the `StructType` node over its own parameters, checked against the registry arity — which the lowerer files as the *written* telescope, carrying no universe instances. The binders that body meets come from the former's elaborated type and do carry them, and the two can never be reconciled: a universe-polymorphic global reached through a bare `Var` does not unfold, because there is no instance to substitute into its body. So the raw side is irreducible and conversion is handed a problem no reduction decides. The declared type's telescope is the one both sides share.
 #[test]
 fn a_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
     let source = r#"

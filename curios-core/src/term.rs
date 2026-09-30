@@ -602,7 +602,7 @@ impl Term {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::Instance(Instance { head, .. }) => head.head_name().map(HeadTag::Name),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
-            // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee used to lose its arm refinement while the equivalent `Nat/le(a, b)` kept it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
+            // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key could be registered but never looked up, and an operator-spelled scrutinee would lose its arm refinement where the equivalent `Nat/le(a, b)` keeps it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
                 Intrinsic::BoolAnd(..) => Some(HeadTag::Intrinsic("intrinsic:BoolAnd")),
                 Intrinsic::BoolOr(..) => Some(HeadTag::Intrinsic("intrinsic:BoolOr")),
@@ -1073,7 +1073,7 @@ impl Term {
         }))
     }
 
-    /// Build a match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization. The elaborator's entry point for an elided motive over a variable scrutinee; see [`MatchResult::Ambient`] for why the head must be a variable.
+    /// Build a match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`].
     pub fn match_ambient<H, G>(head: H, goal: G, cases: Cases) -> Self
     where
         H: Into<Term>,
@@ -1230,7 +1230,7 @@ impl Term {
 
     /// Build one flat [`Let`] block from `(binder, type, value)` items in binding order: each binding closed over the binders before it, the tail over all of them, and a `Let` tail merged in after them. The block [`Term::let_`] reaches merging the items one at a time from the last — reached in one walk per term.
     ///
-    /// Merging a binding re-closes every binding after it, so building `k` of them one at a time walks the block `k` times over: quadratic in bindings whose terms are small, and cubic in the elaborator's rebuild, where each binding's type carries metavariable spines as long as the binders before it. A 400-binding block spent its whole 30-second elaboration there.
+    /// Merging a binding re-closes every binding after it, so building `k` of them one at a time walks the block `k` times over: quadratic in bindings whose terms are small, and cubic in the elaborator's rebuild, where each binding's type carries metavariable spines as long as the binders before it.
     pub fn let_block(items: Vec<(Free, Term, Term)>, tail: Term) -> Self {
         if items.is_empty() {
             return tail;
@@ -1334,11 +1334,11 @@ fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
 
 /// Release the node's descendants iteratively.
 ///
-/// A term is an `Rc` chain, so the derived drop recurses once per link and a deep term aborts the process on release exactly as deep equality used to on comparison. Emptying each node *before* it falls out of scope is what keeps its own drop from cascading: the husk left behind has no children to descend into, so every level is retired from this one loop.
+/// A term is an `Rc` chain, so the derived drop would recurse once per link and a deep term abort the process on release. Emptying each node *before* it falls out of scope is what keeps its own drop from cascading: the husk left behind has no children to descend into, so every level is retired from this one loop.
 ///
 /// Only a node this drop holds the sole reference to is emptied — `get_mut` answers precisely that question — so a subterm shared with a live term is left untouched and merely loses a reference.
 ///
-/// Nothing here allocates, which matters because releasing terms is constant work in the compiler: standing a node down costs a `Prop` and a refcount bump per child. An earlier version substituted a placeholder `Term` instead, and building one per drop cost about a fifth of a prelude build.
+/// Nothing here allocates, which matters because releasing terms is constant work in the compiler: standing a node down costs a `Prop` and a refcount bump per child, where a placeholder `Term` would cost an allocation per drop.
 impl Drop for Node {
     fn drop(&mut self) {
         // Nothing to dismantle, and the case every husk left below lands in.
@@ -1365,14 +1365,14 @@ impl Hash for Term {
 
 /// Structural equality, walked with an explicit worklist.
 ///
-/// The recursion this replaces was native, and a term deep enough overflowed the stack rather than answering — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term already avoids native depth the same way (`Term::fill_post_order`, `traverse_rewrite_spine`); this closes the last one that decides acceptance.
+/// Native recursion would overflow the stack on a term deep enough rather than answer — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term avoids native depth the same way (`Term::warm_scalars`, `traverse_rewrite_spine`).
 ///
 /// Two shortcuts carry the common cases before any of that: pointer identity (hash-consing makes shared structure genuinely common) and the cached hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
 ///
 /// **A pair of shared nodes is compared once.** A reduct is a graph whose tree can be exponential in its depth — a web of definitions each naming the one before it twice reduces to one — and two such graphs that are equal but distinct reach the walk with every pair of shared nodes on as many paths as the tree has, each pair masked and compared again. The walk keeps the pairs it has already entered, exactly as `any_metavar` keeps its visited nodes, and for the same reason: a pair's answer is the pair's, whichever path reached it, and a `false` ends the walk outright, so a recorded pair is always one that is equal so far. Recorded only where both nodes are shared, so the set stays empty and unallocated over two trees.
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
-        // **Both verdicts the loop can reach in O(1), reached before it allocates anything.** They were inside the loop, which is correct and was quadratically wasteful: the setup below allocates a placeholder `Term`, a work vector and a pointer-pair set, and a comparison of a shared node against *itself* — the common case on a reduct, where one node stands in many positions — paid all three to then answer on the loop's first line. On a nine-definition web of definitions each naming the one before it twice, that was 592 million comparisons and the bulk of a 168 GB allocation churn.
+        // **Both verdicts the loop can reach in O(1), reached before it allocates anything.** Inside the loop they would be correct and quadratically wasteful: the setup below allocates a placeholder `Term`, a work vector and a pointer-pair set, and a comparison of a shared node against *itself* — the common case on a reduct, where one node stands in many positions — would pay all three to answer on the loop's first line.
         //
         // Neither is a new trust. One allocation is one value, so `ptr_eq` implies equality outright; and the hash is a function of the value, so a difference implies inequality. Both are the checks the loop already made, hoisted to where the answer is free.
         if Rc::ptr_eq(&self.inner, &other.inner) {
@@ -1381,7 +1381,7 @@ impl PartialEq for Term {
         if self.get_or_init_hash() != other.get_or_init_hash() {
             return false;
         }
-        // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below answered it by allocating a placeholder, a work vector and a visited set to compare one node: a 20 KB literal folded at the type level made three and a half million such comparisons and eleven thousand allocations a byte.
+        // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below would answer it by allocating a placeholder, a work vector and a visited set to compare one node — thousands of allocations a byte for a literal folded at the type level.
         match children_pairwise_shared(&self.inner.subterm, &other.inner.subterm) {
             Some(true) => {
                 return self.inner.subterm == other.inner.subterm;
@@ -1473,9 +1473,9 @@ impl Term {
 
     /// Where `self` and `other` differ in nothing but universe levels — at every position where neither side is a wildcard — the level pairs they differ in, each with its universe-binder depth, in traversal order; `None` where they differ in anything else.
     ///
-    /// **A walk over the pair, not a strip of each side.** The predecessor rebuilt each side with every level replaced by a sentinel, collected the levels in traversal order, compared the two skeletons and zipped the two vectors. That is a walk per *path*: a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the position before it four times — and stripping it rebuilt and recorded every path. Six characters of a position walk cost 3.7 seconds of a 3.8-second elaboration there, and eight never finished. This walks the two sides together, one node at a time as [`equal_up_to`](Self::equal_up_to) does, skips a pair that is one allocation, and enters a pair of shared nodes once per binder depth, so the cost is the graph's.
+    /// **A walk over the pair, not a strip of each side.** Rebuilding each side with every level replaced by a sentinel, collecting the levels in traversal order, comparing the two skeletons and zipping the two vectors is a walk per *path*: a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the position before it four times — and stripping it rebuilds and records every path. This walks the two sides together, one node at a time as [`equal_up_to`](Self::equal_up_to) does, skips a pair that is one allocation, and enters a pair of shared nodes once per binder depth, so the cost is the graph's.
     ///
-    /// **Aligned by correspondence, not by position in two vectors.** Each pair of levels is taken from one pair of corresponding nodes, so the alignment holds whatever sharing either side has. The vectors the predecessor zipped agreed only because both sides were walked as trees; a walk that skipped repeated nodes would have recorded a side's shared subterm once and the other's unshared copies twice, and zipped unrelated levels together.
+    /// **Aligned by correspondence, not by position in two vectors.** Each pair of levels is taken from one pair of corresponding nodes, so the alignment holds whatever sharing either side has. Two stripped vectors agree only when both sides are walked as trees; a walk that skipped repeated nodes would record a side's shared subterm once and the other's unshared copies twice, and zip unrelated levels together.
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
     pub fn level_differences(
@@ -1519,7 +1519,7 @@ impl Term {
                     differences.push((depth + below, this_level, that_level));
                 }
             }
-            // Reversed onto the stack, so the first child is the next node taken: pre-order, the order the stripped vectors recorded, which keeps "the first decisive pair" meaning what it meant.
+            // Reversed onto the stack, so the first child is the next node taken: pre-order, so "the first decisive pair" is the first in reading order.
             work.extend(
                 this_children
                     .into_iter()
@@ -1738,7 +1738,7 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, exhausted the 32 MiB `grown` reserve under the kernel's conversion history, which `capture`s a whole normal form to key a goal, and died as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
+        // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, would exhaust the 32 MiB `grown` reserve under the kernel's conversion history, which `capture`s a whole normal form to key a goal, and die as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
         recurse(|| {
             if visit.memoizes() {
                 let key = Rc::as_ptr(&self.inner) as usize;
@@ -1822,9 +1822,9 @@ impl Term {
     ///
     /// The one place a traversal turns a rewritten payload back into a `Term`, so the sharing rule is stated once rather than at each reconstruction. Every child is compared by [`Term::eq`], whose first act is `Rc::ptr_eq`, so an untouched child settles in one pointer comparison and an untouched subtree of any size settles at its root: the check cascades, because unchanged leaves are what make a parent unchanged.
     ///
-    /// What it replaces is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case. `project_erased_universes` was measured returning an equal term on 1 491 163 of 1 491 163 calls on a nine-definition web of definitions each naming the one before it twice, spending 1.0 s rebuilding and a further 1.6 s re-hashing what it rebuilt, for 4.9 GB of allocation that answered the identity function.
+    /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
-    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences was always representable.
+    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable.
     fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();
@@ -1999,9 +1999,10 @@ impl Term {
     }
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
-    /// Driven by [`Term::try_walk`] for [`Term::any_metavar`]'s reason: it is a read-only walk over `any_child_term`, and a needle sought under a data-shaped spine would otherwise descend it natively. The free-variable head is read once here rather than re-matched at every node, which the recursive spelling did because each level re-entered through the same entry point.
     ///
-    /// Each node is visited once, for [`Term::any_metavar`]'s other reason: whether a subtree holds the needle is a fact about the node, and a compound needle has no cached bit to prune by, so a reduct — a graph whose tree can be exponential in its depth — was searched once per path.
+    /// Driven by [`Term::try_walk`] for [`Term::any_metavar`]'s reason: it is a read-only walk over `any_child_term`, and a needle sought under a data-shaped spine would otherwise descend it natively. The free-variable head is read once here rather than re-matched at every node.
+    ///
+    /// Each node is visited once, for [`Term::any_metavar`]'s other reason: whether a subtree holds the needle is a fact about the node, and a compound needle has no cached bit to prune by, so a reduct — a graph whose tree can be exponential in its depth — would be searched once per path.
     pub fn mentions_term(&self, needle: &Term) -> bool {
         let free = match &**needle {
             Subterm::Var(var) => var.as_free(),
@@ -2051,7 +2052,7 @@ impl Term {
 
     /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
     ///
-    /// `Scope::close` followed by `open` computes the same term, but `close`'s capture rebuilds every node — unpruned and unshared — so each arm's specialization expanded shared subtrees into trees and re-copied nested bodies once per enclosing arm. Inserting a value verbatim under any binder depth is sound only while the value carries no loose index to shift; the solutions an arm's specialization produces — case values and inverted index targets, complete terms both — never do, and the assert is what keeps that a checked contract.
+    /// `Scope::close` followed by `open` computes the same term, but `close`'s capture rebuilds every node — unpruned and unshared — so each arm's specialization would expand shared subtrees into trees and re-copy nested bodies once per enclosing arm. Inserting a value verbatim under any binder depth is sound only while the value carries no loose index to shift; the solutions an arm's specialization produces — case values and inverted index targets, complete terms both — never do, and the assert is what keeps that a checked contract.
     pub fn substitute(&self, solutions: &[(Free, Term)]) -> Term {
         if solutions.is_empty() {
             return self.clone();
@@ -2101,9 +2102,9 @@ impl Term {
     }
 
     /// Whether any metavariable in this term satisfies `pred`, visiting each shared node once. The walk prunes on the cached `has_metavar` bit and dedupes revisits by node identity, because the two prunes fail in each other's gap: a reduction result is a DAG whose tree expansion can be exponential in its depth — one substitution landing a term in two positions doubles it — and a single metavariable at its base, solved or not, sets `has_metavar` on every ancestor, so without the visited set each occurrence of a shared subtree re-pays its whole expansion (measured as a ×2-per-depth elaboration runaway). Skipping a revisit is sound: `pred` is deterministic within one walk, a `true` ends the walk outright, so a recorded node is always one that answered `false`.
-    /// **Driven by [`Term::try_walk`], so a spine's depth costs the driver's heap rather than the native stack.** This walk descended natively until it did not: a packed or list accumulator a few thousand links deep, carrying a metavariable so the `has_metavar` prune could not stop it, took five debug frames per link and died as a bare `SIGSEGV` — below the depth at which the reduction budget refuses, so the same program crashed at eight thousand links and reported cleanly at sixty thousand. It enumerates children through [`Subterm::any_child_term`] like every other read-only analysis, which is the criterion `super::walk` states for belonging on the driver, and `Break` is the exit door that module names for the `any_*` walks.
+    /// **Driven by [`Term::try_walk`], so a spine's depth costs the driver's heap rather than the native stack.** Descending natively, a packed or list accumulator a few thousand links deep, carrying a metavariable so the `has_metavar` prune cannot stop it, would take five debug frames per link and die as a bare `SIGSEGV` — below the depth at which the reduction budget refuses. It enumerates children through [`Subterm::any_child_term`] like every other read-only analysis, which is the criterion `super::walk` states for belonging on the driver, and `Break` is the exit door that module names for the `any_*` walks.
     ///
-    /// The visited set is now unconditional, where it was once reached only when `Rc::strong_count` proved the node shared. That signal does not survive the move — the driver's frames hold owned clones, so every node's count is inflated and the guard would always pass — and it was only ever a way to skip hashing, never part of the answer. What it cost is one insert per descended node; what the `has_metavar` prune still saves is the whole walk over every ground term, which is the common case on this path.
+    /// The visited set is unconditional: `Rc::strong_count` cannot prove a node shared here, since the driver's frames hold owned clones and inflate every count, and it would only ever skip hashing, never change the answer. What it costs is one insert per descended node; what the `has_metavar` prune still saves is the whole walk over every ground term, which is the common case on this path.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         let mut state: (&mut F, HashSet<*const Node>) = (pred, HashSet::new());
 

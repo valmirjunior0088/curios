@@ -72,9 +72,9 @@ mod rope_tests;
 #[cfg(test)]
 mod test_support;
 
-/// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
+/// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built, its reducible control structurized into blocks and loops and its constant data hoisted, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 pub fn into_wasm(module: &curios_cont::Module) -> curios_wasm::Module {
-    // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS outgrew the default test-thread stack.
+    // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS would outgrow the default test-thread stack.
     grown(|| into_wasm_within(module))
 }
 
@@ -104,7 +104,7 @@ fn raw_locals(module: &curios_cont::Module) -> HashMap<EmissionValueName, curios
         .collect()
 }
 
-/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tuple` aggregates, and `EmissionClosure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
+/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tuple` aggregates, a nominal `Row`, and `Closure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionData {
     Nat(Natural),
@@ -118,7 +118,7 @@ pub(crate) enum EmissionData {
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
-/// One pure intrinsic computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely.
+/// One pure intrinsic computation over already-bound values: every variant produces exactly one value and has no effects, anything stateful being an [`EmissionTail`].
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
     /// One [`curios_cont::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` rows are rope operations codegen services through shared helper functions.
@@ -167,7 +167,7 @@ pub(crate) struct EmissionMatchTarget {
     pub(crate) default: Option<EmissionJumpTarget>,
 }
 
-/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table). Both name the `resume` block, which receives the callee's single result as its one parameter — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
+/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table). Both name the `resume` block, which receives the callee's results as its parameters — one for a closure call, the callee's result count for a direct one — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCallTarget {
     Direct {
@@ -185,8 +185,7 @@ pub(crate) enum EmissionCallTarget {
 /// A host-provided intrinsic in tail position. Returning foreign calls carry the block that receives their results; a diverging one does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionHostTarget {
-    /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result (the multi-result records arrive as parallel block parameters, exactly like the per-op variants did).
-    ///
+    /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result, so a multi-result record arrives as parallel block parameters.
     Foreign {
         function: Arc<ForeignFunction>,
         operands: Vec<EmissionValueName>,
@@ -246,7 +245,7 @@ pub(crate) enum EmissionTail {
     Unreachable,
 }
 
-/// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — a [`EmissionValue`] binding never branches, which is what the optimizer's freedom to fold, dedupe, and reorder bindings rests on.
+/// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — an [`EmissionValue`] binding never branches.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBody {
     pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
@@ -288,17 +287,17 @@ pub(crate) struct EmissionClosure {
     pub(crate) region: EmissionBody,
 }
 
-/// A top-level function: parameters, body, and its `resume` sentinel — the block name that means "return": a jump to `resume` with one value *is* the function's return, so a call whose resume block is the enclosing sentinel is a tail call by construction (codegen emits `return_call`), no separate tail-position analysis needed.
+/// A top-level function: parameters, body, and its `resume` sentinel — the block name that means "return": a jump to `resume` *is* the function's return, so a call whose resume block is the enclosing sentinel is a tail call by construction (codegen emits `return_call`), no separate tail-position analysis needed.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionFunction {
     pub(crate) params: Vec<EmissionBinder>,
-    /// How many values this function hands back. One today for every function; the field exists so a protocol delivering a constructor as its fields has somewhere to say so, and so the wasm type is keyed on the shape rather than on the parameter count alone.
+    /// How many values this function hands back: one, unless a return protocol delivers a constructor as its fields — which is why the wasm type is keyed on the shape rather than on the parameter count alone.
     pub(crate) results: usize,
     pub(crate) resume: EmissionBlockName,
     pub(crate) region: EmissionBody,
 }
 
-/// One whole program in cont form: module-level consts (hoisted literals), the closure and function definitions, and the blessed entrypoint. Bodies reference consts and each other by name, and definition order is preserved end-to-end — it is the printed order and the wasm emission order. The collections are private: from outside the crate a module only grows through the `add_*` methods, while the mutating views the optimizer rewrites through stay crate-internal.
+/// One whole program in the emission model: module-level consts (hoisted literals), the closure and function definitions, and the blessed entrypoint. Bodies reference consts and each other by name, and definition order is preserved end-to-end — it is the printed order and the wasm emission order. The collections are private to this module: structurization grows a module through the `add_*` methods, and the hoister, a child module, rewrites its bodies in place.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct EmissionModule {
     consts: Vec<(EmissionValueName, EmissionData)>,

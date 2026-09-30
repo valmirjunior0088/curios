@@ -14,7 +14,7 @@
 //!
 //! # Saturation is refusal
 //!
-//! Arithmetic here saturates rather than wrapping, and a saturated [`Cost`] is refused outright instead of being compared against the budget. Saturating means the true cost is at least [`u64::MAX`] units — sixteen exabytes — which no budget affords and no allocation should be attempted for. That is what the specification's "an overflow is reported as exhaustion rather than wrapped, truncated, converted unsafely to `usize`, or passed to an allocator" comes to in code, and it is why these operations are total rather than fallible: a formula that cannot fail is a formula no caller can forget to check.
+//! Arithmetic here saturates rather than wrapping, and a saturated [`Cost`] is refused outright instead of being compared against the budget. Saturating means the true cost is at least [`u64::MAX`] units — sixteen exabytes — which no budget affords and no allocation should be attempted for. That is what reporting an overflow as exhaustion — rather than wrapping it, truncating it, converting it unsafely to `usize`, or passing it to an allocator — comes to in code, and it is why these operations are total rather than fallible: a formula that cannot fail is a formula no caller can forget to check.
 //!
 //! The direction is the whole safety argument. A formula may overcharge and must never undercharge, so every rounding here is upward and every saturation lands on refusal.
 //!
@@ -26,7 +26,7 @@ use std::{fmt, ops::Add};
 
 /// What a refused charge was *for*.
 ///
-/// Attribution without a second budget. One number still decides acceptance — the specification refuses independent transition and construction limits, and states why — and this says what that number was being spent on at the point it ran out, which is the difference between "your program is too big" and a diagnostic somebody can act on.
+/// Attribution without a second budget. One number still decides acceptance — `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` keeps one counter rather than independent transition and construction limits — and this says what that number was being spent on at the point it ran out, which is the difference between "your program is too big" and a diagnostic somebody can act on.
 ///
 /// **Dominance is deliberately not promised.** This is the category of the *refused charge*, not of whatever consumed the most budget over the declaration; answering the second would need cumulative per-category accounting that has nothing to do with the refusal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,7 +75,7 @@ pub struct Cost {
 
 /// The fixed cost of a packed value or a big number: its length, its offset, and the handle to its buffer.
 ///
-/// Four units rather than three because a `Binary` carries a buffer handle and two indices, and a charge that exactly matched today's field count would have to move whenever one is added.
+/// Four units rather than three because a `Binary` carries a buffer handle and two indices, and a charge that exactly matched the current field count would have to move whenever one is added.
 const VALUE_HEADER: u64 = 4;
 
 /// The fixed cost of a collection: its handle, its length, and its capacity.
@@ -196,7 +196,7 @@ const fn units_of(value: u64, divisor: u64) -> u64 {
 
 /// The measured native frame of one guarded reduction level, rounded up to a power of two.
 ///
-/// **Measured, not guessed.** Taken 2026-08-15 on `aarch64-apple-darwin` by instrumenting `Kernel::spend` to record the address of a stack local, reducing a right-nested `Nat/add` chain at depths 100, 200, 400 and 800, and taking the median descent between consecutive observations inside one stack segment — the min/max span is useless here, because `recurse` moves the walk onto a fresh 32 MiB segment and the addresses stop being comparable across the jump. Every depth reported the same figure to the byte:
+/// **Measured, not guessed.** Taken on `aarch64-apple-darwin` by instrumenting `Kernel::spend` to record the address of a stack local, reducing a right-nested `Nat/add` chain at depths 100, 200, 400 and 800, and taking the median descent between consecutive observations inside one stack segment — the min/max span is useless here, because `recurse` moves the walk onto a fresh 32 MiB segment and the addresses stop being comparable across the jump. Every depth reported the same figure to the byte:
 ///
 /// | Profile | Bytes per level | Units |
 /// | --- | --- | --- |

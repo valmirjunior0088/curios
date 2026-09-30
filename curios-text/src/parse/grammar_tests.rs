@@ -6,7 +6,7 @@ use super::test_support::*;
 
 #[test]
 fn a_comment_banner_parses_without_native_recursion() {
-    // One native frame per `--` line once made banner height a stack bound; the whitespace loop absorbs any run.
+    // One native frame per `--` line would make banner height a stack bound; the whitespace loop absorbs any run.
     let source = "-- banner\n".repeat(50_000) + "0";
     assert!(source.parse::<Term>().is_ok());
 }
@@ -240,7 +240,7 @@ fn a_comment_opens_with_a_space_or_ends_its_line() {
 
 /// A malformed construct reports inside itself, not at the delimiter that opens it.
 ///
-/// Each of these has a prefix that nothing else in the grammar may follow — `Name {`, a lambda's `=>`, a motive's `:`, a field's `:`/`->`/`=`, a constructor target's `:`, a block string's opener, a witness's concept name. Every one of them used to backtrack instead: the construct was re-read as something shorter (a bare name, a parenthesized term, no motive, a positional field) and the enclosing form complained about a token the reader had written correctly.
+/// Each of these has a prefix that nothing else in the grammar may follow — `Name {`, a lambda's `=>`, a motive's `:`, a field's `:`/`->`/`=`, a constructor target's `:`, a block string's opener, a witness's concept name. Left to backtrack, the construct would be re-read as something shorter (a bare name, a parenthesized term, no motive, a positional field) and the enclosing form would complain about a token the reader had written correctly.
 #[test]
 fn a_construct_with_a_discriminating_prefix_reports_inside_itself() {
     for (source, expected) in [

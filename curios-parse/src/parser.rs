@@ -124,7 +124,7 @@ where
 
 /// Marks the parser's failure as the diagnosis, so an enclosing [`Parser::or`] or repetition stops at it instead of trying the next alternative.
 ///
-/// The one source of commitment: a failure backtracks until something says otherwise. Written once an alternative has read the prefix that discriminates it — `parse_struct_pattern` reads `Name {` and commits, so a missing `}` is reported against the pattern rather than sending the whole term grammar looking for another reading. [`uncommit`] is how a caller that may legitimately re-read the same text takes it back.
+/// The one source of commitment: a failure backtracks until something says otherwise. Written once an alternative has read the prefix that discriminates it — `parse_func` reads `(…) =>` and commits to the body, so a broken body is reported against the lambda rather than sending the whole term grammar looking for another reading. [`uncommit`] is how a caller that may legitimately re-read the same text takes it back.
 pub fn commit<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,

@@ -216,7 +216,7 @@ fn a_catch_all_covers_absent_arms() {
 ///
 /// Every other arm has a case value of its own to be checked at, and a catch-all is the one arm that does not: it binds nothing and refines no index, so the only value it can stand for is the scrutinee. `infer` reads the elimination's type off `motive.open([indices, head])`, so an arm checked at any other instance proves something other than what the elimination hands its caller.
 ///
-/// While the hole was open the scrutinee binder was opened at the family *type* `Ix(b)` instead — a type substituted where a value of that type belongs — so this hypothesis at `P(b, subject)` was refused against an expectation of `P(b, Ix(b))`. That direction fails closed, because nothing well-typed inhabits the expectation it manufactures; the direction that does not is the certifier's, which established nothing whatever about the scrutinee for any catch-all it accepted. Reachable from source: `match t : (q) => Eq()(q, q) | a() => Eq/refl() | _ => Eq/refl() end` compiled, elaborated, and was then refused by the kernel with `/Three` standing in both term positions of the `Eq`. It is inert across the fixed prelude — every catch-all there has a motive that ignores its scrutinee — which is why a rule graded *probed* had never been asked this question.
+/// Opening the scrutinee binder at the family *type* `Ix(b)` instead — a type substituted where a value of that type belongs — would refuse this hypothesis at `P(b, subject)` against an expectation of `P(b, Ix(b))`. That direction fails closed, because nothing well-typed inhabits the expectation it manufactures; the direction that does not is the certifier's, which would establish nothing whatever about the scrutinee for any catch-all it accepted. The source spelling is `match t : (q) => Eq()(q, q) | a() => Eq/refl() | _ => Eq/refl() end`. The fixed prelude does not ask the question — every catch-all there has a motive that ignores its scrutinee — so only a fixture does.
 ///
 /// [`a_catch_all_at_another_value_of_the_family_is_refused`] is the paired control: closing this by not checking the catch-all at all would satisfy the test above and nothing else.
 #[test]
@@ -395,7 +395,7 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
 
 /// The same shape with a payload that is *itself a type*. `mk(a : Type 0)` pins nothing — the index target is the constant `0` — so eliminating into `Type` hands a program the type the proposition was built with, while irrelevance says every inhabitant is the same one. `mk({})` and `mk(False)` are convertible at a `Prop`-sorted family, `refl` therefore proves `Eq()(mk({}), mk(False))`, congruence through this eliminator carries that to `Eq()({}, False)`, and `subst` turns `()` into a closed inhabitant of `False`.
 ///
-/// The rule refused a `Nat` payload and admitted this one: `carries_information` reported a component whose *type is a universe* as carrying nothing, reasoning that erasure deletes a type either way. Erasure governs what the runtime observes; irrelevance is a claim about definitional equality, and conversion reads this component back in full. No `.crs` file could reach the hole while it was open — `curios-elab`'s `singleton_eliminable` requires each binder to be `Prop`-sorted or index-pinned, and refused every surface spelling — but `recheck_module_verdicts` certified the hand-built derivation with zero refusals, which is what `crate::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` now holds shut.
+/// A component whose *type is a universe* carries information however completely erasure deletes it: erasure governs what the runtime observes, while irrelevance is a claim about definitional equality, and conversion reads this component back in full. `curios-elab`'s `singleton_eliminable` requires each binder to be `Prop`-sorted or index-pinned and refuses every surface spelling, so only a hand-built derivation reaches this rule; `crate::recheck::proposition_tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole-module walk to it.
 ///
 /// `a_singleton_whose_index_pins_its_payload_eliminates_into_a_type` is the control: a payload the targets do recover must stay eliminable, or `Eq/subst` becomes unstatable.
 #[test]
@@ -427,7 +427,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 
 /// The other half of the same clause: a payload whose type is `Prop` holds a proposition *as data* rather than proving one. `Sort::of(Prop)` is `Type 0`, so the component is informative for exactly the reason above — `mk(True)` and `mk(False)` are convertible at a `Prop`-sorted family while this eliminator tells them apart, and transporting a proof of `True` along the resulting equality inhabits `False`.
 ///
-/// Worth its own fixture: the clause that admitted these named both `Subterm::Type(_)` and `Subterm::Prop`, so a fix dropping only the first would leave this open.
+/// Worth its own fixture: a clause excusing universe-typed components would name both `Subterm::Type(_)` and `Subterm::Prop`, and dropping only the first would leave this open.
 #[test]
 fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
     let mut kernel = kernel();
@@ -455,11 +455,11 @@ fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
     );
 }
 
-/// The accepting half of that same clause, which nothing exercised. A payload whose type is a `Prop`-sorted *family* is a proof rather than data: irrelevance makes any two of them interchangeable, so handing one back tells a program nothing it did not already know, and the singleton stays eliminable into a relevant result.
+/// The accepting half of that same clause. A payload whose type is a `Prop`-sorted *family* is a proof rather than data: irrelevance makes any two of them interchangeable, so handing one back tells a program nothing it did not already know, and the singleton stays eliminable into a relevant result.
 ///
 /// The distinction from the fixture above is the whole clause. There the payload's type is `Prop` itself, so the payload *is* a proposition carried as data and `Sort::of` reports `Type 0`; here the payload's type is a family declared at `Prop`, so the payload inhabits a proposition. Only the second is excused.
 ///
-/// It needs its own fixture because it is the only route through `carries_information` that accepts, and it was measured firing nowhere at all — not once in a kernel walk of the whole prelude, not anywhere in `curios`'s test corpus, and not in this module before this test. Every accepting decision the guard makes anywhere is `pinned_by_targets` excusing `Eq/refl`'s `z`. Both defects this clause has produced were over-permissiveness, so every fix it has received moved it toward refusal with nothing on the accepting side to stop at: refusing every proof-carrying singleton would have passed the whole suite. That is what this holds.
+/// It needs its own fixture because it is the only route through `carries_information` that accepts, and no program reaches it: every accepting decision the guard makes over the prelude and `curios`'s test corpus is `pinned_by_targets` excusing `Eq/refl`'s `z`. Without it, refusing every proof-carrying singleton would pass the whole suite.
 #[test]
 fn a_singleton_carrying_a_proof_still_eliminates_into_a_type() {
     let mut kernel = kernel();
@@ -624,7 +624,7 @@ fn an_arm_of_the_wrong_payload_arity_is_refused() {
 ///
 /// This is the clash rule reaching the kernel through the walk that certifies a module, rather than through the shared unifier alone. The target is *non-linear*: `same(@z) : (z, z)` is `Eq`'s shape, so neither index position clashes on its own — each solves `z`, here to `a()` and to `b()` — and what decides the case is whether those two forcings can be one value.
 ///
-/// The pair differs in nothing but the sort of the *carrier the forcings inhabit* — not of the family being eliminated, which stays a proposition as `Eq` is. That is the distinction the rule turns on and the one a fixture most easily gets wrong: what licenses telling two constructors apart is their own family's sort. At a relevant carrier they are values a program distinguishes, so `Same(a(), b())` is empty and the omission stands. At a `Prop` carrier irrelevance identifies them, the deletion rule reconciles the pair before a clash is ever asked for, and the omitted arm is one the elimination cannot prove absent — the vacuous-elimination route `documentation/soundness/per-term-rules/coverage.md` records, which is why that half is the half worth holding.
+/// The pair differs in nothing but the sort of the *carrier the forcings inhabit* — not of the family being eliminated, which stays a proposition as `Eq` is. That is the distinction the rule turns on and the one a fixture most easily gets wrong: what licenses telling two constructors apart is their own family's sort. At a relevant carrier they are values a program distinguishes, so `Same(a(), b())` is empty and the omission stands. At a `Prop` carrier irrelevance identifies them, the deletion rule reconciles the pair before a clash is ever asked for, and the omitted arm is one the elimination cannot prove absent — the vacuous-elimination route `documentation/design/soundness/elimination/coverage.md` records, which is why that half is the half worth holding.
 #[test]
 fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
     for (label, carrier_sort, omission_stands) in [

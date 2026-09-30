@@ -233,7 +233,7 @@ fn a_malformed_item_is_reported_by_the_head_it_names() {
     for (source, expected) in [
         ("pub let a : /std/Nat -> 1;", "Expected '='"),
         ("satisfy => /std/Equal { }", "Expected identifier"),
-        // The `use` arm now names the rule rather than the token that introduces a group.
+        // The `use` arm names the rule rather than the token that introduces a group.
         (
             "use /std/Nat, /std/Bool;",
             "a `use` imports through a group",
@@ -382,7 +382,7 @@ fn a_misspelled_keyword_is_reported_against_the_word() {
     let error = source.parse::<Module>().unwrap_err();
     let report = error.format();
     assert!(report.contains("obtained 'ends'"), "{report}");
-    // The word sits on line 5; the declaration the caret used to land on is line 7.
+    // The word sits on line 5; the declaration below it, where a caret reading past the whitespace would land, is line 7.
     assert!(report.contains("5 |"), "{report}");
     assert!(!report.contains("7 |"), "{report}");
     // And the caret underlines the word itself, all four characters of it, rather than standing after it.

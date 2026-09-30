@@ -6,7 +6,7 @@
 //!
 //! **A package has a library when `lib.crs` sits beside its manifest, and its own executable when `exe.crs` does.** These are the two places location decides rather than declaration, and both are deliberate: neither is an artifact a package opts into, they are the two things a package *is*, and a manifest entry admitting to either would be ceremony. `[[executables]]` remains for everything else — a second program, or one compiled from a path of its own — and a row always wins over the file.
 //!
-//! This crate used to argue the executable half the other way, on the grounds that a vanished default "fails by silently not being there". That does not survive contact: delete `exe.crs` and `curios run` refuses, naming the package and saying it declares no executable. Both failures are loud; they are merely loud in different places.
+//! The objection that a vanished default "fails by silently not being there" does not hold: delete `exe.crs` and `curios run` refuses, naming the package and saying it declares no executable. Both failures are loud; they are merely loud in different places.
 
 #[cfg(test)]
 mod tests;
@@ -39,7 +39,7 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Str
 
 /// The prefixes `package`'s library may name: every dependency it declares, plus the standard library.
 ///
-/// **Direct dependencies only.** A dependency of a dependency is in the fold — it had to be, for the one in between to compile — and is unspellable here, which is what makes a manifest's rows the whole statement of what a unit reaches. Law 3 said it before this enforced it: membership organizes and dependency compiles.
+/// **Direct dependencies only.** A dependency of a dependency is in the fold — it had to be, for the one in between to compile — and is unspellable here, which is what makes a manifest's rows the whole statement of what a unit reaches. This is law 3: membership organizes and dependency compiles.
 ///
 /// `/std` is implicit because it is the one unit every program is entitled to and no manifest declares: a row for it would be ceremony every package in existence repeats. It is named here rather than derived, which is the one place in this crate that knows the standard library by name; the root beneath it, `/sys`, is named by nothing here at all — it has no path, so no manifest can reach it and `curios-pipeline`'s `standard` module makes the one grant of it.
 pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
@@ -133,7 +133,7 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
 
 /// Refuse an executable compiled from a file the library also reaches through a chain of `mod` declarations.
 ///
-/// The root stem space is [`stems`]'s, and it is one space because everything in it is spelled from one directory. A row may point below the root, where its file sits in the namespace directory of some module — and nothing stops a `mod` in that module from declaring the same file. The file is then a program and a module at once, and what the reader saw before this check was the module loader failing to parse a program as a module: a parse error at the executable's first token, naming neither the row nor the `mod` (law 4). The question is the one the language server asks of a file it is shown, and it is asked of the same resolver.
+/// The root stem space is [`stems`]'s, and it is one space because everything in it is spelled from one directory. A row may point below the root, where its file sits in the namespace directory of some module — and nothing stops a `mod` in that module from declaring the same file. The file is then a program and a module at once, and without this check the reader would see the module loader failing to parse a program as a module: a parse error at the executable's first token, naming neither the row nor the `mod` (law 4). The question is the one the language server asks of a file it is shown, and it is asked of the same resolver.
 ///
 /// A header the walk cannot read is not this refusal: the compilation reports that on its own account, so the question is taken as answered `false` rather than answered twice.
 fn apart(package: &Package, directory: &Path, source: &RootSource) -> Result<(), String> {

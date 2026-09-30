@@ -2,7 +2,7 @@
 //!
 //! **Spelled in the nodes the roster already has**, so nothing below reduction meets a new shape: `IntAdd(inner, Int(k))` carries the constant `k` over `inner` and is absent when `k` is zero; `inner` is a left-nested `IntAdd` spine of summands, each `IntMul(Int(c), monomial)` or the bare monomial when `c` is one; a monomial is a left-nested `IntMul` of factors in structural-hash order, as `Nat::product` orders them, so `i · j` and `j · i` are one term. Summands keep first-appearance order, as `Nat::linear` keeps it, so `i + j` and `j + i` are two spellings of one combination — decided by cancellation at the peel, never by reordering in the fold, for the reason `Nat::cancel_common` records: a rebuilt sum is a different term, and a stuck comparison rebuilt from one would never be found again.
 //!
-//! **A product of two symbolic sums stays stuck until a comparison asks**, the decision `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md` measured for `Nat` and applies here verbatim: [`int_product`] distributes when either operand is a constant or a single summand, and [`int_normalize`] distributes the rest on demand.
+//! **A product of two symbolic sums stays stuck until a comparison asks**, the decision `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md` measured for `Nat` and applies here verbatim: [`int_product`] distributes when either operand is a constant or a single summand, and [`int_normalize`] distributes the rest on demand.
 //!
 //! Every function here is total over reduced terms it does not recognize, reading anything that is not an `IntAdd`, `IntMul` or `Int` literal as an opaque monomial factor, which is what makes `i - i` fold to `0` for a symbolic `i` while `f(i)` stays the symbol it is.
 
@@ -472,7 +472,7 @@ pub(crate) fn int_rebuild_cancelled(
 
 /// The difference of two reduced terms split by sign for every pair, where [`int_cancel_common`] splits it only once something cancels: every monomial on the side that keeps its coefficient positive, the constant likewise, so two pairs with one difference are one pair — `0 < j - i` and `i < j`, `-i < -j` and `j < i`.
 ///
-/// **Read, never written back.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` records for swapped operands. So the one reader is the `Int` comparison fold's `compare_preimages`, which splits a comparison to read the preimages of its widened naturals and only ever decides.
+/// **Read, never written back.** A stuck comparison is what a guard refines on, and a refinement is keyed on the guard's written spelling; a fold that split every comparison would take each later occurrence past its own key, the failure `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md` records for swapped operands. So the one reader is the `Int` comparison fold's `compare_preimages`, which splits a comparison to read the preimages of its widened naturals and only ever decides.
 pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
     let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);

@@ -1,6 +1,6 @@
 //! The intrinsic transcription: each Core intrinsic to its arena identity, shape for shape.
 //!
-//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Unbounded type-level numerals narrow to the exact 32-bit domains here (the numeric law's Core border), with overflow reported as an error, never wrapped.
+//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
 
 use {
     super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
@@ -9,12 +9,11 @@ use {
     curios_utilities::SyntaxName,
 };
 
-/// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-emit` refuses one the envelope cannot box.
-///
-/// `pub(super)` because it is not this module's alone — `eliminate`'s switch narrows its case keys through it. Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it, and every literal reaching Ersd is narrowed by the same routine.
 /// A natural-dispatch case key as `curios-ersd`'s `NatCase` carries it, refusing one no branch table indexes.
 ///
-/// The one narrowing left at this boundary. A `Nat` *value* is unbounded from here down — the erased carriers hold whatever the theory computed and only materialization refuses — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
+/// The one narrowing at the `Nat` half of the Core border. A `Nat` *value* crosses whole — the erased carriers are unbounded too, and only materialization in `curios-emit` refuses one the envelope cannot box — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
+///
+/// `pub(super)` because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
 pub(super) fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
     u32::try_from(value)
         .ok()

@@ -14,7 +14,7 @@ pub mod status {
     pub const ALREADY_EXISTS: u64 = 4;
     /// A `socket_connect` was actively refused — no listener at the target address.
     pub const CONNECTION_REFUSED: u64 = 5;
-    /// A non-blocking op could not make progress right now. Retriable by design: `/std`'s task scheduler matches on it to reschedule the read/write instead of surfacing a failure.
+    /// A non-blocking op could not make progress right now. Retriable by design: `/std/Handle` matches on it to poll the handle and retry instead of surfacing a failure.
     pub const WOULD_BLOCK: u64 = 6;
     /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
     pub const TLS_ERROR: u64 = 7;
@@ -64,7 +64,7 @@ pub mod file_kind {
     pub const OTHER: u64 = 3;
 }
 
-/// How `proc/spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/proc/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+/// How `proc/spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/Command/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
 pub mod stdio_mode {
     /// The child shares the parent's stream.
     pub const INHERIT: u64 = 0;

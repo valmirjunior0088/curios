@@ -2,11 +2,11 @@
 //!
 //! The demand lattice is the backward half — how a received value is *used*. This is the forward half the value-lifetime decision separates from it: whether a parameter's every incoming edge carries a visible construction or an alias of one, which is what makes a merged flow *exclusive* and a scalar-replacement rewrite able to say what fields exist on every path. The two halves have separate tests and separate lattices, even though the eventual rewrite consumes them together.
 //!
-//! A region is entered by constructions but circulates through aliases: a loop arm that passes the loop's own parameter back unchanged contributes that parameter's own fact, which the fixpoint resolves to the constructions that entered it — so an every-edge-constructs reading is not expressible here by design, because it would decline exactly the loops the specification exists for.
+//! A region is entered by constructions but circulates through aliases: a loop arm that passes the loop's own parameter back unchanged contributes that parameter's own fact, which the fixpoint resolves to the constructions that entered it — so an every-edge-constructs reading is not expressible here by design, because it would decline exactly the loops the value-lifetime decision exists for.
 //!
-//! **Widths merge rather than conflict, which is what makes a variant expressible.** A flow reached by constructions of several widths was `Opaque` while the fact was one arity, and a tagged row is exactly that shape: `curios-ersd`'s door lowers a nullary constructor to a one-tuple and a three-payload one to a four-tuple, so no single arity ever described the UTF-8 scan state. The fact is the *set* of widths instead, and the rewrite travels the region at the widest of them with each narrower edge filled — which is safe for the same reason the return protocol's filler is: an edge's own width is this same fact read at that edge's argument, so nothing ever projects past what a construction carries.
+//! **Widths merge rather than conflict.** A structural tuple flow reached by constructions of several widths has the *set* of widths as its fact, and the rewrite travels the region at the widest of them with each narrower edge filled — which is safe for the same reason the return protocol's filler is: an edge's own width is this same fact read at that edge's argument, so nothing ever projects past what a construction carries. A family's row never needs the merge: `curios-ersd`'s door pads every construction to its row's width, so a row's origin settles at one.
 //!
-//! **What the fact deliberately does not record is the discriminant.** A variant region's cheapness comes from its tag being a constant on each entry edge, but that is a *consequence* rather than an admission condition, and requiring it would decline the motivating flow: once `split_returns` delivers a constructor as fields, the resume rebuilds it with the tag in a parameter, so seven of the scan region's seventeen constructions carry no literal at slot zero at all. Constant discriminants are then found by the passes that already fold them — projection forwarding through a visible construction, and jump threading over a literal switch.
+//! **What the fact deliberately does not record is the discriminant.** A variant region's cheapness comes from its tag being a constant on each entry edge, but that is a *consequence* rather than an admission condition, and requiring it would decline the motivating flow: once `split_returns` delivers a constructor as fields, the resume rebuilds it with the tag in a parameter, so many of the scan region's constructions carry no literal at slot zero at all. Constant discriminants are then found by the passes that already fold them — projection forwarding through a visible construction, and jump threading over a literal switch.
 //!
 //! Boundaries are stated by injection rather than by omission: a resume parameter receives whatever an unsplit return interface delivers, an escaping function's parameters receive whatever unknown callers pass, the entry's parameters belong to the host, and a knot-tied value is a closure — each is seeded `Opaque` so a bottom that survives the round means *unreached*, never *assumed constructed*.
 
@@ -23,7 +23,7 @@ use {
 pub(crate) enum Origin {
     /// No flow reached it in the round — an unentered parameter or an unreachable binding.
     Unreached,
-    /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a variant, which travels as its widest constructor with each narrower edge filled.
+    /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a merged flow, which travels as its widest construction with each narrower edge filled.
     Constructed(BTreeSet<usize>),
     /// Every flow reaching it is a [`ValueExpr::Row`] of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
     Row(super::RowId, usize),
@@ -48,7 +48,7 @@ impl Origin {
 
     /// The one width every flow agrees on, and `None` where they do not.
     ///
-    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Row`] flow is settled by construction — every edge carries the row width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
+    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a merged tuple flow whose width is undecided there, so projecting it at the widest reads past whatever the narrower construction carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Row`] flow is settled by construction — every edge carries the row width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
     pub(crate) fn settled_width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => match widths.len() {
@@ -60,12 +60,12 @@ impl Origin {
         }
     }
 
-    /// Whether a site may take a value of this origin apart — see [`Origin::settled_width`] for why a merged variant may not.
+    /// Whether a site may take a value of this origin apart — see [`Origin::settled_width`] for why a merged flow may not.
     pub(crate) fn is_settled(&self) -> bool {
         !matches!(self, Origin::Constructed(widths) if widths.len() > 1)
     }
 
-    /// The row this origin's flows construct, where they are variant constructions at all.
+    /// The row this origin's flows construct, where they are row constructions at all.
     pub(crate) fn row(&self) -> Option<super::RowId> {
         match self {
             Origin::Row(row, _) => Some(*row),

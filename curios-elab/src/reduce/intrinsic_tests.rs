@@ -25,7 +25,7 @@ fn reduced(context: &mut Context, term: Term) -> Subterm {
     Term::unwrap_or_clone(reduce(context, term).expect("reduces"))
 }
 
-// Symbolic successor bounds the family must decide — exactly the cases the old bespoke `lt` rule handled, now shared by the whole family (a regression guard).
+// Symbolic successor bounds the comparison family must decide, every member alike.
 #[test]
 fn comparisons_decide_symbolic_successor_bounds() {
     let mut context = context();
@@ -71,7 +71,7 @@ fn comparisons_decide_symbolic_successor_bounds() {
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
 
-    // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ once the shared floor is peeled).
+    // The shape a `Str` decoder needs: `eql(succ(succ x), 1) = false` (shapes differ once the shared floor is peeled).
     assert_eq!(
         reduced(
             &mut context,
@@ -160,7 +160,7 @@ fn mul_distributes_literal_over_symbolic_floor() {
     ));
 }
 
-// `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons `List/get` and `List/slice` previously could not peel (they folded only literal arrays), now decoded one element at a time like their `Bin` twins.
+// `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — a symbolic cons `List/get` and `List/slice` decode one element at a time, like their `Bin` twins.
 fn list_cons_seven(xs: &Term) -> Term {
     Term::intrinsic(Intrinsic::list_concat(
         Term::intrinsic(Intrinsic::NatType),

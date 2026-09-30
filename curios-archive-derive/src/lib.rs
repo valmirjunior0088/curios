@@ -145,7 +145,7 @@ fn rewrite_markers(stream: TokenStream, always: bool) -> TokenStream {
 
 /// The bounds a *recursive* archived type needs, spelled once.
 ///
-/// rkyv cannot infer these for a type that reaches itself, so every such type carried the same three clauses copied by hand. Five copies had already drifted into two spellings of `SharedContext` — the re-export and its defining module — which is what a duplicated bound does eventually and why this now lives in exactly one place.
+/// rkyv cannot infer these for a type that reaches itself, and a copy per type would drift — into two spellings of `SharedContext`, say, the re-export and its defining module — so every recursive type takes them from here.
 const RECURSIVE_BOUNDS: &str = "serialize_bounds(\
         __S: ::curios_archive::rkyv::ser::Writer \
             + ::curios_archive::rkyv::ser::Allocator \

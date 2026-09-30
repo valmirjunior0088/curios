@@ -1,6 +1,6 @@
 //! What became of each source declaration, read off the Cont graph on either side of the optimizer.
 //!
-//! A function carries the name of the declaration it descends from — [`Function::debug_name`], set by erasure and copied onto every clone the optimizer makes, per `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`. So the optimizer's effect on a declaration is a difference of two counts: how many functions bore its name before, and how many bear it after.
+//! A function carries the name of the declaration it descends from — [`Function::debug_name`], set by erasure and copied onto every clone the optimizer makes, per `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`. So the optimizer's effect on a declaration is a difference of two counts: how many functions bore its name before, and how many bear it after.
 //!
 //! **Nothing here instruments a pass.** No rewrite records what it did, and none has to: `curios-pipeline` already observes the graph before and after optimization, so a caller that counts both sides learns every fate below without the optimizer knowing it is being watched. That is what keeps the measured program the shipped program — the failure GHC's `-fprof-late` exists to undo, avoided by not annotating rather than by annotating late.
 //!

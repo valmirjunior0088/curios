@@ -388,7 +388,7 @@ h2 {
     text-wrap: pretty;
 }
 
-/* The witnesses, and what a module exposes from elsewhere: one row each, in one box. */
+/* The witnesses: one row each, in one box. */
 .witnesses,
 .reexports {
     margin: 0;

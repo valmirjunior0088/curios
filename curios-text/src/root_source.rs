@@ -34,7 +34,7 @@ pub struct RootSource {
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
     ///
-    /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` yet — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
+    /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
     reads: RefCell<BTreeMap<PathBuf, Arc<Source>>>,
 }
 
@@ -154,7 +154,7 @@ impl RootSource {
 
     /// This source with `prefixes` as the units it declared a dependency on — the only ones its names may resolve into.
     ///
-    /// **Declaring is how a unit reaches a closed root.** `/sys` is mounted by every compilation and named by no manifest, so it is not in the default set; the standard library reaches it by declaring it here, and nothing else can, which is the whole of the old privilege tier expressed as a dependency.
+    /// **Declaring is how a unit reaches a closed root.** `/sys` is mounted by every compilation and named by no manifest, so it is not in the default set; the standard library reaches it by declaring it here, and nothing else can, which is the whole of what a privilege tier would say, expressed as a dependency.
     ///
     /// Left unset, a unit sees every prefix in scope but a closed root — the honest reading of "the caller did not decide", since a fold whose order is all its dependency information has nothing to narrow by.
     pub fn declaring(self, prefixes: impl IntoIterator<Item = Qualifier>) -> Self {
@@ -284,7 +284,7 @@ impl RootSource {
     ///
     /// **This is the question "is this file part of the unit", asked before any compile and independent of the store.** A unit's input set is closed (see [`Self::reads`]): a file joins it only by being declared, so a file the walk does not reach is one no compilation of this unit ever reads. Asking the walk rather than the record of a compilation is what keeps the answer the same on a cache hit, where nothing is read at all. An inline `mod x { … }` is walked as the body it carries, and a file module is loaded, so what this reads is exactly what discovery would.
     ///
-    /// The module asked about is never loaded: the `mod` that declares it is the whole answer, and what the file holds is not part of the question. Loading it made a declared file that does not parse — a program a row also compiles, say — answer `Err` where the truthful answer is `true`, and the caller asking whether the file is claimed was told nothing.
+    /// The module asked about is never loaded: the `mod` that declares it is the whole answer, and what the file holds is not part of the question. Loading it would make a declared file that does not parse — a program a row also compiles, say — answer `Err` where the truthful answer is `true`, and the caller asking whether the file is claimed would be told nothing.
     ///
     /// `Err` is a header on the chain that could not be read or parsed — a fault the compilation reports on its own account, so a caller adds nothing beside it.
     pub fn declares_module(&self, qualifier: &Qualifier) -> Result<bool, Error> {

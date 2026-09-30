@@ -56,7 +56,7 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
         .or(refuse_keyword_field_label())
 }
 
-// A keyword written where a field is labelled. Tried last, so reaching it means none of the three real forms could read this field, and it commits: `parse_label` refuses a keyword uncommittedly — it has to, since a positional field is a term and a term may open with one — and the refusal was then discarded for the enclosing `}`, which reported `Expected '}', obtained 'e'` for a field written `end : Nat`.
+// A keyword written where a field is labelled. Tried last, so reaching it means none of the three real forms could read this field, and it commits: `parse_label` refuses a keyword uncommittedly — it has to, since a positional field is a term and a term may open with one — and the refusal would then be discarded for the enclosing `}`, which reports `Expected '}', obtained 'e'` for a field written `end : Nat`.
 //
 // The introducer is required, and is what keeps this from claiming a positional field that merely opens with a keyword: `{ match b | true => T end }` reaches here only if the term failed, and its `match` is followed by a scrutinee rather than by `:` or `(`, so the arm's own diagnosis stands. A term that *is* `<keyword> (` — a `let` over a tuple pattern — parses as the positional form and never reaches this alternative at all.
 fn refuse_keyword_field_label<'a>() -> Parser<'a, TupleTypeParam> {

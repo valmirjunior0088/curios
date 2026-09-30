@@ -1,0 +1,34 @@
+# A universe level is implicit, cumulative, and settles by where it came from
+
+**Decision.** Surface `Type` is nullary, and Core gives every occurrence an inferred level in an infinite cumulative hierarchy, `Type u : Type (u + 1)`. A declaration generalizes the levels its constraints leave free and instantiates them freshly at each external use; a recursive group is monomorphic in its own levels. Every universe metavariable the elaborator mints carries a provenance — *chosen*, a `Type` written in an input position; *occurrence*, the instance level a use of a universe-polymorphic name mints; *inferred*, every other — and `UniverseSolver::finalize` settles a level by it before generalizing what remains:
+
+- an occurrence's level settles at its recorded floor, its principal lower bound or zero, while a level nothing bounds from below stays;
+- a chosen level bounded above only by one other chosen level is that level, so a concept's method level is its family's domain;
+- a level neither the type nor the body mentions settles, after the occurrences;
+- a deferred witness goal still pending is made ground, with every level a settlement lands on;
+- a result sort is determined only where the declaration's terminal is a sort.
+
+Where two levels are identified, the member of greater provenance represents the class, so a written type lands in the sort its reduct does and the kernel types a type as written. Two instances of an `induct` or a `struct` compare their levels by variance: a level that no constructor payload, field or index type mentions, except through a position itself irrelevant, is irrelevant and compared at nothing; every other level is invariant, and none is covariant.
+
+**Rationale.**
+
+- **Implicit levels remove `Type : Type`'s inconsistency** without universe syntax or runtime cost, and Girard's paradox is spellable and refused. A level a declaration carries only in its body is minimized, so under `let U: Type = (X: Type, f: (Pow(Pow(X))) -> X) -> Pow(Pow(X))` the self-application `s(U, tau)` instantiates `X` at `U` and is refused, `this Type would need to be strictly below itself` (`curios`'s `tests::universes`, and [Subsumption and level entailment](../soundness/formation/subsumption-and-level-entailment.md)). A self-reference such as `Box/wrap(Box)` stratifies into two levels, which is the hierarchy working.
+- **Two honest shapes meet the same refusal with no syntax to escape by**: a local definition applied to itself at two levels, and a group member called above the group's level. The diagnostic gives the span the constraint came from, a level numbering local to the message, and the two remedies, hoisting the definition or splitting the group.
+- **An occurrence's instance is gone from its reduct.** Both checkers size a tuple type or a Π from its parts' reducts, so generalizing an occurrence's level as interface floats a written type above the sort its reduct sits in, and a written level only overstates its reduct's, so settling it admits nothing false. Rocq's minimization touches only "the fresh universes generated for each global application" and keeps a rigid universe over a flexible one; Agda under `--cumulativity` sends a level bounded only below to the join of its bounds; Lean's `Pure (f : Type u → Type v)` ties `pure {α : Type u}` to its family. Settled so, a scheme carries only the parameters its interface needs; `curios-prelude-archive`'s `universe_parameter_census` prints each `/std` definition's count.
+- **A deferred goal resolves after its declaration's scheme has closed**, and its least levels are the one assignment every witness answers.
+- **A level only a parameter's type mentions changes nothing an instance holds.** Equating such levels makes `!` hold its region at the level of a nominal action it binds — `small(n)!` over `Result(Str, Nat)` inside a region over `Result(Str, Type)` — where `Result/bind` passes. An irrelevant level leaves two instances' constructor telescopes identical, and telescopes are what the large-elimination guard reads, so the guard decides nothing new. Rocq infers the same variance (`list@{u}` is `*u`), and MetaCoq's PCUIC specifies it (`Variance.Irrelevant`).
+
+**Rejected.**
+
+- **`Type : Type`**, **universe syntax** — variables, level expressions, explicit arguments — and **specializing runtime code by universe instance**.
+- **Reconstructing a level's role at finalization** from an occurrence flag or a record of discharged bounds: which member of an identified pair survives is arbitrary, so settling one settles a choice with it.
+- **Rocq's atomic-bound condition**: Curios's levels are algebraic, and occurrences bounded below by a maximum would float.
+- **Generic method levels with harder disjunction solving**: every witness's scheme would carry maxima a use can only guess through.
+- **Minimizing only the occurrences unfolding erases**, which conversion observes; **equating an occurrence's level with its argument's at application**, incomplete where one level bounds several arguments.
+- **Requiring a witness before its use**, as Lean and Rocq do, **checking witness heads before any body**, as GHC does, or **fixing a scheme from the signature**, as Lean does for a theorem's header: a Curios witness's scheme depends on its body, `/std`'s order does not follow its witnesses, and without level syntax a body could not narrow a signature's scheme.
+- **McBride's displacement** (Favonia, Angiuli and Mullanix, POPL 2023), which sets cumulativity aside and would replace the solver and the kernel's entailment.
+- **Sizing by the written spelling in both checkers**, **resolving `/sys` formers to their intrinsics**, or **declaring the reduct the truth**: the first keeps every floating level, the second misses aliases and nominal occurrences, the third leaves the kernel accepting a declared type it never typed.
+- **Settling only a deferred goal's own levels**, **retrying goals before the scheme closes**, **elaborating a missing witness on demand**, or **holding a scheme open until its goals resolve**: a constraint the late witness needs reaches no scheme; no witness registers mid-declaration; elaboration would have to be re-entrant; later items would take the levels rather than instances of them.
+- **Covariant nominal levels**, `Value.{u} ≤ Value.{v}`, which need subsumption to reach nominal types for no program that asks.
+- **Inferring variance by checking two fresh instances against each other**, as Rocq does, which blew up on the HoTT library; it is inferred by occurrence, compositionally, so a `Tree(A)` holding `List(Tree(A))` stays irrelevant.
+- **MetaCoq's rule that a fully applied constructor compares no level**: the kernel compares unfoldings untyped, so "compared at the same supertype" does not hold here, and a value compares at its family's variance.

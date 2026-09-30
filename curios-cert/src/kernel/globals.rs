@@ -6,11 +6,11 @@
 //!
 //! [`Globals::induct_decl`] and [`Globals::struct_decl`] hand back the raw entry. That is correct for the *shared analyses* — positivity walks a declaration's telescopes, inversion reads its `result_sort` — because they analyze the declaration itself and there is no occurrence involved.
 //!
-//! It is **not** the way a typing rule should reach one. A rule consulting a declaration *for an occurrence* is asking what that occurrence is, and the answer is only meaningful once the occurrence's universe instance and its parameter and index counts have been checked against what the declaration declares. Reading the raw entry and opening its arity at whatever the occurrence carried is how `Telescope::open` came to abort the walk instead of refusing the item. Those rules go through the checked handle instead.
+//! It is **not** the way a typing rule should reach one. A rule consulting a declaration *for an occurrence* is asking what that occurrence is, and the answer is only meaningful once the occurrence's universe instance and its parameter and index counts have been checked against what the declaration declares. Reading the raw entry and opening its arity at whatever the occurrence carried would let `Telescope::open` abort the walk instead of refusing the item. Those rules go through the checked handle instead.
 //!
 //! # It is also what a walk starts from
 //!
-//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, the certifier's record of its definitions' totality, and the binder floor a walk cannot re-derive cheaply. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what it does not already answer for, by name — the environment is a set of names, so nothing about it identifies an item by where it sits.
+//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what it does not already answer for, by name — the environment is a set of names, so nothing about it identifies an item by where it sits.
 
 use {
     curios_core::{
@@ -37,7 +37,7 @@ pub struct Globals {
     /// `BTreeMap` rather than `HashMap` because these are handed to strict positivity as the base of its declaration set, and that pass reports *the first refusal in name order*. A hashed base would make which refusal it reports depend on iteration order.
     inducts: BTreeMap<Global, InductDecl>,
     structs: BTreeMap<Global, StructDecl>,
-    /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace — the one query that had no home when it lived on a prefix descriptor.
+    /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace.
     concepts: HashSet<Global>,
     /// The names in scope here that are *not* known to terminate, closed transitively already, as the certifier's record of each unit mounted here classifies them.
     ///

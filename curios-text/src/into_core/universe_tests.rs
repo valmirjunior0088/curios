@@ -207,7 +207,7 @@ fn a_level_only_in_the_result_is_minimized_away() {
     assert_eq!(universe_parameters(&module, "/Holds"), 0);
 }
 
-/// Superclass fields are anonymous positional slots: no namespace binding, no wrapper. Registering their empty labels used to make a concept's *second* superclass collide with the first as an empty-named duplicate declaration, refusing the whole module at discovery.
+/// Superclass fields are anonymous positional slots: no namespace binding, no wrapper. Registering their empty labels would make a concept's *second* superclass collide with the first as an empty-named duplicate declaration, refusing the whole module at discovery.
 #[test]
 fn a_concept_with_two_superclasses_lowers() {
     run("pub concept A(T : Type) : pub Type { fa(T) -> T, }
@@ -220,7 +220,7 @@ fn a_concept_with_two_superclasses_lowers() {
          C");
 }
 
-/// The scheduler's witness edges (`witness_dep_nodes`): `probe`'s declared type only converts by unfolding `+` within `probe`'s own item, the row satisfying it is declared *last* and referenced by no name, and only the operator's soft edge can order the row first — the deferred-witness store retries between items, which is too late for a conversion the item drain must decide. Under name edges alone `probe` elaborates first and fails exactly as the retired `/std/BigPos/add`'s certificate once did.
+/// The scheduler's witness edges (`witness_dep_nodes`): `probe`'s declared type only converts by unfolding `+` within `probe`'s own item, the row satisfying it is declared *last* and referenced by no name, and only the operator's soft edge can order the row first — the deferred-witness store retries between items, which is too late for a conversion the item drain must decide. Under name edges alone `probe` would elaborate first and fail.
 #[test]
 fn an_operator_in_a_dependent_type_orders_after_its_witness_row() {
     elaborate_source(

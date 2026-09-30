@@ -10,7 +10,7 @@ use {
 
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
-    // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). The suspension now carries a *description* rather than performing on the way through: `force` walks the `later` closure to the `now` payload, and the write happens where that payload is forced, so the output still proves the closure was reached and called.
+    // A nullary closure stored in an inductive field and called indirectly through `call_indirect` — the erasure and codegen path that needs `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). The suspension carries a *description* rather than performing on the way through: `force` walks the `later` closure to the `now` payload, and the write happens where that payload is forced, so the output still proves the closure was reached and called.
     assert_eq!(
         run(r#"
         use /std/{Str, Io};
@@ -115,7 +115,7 @@ fn curried_function() {
 
 #[test]
 fn folds_constant_arg_through_let_function() {
-    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is now a description yielding unit, so no user value reaches that continuation at all. `proc/exit` is the shortest host operation, reached here through the narrowing to its `Byte` that the literal discharges, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is a description yielding unit, so no user value reaches that continuation at all. `proc/exit` is the shortest host operation, reached here through the narrowing to its `Byte` that the literal discharges, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
@@ -194,7 +194,7 @@ fn local_rec_calls_enclosing_rec_member() {
     );
 }
 
-// A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that the program never calls: this is exactly the shape that silently miscompiled under lambda-lifting (a self-aliased value slot dropped by the optimizer's copy-propagation) — here it stays a term-level `Rec`, erased in place, and its mere existence has no effect on the rest of the program.
+// A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that the program never calls: under lambda-lifting its self-aliased value slot would be dropped by the optimizer's copy-propagation, so it stays a term-level `Rec`, erased in place, and its mere existence has no effect on the rest of the program.
 #[test]
 fn self_referential_value_rec_never_forced_compiles_and_runs() {
     assert_eq!(
@@ -229,9 +229,9 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     );
 }
 
-// A padded nullary constructor beside a closure-carrying one, through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `nothing` leaves padded; the continuation split carried that padding as a filler, and the join's head rebuilt the row from its field parameters through the slot's cast — which the boxed zero a filler used to materialise as failed, and the null it travels as passes. The tags depend on the process arguments so the fold runs at run time, which is the only place the trap was.
+// A padded nullary constructor beside a closure-carrying one, through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `nothing` leaves padded; the continuation split carries that padding as a filler, and the join's head rebuilds the row from its field parameters through the slot's cast, which the null a filler travels as passes where a boxed zero would fail. The tags depend on the process arguments so the fold runs at run time, which is the only place the trap was.
 //
-// **A regression fixture with a runtime failure behind it.** It was found in `/std/Tui`'s command type, whose `issue` was split into a worker over its slots; that type is a struct now and pads nothing. The family here is written for the shape rather than borrowed from a library, so no later redesign can retire the fixture by making its vehicle flat.
+// The family here is written for the shape rather than borrowed from a library, so no redesign of a library type can retire the fixture by making its vehicle flat.
 #[test]
 fn a_padded_variant_survives_a_split_join_at_run_time() {
     let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();

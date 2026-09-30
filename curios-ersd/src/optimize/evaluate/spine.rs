@@ -25,7 +25,7 @@ const MAX_SPINE_NODES: usize = 256;
 
 /// Module-wide cap on what minting may *materialize*, in arena entries.
 ///
-/// [`MAX_SPECIALIZATIONS`] bounds how many specializations are minted and says nothing about how large each one is, so the pair bounded a count while the cost is a product: sixty-four copies of a large self-recursive target multiply the module exactly as unbounded closure reification did. Counting mints is the cheap half of the answer; this is the other half.
+/// [`MAX_SPECIALIZATIONS`] bounds how many specializations are minted and says nothing about how large each one is, so alone it bounds a count while the cost is a product: sixty-four copies of a large self-recursive target multiply the module exactly as unbounded closure reification would. Counting mints is the cheap half of the answer; this is the other half.
 const MAX_SPECIALIZATION_NODES: usize = 100_000;
 
 /// Specialize every eligible literal-spine call site, module-wide.

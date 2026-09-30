@@ -145,7 +145,7 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
 
 /// A witness declared here, scoped to a mount this module does not own.
 ///
-/// Before B1 there was nothing to check: an identity was a bare ordinal, so "unscoped" named no state a module could be in. What makes it checkable is that the ordinal now counts *within* a mount — and a module declaring a witness under somebody else's mount is claiming an ordinal in a space it does not own, which two compilations would both hand out.
+/// A witness's ordinal counts *within* the module that declares it, so a module declaring a witness under somebody else's mount is claiming an ordinal in a space it does not own, which two compilations would both hand out.
 #[test]
 fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
     let mut module = stored(Term::intrinsic(crate::Intrinsic::NatType));

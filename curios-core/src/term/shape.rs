@@ -4,7 +4,7 @@
 
 use {super::*, crate::Label};
 
-/// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on `Bool` — see `elaborate_infix`); the node never survives elaboration.
+/// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`, `&&`/`||` included — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Infix {
@@ -25,7 +25,7 @@ pub enum NumLit {
     Character(char),
 }
 
-/// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/std/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.
+/// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/std/Monad/bind` application — built at elaboration rather than by the lowerer, so the sequencing survives to the stage that can make type-directed decisions about it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Bang {
@@ -274,7 +274,7 @@ pub struct Match {
 ///
 /// A **family** is a motive: a scope closed at the eliminator's own arity — the scrutinee's indices in declaration order, then the scrutinee — which is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted, being uniform across constructors and fixed by the scrutinee's type, so the body refers to them through the ambient scope like any other term. Before elaboration a written motive is carried in an arity-0 scope instead — see `Term::match_motive_written`. A family is the only form that states a result beyond the goal's own spelling, and the only one an induction hypothesis can be typed from, so it is what a written motive lowers to and what every free-monoid fold whose arm reads its hypothesis carries.
 ///
-/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee standing for the case's value and each variable index for the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason the convoy pattern existed, and this form retires it. Elaboration builds it wherever a motive is elided in a checked position, over any scrutinee. A variable is substituted for. Over an expression — written so, or reached by substitution, a `let` value into its tail or an argument into a body — the goal's syntactic occurrences of that expression stand for the case instead: the with-abstraction reading, a fixed operation on the spelling rather than a case equation the reducer may or may not meet, with an occurrence the spelling does not show left to the arm's case equation (see `documentation/design/language/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
+/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee standing for the case's value and each variable index for the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason for the convoy pattern, which this form makes unnecessary. Elaboration builds it wherever a motive is elided in a checked position, over any scrutinee. A variable is substituted for. Over an expression — written so, or reached by substitution, a `let` value into its tail or an argument into a body — the goal's syntactic occurrences of that expression stand for the case instead: the with-abstraction reading, a fixed operation on the spelling rather than a case equation the reducer may or may not meet, with an occurrence the spelling does not show left to the arm's case equation (see `documentation/design/types/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum MatchResult {
@@ -454,7 +454,7 @@ pub enum Cases {
     Bool { false_case: Term, true_case: Term },
     /// Sparse dispatch on specific `Nat` values with a default arm.
     ///
-    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and a dispatch *key* narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Nat and Int are an i31 until they outgrow it](../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md). A `u32` here wrote `curios-ersd`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
+    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and a dispatch *key* narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md). A `u32` here would write `curios-ersd`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
     ///
     /// A sequence rather than a `BTreeMap`, for the reason [`Cases::Induct`]'s arms are one: this enum is archived, and `Natural`'s archived form is its little-endian bytes, whose collation is not its numeric order. Rather than teach the archived form an ordering it does not have, the keys are held **strictly ascending** — the invariant every constructor establishes and every rebuild preserves, and the one that makes term identity independent of the order arms were written in.
     Switch {
@@ -463,7 +463,7 @@ pub enum Cases {
     },
     /// The intrinsic eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.
     Induct {
-        /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default` or a Rung-C prune.
+        /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default`, or where index inversion prunes it.
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
     },
@@ -501,7 +501,7 @@ pub struct Let {
 
 /// One non-recursive local binding: its declared type and its value.
 ///
-/// A local binding is monomorphic. Universe polymorphism is a property of *declarations*, which are frozen into the prelude archive and re-instantiated by later programs; a local binding has no such use sites, and cumulativity already admits the uses a local scheme once served — for `let id : (@A : Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1` accepts both, and the level order is linear so a sup always exists.
+/// A local binding is monomorphic. Universe polymorphism is a property of *declarations*, which are frozen into the prelude archive and re-instantiated by later programs; a local binding has no such use sites, and cumulativity admits the uses a local scheme would serve — for `let id : (@A : Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1` accepts both, and the level order is linear so a sup always exists.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct LetBinding {
@@ -685,7 +685,7 @@ impl RecGroup {
 
 /// A block of mutually recursive bindings with a tail in scope of the shared group.
 ///
-/// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node was the earlier design, and what it cost is worth recording: a node that is well-formed standing alone is a node no scope gates, and the kernel typed one from the group it carried without ever checking that group.
+/// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node is rejected for what it costs: a node well-formed standing alone is one no scope gates, and a kernel could type one from the group it carried without ever checking that group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Rec {
@@ -722,7 +722,7 @@ pub struct WitnessOrigin {
 
 /// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the binder it filled, an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
 ///
-/// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and each once matched any bare metavariable, which is how a written `?` in those positions was discarded unelaborated and the program compiled with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
+/// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and one matching any bare metavariable would discard a written `?` in those positions unelaborated and compile the program with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum MetavarOrigin {
@@ -736,7 +736,7 @@ pub enum MetavarOrigin {
     Goal,
 }
 
-/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an `Entropy`(Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
+/// A metavariable's identity: a dense index into the elaborator's solution store (`Solutions`), minted monotonically by an `Entropy`. A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct MetavarId(pub usize);
@@ -759,7 +759,7 @@ impl fmt::Display for MetavarId {
     }
 }
 
-/// A metavariable: a placeholder term standing for an as-yet-unknown subterm, born from a surface hole `?` and (possibly) solved by unification. The solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`, spelled with the *birth telescope's* free names.
+/// A metavariable: a placeholder term standing for an as-yet-unknown subterm, born from a surface hole `?` and (possibly) solved by unification. The solution, when one exists, lives in the elaborator's solution store (`Solutions`), keyed by `id`, spelled with the *birth telescope's* free names.
 ///
 /// `origin` rides with the node and says what minted it — a silent hole, an elaborator-inserted implicit/witness argument (zonk's unsolved report then names the binder instead of a bare id), or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes as `Hole` and written goals as `Goal`, core insertions above the floor `into_core` returns with theirs), so every occurrence of an id carries the same origin and the derived equality never splits an id.
 ///
@@ -806,7 +806,7 @@ impl InstanceHead {
         }
     }
 
-    /// The free name a variable head references, mirroring `Term::head_name`: a projection head names no free variable, exactly as the `Rec` it abbreviates did.
+    /// The free name a variable head references, mirroring `Term::head_name`: a projection head names no free variable, exactly as the `Rec` it abbreviates does.
     pub fn head_name(&self) -> Option<&Free> {
         match self {
             InstanceHead::Var(var) => var.as_free(),

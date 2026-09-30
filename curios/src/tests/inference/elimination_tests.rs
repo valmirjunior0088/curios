@@ -22,7 +22,7 @@ fn match_omitted_motive_infers() {
 
 #[test]
 fn omitted_motive_infers_over_a_compound_scrutinee() {
-    // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers where it previously had to be spelled.
+    // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers without being spelled.
     let source = r#"
         use /std/{Nat, Vec, Io};
         let build(n : Nat) -> Vec(Nat, n) =
@@ -41,7 +41,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
     assert_eq!(run(source), b"4");
 }
 
-// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B probe in `reduce`). A concept-dispatched comparison reduces past the `Compare` wrapper to an intrinsic normal form, which is not an application — so before `head_label` covered intrinsics, `match a <= hi` registered a refinement key the probe could never look up and the arm silently failed to refine, while the equivalent `Nat/le(a, hi)` spelling worked. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
+// Scrutinee refinement keys on the applied head's tag, `Term::head_key`, which the reducer's refinement lookup gates on. A concept-dispatched comparison reduces past the `Cmp` wrapper to an intrinsic normal form, which is not an application, so `head_key` tags the intrinsic: an untagged `match a <= hi` would register a refinement key the probe never looks up, and the arm would silently fail to refine where the equivalent `Nat/le(a, hi)` spelling refines. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
 #[test]
 fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"
@@ -65,7 +65,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     assert_eq!(run(source), b"refined");
 }
 
-/// A guard's refinement discharges a window bound whose spelling sits one definitional step away: the slice obligation states its end as `0 + n`, the guard can only spell `n <= List/len(l)`, and the probe-time canonicalization brings the two together. The regression this pins: the refinement store records a universes-erased key, and erasure strips the `Instance` a polymorphic global (`List/len`) unfolds through — so canonicalizing the *erased* key stalled where the goal side reduced, and the bound reported as an uninferred implicit against a caller who had established it. The canonicalization now reduces the unerased original stored beside the key.
+/// A guard's refinement discharges a window bound whose spelling sits one definitional step away: the slice obligation states its end as `0 + n`, the guard can only spell `n <= List/len(l)`, and the probe-time canonicalization brings the two together. The refinement store records a universes-erased key, and erasure strips the `Instance` a polymorphic global (`List/len`) unfolds through, so the canonicalization reduces the unerased original stored beside the key: the *erased* key would stall where the goal side reduces, and the bound would be reported as an uninferred implicit against a caller who had established it.
 #[test]
 fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
     let source = r#"

@@ -770,7 +770,7 @@ impl Floating {
         round(negative, magnitude, exponent, false, rounding)
     }
 
-    /// The exact natural this truncates toward zero to, refusing outside the domain `/std/Flt/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`. One refusal where there were two: the model decides what the truncation *is*, and no carrier adds a width on top of it.
+    /// The exact natural this truncates toward zero to, refusing outside the domain `/std/Flt/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`. That is the one refusal: the model decides what the truncation *is*, and no carrier adds a width on top of it.
     ///
     /// Exact and unbounded: `to_natural(3.0e9)` is the natural `3000000000`, which the running program holds as a boxed magnitude.
     pub fn to_natural(self) -> Result<Natural, ScalarTrap> {

@@ -1,6 +1,6 @@
 //! The polarity lattice's own laws, and the closure over the occurrence relation.
 //!
-//! Pure functions of the relation, so they need no checker and stay beside the analysis. The two tests that drove `positivity_vectors` through a real `Env` moved to `curios-analysis/tests/driven.rs`; see that file's header for why.
+//! Pure functions of the relation, so they need no checker and stay beside the analysis. The tests that drive `positivity_vectors` through a real `Env` are in `curios-analysis/tests/driven.rs`; see that file's header for why.
 
 use {
     super::{Occurrences, close},
@@ -98,7 +98,7 @@ fn reaching_a_bad_cycle_without_joining_it_is_not_a_rejection() {
     assert!(!diagonal(&closed, "Left").unwrap().accepting());
 }
 
-// Prelude declarations are sinks of the relation: they cannot mention user code, so a user declaration that travels through one has no way back and the closure terminates without inventing an edge.
+// A predecessor unit's declarations are sinks of the relation: they cannot mention a successor's, so a declaration that travels through one has no way back and the closure terminates without inventing an edge.
 #[test]
 fn a_sink_contributes_no_path_back() {
     let closed = close(&relation(&[("User", "PreludeList", Strict)]));

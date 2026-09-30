@@ -264,7 +264,7 @@ pub(super) struct Context<'a> {
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
-    // Shared, program-global metavariable-id counter. The whole program folds into one `curios_core::Term`, so holes in different module bodies (each its own `Context` via `nested`) must draw from the same monotonic source. Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
+    // Shared, unit-wide metavariable-id counter. Holes in different module bodies (each its own `Context` via `nested`) are one unit's, so they draw from the same monotonic source. Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     universes: &'a Entropy,
     universe_role: &'a Cell<curios_core::UniverseRole>,
@@ -272,7 +272,7 @@ pub(super) struct Context<'a> {
     universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
     // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: &'a Entropy,
-    // One ordinal counter per mount. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the mount that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
+    // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
     witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
     // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
     unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
@@ -462,7 +462,7 @@ impl<'a> Context<'a> {
     ///
     /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The ordinal is per module rather than per program: two units both counting from zero is exactly what makes a bare ordinal unstorable, and the module is what makes the pair disjoint without either unit knowing the other exists — modules are disjoint within a mount, and mounts across units.
     ///
-    /// The module is this context's own prefix. It used to be the mount that prefix lies within, which was disjoint enough to be sound and too coarse to be *placed*: an import scope is keyed by `Global`, and a page asks which declarations belong to the module it renders, to which every witness in the standard library answered `/std`.
+    /// The module is this context's own prefix rather than the mount it lies within, which would be disjoint enough to be sound and too coarse to be *placed*: an import scope is keyed by `Global`, and a page asks which declarations belong to the module it renders, to which every witness in the standard library would answer `/std`.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
         let module = self.prefix;
 
@@ -784,7 +784,7 @@ impl<'a> Context<'a> {
 
     // Snapshot the imports in scope of this body as the view of the declaration `owner` — what a goal inside it may be offered, and what a page resolves the names in its signature through. `None` is the entrypoint tail, which closes the root body.
     //
-    // Keyed by `Global` rather than by `Qualifier`, because a `satisfy` is anonymous: its identity is a `Global::Witness` and there is no name to hand over. Every other declaration wraps its own qualifier at the call site, which is the same key this used to build.
+    // Keyed by `Global` rather than by `Qualifier`, because a `satisfy` is anonymous: its identity is a `Global::Witness` and there is no name to hand over. Every other declaration wraps its own qualifier at the call site.
     pub(super) fn record_import_scope(&self, owner: Option<&curios_core::Global>) {
         let mut imports = self.imports.borrow_mut();
         match owner {

@@ -29,7 +29,7 @@ pub let of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Le(a, b) =
 
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 ---
---- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
+--- The decided pair is total, so refuting one settles the other. Reduction answers the other comparison inside a guard's own `false` arm, but a refutation held as a hypothesis is a term neither reduction nor the facts in scope read, and this is the bridge from it to the conclusion.
 pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Le(b, a) =
     match a
     | 0 =>
@@ -148,7 +148,7 @@ pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq()(a + (b - a), b) =
 
 --- `a <= b` gives `a - b <= 0`: `Nat` subtraction truncates where it would go below zero.
 ---
---- The case [`add_sub_cancel`] leaves out, where `a - b` is no difference: a proof the elaborator writes over a truncated subtraction splits on `b <= a` and takes this in the arm where that fails. Conversion does not decide it there, since the arm's guard is a fact about the scope and reduction reads terms.
+--- The case [`add_sub_cancel`] leaves out, where `a - b` is no difference: a proof the elaborator writes over a truncated subtraction splits on `b <= a` and takes this in the arm where that fails. Conversion does not decide it there: the arm's guard answers its own spellings, and `a - b <= 0` is none of them.
 pub let sub_zero(a: Nat, b: Nat, p: Le(a, b)) -> Le(a - b, 0) =
     match a
     | 0 => Bool/True/qed()

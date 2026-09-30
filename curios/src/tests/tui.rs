@@ -77,7 +77,7 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
     assert!(io.raw_modes().is_empty());
 }
 
-// The whole path as one program: a listing in a border, driven by scripted keystrokes that arrive one chunk per burst — so the reader fiber parks between them, which is what `7234cc3f` scripted standard input for. `down` moves the selection, `q` quits, and the model `run` answers is printed after the session ends. The first frame is written whole; the second is the diff that moved the highlight.
+// The whole path as one program: a listing in a border, driven by scripted keystrokes that arrive one chunk per burst — so the reader fiber parks between them. `down` moves the selection, `q` quits, and the model `run` answers is printed after the session ends. The first frame is written whole; the second is the diff that moved the highlight.
 #[test]
 fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     let (system, io) = MockHost::builder()

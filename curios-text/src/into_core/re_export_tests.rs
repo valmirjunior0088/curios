@@ -186,7 +186,7 @@ fn chained_pub_use_re_exports_transitively() {
 
 // --- Module-interface redesign acceptance cases ---
 
-// A re-exports x from B; B re-exports x from C; C declares x. A is declared before its providers. The phase-3 fixed point must resolve A/x to /C/x regardless of declaration order.
+// A re-exports x from B; B re-exports x from C; C declares x. A is declared before its providers. The `pub use` fixed point must resolve A/x to /C/x regardless of declaration order.
 #[test]
 fn chained_re_export_resolves_out_of_order() {
     assert_eq!(
@@ -323,7 +323,7 @@ fn rejects_re_export_through_other_modules_private_child() {
     );
 }
 
-// An inductive's constructor module is a first-class interface member built in phase 2, so its cases re-export by name and by glob through the fixed point.
+// An inductive's constructor module is a first-class interface member seeded with its module's interface, so its cases re-export by name and by glob through the fixed point.
 #[test]
 fn re_exports_inductive_constructor_by_name() {
     let term = run(r#"

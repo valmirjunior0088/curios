@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
-    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y`. The reducer once bound `y` as a fresh context definition rather than substituting it, and the scope check hard-failed that spelling as an out-of-scope name, so this program refused with a type mismatch; a loop in `solve` then reified such definitions back out of the candidate. The reducer now substitutes a `let` as the kernel does, so the candidate names nothing the scope does not cover, and the loop is gone.
+    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y`. The reducer substitutes a `let` as the kernel does, so the candidate names nothing the scope does not cover; binding `y` as a fresh context definition instead would leave a name the scope check refuses as out of scope.
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
 
@@ -64,7 +64,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
     error(source);
 }
 
-// Regression: an `Eq/subst` whose motive contains `Eq()(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
+// An `Eq/subst` whose motive contains `Eq()(_, _)` — whose `@A` is implicit — inserts that implicit when the motive is instantiated. Dropping it would leave `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panics `reduce_apply` with a telescope arity mismatch.
 #[test]
 fn subst_motive_inserts_implicit_in_eq() {
     let source = r#"
@@ -79,7 +79,7 @@ fn subst_motive_inserts_implicit_in_eq() {
     assert_eq!(run(source), b"ok");
 }
 
-// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ List(Nat)` commits `?M := (A) => List(A)` and `?A := Nat` — where previously only the explicit `apply_m(@List, l)` spelling checked.
+// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ List(Nat)` commits `?M := (A) => List(A)` and `?A := Nat` — as the explicit `apply_m(@List, l)` spelling states it.
 #[test]
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
@@ -93,7 +93,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
     assert_eq!(run(source), b"2");
 }
 
-// Two applications of one global definition are unified by their spines before the head unfolds — the first-order approximation. `trim` is a fold that never names itself, so it is a `let` and reduction would unfold it: the left side steps to `combine(false, trim(x))`, the right to a fold stuck on `?t`, and nothing pins `?t` again. Comparing the spines first states the solution outright, as it always had for a `rec`-defined head, whose application stays folded.
+// Two applications of one global definition are unified by their spines before the head unfolds — the first-order approximation. `trim` is a fold that never names itself, so it is a `let` and reduction would unfold it: the left side steps to `combine(false, trim(x))`, the right to a fold stuck on `?t`, and nothing pins `?t` again. Comparing the spines first states the solution outright, as it does for a `rec`-defined head, whose application stays folded.
 #[test]
 fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
     let source = r#"
@@ -128,7 +128,7 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
     assert_eq!(run(source), b"ok");
 }
 
-// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written, the shape `Str/to_list`'s scan once carried. `Convert::solve` re-validates a candidate as an oracle, and the oracle used to withhold *every* refinement, including the ones the candidate's own arms re-establish: the proof was then checked against the unreduced `Nat/Lt(0, Bytes/len(b))`, re-validation rejected a correct solution, and the implicit surfaced as a mismatch with the entire unfolded fold on its inferred side. Suppression is scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not.
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Nat/Lt(0, Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
 #[test]
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
@@ -176,7 +176,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
     );
 }
 
-// An implicit born inside a match arm that generalizes a hypothesis over the scrutinee. `Sizes(s)` computes the size record by matching on the shape, so `z : Sizes(s)` mentions the scrutinee and `check_generalized_arm` re-assumes it under the case-specialized `{Sizes(a), Sizes(b)}` — under its *original* name, shadowing the ambient binder. `local` then held `z` twice, and every metavariable born in the arm inherited a spine with a repeated argument: `Convert::solve`'s inversion cannot invert a name reachable through two slots, so the scope check refused `Total(a, z.0)` for mentioning a hypothesis plainly in scope and `Vec/append`'s length never solved. A birth telescope keeps one entry per name, at its innermost binding.
+// An implicit born inside a match arm that generalizes a hypothesis over the scrutinee. `Sizes(s)` computes the size record by matching on the shape, so `z : Sizes(s)` mentions the scrutinee and `retype_locals` re-assumes it under the case-specialized `{Sizes(a), Sizes(b)}` — under its *original* name, shadowing the ambient binder. A birth telescope keeps one entry per name, at its innermost binding: with `z` held twice, every metavariable born in the arm would inherit a spine with a repeated argument, which `Convert::solve`'s inversion cannot invert, so the scope check would refuse `Total(a, z.0)` for mentioning a hypothesis plainly in scope and `Vec/append`'s length would never solve.
 #[test]
 fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
     assert_eq!(
@@ -230,7 +230,7 @@ const SIZES: &str = r#"
     let tree: Shape = Shape/node(Shape/leaf(), Shape/node(Shape/leaf(), Shape/leaf()));
     "#;
 
-// The arm above under a written motive. The motive makes the result a family rather than the ambient goal, and the elaborator re-typed locals only at an ambient goal, so `z` stayed `Sizes(s)` in the metavariable's birth context and `Vec/append`'s length refused `Total(a, z.0)`. The kernel re-types in every arm, and both now do by the one rule, `curios_analysis::retyped`.
+// The arm above under a written motive, which makes the result a family rather than the ambient goal. Both checkers re-type locals in every arm by the one rule, `curios_analysis::retyped`, so `z` is not left `Sizes(s)` in the metavariable's birth context for `Vec/append`'s length to refuse `Total(a, z.0)`.
 #[test]
 fn an_implicit_solves_in_an_arm_whose_written_motive_leaves_the_hypothesis_ambient() {
     let source = format!(
@@ -247,7 +247,7 @@ fn an_implicit_solves_in_an_arm_whose_written_motive_leaves_the_hypothesis_ambie
     assert_eq!(run(&source), b"9");
 }
 
-// The arm above learning its shape from inside an index. `w(a, b)` targets `node(node(a, b), leaf())` against the actual `node(s, leaf())`, so the case solves the outer `s := node(a, b)` — a variable that is neither the scrutinee nor an index, which the elaborator's own re-typing never reached, leaving `z : Sizes(s)` for the metavariable to read. The kernel re-types by the case's whole solution, and both now do by `curios_analysis::retyped`.
+// The arm above learning its shape from inside an index. `w(a, b)` targets `node(node(a, b), leaf())` against the actual `node(s, leaf())`, so the case solves the outer `s := node(a, b)` — a variable that is neither the scrutinee nor an index. Both checkers re-type by the case's whole solution through `curios_analysis::retyped`, so `z : Sizes(s)` is not left for the metavariable to read.
 #[test]
 fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index() {
     let source = format!(
@@ -267,7 +267,7 @@ fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index(
     assert_eq!(run(&source), b"5");
 }
 
-// The arm above over a `let` of the scrutinee. The kernel has substituted the `let`, so its arm meets `s` and re-types `z`; the elaborator keeps `t` as a local definition, re-typed only what mentions `t`, and left `z : Sizes(s)` for the metavariable to read. `curios_analysis::scrutinee_solution` reads through the definition to the `s` the kernel sees. The second program types its hypothesis over `t` itself, which the elaborator's re-typing did reach, and which `curios_analysis::retyped` reaches by reading `t` through to `s`.
+// The arm above over a `let` of the scrutinee. The kernel has substituted the `let`, so its arm meets `s` and re-types `z`; the elaborator keeps `t` as a local definition, and `curios_analysis::scrutinee_solution` reads through it to the `s` the kernel sees, so `z : Sizes(s)` is re-typed too. The second program types its hypothesis over `t` itself, which `curios_analysis::retyped` reaches by reading `t` through to `s`.
 #[test]
 fn an_implicit_solves_in_an_arm_over_a_let_bound_scrutinee() {
     for (label, arms) in [
@@ -319,7 +319,7 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
     );
 }
 
-// An implicit solved from a projection whose value runs a walk that carries its input's validity, which each arm's guard discharges — the shape `Str/fold` takes once it threads a string's validity. The guard is `h + 1 < 10`, and the occurrence it must meet sits in `step`'s unfolding behind the `let` that names `h + 1`, so it reaches the arm respelled. Elaborating the walk decides that by comparing canonical spellings. Re-validating the solution looked the written spelling up and nothing more, since the canonical comparison sat on the branch suppression never takes, so a correct solution was rejected and `use_it` refused — while the same program with `step` spelling `h + 1 < 10` directly was accepted.
+// An implicit solved from a projection whose value runs a walk that carries its input's validity, which each arm's guard discharges. The guard is `h + 1 < 10`, and the occurrence it must meet sits in `step`'s unfolding behind the `let` that names `h + 1`, so it reaches the arm respelled. Elaborating the walk decides that by comparing canonical spellings, and re-validating the solution does too, suppressed or not: looking the written spelling up and nothing more would reject a correct solution and refuse `use_it`, while the same program with `step` spelling `h + 1 < 10` directly would pass.
 #[test]
 fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
     assert_eq!(
@@ -367,7 +367,7 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
     );
 }
 
-/// An implicit born inside an arm is solved under the refinements it was born under, so its solution may rest on the arm's guard: `Eq/sym`'s `@x` is `Bytes/get(b, k)`, whose bound `k < Bytes/len(b)` holds only in the arm. Re-validating with every refinement withheld refused the program at `found`, and `/std/Str` spelled such implicits by hand. Mutation-checked: re-validating with every refinement withheld refuses it again.
+/// An implicit born inside an arm is solved under the refinements it was born under, so its solution may rest on the arm's guard: `Eq/sym`'s `@x` is `Bytes/get(b, k)`, whose bound `k < Bytes/len(b)` holds only in the arm. Mutation-checked: re-validating with every refinement withheld refuses the program at `found`.
 #[test]
 fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
     let output = run(r#"
@@ -391,7 +391,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
     assert_eq!(output, b"5");
 }
 
-/// An implicit born outside an arm is solved without the arm's refinements, whatever kind of guard opens it: `pick`'s `@b` meets `W(k < n)` read as `W(true)` in one arm and `W(false)` in the other, and is solved to the guard itself. A guard on an application counted as no refinement, so the first arm's literal was committed and the second arm refused; the guard over a variable, `unstuck`, is the control that always passed.
+/// An implicit born outside an arm is solved without the arm's refinements, whatever kind of guard opens it: `pick`'s `@b` meets `W(k < n)` read as `W(true)` in one arm and `W(false)` in the other, and is solved to the guard itself. Counting a guard on an application as no refinement would commit the first arm's literal and refuse the second arm; the guard over a variable, `unstuck`, is the control.
 #[test]
 fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
     let output = run(r#"
@@ -417,7 +417,7 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
     assert_eq!(output, b"tft");
 }
 
-/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Nat/Lt(0, Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`, as it refused `/std/Str`'s `occurrence` until its implicits were spelled by hand.
+/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Nat/Lt(0, Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`.
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
@@ -442,7 +442,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     assert_eq!(output, b"1");
 }
 
-/// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it held the match's type open until `read!` pinned it to the region's monad, which refused the first arm with `Async(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program again.
+/// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it would hold the match's type open until `read!` pinned it to the region's monad, refusing the first arm with `Async(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program.
 #[test]
 fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_it() {
     let output = run(r#"
@@ -470,7 +470,7 @@ fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_
     assert_eq!(output, b"read");
 }
 
-/// An elided element type is restricted as an omitted implicit is: each arm's `[]` leaves its element type open inside the match's type, so both arms waited on it, and matching on `xs` met a type still a metavariable and refused it as no list. The hole is minted as a silent one, the origin a parked check's placeholder shares, and it is the placeholder's own kind that keeps that one waiting. Mutation-checked: waiting on every silent hole refuses the program again.
+/// An elided element type is restricted as an omitted implicit is: each arm's `[]` leaves its element type open inside the match's type, and were both arms to wait on it, matching on `xs` would meet a type still a metavariable and refuse it as no list. The hole is minted as a silent one, the origin a parked check's placeholder shares, and it is the placeholder's own kind that keeps that one waiting. Mutation-checked: waiting on every silent hole refuses the program.
 #[test]
 fn an_elided_element_type_is_restricted_like_an_implicit_to_type_the_match() {
     let output = run(r#"

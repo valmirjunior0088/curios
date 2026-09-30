@@ -106,14 +106,14 @@ fn rejects_user_pub_mod_std_colliding_with_prelude_std() {
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
-// The private case is the actual regression this guard closes: before `ModuleInfo::insert_child`'s collision check was made unconditional, a private redeclaration of a reserved name didn't trip the pub-only guard and silently overwrote the prelude's `std` registration instead of erroring.
+// The private case is the one a pub-only guard would miss: `ModuleInfo::insert_child`'s collision check is unconditional, so a private redeclaration of a reserved name errors rather than silently overwriting the prelude's `std` registration.
 #[test]
 fn rejects_user_private_mod_std_colliding_with_prelude_std() {
     let error = lower_with_prelude("mod std\n    let x : Type = Type;\nend\nType").unwrap_err();
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
-// Without a prelude attached, `has_embedded_roots()` is false, so the fixed sys/std/std machinery never runs at all — the user's own `mod std` is just an ordinary, unreserved entry-rooted module, not a collision.
+// Without a prelude in scope nothing claims `/std`, so the user's own `mod std` is an ordinary, unreserved entry-rooted module, not a collision.
 #[test]
 fn user_own_mod_std_without_prelude_is_not_a_collision() {
     run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");
@@ -168,7 +168,7 @@ fn allows_pub_root_module_via_absolute_path() {
 
 /// `/sys` offers no way out of `Io`: the effect module exports its carrier and its two monad operations, and no `/sys` function anywhere takes an `Io` to something that is not one.
 ///
-/// This *narrows* `documentation/soundness/per-term-rules/a-term-outside-io-performs-no-effect.md`; it does not discharge it. That entry rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because `host_fn` wraps every store row's result in `Io` at a single site and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
+/// This *narrows* `documentation/design/soundness/effects/a-term-outside-io-performs-no-effect.md`; it does not discharge it. That entry rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because `host_fn` wraps every store row's result in `Io` at a single site and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
 #[test]
 fn the_sys_io_roster_offers_no_eliminator() {
     /// Whether a signature's type is headed by `Io`, which is the only shape that matters here: `/sys` states its effect types directly rather than behind an alias, so a domain that is an `Io` is written as one.

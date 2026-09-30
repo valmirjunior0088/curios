@@ -1,4 +1,4 @@
-//! Repeatable before-and-after measurements for the host and guest boundary, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
+//! Repeatable measurements of the host and guest boundary, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
     super::{
@@ -51,7 +51,7 @@ fn assert_stream(io: &MockIo) {
 
 /// Measure compilation and execution around the host and guest boundary's checked adapters and outcomes.
 ///
-/// This capture compares compilation and execution around the checked host and guest boundary — [a host operation has one contract, checked at both ends](../../../documentation/design/toolchain/a-host-operation-has-one-contract-checked-at-both-ends.md): the checked host adapter, the operation contracts, guest reply validation and the `/sys` outcomes built over wire-shaped calls. It is a local native measurement, separate from the containerized cross-language series.
+/// This capture times compilation and execution around the checked host and guest boundary — [a host operation has one contract, checked at both ends](../../../documentation/design/effects/a-host-operation-has-one-contract-checked-at-both-ends.md): the checked host adapter, the operation contracts, guest reply validation and the `/sys` outcomes built over wire-shaped calls. It is a local native measurement, separate from the containerized cross-language series.
 ///
 /// ## Workloads and reproduction
 ///
@@ -69,42 +69,11 @@ fn assert_stream(io: &MockIo) {
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned and frequency scaling remains enabled. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions.
 ///
-/// ## Baseline
+/// ## Last reading
 ///
-/// Captured on 2026-09-25, on `main` at `fdc478223dea6716a3e17231cfc8a3a5546a2032` plus the measurement harness in this checkpoint: `Byte` crosses the wire, builtins are named by their roster identity, exit is a diverging row and `/sys/Result` is present; host replies are still unchecked on both sides and `/sys` still hands `/std` raw status records.
-///
-/// Host: Apple M4 Pro (12 cores), `aarch64-apple-darwin`, Darwin `25.6.0`; Rust `1.95.0 (59807616e 2026-04-14)`. Cargo release profile, all features, one test thread, default runtime engine configuration.
+/// Host: Apple M4 Pro (12 cores), `aarch64-apple-darwin`, Darwin `25.6.0`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
 ///
 /// All times below are milliseconds. Sample 0 is the warmup and is excluded from the medians.
-///
-/// | Workload | Sample | Compile | Run | Output bytes |
-/// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_io` | 0 (warmup) | 793.883 | 1.043 | 6 |
-/// | `monad_io` | 1 | 708.643 | 0.590 | 6 |
-/// | `monad_io` | 2 | 707.303 | 0.605 | 6 |
-/// | `monad_io` | 3 | 705.960 | 0.589 | 6 |
-/// | `monad_io` | 4 | 709.292 | 0.596 | 6 |
-/// | `monad_io` | 5 | 707.670 | 0.623 | 6 |
-/// | `stream_copy` | 0 (warmup) | 440.585 | 29.091 | 512000 |
-/// | `stream_copy` | 1 | 445.554 | 29.642 | 512000 |
-/// | `stream_copy` | 2 | 437.811 | 29.673 | 512000 |
-/// | `stream_copy` | 3 | 434.638 | 29.518 | 512000 |
-/// | `stream_copy` | 4 | 439.462 | 31.043 | 512000 |
-/// | `stream_copy` | 5 | 438.405 | 28.847 | 512000 |
-/// | `tui` | 0 (warmup) | 2780.869 | 20.820 | 11368 |
-/// | `tui` | 1 | 2786.750 | 21.602 | 11368 |
-/// | `tui` | 2 | 2765.944 | 19.957 | 11368 |
-/// | `tui` | 3 | 2757.135 | 20.872 | 11368 |
-/// | `tui` | 4 | 2769.737 | 20.624 | 11368 |
-/// | `tui` | 5 | 2771.243 | 27.216 | 11368 |
-///
-/// Measured medians: `monad_io` compile **707.670 ms**, run **0.596 ms**; `stream_copy` compile **438.405 ms**, run **29.642 ms**; `tui` compile **2769.737 ms**, run **20.872 ms**. Tui execution ranges from 19.957 to 27.216 ms, so a later comparison must account for that spread. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
-///
-/// Local raw and folded captures: `curios/.artifacts/host_boundary/1790363426131510000/`, with files named `<workload>-<sample>.trace` and `<workload>-<sample>.tsv`. These generated artifacts are not committed; the protocol and individual timings above are the durable baseline.
-///
-/// ## After
-///
-/// Captured on 2026-09-25, on `main` at `068c4e182267f4175d12db8f8c5c7b895e142f23`: every host reply checked by the native adapter and by the guest, the operation contracts in force on every host, and `/sys` reading each fallible row as a `Result` or `Option` that `/std` names. Same host, toolchain and protocol as the baseline.
 ///
 /// | Workload | Sample | Compile | Run | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
@@ -127,11 +96,9 @@ fn assert_stream(io: &MockIo) {
 /// | `tui` | 4 | 2950.161 | 22.683 | 11368 |
 /// | `tui` | 5 | 2942.890 | 20.914 | 11368 |
 ///
-/// Measured medians, with the change from the baseline: `monad_io` compile **737.592 ms** (+4.2%), run **0.638 ms** (+0.042 ms); `stream_copy` compile **400.891 ms** (−8.6%), run **28.003 ms** (−5.5%); `tui` compile **2965.527 ms** (+7.1%), run **21.664 ms**, inside the baseline's 19.957–27.216 ms spread. All eighteen samples passed their behavior and closed-span assertions, with the baseline's output lengths.
+/// Measured medians: `monad_io` compile **737.592 ms**, run **0.638 ms**; `stream_copy` compile **400.891 ms**, run **28.003 ms**; `tui` compile **2965.527 ms**, run **21.664 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
 ///
-/// The compile increases are reviewed and kept. Comparing the folded spans of `tui` sample 3 against the baseline's, the whole growth is in `cont_optimize` — 1757.1 to 1957.4 ms — spread across its passes in proportion to their size (`inline_known_calls` 251.1 to 299.8, `split_workers` 271.4 to 300.1, `split_parameters` 186.7 to 209.7), while parsing, elaboration, erasure, pruning and emission stay flat: the continuation module is larger by the code each fallible call now carries — `/sys`'s bind, continuation and status match — and `tui` reaches more rows than the other workloads. `stream_copy` compiles and runs faster because its read loop matches the row's `Result` directly where it built and took apart `Io/Chunk/of`'s `Option`. `monad_io`'s run pays for its byte-at-a-time reads, each now read through `/sys` and held to its row by the guest.
-///
-/// Local raw and folded captures: `curios/.artifacts/host_boundary/1790386533842688000/`, named as the baseline's are.
+/// What the checks cost at compile time is in `cont_optimize`, spread across its passes in proportion to their size, while parsing, elaboration, erasure, pruning and emission are unaffected: the continuation module carries the code each fallible call needs — `/sys`'s bind, continuation and status match — and `tui` reaches more rows than the other workloads. `stream_copy`'s read loop matches the row's `Result` directly rather than building and taking apart an `Option`, and `monad_io`'s run pays for its byte-at-a-time reads, each read through `/sys` and held to its row by the guest.
 #[test]
 #[ignore = "measurement: captures compilation and execution costs"]
 fn host_boundary_measurements() {

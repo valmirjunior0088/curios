@@ -6,9 +6,9 @@
 //!
 //! That argument incurs an obligation, and the obligation is discharged rather than assumed. A disagreement is a signal only where something can observe one, and nothing in a compile can: `universe_context_validate` refuses during elaboration, so a context it rejects never becomes part of a module, and this function is asked only about contexts it has already passed — for every program in the corpus. `curios-elab`'s `universe_solver::tests::both_checkers_decide_universe_context_validity_alike` therefore puts the two decisions to each other directly, which is the only place this second opinion is worth anything. The unsound direction is *this* side being the more permissive of the two, because the kernel assumes a context while checking under it.
 //!
-//! # The closure half is not here, and that is the correction
+//! # The closure half is not here
 //!
-//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing (see `documentation/soundness/whole-module-passes/validate_universes-inside-zonk_module.md`). Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`](curios_core::UniverseContext::is_closed), decided once on the data it is about.
+//! Whether a context is *closed* — every parameter index below the declared count and no level holding a metavariable — has essentially one implementation, so a second copy would agree by construction rather than by independence, a second opinion worth nothing (see `documentation/design/soundness/formation/universe-instances-and-constraints.md`). It is [`UniverseContext::is_closed`](curios_core::UniverseContext::is_closed), decided once on the data it is about.
 //!
 //! Satisfiability is the opposite case and stays written twice, because here there is real algorithmic freedom for the two to differ in: this reads a least model, and the elaborator's is a run of its solver's search. That is the line — a property of the data is read once; a question that needs a procedure is answered twice.
 //!
@@ -18,7 +18,7 @@
 //!
 //! The naturals' zero is the model's floor, below every head, which is the fact no constraint states — a parameter ranges over the naturals — and what makes `P0 + 1 ≤ P1` with `P1 ≤ 0` a loop through the zero rather than a set with a model over the integers. A model whose zero sits above 0 shifts down to one whose zero is 0, since every relation is invariant under a uniform shift, so a model the corollary promises is one with the parameters ranging over the naturals.
 //!
-//! **This replaced a search, and the search had a budget.** Read the other way, a right-hand maximum is a disjunction: `max(1, P0) ≤ max(1, P1)` bounds `P0` by either `P1` or the constant. The search chose an alternative per lower part, committed each as a difference constraint against a feasible potential and backtracked on a negative cycle, visiting at most 100 000 nodes and refusing when it ran out. As a clause the maximum is a conjunction to be derived rather than a choice to be made, and the decision is polynomial and exact in both directions.
+//! **No search, and so no budget.** Read the other way, a right-hand maximum is a disjunction: `max(1, P0) ≤ max(1, P1)` bounds `P0` by either `P1` or the constant, and a search would choose an alternative per lower part, commit each as a difference constraint against a feasible potential and backtrack on a negative cycle, under a node budget it could run out of. As a clause the maximum is a conjunction to be derived rather than a choice to be made, and the decision is polynomial and exact in both directions.
 
 #[cfg(test)]
 mod tests;

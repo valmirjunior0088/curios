@@ -10,7 +10,7 @@ use {
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
 ///
-/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased arena are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the four halves describe *one* unit, and nothing else says so.
+/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased arena are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the three artifacts describe *one* unit, and nothing else says so.
 ///
 /// A compilation holds one of these only between elaborating a unit and certifying it, and [`Uncertified::certified`] is the one way out. The fixed prelude's images are the one place one is kept: `curios-prelude-archive`'s build script writes them below the certifier by design, framed as a store slot is framed, and `curios-prelude` certifies what they hold and attaches the record its own build filed.
 #[derive(Clone)]
@@ -21,7 +21,7 @@ pub struct Uncertified {
     core: Module,
     /// **Not per-unit, despite sitting on a unit** — which is why it is named for what it is rather than for the stage that made it. Each unit's erasure resumes over the previous one's arena — see [`Prefix::arena`](crate::Prefix::arena) — so what this holds is the whole prefix's artifact, cumulative from the first unit forward, and never an independent arena numbered from zero.
     ///
-    /// That is what lets a unit be stored whole. The worry it answers was real: two *independently* erased arenas both start at zero, so per-unit artifacts would need a relocation pass, which is `cnum_map` again. They are not independent, and a stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the prefix it is restored into.
+    /// Why is the crate `README.md`'s "The erased arena is the prefix's, not the unit's".
     arena: ErasedArena,
 }
 
@@ -39,7 +39,7 @@ impl Uncertified {
         }
     }
 
-    /// The prefixes this unit claims, and the privilege tier each carries.
+    /// The prefixes this unit claims, and whether each is a root only the compiler supplies.
     pub fn mounts(&self) -> &[Mount] {
         &self.core.mounts
     }
@@ -74,7 +74,7 @@ impl Uncertified {
 #[curios_archive::archived]
 pub struct Unit {
     unit: Uncertified,
-    /// What the certifier concluded about the unit's definitions: each one's totality, closed over what it mentions. A later walk reads this for the unit's verdicts rather than the stamps elaboration wrote.
+    /// What the certifier concluded about the unit's definitions: each one's totality, closed over what it mentions, and what judging it read. A later walk reads this for the unit's verdicts rather than the stamps elaboration wrote.
     certification: Certification,
 }
 

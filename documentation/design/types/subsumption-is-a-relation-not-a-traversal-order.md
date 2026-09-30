@@ -1,0 +1,7 @@
+# Subsumption is a relation, not a traversal order
+
+**Decision.** `Γ ⊢ t : A` and `A ≤ B` give `Γ ⊢ t : B`, where `Type u ≤ Type v` whenever the level algebra proves `u ≤ v`, `Prop ≤ Type v`, and `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'` under `x`; everywhere else `≤` is conversion. Domains are compared by conversion and codomains cumulatively, as Rocq does. Both checkers decide the relation structurally, on the Π being subsumed — `curios-cert`'s `subsumes` and `curios-elab`'s `subsume` — and [Subsumption and level entailment](../soundness/formation/subsumption-and-level-entailment.md) holds what it assumes.
+
+**Rationale.** A traversal reaches the relation's verdicts only for the terms it introduces. Bidirectional checking pushes a λ against a Π down to sorts, where a head-only rule suffices, but a *name* checked against a function type has nothing to push: its Π is compared whole, and a head-only rule refuses `(b : Bool) -> Prop` where `(Bool) -> Type` is wanted — `Bool/Holds` handed to `Eq/subst`, as the corpus fixture `/big_nat` does. A rule that holds where a traversal happens to bottom out also changes silently when the traversal does; deciding it structurally in both checkers puts it on the page, the same rule twice.
+
+**Rejected.** Contravariant domains. Widening to them later accepts strictly more and breaks nothing, while shipping and withdrawing them would break programs.

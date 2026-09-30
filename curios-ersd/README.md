@@ -1,33 +1,23 @@
 # curios-ersd
 
-The Curios erased IR: the flat, explicit, first-order stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cont`. Types, proofs, and erasable binders are gone by construction; the representation and its derived analyses belong to the crate rustdoc.
+The Curios erased IR: the flat, explicit, first-order stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cont`, with the one-way door `lower_to_cont` between them. Types, proofs and erasable binders are gone by construction. How the module prints and how its identities are spelled is [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); the representation and its derived analyses belong to the crate rustdoc.
 
 ## Design
 
 ### The Ersd optimizer is thin
 
-**Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation, and the monoid worker/wrapper rebase — and nothing else. Every structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to `curios-cont`, which runs after the lowering.
+**Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation of closed terms and literal spines, and the monoid worker/wrapper rebase — and nothing else. Folding, dead code, inlining, contification and specialization belong to `curios-cont`, after the lowering.
 
-**Rationale.** Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper). A second local-rewrite engine here would restate Cont's reductions over a second representation, and the two would drift.
-
-**Rejected.** Local reductions in Ersd.
+**Rationale.** Ersd's leverage is what it still knows: hand Cont no work it can delete, run what compile time has decided, and re-base what would exhaust the runtime stack. A second local-rewrite engine would restate Cont's reductions over a second representation, and the two would drift.
 
 ### Shapes stay distinct
 
-**Decision.** The erased alphabet keeps erased Core's semantic identities intact — distinct scalar shapes, schema-carrying products and variants, dedicated Bool and Nat switches, first-class folds. One shape's operations are never reused for another, and conversions between shapes are explicit operations.
+**Decision.** The erased alphabet keeps erased Core's semantic identities — distinct scalar shapes, schema-carrying products and variants, dedicated `Bool` and `Nat` switches, first-class folds. One shape's operations are never reused for another, and conversions between shapes are explicit operations.
 
-**Rationale.** Every encoding decision — carriers, tag layouts, dispatch, loop synthesis — belongs exclusively to the lowering into Cont. Collapsing shapes early discards information the backend needs and cannot recover, and an operation reused across shapes acquires a per-context meaning the semantic oracle could no longer classify node-locally.
+**Rationale.** Every encoding decision — carriers, tag layouts, dispatch, loop synthesis — belongs to the lowering into Cont. Collapsing shapes early discards information the backend cannot recover, and an operation reused across shapes acquires a per-context meaning no node-local classification can read.
 
 ### Numeric carriers are exact
 
-**Decision.** Core arithmetic is unbounded, and so are the erased carriers — `Nat` and `Int` as `curios-num`'s `Natural` and `Integer`, `Flt` as binary64 — with their semantics owned by `curios-num`'s `scalar`, the one constant-folding table every stage shares. The runtime's split between an i31 and a boxed magnitude appears nowhere in the IR: it is `curios-cont`'s and `curios-emit`'s, per [Nat and Int are an i31 until they outgrow it](../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+**Decision.** The erased carriers are Core's, unbounded — `Nat` and `Int` as `curios-num`'s `Natural` and `Integer`, `Flt` as binary64 — with the carrier methods every stage's constant folder shares. The runtime's split between an i31 and a boxed magnitude appears nowhere in the IR; it is `curios-cont`'s and `curios-emit`'s ([Nat and Int are an i31 until they outgrow it](../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
 
-**Rationale.** One shared semantics table means the stages' constant folders cannot drift from each other or from emitted code, and keeping the runtime's representation out of the IR keeps a representation choice from becoming a semantic one.
-
-### Identity naming is cross-cutting
-
-This crate's arena identities (`id.rs`) follow the naming scheme shared with `curios-cont` and `curios-wasm` — see [One naming scheme for compiler identities](../documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md), which states it once for all three.
-
-### Printing is cross-cutting
-
-`print.rs` renders the module as ANF Curios, under an elision rule that decides what a dump declares and what it states once — see [The erased IR prints as ANF Curios](../documentation/design/toolchain/the-erased-ir-prints-as-anf-curios.md). The decision is filed there rather than here because it settles the notational continuity between this rung and the three above it, and because the same rule is what `curios-cont`'s printer is measured against.
+**Rationale.** One shared semantics keeps the folders from drifting from each other or from emitted code, and keeping the runtime's representation out of the IR keeps a representation choice from becoming a semantic one.

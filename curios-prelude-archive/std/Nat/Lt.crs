@@ -10,7 +10,7 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---
---- The dual of `Le/of_not_lt`: the bridge out of a `<=` guard's false arm, where `Bool/True/qed()` inhabits the hypothesis.
+--- The dual of `Le/of_not_lt`: the bridge from a refuted `<=` held as a hypothesis.
 pub let of_not_le(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a <= b))) -> Lt(b, a) =
     match b
     | 0 =>
@@ -31,7 +31,7 @@ pub let of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, 
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 ---
---- The bound every positional encoding wants, and the one shape reduction cannot reach on its own — `a` and `b` arrive as binders carrying their bounds in proofs, where the oracle reads terms and finds nothing. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Le/mul_mono_r`].
+--- The bound every positional encoding wants, and the step a proof the elaborator writes from the facts in scope states a quotient's upper bound with: `x < (x / d + 1) * d`, read as the remainder beside its quotient's multiple. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Le/mul_mono_r`].
 pub let add_mul_lt(
     a: Nat,
     b: Nat,

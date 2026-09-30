@@ -39,7 +39,7 @@ fn a_materialized_tree_files_under_its_scheme() {
     );
 }
 
-/// The five families never share a namespace, so a package named `c1` cannot land on a scheme's directory and a unit slot cannot land on a payload's.
+/// The families never share a namespace, so a package named `c1` cannot land on a scheme's directory and a unit slot cannot land on a payload's.
 #[test]
 fn the_families_do_not_share_a_namespace() {
     let root = PathBuf::from("/w/u");
@@ -124,7 +124,7 @@ fn a_units_declared_dependencies_are_part_of_its_slot() {
     assert_ne!(undeclared, one);
 }
 
-/// What a unit was compiled *from* is verified rather than addressed, so editing its source must leave the address alone — that is what keeps a project's slot count equal to its unit count instead of growing by one per compile, which is exactly how the tree-hashed scheme this replaced went wrong.
+/// What a unit was compiled *from* is verified rather than addressed, so editing its source must leave the address alone — that is what keeps a project's slot count equal to its unit count instead of growing by one per compile, as an address hashed over the unit's tree would.
 #[test]
 fn a_slot_does_not_move_when_its_source_changes() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];

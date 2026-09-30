@@ -186,7 +186,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     ///
-    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and captured that web's tree at every one.
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and would capture that web's tree at every one.
     fn capture(&self, binders: &[&Free]) -> Self {
         self.traverse(&mut Visit::shared_at_depth(|depth, var| {
             var.as_free()
@@ -282,7 +282,7 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
     rewrite_universe_levels_scoped_shared(value, move |_, level| rewrite(level))
 }
 
-/// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-Ersd lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over `Nat` summands, where no level can reach a number, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the route it admits anywhere else.
+/// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-Ersd lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over `Nat` summands, where no level can reach a number, and `documentation/design/soundness/elimination/case-equations-and-their-key.md` records the route it admits anywhere else.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
@@ -426,7 +426,7 @@ pub fn stamp_declaration_instance<B: Bound>(
 
 /// What a scope remembers of one binder it closed over: a global's name, which means the same in every compilation, or a local's display hint.
 ///
-/// **Never a local's identity.** That was minted by the compilation that closed the scope, and a stored scope that kept it carried a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
+/// **Never a local's identity.** That is minted by the compilation that closed the scope, and a stored scope keeping it would carry a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub(crate) enum Label {
@@ -729,15 +729,15 @@ pub(crate) struct MaskedLevels {
 
 /// Whether a traversal remembers what it rebuilt, and under what key.
 ///
-/// **Orthogonal to [`Mode`], and stated separately because it is.** It used to be encoded by doubling variants — `Plain` beside `PlainSharedAtDepth`, `Rewriting` beside `RewritingShared` — which made a walk's memo a property of *which mode it picked* rather than a decision its author made. Three modes then had no memoized twin at all, and two of those three were `2^n` waiting to be found: the machine's forced recursive call and the universe-erased projection a `Nat` comparison takes.
+/// **Orthogonal to [`Mode`], and stated separately because it is.** Doubling variants — `Plain` beside `PlainSharedAtDepth`, `Rewriting` beside `RewritingShared` — would make a walk's memo a property of *which mode it picked* rather than a decision its author made, and a mode left without a memoized twin a `2^n` walk waiting to be found, as the machine's forced recursive call and the universe-erased projection a `Nat` comparison takes would be.
 ///
 /// **The law.** Within one pass over an immutable DAG a node's answer is determined by the node and by whatever else the visit is parameterised on, so a revisit of the same key may be skipped. A reduct is a DAG whose *tree* expansion doubles per level — one substitution landing a term in two positions is enough — so a walk that rebuilds per occurrence is exponential in a term the node count, and therefore the unit budget, reads as linear.
 ///
 /// **When it is legal.** [`Memo::ByNode`] needs the variable callback and the rewrite hook pure in the node; [`Memo::ByNodeAndDepth`] needs them pure in the node and the depth. Purity is not the whole condition: a hook with an *effect* may still memoize when the effect is idempotent — a set insert, a first-error latch — and may not when it is not. Three hooks serve operands by position (an `index` or an iterator) and one pushes into a `Vec`; for those the answer differs per occurrence and [`Memo::None`] is the only correct choice.
 ///
-/// Every constructor takes one explicitly. There is no default, deliberately: both defects above were omissions, so neither defaulting direction is safe — a wrong `None` costs an exponent and a wrong memo costs a wrong answer.
+/// Every constructor takes one explicitly. There is no default, deliberately: neither defaulting direction is safe — a wrong `None` costs an exponent and a wrong memo costs a wrong answer.
 ///
-/// **A span is an occurrence's, not a node's.** It sits on the `Term` wrapper, and one node is shared under wrappers spanning different text — the elaborator's cache hands every occurrence of a subterm one node and stamps each with its own span. An unmemoized rebuild keeps each occurrence's span; a hit that handed back the stored rebuild as it was gave every later occurrence the first one's, so a diagnostic at the second occurrence of a shared subterm pointed at the first. So an entry keeps the span of the occurrence that filled it ([`Remembered`]), and a hit whose rebuild carries that span — a rebuild, or a hook's answer spanned by the occurrence it replaced — takes the asking occurrence's instead. A hook's own replacement, spanned by something else, is handed back as it was, which is what rebuilding the occurrence would have produced.
+/// **A span is an occurrence's, not a node's.** It sits on the `Term` wrapper, and one node is shared under wrappers spanning different text — the elaborator's cache hands every occurrence of a subterm one node and stamps each with its own span. An unmemoized rebuild keeps each occurrence's span; a hit that handed back the stored rebuild as it was would give every later occurrence the first one's, so a diagnostic at the second occurrence of a shared subterm would point at the first. So an entry keeps the span of the occurrence that filled it ([`Remembered`]), and a hit whose rebuild carries that span — a rebuild, or a hook's answer spanned by the occurrence it replaced — takes the asking occurrence's instead. A hook's own replacement, spanned by something else, is handed back as it was, which is what rebuilding the occurrence would have produced.
 enum Memo {
     /// Rebuild every occurrence. Correct for a hook whose answer depends on how many times it has run.
     None,
@@ -791,9 +791,9 @@ impl NodeMemo {
 
 /// What a traversal does beyond rewriting variables.
 ///
-/// A closed set, stated as a sum. These were six independent fields — a `prune` flag, two optional boxed hooks, two more flags, and an optional memo — of which only the eight combinations below were ever constructed, out of the sixty-four the fields could express. Every consumer re-derived which combination it was looking at by testing the fields one at a time.
+/// A closed set, stated as a sum rather than as independent fields — a `prune` flag, optional hooks, more flags — of which only the combinations below mean anything, and which every consumer would test one at a time to learn which combination it was looking at.
 ///
-/// Naming the combinations makes adding a ninth a change the compiler checks: every `match` below stops compiling until the new case has been decided. Closed on purpose — a traversal mode is compiler-internal vocabulary, and all of its construction sites live in this crate.
+/// Naming the combinations makes adding one a change the compiler checks: every `match` below stops compiling until the new case has been decided. Closed on purpose — a traversal mode is compiler-internal vocabulary, and all of its construction sites live in this crate.
 enum Mode {
     /// Rebuild every node, rewriting variables only.
     Plain,
@@ -856,7 +856,7 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Pruning,
-            // **Measured twice as inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could. Installed anyway, `str_literal_cost_measurements` reported all ten rows byte-for-byte identical (2026-08-24), matching an earlier swap of `release` alone that moved a `/std/BigNat/sub` ladder — now the corpus fixture's `/big_nat/sub` — not at all. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
+            // **Inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could; installed, it leaves every row of `curios`'s `str_literal_cost_measurements` byte-for-byte unchanged. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
             memo: Memo::None,
         }
     }
@@ -958,7 +958,7 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::ErasingUniverses,
-            // A comparison projects both operands through this at every `Nat` comparison, and the projection walks the whole term: unmemoized it was `2^n` in the operand's width while the unit budget read linear.
+            // A comparison projects both operands through this at every `Nat` comparison, and the projection walks the whole term: unmemoized it would be `2^n` in the operand's width while the unit budget read linear.
             memo: Memo::ByNode(HashMap::new()),
         }
     }
@@ -1013,7 +1013,7 @@ where
 
     pub(crate) fn visit_level(&mut self, level: &Level) -> Level {
         if self.erases_universes() {
-            // Every other level-bearing container is removed structurally in `Subterm::traverse`; this is the unavoidable payload of Core's still-level-indexed `Type` variant, not an erasure sentinel.
+            // Every other level-bearing container is removed structurally in `Subterm::traverse`; this is the unavoidable payload of Core's level-indexed `Type` variant, not an erasure sentinel.
             return Level::zero();
         }
         let universe_depth = self.universe_depth;

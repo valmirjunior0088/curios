@@ -1,6 +1,6 @@
 //! Eliminations: the semantic identity each Core elimination selects.
 //!
-//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
+//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/lowering/a-lowering-names-the-elimination-it-performs.md).
 //!
 //! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
@@ -260,7 +260,7 @@ impl Lowering {
 
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (value, body) in cases {
-            // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md), where a narrowing refuses rather than change a value.
+            // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md), where a narrowing refuses rather than change a value.
             //
             // Located at the arm's body, which is the only span the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
             let key = narrow_case_key(value).map_err(|error| match body.span() {
@@ -392,7 +392,7 @@ impl Lowering {
         ))
     }
 
-    /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop the library's index-loop fold used to spell by hand, now emitted here, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
+    /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop is emitted here rather than spelled by the library, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
     ///
     /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
     #[allow(clippy::too_many_arguments)]
@@ -496,7 +496,7 @@ impl Lowering {
         //
         // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored as the fold's step restores it: the arm is erased under `head = [element, ..suffix]`, the refinement it was elaborated under. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
         //
-        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here meant this crate had to hold a window's operand convention, and a window is the one shape whose operands have changed under it.
+        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
         if !cons_case.uses(2) {
             let element_hint = cons_case.first_hint().map(str::to_string);
             let suffix_hint = cons_case.second_hint().map(str::to_string);
@@ -843,7 +843,7 @@ fn refine_arm(
         vars.to_vec(),
     );
     refine_head(context, m.head, &constructor_value)?;
-    // The index equations by the function elaboration and the kernel solve them with, both directions — which erasure's arm used to learn in one direction alone, the arm binders a constructor index pins never pinned here.
+    // The index equations by the function elaboration and the kernel solve them with, both directions.
     if let Invert::Solved(solutions) =
         solve_indices(context, m.actual_indices, &target_indices, labels)?
     {

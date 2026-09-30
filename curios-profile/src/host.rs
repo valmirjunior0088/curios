@@ -39,7 +39,7 @@ pub fn capture_host_records<T>(target: &str, operation: impl FnOnce() -> T) -> (
     let result = tracing::subscriber::with_default(subscriber, operation);
     set_max_level(LevelFilter::Off);
 
-    // Taken out from under the lock rather than by unwrapping the `Arc`: the subscriber's scope has ended, but tracing-core registers every dispatcher weakly in a global registrar, and another thread building a dispatcher at this moment — a concurrent `capture` in the same process — upgrades each registered handle to a strong one while it rebuilds callsite interest. Unique ownership is therefore true in steady state and false for an instant, which made this a race in the test binary.
+    // Taken out from under the lock rather than by unwrapping the `Arc`: the subscriber's scope has ended, but tracing-core registers every dispatcher weakly in a global registrar, and another thread building a dispatcher at this moment — a concurrent `trace` or capture in the same process — upgrades each registered handle to a strong one while it rebuilds callsite interest. Unique ownership is therefore true in steady state and false for an instant, so unwrapping would race.
     let records = std::mem::take(&mut *records.lock().expect("host record lock poisoned"));
 
     (result, records)
@@ -77,7 +77,7 @@ where
 
 /// Reads the `message` field off a bridged event, ignoring anything else it carries.
 ///
-/// **Both arms are load-bearing**, for the reason `collect.rs`'s `GroupValue` states: the bridge records the message as a `fmt::Arguments` through [`Visit::record_debug`] — whose `Debug` output is the formatted text, unquoted — so a visitor implementing only `record_str` compiles, runs, and silently captures nothing.
+/// **Both arms are load-bearing**: the bridge records the message as a `fmt::Arguments` through [`Visit::record_debug`] — whose `Debug` output is the formatted text, unquoted — so a visitor implementing only `record_str` compiles, runs, and silently captures nothing.
 #[derive(Default)]
 struct MessageValue(Option<String>);
 

@@ -7,7 +7,7 @@
 //! - the wasm emitter's `sys.*`/`ffi.*` import types and call-site operand loads,
 //! - the runtime linker's `wasmtime::FuncType`s.
 //!
-//! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) seeds the fixed builtin (`sys`) tier, consumable only by the standard library, created per compilation by the pipeline driver; a second store, accumulated from a program's own `foreign` declarations (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two are never merged, but the wasm namespace is decided by the row's case — the store split only governs who may consume a tier.
+//! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) is the fixed builtin (`sys`) tier, consumable only by the standard library: `/sys` is minted from it when the prelude is built, and the runtime binds it. Each unit's own `foreign` declarations accumulate into a store of the `ffi` tier (`curios_text`'s generated foreign signature), and a compilation hands its embedder the union of those. The two tiers are never merged, but the wasm namespace is decided by the row's case — the store split only governs who may consume a tier.
 
 use {
     super::HostOp,
@@ -150,7 +150,7 @@ impl From<WireReference> for WireType {
 
 /// The named results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
 ///
-/// The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: `/sys` projects `.status` and `.bytes` in reading a row's outcome, and the standard library `.secs`, `.nanos`, …. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot. `README.md` states the decision and the rule it replaced.
+/// The count fixes the guest-facing shape, as [`ResultShape`] states. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
@@ -221,7 +221,7 @@ pub struct WireSignature {
 
 /// The wasm import namespace a foreign function links under — the closed pair both ends agree on. `Sys` is the fixed builtin substrate, consumable only by the standard library; `Ffi` is a user's own `foreign` declaration.
 ///
-/// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written — `README.md`'s decision, with what the string type it replaced could not give.
+/// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written — `README.md`'s decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Namespace {
@@ -232,7 +232,7 @@ pub enum Namespace {
 /// The one `sys` import that is not a store row: the emitter's own refusal. `panic` takes a byte string and traps rather than returns, so no [`WireSignature`] describes it; no `/sys` declaration names it either, since no program can spell it — `curios-emit` calls it wherever it refuses a computation, with one constant sentence per refusal class, and both runtimes render what arrives as `panicked: …`. Only the name is wire.
 pub const PANIC: &str = "panic";
 
-/// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, which is what let a debug name decide a wire string before this row existed.
+/// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
 pub const ENTRY: &str = "func/main";
 
 impl Namespace {

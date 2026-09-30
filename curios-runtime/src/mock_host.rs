@@ -258,7 +258,7 @@ struct MockFile {
     position: usize,
 }
 
-/// The scripted bytes a stream serves, chunk by chunk, as a peer would deliver them: a `handle_read` serves from the front chunk and, once that chunk is spent, answers `WouldBlock` until a `handle_poll` arms the next one. A flat script is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a scheduler's park-poll-resume path under test, which a host that is always ready never could.
+/// The scripted bytes a stream serves, chunk by chunk, as a peer would deliver them: a `handle_read` serves from the front chunk and, once that chunk is spent, answers `WouldBlock` until a `handle_poll` arms the next one. A flat script is one chunk, armed from the start; a multi-chunk script is what puts a scheduler's park-poll-resume path under test, which a host that is always ready never could.
 struct Chunked {
     chunks: VecDeque<Vec<u8>>,
     position: usize,
@@ -370,7 +370,7 @@ enum MockResource {
 
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a `handle_poll` arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
+    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a `handle_poll` arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
     input: Mutex<Chunked>,
     /// Every byte written to stdout and stderr, concatenated in write order. Shared with [`MockIo::output`], which is what a fixture reads when it only cares that something was written.
     output: Arc<Mutex<Vec<u8>>>,
@@ -1417,7 +1417,7 @@ impl MockHostBuilder {
     }
 }
 
-/// The chunk script standard input serves: the newline-terminated lines first, as the single armed chunk they have always been, then each scripted chunk in its own right. An empty prefix contributes nothing, so a chunk script begins at its own first chunk.
+/// The chunk script standard input serves: the newline-terminated lines first, as the single armed chunk they are, then each scripted chunk in its own right. An empty prefix contributes nothing, so a chunk script begins at its own first chunk.
 fn stdin_script(lines: Vec<u8>, chunks: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
     let mut script = Vec::with_capacity(chunks.len() + 1);
 

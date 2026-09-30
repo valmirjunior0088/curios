@@ -2,7 +2,7 @@
 
 use crate::tests::run;
 
-// Regression for a `choose` lowering bug: a condition arm followed by a refutable bind arm was parsed as `Choose`, but lowering the bind arm accidentally routed through the headed-match dependent-motive/default gate.
+// A condition arm followed by a refutable bind arm parses as `Choose`, and lowering the bind arm does not route through the headed-match dependent-motive/default gate.
 #[test]
 fn allows_condition_before_bind_arm() {
     let source = r#"

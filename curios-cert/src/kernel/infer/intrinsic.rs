@@ -1,8 +1,6 @@
 //! Typing rules for intrinsic operations.
 //!
-//! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — an intrinsic's signature is fixed by the language, so this module is a table, and the table is the specification.
-//!
-//! **The table is no longer written here.** It is `Intrinsic::signature` in `curios-core`, and this module is the walk that *applies* it. That is the whole of the change: a table written as a checking procedure can be executed by one caller and read by none, so the same signatures were written three times — as `/sys`'s declarations, as these rules, and again as elaboration's — in three crates with nothing checking the three agreed. Now the kernel and the elaborator check against one statement, and disagreeing about an operand's type is not something either can express.
+//! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — an intrinsic's signature is fixed by the language, and the table stating it is `Intrinsic::signature` in `curios-core`; this module is the walk that *applies* it. A table written as a checking procedure can be executed by one caller and read by none, so the kernel and the elaborator check against one statement, and disagreeing about an operand's type is not something either can express.
 //!
 //! What the walk still owns is the two judgments a table cannot state: a type operand is established by *typing* it (`check_is_type`, never a structural read), and a parameterized former's sort is `sort_of_intrinsic`'s to compute, because the element's own sort is not the answer — a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
 
@@ -20,7 +18,7 @@ pub(super) fn infer_intrinsic(
     let signature = intrinsic.signature(&kernel.syntax());
     let operands = intrinsic.operands();
 
-    // The table and the traversal are two statements of the same operand list, and zipping them is only safe while they agree. A disagreement is this crate's own bug rather than a fault in the term, so it asserts rather than refusing — see `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` on what the kernel reports and what it must not.
+    // The table and the traversal are two statements of the same operand list, and zipping them is only safe while they agree. A disagreement is this crate's own bug rather than a fault in the term, so it asserts rather than refusing — see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` on what the kernel reports and what it must not.
     assert_eq!(
         operands.len(),
         signature.operands.len(),

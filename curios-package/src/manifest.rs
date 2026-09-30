@@ -91,7 +91,7 @@ pub struct Package {
 impl Package {
     /// This package, plus its own executable when `exe.crs` sits in `directory` and no row already claims that name.
     ///
-    /// **Presence is the declaration, exactly as it is for `lib.crs`.** A package's own program and its own library are the two things it *is*, and neither should cost a manifest entry to admit to. The asymmetry this crate used to state — that a vanished executable "fails by silently not being there" — does not survive contact: deleting `exe.crs` makes `curios run` say the package declares no executable, which is a refusal naming the problem rather than a silence.
+    /// **Presence is the declaration, exactly as it is for `lib.crs`**, for the reasons the `layout` module states.
     ///
     /// A row wins over the file: somebody who wrote `[[executables]]` for this name meant the path they gave.
     fn discovered(mut self, directory: &Path) -> Self {

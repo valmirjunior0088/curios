@@ -6,9 +6,9 @@
 //!
 //! Every rewrite records its pre-image, so a solver mark can restore the exact state it named. Truncating the trailing constraints is not enough once an assignment may edit an older one in place.
 //!
-//! That journal is recorded only while a speculative scope is open. A scope that succeeds releases, and once none is live the pre-images are unreachable — nothing can name a state before them — so they are neither kept nor, at depth zero, ever taken. Recording them unconditionally is what made a declaration's peak footprint superlinear: a substitution *widens* the constraints it lands in, so an unconditional journal keeps every intermediate width of every constraint it ever rewrote.
+//! That journal is recorded only while a speculative scope is open. A scope that succeeds releases, and once none is live the pre-images are unreachable — nothing can name a state before them — so they are neither kept nor, at depth zero, ever taken. Recording them unconditionally would make a declaration's peak footprint superlinear: a substitution *widens* the constraints it lands in, so an unconditional journal keeps every intermediate width of every constraint it ever rewrote.
 //!
-//! Change detection therefore cannot read the journal's length, which no longer counts rewrites. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
+//! Change detection therefore cannot read the journal's length, which does not count every rewrite. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
 use {
     curios_core::{Level, LevelHead, UniverseConstraint, UniverseMetaId},
@@ -26,7 +26,7 @@ fn heads(constraint: &UniverseConstraint) -> impl Iterator<Item = LevelHead> + '
 
 /// How much of the store's history a [`super::UniverseMark`] covers.
 ///
-/// `len` and `rewrites` are where a rollback unwinds to; `epoch` is what a reader compares to decide whether anything changed. The two are separate because the journal is now conditional and its length no longer moves on every rewrite.
+/// `len` and `rewrites` are where a rollback unwinds to; `epoch` is what a reader compares to decide whether anything changed. The two are separate because the journal is conditional and its length does not move on every rewrite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct StoreMark {
     len: usize,
@@ -50,7 +50,7 @@ pub(super) struct ConstraintStore {
     constraints: Vec<UniverseConstraint>,
     occurrences: BTreeMap<LevelHead, BTreeSet<usize>>,
     rewrites: Vec<(usize, UniverseConstraint)>,
-    /// Ticked once per rewrite actually applied, so a no-op substitution stays invisible to change detection exactly as it was when the journal's length carried that signal.
+    /// Ticked once per rewrite actually applied, so a no-op substitution stays invisible to change detection.
     epoch: Entropy,
     /// How many speculative scopes are open. Pre-images are recorded only above zero, and dropped when it returns there.
     speculation: usize,
@@ -104,7 +104,7 @@ impl ConstraintStore {
 
     /// The constraints mentioning `head`, in insertion order.
     ///
-    /// Solving reads a flexible level's bounds through this index. Scanning every constraint per level instead is what made finalization quadratic in the number of levels a declaration touches.
+    /// Solving reads a flexible level's bounds through this index. Scanning every constraint per level instead would make finalization quadratic in the number of levels a declaration touches.
     pub(super) fn mentioning(&self, head: LevelHead) -> impl Iterator<Item = usize> + '_ {
         self.occurrences
             .get(&head)
@@ -199,11 +199,11 @@ impl ConstraintStore {
 
     /// Replace `head` by `solution` in every constraint mentioning it, moving the index by the *delta* the substitution makes rather than rebuilding each rewritten constraint's whole entry.
     ///
-    /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. The previous form took an opaque rewriting closure, which hid exactly that fact, and so had to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*.
+    /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. An opaque rewriting closure would hide exactly that fact, and so would have to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*.
     ///
-    /// **Widening is rare per substitution and was pervasive in aggregate**, which is what the discharge below exists to stop. A solution carries a mean of **0.7** atoms against a max of 219, so almost every individual substitution splices in a constant or a single head and widens nothing — which reads like a refutation of the widening argument and is not one, because the thin tail *compounds*: a widened constraint is then the input to every later substitution landing in it. Sampled directly around finalization over the prelude, the store used to enter with 151,367 level atoms and leave with **402,442**, a 2.66× inflation, 4.6× for the declaration holding most of the constraints. Discharging tautologies takes that to **1.03×**, and with it `check_consistent` from 34.6 s to 1.2 s and the whole prelude's peak footprint from 1665 MiB to 878 MiB — the peak being the difference graph that a full consistency check builds over the store at its largest.
+    /// **Widening is rare per substitution and pervasive in aggregate**, which is what the discharge below exists to stop. Almost every individual substitution splices in a constant or a single head and widens nothing — which reads like a refutation of the widening argument and is not one, because the thin tail *compounds*: a widened constraint is then the input to every later substitution landing in it. Without the discharge the store would grow over its own solving, and with it the cost of `check_consistent` and the peak footprint, which is the difference graph a full consistency check builds over the store at its largest.
     ///
-    /// Worth separating from the defect it is *not*. Rebuilding each level per atom was an implementation fault inside `Level::substitute`, and is fixed there. Inflating the store is a property of materialising substitutions at all, and the standing alternative remains recording `meta := level` and dereferencing lazily — which this compiler already does for term metavariables, where a solution lives in a table and nothing is substituted until `zonk` runs. That change is no longer motivated by these numbers; it would have to earn its way in on the read side, which nothing has measured.
+    /// Inflating the store is a property of materialising substitutions at all. The alternative is recording `meta := level` and dereferencing lazily — which this compiler already does for term metavariables, where a solution lives in a table and nothing is substituted until `zonk` runs; with the discharge in place it would have to earn its way in on the read side.
     ///
     /// Answers the metas a discharge left bounded below by a constant alone — `ℓ ≤ u` become `0 ≤ u` — since that bound is what the solver's floor records and the discharge erases.
     pub(super) fn substitute_head(
@@ -232,7 +232,7 @@ impl ConstraintStore {
                 if lower == constraint.lower && upper == constraint.upper {
                     continue;
                 }
-                // A substitution can leave a constraint *trivially* true, and most of them do: a solution carries a mean of 0.7 atoms, so it is usually a constant, and the level algebra alone proves `0 ≤ anything`. Such a row imposes nothing on any solution that follows it — but kept, it is walked by every remaining pass and widened again by every later substitution that lands in it, which is what turns a thin tail of wide solutions into a store that grows over its own solving.
+                // A substitution can leave a constraint *trivially* true, and most of them do: a solution is usually a constant, and the level algebra alone proves `0 ≤ anything`. Such a row imposes nothing on any solution that follows it — but kept, it is walked by every remaining pass and widened again by every later substitution that lands in it, which is what turns a thin tail of wide solutions into a store that grows over its own solving.
                 //
                 // Discharging it to `0 ≤ 0` rather than removing it keeps every position stable, so the occurrence index needs no rebuild. Leaving it indexed is harmless for the same reason the index is already an over-approximation: a later substitution reaches it, rewrites nothing, and takes the no-op path above. `structurally_leq` is the right predicate and not an approximation of one — it is true exactly when the constraint is provable without any surrounding constraint, so dropping it cannot make an inconsistent system look consistent, and cannot move a least solution.
                 match lower.structurally_leq(&upper) {
@@ -258,7 +258,7 @@ impl ConstraintStore {
 
             let previous = std::mem::replace(&mut self.constraints[position], rebuilt);
             self.epoch.fresh();
-            // Only a live scope can ever ask for this pre-image back. Outside one it is garbage the moment it is taken, and taking it at all is what a declaration's peak footprint was paying for.
+            // Only a live scope can ever ask for this pre-image back. Outside one it is garbage the moment it is taken, and taking it at all would cost a declaration's peak footprint.
             if self.speculation > 0 {
                 self.rewrites.push((position, previous));
             }

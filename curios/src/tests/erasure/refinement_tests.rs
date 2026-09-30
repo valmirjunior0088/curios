@@ -2,7 +2,7 @@
 
 use crate::tests::run;
 
-// The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. The proof `Lt(xp, x)` holds only because `x` is `xp + 1` in the arm, and the curried call makes erasure infer `ih(xp, …)` again: a predecessor spelled `x - 1`, with nothing refined, left it asking for `x - 1 < x`.
+// The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. The proof `Lt(xp, x)` holds only because `x` is `xp + 1` in the arm, and the curried call makes erasure infer `ih(xp, …)` again: a predecessor spelled `x - 1`, with nothing refined, would leave it asking for `x - 1 < x`.
 #[test]
 fn a_nat_case_split_is_erased_under_its_successor() {
     let source = r#"
@@ -15,7 +15,7 @@ fn a_nat_case_split_is_erased_under_its_successor() {
     assert_eq!(run(source), b"14");
 }
 
-// An expression scrutinee is refined under its own spelling, which is the one the arm's proof mentions. Refining an alias for it instead — a fresh variable defined as `count(x)` — left `Lt(xp, count(x))` undecided even in a fold's step.
+// An expression scrutinee is refined under its own spelling, which is the one the arm's proof mentions. Refining an alias for it instead — a fresh variable defined as `count(x)` — would leave `Lt(xp, count(x))` undecided even in a fold's step.
 #[test]
 fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
     let source = r#"

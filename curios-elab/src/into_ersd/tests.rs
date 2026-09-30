@@ -250,7 +250,7 @@ entry
 fn an_exit_seals_the_thunk_that_describes_it() {
     let mut context = context();
     let dead = context.fresh(Some("dead"));
-    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead any more, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
+    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
     let body = Term::let_(
         &dead,
         Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
@@ -714,7 +714,7 @@ entry
   Return ~v0
 "
     );
-    // The family the construction registered against, asked of the arena the header used to render: a nullary `none` and a `some` carrying one `Nat`, with `~t1` — the constructed one — the second.
+    // The family the construction registered against, asked of the arena the header renders from: a nullary `none` and a `some` carrying one `Nat`, with `~t1` — the constructed one — the second.
     let [family] = erased.families() else {
         panic!("the fixture registers one family");
     };
@@ -770,7 +770,7 @@ entry
   Return ~v1
 "
     );
-    // The width row itself — that it is the interned shared one, which is the test's subject and what the header used to render.
+    // The width row itself — that it is the interned shared one, which is the test's subject.
     let [schema] = erased.products() else {
         panic!("the fixture registers one schema");
     };
@@ -1242,7 +1242,7 @@ fn unary_induct(payload: Term) -> InductDecl {
     }
 }
 
-/// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload stays `Opaque`.
+/// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload records its carrier, `Flt`.
 #[test]
 fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let mut context = context();
@@ -1323,7 +1323,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         payload(&erased, "/Knotted"),
         vec![("x", FieldShape::Opaque)]
     );
-    // `Boxed` was this fixture's "not immediate" example; the full recorder now names its carrier instead of merely withholding `immediate`.
+    // `Boxed` holds a `Flt`, and the recorder names that carrier rather than merely withholding `immediate`.
     assert_eq!(payload(&erased, "/Boxed"), vec![("x", FieldShape::Flt)]);
     assert_eq!(
         payload(&erased, "/Chained"),

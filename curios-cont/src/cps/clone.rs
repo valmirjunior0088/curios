@@ -1,6 +1,6 @@
 //! Copying one body into another set of identities.
 //!
-//! Three callers copy a subtree and differ only in what they map it onto: the SCC specializer mints a fresh identity for everything it owns, the join specializer does the same for one continuation's subtree, and the inliner binds the callee's parameters to the call's argument atoms and splices the body's root onto the call node itself. Those differences are the [`Mapping`]; the walk below is what all three were writing out identically.
+//! Three callers copy a subtree and differ only in what they map it onto: the SCC specializer mints a fresh identity for everything it owns, the join specializer does the same for one continuation's subtree, and the inliner binds the callee's parameters to the call's argument atoms and splices the body's root onto the call node itself. Those differences are the [`Mapping`]; the walk below is the one all three share.
 //!
 //! **Two of the three share the whole copy, not just the walk.** Cloning a function set and cloning a continuation's subtree ask the same question of nesting and answer it the same way, so [`copy_bodies`] serves both and each caller is left with only its seed and what it does with the result. The inliner keeps its own, because its mapping is genuinely different: parameters bind to the call's argument atoms rather than to fresh values, and the body's root is spliced onto the call node instead of being minted.
 

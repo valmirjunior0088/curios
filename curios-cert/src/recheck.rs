@@ -4,13 +4,13 @@
 //!
 //! # Reading a disagreement
 //!
-//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The kernel is deliberately incomplete in one place — conversion compares an application spine's arguments, a stuck elimination's motive and arms, and a struct type-former's parameters at `Type` rather than at their real types, forfeiting type-directed eta and goal-level irrelevance there — and that refuses valid programs. So a disagreement is a question, and the two answers are "the kernel needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
+//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The kernel is deliberately incomplete in one place — conversion compares a stuck elimination's scrutinee, motive and arms, and a projection's or an instance's head, at `Type` rather than at their real types, forfeiting type-directed eta and goal-level irrelevance there — and that refuses valid programs. So a disagreement is a question, and the two answers are "the kernel needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
 //!
-//! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in a decision file of its own under `documentation/design/language/`, beside `an-independent-kernel-re-checks-what-the-elaborator-accepts.md`.
+//! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in a decision file of its own under `documentation/design/soundness/`, beside `an-independent-kernel-re-checks-what-the-elaborator-accepts.md`.
 //!
 //! # On the compile path
 //!
-//! Every compilation calls this. `compile_entrypoint` runs [`recheck_module_verdicts`] with the archived prelude as its [`Globals`] and fails the build on a refusal, judging the user's items while the prelude's are in scope on the archive's word — the ground for that word being `curios-prelude`'s build script, which runs the same walk from an empty environment when the archive is constructed and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
+//! Every compilation calls this. `curios-pipeline` certifies each unit it compiles — [`certify_module`] for a unit, [`certify_program`] for the entry — with the units in scope as its [`Globals`], and fails the build on a refusal, judging the unit's own items while the scope's are taken on the word of the walk that certified each of them: a unit is certified by construction, and the prelude's word is `curios-prelude`'s build script, which runs the same walk over each root, against the roots before it, and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
 //!
 //! What is *not* re-judged is decided by name. An item whose declared names the environment already answers for was judged by the walk that built the environment; every other item is judged here. Nothing reads a length, and nothing requires the already-judged items to sit anywhere in particular — which is the difference between an environment and a prefix.
 
@@ -63,7 +63,7 @@ use {
 
 /// `module`'s items in dependency order: every item after the ones it mentions.
 ///
-/// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it. `/std/Nat/Lt` uses `<` at `Nat`, and the edge to the witness carrying that `Compare` instance is created by witness resolution during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
+/// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it: a use of `<` at `Nat` reaches the witness carrying that `Cmp` instance through an edge witness resolution creates during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
 ///
 /// `judged` names the items to order, as indices into `module.items`; it is expected in ascending order, which is what makes the tie-break below the lowest-index one.
 ///
@@ -171,13 +171,13 @@ pub fn recheck_module(
 ///
 /// # Why this is the intrinsic
 ///
-/// The kernel is incomplete in known places, so a walk over a real module stops at the first of them and says nothing about what lies past it. Discovering those one build at a time is how a checker gets patched in the order its gaps happen to be encountered, rather than in the order they matter. This exists so the gaps can be *counted* before any of them is designed for — the same move that settled every earlier question in this effort.
+/// The kernel is incomplete in known places, so a walk over a real module stops at the first of them and says nothing about what lies past it. Discovering those one build at a time is how a checker gets patched in the order its gaps happen to be encountered, rather than in the order they matter. This exists so the gaps can be *counted* before any of them is designed for.
 ///
 /// # Why the verdicts are independent
 ///
 /// `check_definition` and `check_rec_group` both return before their `Kernel::define` step, so a refused item has defined nothing. Running that same define anyway is what keeps this from degenerating into a cascade: every item enters the environment at its declared type with its real body whether or not it checked, so each later item is judged against exactly what it would have been judged against in a fully passing walk.
 ///
-/// Nothing else survives an item. [`Kernel`] holds no caches, its conversion history is built fresh per comparison, and every binder it opens is retracted on the failing path as well as the succeeding one. So recovery here is exact rather than approximate, and a verdict late in the list is worth as much as the first.
+/// Nothing else survives an item. [`Kernel`]'s memos are cleared at every declaration boundary, its conversion history is built fresh per comparison, and every binder it opens is retracted on the failing path as well as the succeeding one. So recovery here is exact rather than approximate, and a verdict late in the list is worth as much as the first.
 ///
 /// # What it does not tell you
 ///
@@ -185,9 +185,9 @@ pub fn recheck_module(
 ///
 /// # What `globals` buys, and what it does not excuse
 ///
-/// An item whose declared names `globals` already answers for is defined and not judged. On the compile path that environment is the archived prelude, and the faith placed in it is in the archive's *construction*, not in any per-compile claim: the prelude build runs this same walk from an empty environment and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at ~24× the cost of the whole rest of the pipeline.
+/// An item whose declared names `globals` already answers for is defined and not judged. On the compile path that environment is the units in scope, and the faith placed in it is in each unit's *construction*, not in any per-compile claim: a unit is certified by construction, and the prelude build runs this same walk over each root, against the roots before it, and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at the cost of walking the whole scope.
 ///
-/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one and those passes cost milliseconds; only the per-item typing judgment consults the environment.
+/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one; only the per-item typing judgment consults the environment.
 pub fn recheck_module_verdicts(
     module: &Zonked<Module>,
     budget: u64,
@@ -318,7 +318,7 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetavarId> {
 
 /// The first unsolved *universe* metavariable one of `value`'s levels holds.
 ///
-/// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`](curios_core::UniverseContext::is_closed) inspects a `UniverseContext`'s *constraints* — the only place this crate looked for a meta level — never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
+/// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`](curios_core::UniverseContext::is_closed) inspects a `UniverseContext`'s *constraints*, never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
 fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
     universe_metas(value)
         .into_iter()
@@ -328,7 +328,7 @@ fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
 
 /// The first universe parameter one of `value`'s levels names that a scheme of `parameter_count` parameters does not have.
 ///
-/// A declaration's universe scheme promises that every level it mentions is ground or one of the parameters it declares, so a use site fully determines it. [`universe_residue`] above checks half of that promise — no unsolved metavariable — and this checks the other half, which nothing here checked: no parameter index past the declaration's own count. `closed` sees a `UniverseContext`'s constraints and not a level sitting in a term, so the two are the same omission at different depths.
+/// A declaration's universe scheme promises that every level it mentions is ground or one of the parameters it declares, so a use site fully determines it. [`universe_residue`] above checks half of that promise — no unsolved metavariable — and this checks the other half: no parameter index past the declaration's own count. `closed` sees a `UniverseContext`'s constraints and not a level sitting in a term, so the two are the same omission at different depths.
 ///
 /// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universe_levels_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
 ///
@@ -473,7 +473,7 @@ fn verdicts_within(
         }
     }
 
-    // A registry entry is data that no judgment in this walk types; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
+    // A registry entry is data; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
@@ -614,7 +614,7 @@ fn verdicts_within(
         }
     }
 
-    // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
+    // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it.
     if let Some(entry) = entry {
         let checked = match &entry.type_ {
             Some(type_) => check_entrypoint(kernel, &entry.body, type_),
@@ -648,9 +648,9 @@ fn verdicts_within(
         }
     }
 
-    // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a user declaration may reach a prelude one — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
+    // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a declaration may reach one a unit in scope declares — so the analysis recomputes every vector rather than reading any a unit carries; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
     //
-    // Positivity is a judgment of its own and gets its own budget, as the elaborator's pass does. It reduces payload types across every declaration in the program, and on what the entrypoint and the two obligations above left, whether it finished depended on how much they had spent.
+    // Positivity is a judgment of its own and gets its own budget, as the elaborator's pass does. It reduces payload types across every declaration in the program, and on what the entrypoint and the two obligations above left, whether it finished would depend on how much they had spent.
     kernel.restore_budget();
     if let Err(refusal) = positivity_vectors(
         kernel,

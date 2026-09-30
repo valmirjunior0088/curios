@@ -343,7 +343,7 @@ impl Convert {
 
     /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and the corpus fixture's `/big_nat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
     ///
-    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changed what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
+    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/elimination/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
         this_term: &Term,
@@ -1089,7 +1089,7 @@ impl Convert {
 
         // Embedded-metavariable guard: any *other* unsolved metavariable in the candidate may carry a wider context than `id`'s, so solving now could let the solution escape its scope. A metavariable whose birth context is *contained* in `id`'s provably cannot smuggle a name out: everything it can ever inject — its spine entries now, its own solution's names later, arriving only through that scope-checked spine — lies inside `id`'s scope already. The exemption is what lets a settle-synthesized lambda type, whose unannotated domains are metavariables minted at the settling expectation's own scope, commit instead of stranding.
         //
-        // One not contained is *restricted* to `id`'s context instead of holding the candidate back ([`Context::metavar_restriction`]): solved to a stand-in born over `id`'s binders, under the refinements both were born under, and the candidate solved again through it — contained, so the retry does not come back here. Waiting was for a solution that, once `id` embeds it, could only escape: an implicit minted under a match arm's `v` and embedded in the match's type left that type open until a later `read!` pinned it to the region's monad. What cannot be restricted still waits, and so does a candidate the retry does not commit, which leaves no restriction behind.
+        // One not contained is *restricted* to `id`'s context instead of holding the candidate back ([`Context::metavar_restriction`]): solved to a stand-in born over `id`'s binders, under the refinements both were born under, and the candidate solved again through it — contained, so the retry does not come back here. Waiting would be for a solution that, once `id` embeds it, could only escape: an implicit minted under a match arm's `v` and embedded in the match's type would leave that type open until a later `read!` pinned it to the region's monad. What cannot be restricted still waits, and so does a candidate the retry does not commit, which leaves no restriction behind.
         let blocking = metavars
             .iter()
             .copied()
@@ -1186,7 +1186,7 @@ impl Convert {
 
         // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.
         //
-        // Each entry's multiplicity is counted once, over the spine, rather than by rescanning the spine per entry: a spine is as long as the birth telescope, which is every binder in scope, and a region a hundred `let`s deep solves a metavariable per `!` — the rescans were a cubic term in a long chain's elaboration.
+        // Each entry's multiplicity is counted once, over the spine, rather than by rescanning the spine per entry: a spine is as long as the birth telescope, which is every binder in scope, and a region a hundred `let`s deep solves a metavariable per `!` — rescanning would be a cubic term in a long chain's elaboration.
         let image: Vec<_> = {
             let names = entries
                 .iter()
@@ -1373,7 +1373,7 @@ impl Convert {
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the problem, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked problem surfaces as a type mismatch at its origin.
     ///
-    /// The callers' arms fire for *any* `Apply` against a nominal type; the unsolved-bare-metavariable-head test lives here, and its else branch reproduces the `eta_expand_neutral` fallthrough these pairs took before this rule existed.
+    /// The callers' arms fire for *any* `Apply` against a nominal type; the unsolved-bare-metavariable-head test lives here, and its else branch is the `eta_expand_neutral` fallthrough every other pair takes.
     fn imitate_flex_apply(
         &mut self,
         context: &mut Context,
@@ -1532,7 +1532,7 @@ impl Convert {
         };
 
         if context.refinements_are(&birth) {
-            // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation this decided before is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
+            // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
             let stalled = stalled_unfolding(rigid_raw, rigid);
             if stalled && let Solved::Done = self.solve(context, metavar, rigid_raw)? {
                 return Ok(Solved::Done);
@@ -1601,14 +1601,14 @@ impl Convert {
                 continue;
             }
 
-            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of the projection comparison it replaces. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
+            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of a projection comparison. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
             if (this.has_universe_data() || that.has_universe_data())
                 && identify_universe_levels(context, &this, &that)? == Identification::Identified
             {
                 continue;
             }
 
-            // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof then spent the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
+            // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
                 && matches!(Sort::of(context, &type_)?, Sort::Prop)
@@ -1663,7 +1663,7 @@ impl Convert {
                         }
                     }
 
-                    // Rec slots, and distinct heads (or an undecided probe): v1 flex–flex does no intersection — postpone.
+                    // Rec slots, and distinct heads (or an undecided probe): flex–flex does no intersection — postpone.
                     self.blocked.push(raw_problem(&type_));
                     continue;
                 }
@@ -1840,7 +1840,7 @@ impl Convert {
                         _ => self.compare_apply(context, this_a, that_a)?,
                     }
                 }
-                // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time was where a `Str` literal's validity check went quadratic in retention and superlinear in wall clock — every round re-reduced the next folded spelling, whose argument carried the scan's state unreduced, one `step` deeper per character, and stored it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold it always did, so a comparison against an unfolded body still meets it.
+                // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
                 (Subterm::Apply(apply), other) if apply.head.spine_rec_proj().is_some() => {
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {

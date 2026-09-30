@@ -11,7 +11,7 @@ use {
 
 /// An operand under a total order, with `Flt` by bit pattern and packed data by the value's own, so commutative normalization can sort and the scope table can key deterministically.
 ///
-/// A `Bin` holds the [`Binary`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes collided them, and two `BinEql`s against those two literals deduped into one.
+/// A `Bin` holds the [`Binary`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes would collide them, deduplicating two `BinEql`s against those two literals into one.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum AtomKey {
     Value(u32),
@@ -45,7 +45,7 @@ fn intrinsic_key(op: Intrinsic, args: &[Atom]) -> (Intrinsic, Vec<AtomKey>) {
 
 /// One scope-walk work item: visit a node under the current table, or retract what a binder inserted once its subtree is done. The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees, which is what keeps one sibling's bindings invisible to the next.
 ///
-/// A retraction names the *node*, not the key it inserted. The walk never mutates the module — every rewrite is batched after the last function is walked — so the node still carries the operator and operands that produced its key, and recomputing costs one `intrinsic_key`. Carrying the key instead parked an owned `Vec<AtomKey>` here for the whole extent of the binder's subtree, and an `AtomKey::Bin` holds a packed literal's entire byte string, so a chain of literal-bearing intrinsics held one copy of each literal per pending retraction.
+/// A retraction names the *node*, not the key it inserted. The walk never mutates the module — every rewrite is batched after the last function is walked — so the node still carries the operator and operands that produced its key, and recomputing costs one `intrinsic_key`. Carrying the key instead would park an owned `Vec<AtomKey>` here for the whole extent of the binder's subtree, and an `AtomKey::Bin` holds a packed literal's entire byte string, so a chain of literal-bearing intrinsics would hold one copy of each literal per pending retraction.
 enum Task {
     Visit(NodeId),
     Retract(NodeId),
@@ -138,7 +138,7 @@ pub(super) fn dedupe_intrinsics(module: &mut Module) -> bool {
     true
 }
 
-/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link. No pass creates sharing today; this assertion is where that assumption fails loudly if one starts to.
+/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link. No pass creates sharing and [`Module::verify`] refuses a node reached twice; this assertion states the invariant where this pass relies on it, which is mid-round, between verifications.
 fn debug_assert_single_owner(module: &Module) {
     if cfg!(debug_assertions) {
         let mut counts = BTreeMap::<NodeId, usize>::new();

@@ -1,6 +1,6 @@
 //! The typed arena identities of the erased representation.
 //!
-//! Each kind gets its own `u32`-backed newtype with a distinct `~`-sigil display prefix, following the naming scheme shared with `curios-cont` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`. Identities are minted monotonically by their owning arena and never reused; removal tombstones the slot instead.
+//! Each kind gets its own `u32`-backed newtype with a distinct `~`-sigil display prefix, following the naming scheme shared with `curios-cont` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`. Identities are minted monotonically by their owning arena and never reused; removal tombstones the slot instead.
 
 use curios_utilities::id;
 

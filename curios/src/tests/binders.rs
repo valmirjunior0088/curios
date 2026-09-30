@@ -140,7 +140,7 @@ fn lambda_plain_binder_never_binds_a_hidden_slot() {
 
 // The surplus refusal names the surplus, because no count pair can name this fault.
 //
-// Alignment is positional by plicity, so a lambda and its expected type can agree on their totals *and* on their explicit counts and still fail to align. Comparing totals reported `expected 3, got 3` for the first of these — self-contradictory, and silent about the rule that decided it.
+// Alignment is positional by plicity, so a lambda and its expected type can agree on their totals *and* on their explicit counts and still fail to align. Comparing totals would report `expected 3, got 3` for the first of these — self-contradictory, and silent about the rule that decides it.
 #[test]
 fn a_lambda_binder_that_claims_no_parameter_is_named_as_surplus() {
     let surplus = |source: &str| {
@@ -173,7 +173,7 @@ fn a_lambda_binder_that_claims_no_parameter_is_named_as_surplus() {
 
 // A lambda short of an explicit parameter counts the explicit ones, which are the only parameters it may write.
 //
-// Counting the total said `expected 3` for a type with two explicit parameters, and acting on it means writing the third — the spelling refused just above.
+// Counting the total would say `expected 3` for a type with two explicit parameters, and acting on it would mean writing the third — the spelling refused just above.
 #[test]
 fn a_lambda_short_of_a_parameter_counts_the_explicit_ones() {
     let source = r#"
@@ -265,7 +265,7 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
     );
 }
 
-// A bare reference whose type leads with an implicit binder, checked against a rigid non-arrow expectation, has the hidden prefix inserted at the reference. Plicity is part of function identity, so this configuration was a guaranteed mismatch — insertion only rescues errors.
+// A bare reference whose type leads with an implicit binder, checked against a rigid non-arrow expectation, has the hidden prefix inserted at the reference. Plicity is part of function identity, so without insertion this configuration is a guaranteed mismatch — insertion only rescues errors.
 #[test]
 fn bare_reference_inserts_hidden_arguments_at_a_rigid_expectation() {
     let source = r#"

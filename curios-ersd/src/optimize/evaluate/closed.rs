@@ -120,8 +120,9 @@ fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Result<Pl
     planned
 }
 
-/// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
 /// Install the plans that reify, answering how many replacements landed and how many of them are residual calls.
+///
+/// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
 fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usize) {
     let planned: Vec<Planned> = plans.into_iter().flatten().collect();
     if planned.is_empty() {
@@ -152,9 +153,9 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
         }
         // **Where the group is bound, which is not where the candidate stands.** Every statement a replacement emits is closed by construction — interned constants, functions [`ReifyScope::outward_ok`] proved item-bound, and earlier statements of the same group — so the group can be bound ahead of the *item* enclosing the candidate instead of inside the candidate's own block. Item bindings are ambient for everything after them, so that puts it in scope at the candidate and at every candidate after it, and gives a block-owned candidate an item position to share from.
         //
-        // Binding it in the block instead is what made the same grammar cost `n² + 2` copies where the identical applications written at item level cost `n + 2`: a group bound inside a block that need not dominate anything contributed to no other replacement, so every definition re-materialized the whole chain below it.
+        // Binding it in the block instead would cost the same grammar `n² + 2` copies where the identical applications written at item level cost `n + 2`: a group bound inside a block that need not dominate anything contributes to no other replacement, so every definition would re-materialize the whole chain below it.
         //
-        // A block the entry expression owns has no item ahead of it. Such a candidate keeps the block-local splice and shares only within itself, which is what every block-owned candidate used to do.
+        // A block the entry expression owns has no item ahead of it. Such a candidate keeps the block-local splice and shares only within itself.
         let (splice_before, splice_owner, position) = match plan.owner {
             Owner::Items => (
                 plan.statement,
@@ -393,7 +394,7 @@ fn group_is_item_level_safe(
 
 /// Map every block to the top-level item whose region owns it.
 ///
-/// **What lets a candidate inside a block bind its group where later candidates can see it.** [`Module::verify`] treats the top level as a virtual block — the items in order, then the entry block, with each item's bindings ambient for everything after it — so a group bound ahead of the item *enclosing* a candidate is in scope at that candidate and at every candidate after it. Bound inside the candidate's own block, the same group is in scope for nothing else at all, and that difference is the whole of the quadratic this pass used to produce.
+/// **What lets a candidate inside a block bind its group where later candidates can see it.** [`Module::verify`] treats the top level as a virtual block — the items in order, then the entry block, with each item's bindings ambient for everything after it — so a group bound ahead of the item *enclosing* a candidate is in scope at that candidate and at every candidate after it. Bound inside the candidate's own block, the same group is in scope for nothing else at all, and that difference is the whole of the quadratic block-local binding produces.
 ///
 /// A `Rec` group's computed members initialize in blocks the group owns, so they map to the item beside the function bodies. A block the *entry expression* owns maps to nothing: there is no item ahead of it, and a candidate there keeps the block-local splice.
 ///

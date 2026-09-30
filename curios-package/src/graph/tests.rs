@@ -156,7 +156,7 @@ fn a_dependency_with_no_library_is_refused() {
 
 /// **The conflict**, over exact pins: two dependents pinning one canonical name two ways is refused naming both dependents and both pins.
 ///
-/// This needed M3 before it could be written at all — a `git` row could not be located, so no second one was ever reached. It needs only *one* materialized tree even now, and that is the property under test as much as the refusal is: the pin is read off the row before anything is located, so the disagreement is caught whether or not the second delivery exists. "Before any of the three elaborates" has to mean that.
+/// It needs only *one* materialized tree, and that is the property under test as much as the refusal is: the pin is read off the row before anything is located, so the disagreement is caught whether or not the second delivery exists. "Before any of the three elaborates" has to mean that.
 #[test]
 fn two_dependents_pinning_one_name_two_ways_is_refused() {
     let root = tree(
@@ -218,7 +218,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
         "both dependents are named: {refusal}"
     );
 
-    // And the other half the specification names: one revision, two criteria. The second hash was never delivered, which is the point — the disagreement is caught before anything is looked for.
+    // And the other half: one revision, two criteria. The second hash was never delivered, which is the point — the disagreement is caught before anything is looked for.
     let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
     fs::write(
         root.join("right/curios.toml"),

@@ -11,7 +11,7 @@ use {
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
 ///
-/// `Rc`-backed like `curios-core`'s `Term`, and for the same reason: a clone must be a pointer bump, never a tree copy. The packrat cache stores a clone of every memoized success, so a `Box`-backed tree cloned once per cached offset — O(N²) over nested programs — and the root entry's clone of the whole program recursed once per level, which is what made deep operator chains overflow *after* the parser itself had gone iterative.
+/// `Rc`-backed like `curios-core`'s `Term`, and for the same reason: a clone must be a pointer bump, never a tree copy. The packrat cache stores a clone of every memoized success, so a `Box`-backed tree would be cloned once per cached offset — O(N²) over nested programs — and the root entry's clone of the whole program would recurse once per level, overflowing on deep operator chains however iterative the parser.
 #[derive(Debug, Clone)]
 pub struct Term {
     span: Option<Span>,
@@ -201,7 +201,7 @@ pub struct Tuple {
     pub fields: Vec<TupleField>,
 }
 
-/// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, or a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write today. Always irrefutable: unlike a match-arm pattern, there is no constructor-tag case, since these binder sites never dispatch on shape — a tuple/struct value always has exactly one shape.
+/// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, or a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write. Always irrefutable: unlike a match-arm pattern, there is no constructor-tag case, since these binder sites never dispatch on shape — a tuple/struct value always has exactly one shape.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     /// `None` only for a function-sugar `use` parameter, which has no source binder position at all — genuinely anonymous, not a user-spelled `_`. Lowering mints a fresh internal name for it directly; `Some("_")` (a user actually typing the wildcard) goes through the same gensym path but is a distinct case, kept apart so an anonymous `use` binder lowers its Π-type binder as truly unlabeled (see `LetSignature::type_`) rather than as a Π-binder spelled `"_"`.
@@ -284,7 +284,7 @@ pub struct Match {
     pub arms: Vec<MatrixArm>,
 }
 
-/// One arm of a [`Match`]: `| pattern => body`. Compiled by `into_core::match_compile` into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches today (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) lowers exactly as before.
+/// One arm of a [`Match`]: `| pattern => body`. Compiled by `into_core::match_compile` into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) lowers to one core arm binding the written names.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixArm {
     pub pattern: MatchPattern,
@@ -303,7 +303,7 @@ pub enum MatchPattern {
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
     Tuple(Vec<MatchPatternField>),
-    /// A struct pattern — the same labeled/punned/positional grammar as struct literals and today's irrefutable [`Pattern::Struct`], not the positional constructor-call shape (structs have field labels; inductive constructors don't).
+    /// A struct pattern — the same labeled/punned/positional grammar as struct literals and the irrefutable [`Pattern::Struct`], not the positional constructor-call shape (structs have field labels; inductive constructors don't).
     Struct {
         head: String,
         fields: Vec<MatchPatternField>,
@@ -321,7 +321,7 @@ pub enum MatchPattern {
 }
 
 impl MatchPattern {
-    /// Whether this leaf is a genuine single-dispatch shape (`Ctor`/`Bool`/`Nat`/`List`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/ `Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/ `Bits`/`Bytes` each nest their own two-case sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
+    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bin` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
     pub(crate) fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
@@ -342,7 +342,7 @@ pub enum NatPattern {
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     ///
-    /// Carries the numeral, not the erased carrier's `u32`. Narrowing here chose `curios-ersd`'s width in the parser, four stages above the erase boundary that owns it, and — because a digit run *is* an identifier — an oversized numeral did not even refuse: it fell past every leaf to [`MatchPattern::Binder`], so `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input. The width is now `curios-elab`'s alone, and it refuses rather than wraps — see [Nat and Int are an i31 until they outgrow it](../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+    /// Carries the numeral, not the erased carrier's `u32`. Narrowing here would choose `curios-ersd`'s width in the parser, four stages above the erase boundary that owns it, and — because a digit run *is* an identifier — an oversized numeral would not even refuse: it would fall past every leaf to [`MatchPattern::Binder`], so `match n | 4294967296 => 7 end` would compile to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input. The width is `curios-elab`'s alone, and it refuses rather than wraps — see [Nat and Int are an i31 until they outgrow it](../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
     Lit(Natural),
 }
 
@@ -380,7 +380,7 @@ pub struct MatchPatternField {
     pub value: MatchPattern,
 }
 
-/// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`. A plain-name (`Pattern::Binder`) label flows into both the Π-type binder and the lambda parameter, exactly as before. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
+/// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`. A plain-name (`Pattern::Binder`) label flows into both the Π-type binder and the lambda parameter. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncSugarParam {
     pub plicity: Plicity,
@@ -403,7 +403,7 @@ pub enum LetSignature {
     },
 }
 
-/// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder, so it lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. today's `use`-binder or an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
+/// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder, so it lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. a `use`-binder or an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
 pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeParam> {
     params
         .iter()
@@ -479,7 +479,7 @@ pub struct Let {
     pub tail: Term,
 }
 
-/// A surface infix application `left <op> right`, produced by the precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved to a concrete scalar intrinsic during elaboration (the operand types are not yet known at lowering).
+/// A surface infix application `left <op> right`, produced by the precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved during elaboration to a projection off the witness of its `/std/ops` concept (the operand types are not yet known at lowering).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Infix {
     pub op: InfixOp,
@@ -501,7 +501,7 @@ pub enum Subterm {
     Type,
     Prop,
     Intrinsic(Intrinsic),
-    /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than a [`Intrinsic`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
+    /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than an [`Intrinsic`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     FuncType(FuncType),
     Func(Func),

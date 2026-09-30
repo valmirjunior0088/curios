@@ -1,8 +1,8 @@
-//! The kernel in `curios-core` re-decides reduction from the term alone, with none of this crate's machinery — no cache, no refinements, no metavariables. These tests are the check that the two agree where they must.
+//! The kernel in `curios-cert` re-decides reduction from the term alone, through a strategy of its own that shares none of this crate's machinery — no metavariable store, no refinement layer, no elaboration caches. These tests are the check that the two agree where they must.
 //!
 //! Agreement is worth asserting precisely because the implementations are separate. If the kernel simply called this reducer the tests would be tautologies; because it does not, a divergence here is a real disagreement about what a term computes to, and one of the two is wrong.
 //!
-//! The known *deliberate* divergences are internal to reduction and invisible in the result: a `let` is an environment step here and a substitution there, and a match arm binds a projection of the scrutinee here and the payload itself there. Both routes land on the same weak-head normal form, which is exactly what these assertions pin.
+//! The known *deliberate* divergence is internal to reduction and invisible in the result: a match arm binds a projection of the scrutinee here and the payload itself there. Both land on the same weak-head normal form, which is exactly what these assertions pin.
 //!
 //! One case puts an arm's equation in, where the two sides meet it through different doors: the kernel through its arm rule, which is all its public surface offers, and the elaborator through the reducer under the equation registered as an arm registers it.
 
@@ -195,7 +195,7 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
 
 /// A guard answers its own definition one unfolding down, in both checkers.
 ///
-/// With `small(x) = x < 10`, the type `T = match n < 10 | true => Nat | false => Bool` is `Nat` in the true arm of `match small(n)` and `Bool` in the false one — the guard itself, met unfolded. The kernel settles the guard's reduced spelling and answers `n < 10` from it; the elaborator refused it, comparing guards only as written, until it settled reduced spellings as the kernel does. So the kernel is asked to accept the match whose arms inhabit `T` at `0` and `false`, and the elaborator to reduce `T` to each carrier under the arm's equation. Mutation-checked: without `reduce::refined_reduct`, the elaborator's `T` stays a stuck match in both arms.
+/// With `small(x) = x < 10`, the type `T = match n < 10 | true => Nat | false => Bool` is `Nat` in the true arm of `match small(n)` and `Bool` in the false one — the guard itself, met unfolded. The kernel settles the guard's reduced spelling and answers `n < 10` from it, and the elaborator settles reduced spellings the same way — comparing guards only as written, it would refuse. So the kernel is asked to accept the match whose arms inhabit `T` at `0` and `false`, and the elaborator to reduce `T` to each carrier under the arm's equation. Mutation-checked: without `reduce::refined_reduct`, the elaborator's `T` stays a stuck match in both arms.
 #[test]
 fn a_guard_answers_its_definition_one_unfolding_down() {
     let mut context = context();

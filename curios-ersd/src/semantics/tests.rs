@@ -11,7 +11,7 @@ fn traps_and_effects_classify_by_operation() {
             .observable
             .may_trap
     );
-    // No division carries a trap: `/sys` states a nonzero divisor as a precondition, so a term reaching here was refused if it could not supply one, and `IntDiv`'s signed overflow went with the carrier, since a quotient past the i31 grows into a boxed magnitude.
+    // No division carries a trap: `/sys` states a nonzero divisor as a precondition, so a term reaching here was refused if it could not supply one, and `IntDiv`'s signed overflow is none either, since a quotient past the i31 grows into a boxed magnitude.
     assert!(!Semantics::operation(Operation::NatDiv).is_observable());
     assert!(!Semantics::operation(Operation::IntDiv).is_observable());
     assert!(!Semantics::operation(Operation::NatRem).is_observable());
@@ -40,7 +40,7 @@ fn traps_and_effects_classify_by_operation() {
 
 #[test]
 fn a_decode_that_folds_to_a_trap_is_classified_as_one() {
-    // The classifier and the folder have to name the same set, and `FltOfLeBytes` is where they once disagreed: `TrapKind::MalformedInput` exists for this operation alone, yet the classifier reported it pure — which is `prune` dropping a top-level item whose only observable effect is the malformed decode.
+    // The classifier and the folder have to name the same set, and `FltOfLeBytes` is where they can disagree: `TrapKind::MalformedInput` exists for this operation alone, and a classifier reporting it pure would let `prune` drop a top-level item whose only observable effect is the malformed decode.
     let eight = Constant::Bin(
         Grain::X,
         Binary::from_bytes(vec![0, 0, 0, 0, 0, 0, 0xf0, 0x3f]),

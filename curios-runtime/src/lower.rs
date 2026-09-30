@@ -271,7 +271,7 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `List(Bytes)`: an array of `anyref` whose elements are `Bytes` (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's uniform `list_type`, so the array's runtime type is the one downstream `ref.cast`s expect.
+/// `List(Bytes)`: an array of `anyref` whose elements are `Bytes` (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's `$elems`, so the array's runtime type is the one downstream `ref.cast`s expect.
 impl Lower for Vec<Vec<u8>> {
     fn shape() -> Vec<WireType> {
         vec![WireType::List(WireLeaf::Bytes)]

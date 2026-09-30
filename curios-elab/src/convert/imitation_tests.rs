@@ -188,7 +188,7 @@ fn arity_mismatch_blocks() {
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetavarId(0), Vec::new(), kind);
 
-    // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: v1 has no partial-application solutions, so the goal blocks (it is not provably unequal — a constant solution could exist).
+    // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: the right-biased imitation abstracts the index, a split `?0`'s birth kind refuses, so the goal blocks (it is not provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
@@ -218,7 +218,7 @@ fn leaves_rigid_apply_pairs_alone() {
     let kind = type_to_type(&mut context);
     context.assume(&f, &kind);
 
-    // A *rigid* stuck application against a nominal type is not the imitation case: the guard falls back to the neutral path, which cannot equate them — a definite mismatch, exactly as before the rule existed.
+    // A *rigid* stuck application against a nominal type is not the imitation case: the guard falls back to the neutral path, which cannot equate them — a definite mismatch.
     let stuck = Term::apply(Term::free_var(&f), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));

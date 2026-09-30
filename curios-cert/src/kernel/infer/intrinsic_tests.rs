@@ -65,7 +65,7 @@ fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
 
 /// A bound stated only on `/sys`'s wrapper is re-checked wherever that application survives and nowhere else: one unfolding leaves the bare operation, which a signature reading its operand alone would admit. Carrying the proof as an operand is what makes the check a property of the node, so it is this crate — not the elaborator that built the node — that decides the narrowing was justified.
 ///
-/// `Holds` is declared rather than defined, since the fixture registry only names it. Opaque is enough: what is under test is that the operand is checked against the proposition at all — and the proposition is now the reflection of a comparison the signature builds, rather than a separately named `NonNeg`.
+/// `Holds` is declared rather than defined, since the fixture registry only names it. Opaque is enough: what is under test is that the operand is checked against the proposition at all — the reflection of a comparison the signature builds.
 #[test]
 fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let mut kernel = kernel();
@@ -136,7 +136,7 @@ fn an_intrinsic_operation_has_the_result_type_its_rule_states() {
     );
 }
 
-/// A list literal carries its element type, every element checks against it — and `[]` types at exactly that carried element, the case that used to be refused for having no element to read a type from.
+/// A list literal carries its element type, every element checks against it — and `[]` types at exactly that carried element, though it has no element to read a type from.
 #[test]
 fn a_list_literal_checks_its_elements_against_its_carried_type() {
     let mut kernel = kernel();
@@ -259,9 +259,9 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 
 /// A case form names the carrier it eliminates, and that claim needs establishing like any other.
 ///
-/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The other two forms read the claim and checked nothing, which is the same shape as every count the boundary now checks: no typing rule looks at a case form, so no ordering discipline would ever have caught it.
+/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The boolean and dispatch forms establish it against `Bool` and `Nat`: no typing rule looks at a case form otherwise, so no ordering discipline would catch a claim left unchecked.
 ///
-/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, which is why no surface program reaches them and why the certifier's copy of the rule went unwritten.
+/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, so no surface program reaches them.
 #[test]
 fn a_boolean_elimination_requires_a_boolean_scrutinee() {
     let mut kernel = kernel();

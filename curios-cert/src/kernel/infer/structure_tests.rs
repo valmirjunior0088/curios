@@ -13,13 +13,13 @@ use super::test_support::*;
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
 ///
-/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `List(P)` inferred at `Prop` while `Sort::of(List(P))` said `Type 0`.
+/// `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule must agree: reporting the *element's* sort as the former's would infer `List(P)` at `Prop` while `Sort::of(List(P))` says `Type 0`.
 ///
 /// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X)(x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Eq(@List(P))([p], [])` for a one-element list against the empty one. Congruence through `List/len` carries that to `Eq()(1, 0)`, and transport turns `()` into a proof of `False`.
 ///
-/// Verified while the hole was open: `check(List(P), Prop)` returned `Ok(())`, `check_definition` accepted that lemma, and `infer` on the instantiated application returned `Eq(@List P)([p], [])`. The surface route was live too — `curios/src/tests/perimeter::a_list_of_proofs_is_not_a_proposition` is the program, which elaborated and which the compile-path recheck certified. It stopped short of a runtime only in erasure, which refuses any call whose every argument erases; that is a separate defect of the erase boundary, and the same lemma at a genuine proposition trips it identically.
+/// `curios/src/tests/perimeter`'s `a_list_of_proofs_is_not_a_proposition` is the surface program.
 ///
-/// The controls are the other half. A list at a relevant element still reports that element's level, `List(Type 0)` included, so the fix cannot have pinned every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it cannot have closed the hole by refusing the position outright.
+/// The controls are the other half. A list at a relevant element still reports that element's level, `List(Type 0)` included, so the rule does not pin every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it does not refuse the position outright.
 #[test]
 fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     let mut kernel = kernel();
@@ -94,7 +94,7 @@ fn elaboration_only_syntax_is_refused() {
 
 /// A nominal occurrence states as many parameters as its declaration declares, and the two rules that open a `struct` arity at an occurrence's parameters must check that before opening it.
 ///
-/// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `recheck_module_verdicts`' count a count. `Sort::of` and `synth_neutral` both guarded this; `infer`'s projection rule and `check`'s record rule reached `open` behind `check_instance` alone, which decides the *universe* width and says nothing about the parameters.
+/// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `recheck_module_verdicts`' count a count. `check_instance` decides the *universe* width and says nothing about the parameters, so `infer`'s projection rule and `check`'s record rule reach `open` only through the checked handle, as `Sort::of` and `synth_neutral` do.
 ///
 /// Neither is reachable from a surface program — the elaborator does not emit an occurrence at the wrong count — so this is the shape that needs a term built by hand, and it is a fail-open-to-abort rather than an unsoundness. Both rules are reached here at a one-parameter family occurring with none: the projection through a variable assumed at that type, and the record through a literal checked against it.
 #[test]

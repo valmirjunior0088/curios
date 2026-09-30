@@ -34,7 +34,7 @@ fn folded_and_executed_scalar_ops_agree() {
         "Nat/to_str(Int/abs(Int/add(-7, i)))",
         "Nat/to_str(Int/abs(Int/add(+0, i)))",
         "Nat/to_str(Int/abs(Int/sub(i, 1180591620717411303424)))",
-        // Past the i31, where the running program's form changes and its value must not. Each of these used to refuse: a sum and a product past `2³¹`, a left shift whose product an `i32` would have truncated (`2³⁰ << 15`), a count Wasm would have reduced modulo the width (`<< 40`), the signed range one place short of the unsigned one (`+1 << 30`), and a float truncated past `2³¹` on each side of what `i32.trunc_f64_*` holds.
+        // Past the i31, where the running program's form changes and its value must not: a sum and a product past `2³¹`, a left shift whose product an `i32` would truncate (`2³⁰ << 15`), a count Wasm would reduce modulo the width (`<< 40`), the signed range one place short of the unsigned one (`+1 << 30`), and a float truncated past `2³¹` on each side of what `i32.trunc_f64_*` holds.
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
         "Nat/to_str(Nat/shl(1 + n, 31))",
@@ -62,7 +62,7 @@ fn folded_and_executed_scalar_ops_agree() {
         "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
         // Sign transfer.
         "Flt/to_str(Flt/copysign(Flt/add(2.5, Int/to_flt(i)), -1.0))",
-        // `Flt/rem` is exact `fmod` in every folder, and the emitted Wasm must compute the same: it once expanded `x - trunc(x / y) * y` inline, which rounds at each step and disagreed with the fold on about half of all finite pairs — `1e8 % 3` was `1` folded and `0` executed, and `1 % inf` was `1` folded and NaN executed. Each row below is a pair the expansion got wrong.
+        // `Flt/rem` is exact `fmod` in every folder, and the emitted Wasm must compute the same rather than expand `x - trunc(x / y) * y` inline, which rounds at each step: that expansion answers `1e8 % 3` as `0` and `1 % inf` as NaN, where the fold answers `1` for both. Each row below is a pair the expansion gets wrong.
         "Flt/to_str(Flt/rem(Flt/add(100000000.0, Nat/to_flt(n)), 3.0))",
         "Flt/to_str(Flt/rem(Flt/add(5.0, Nat/to_flt(n)), 0.1))",
         "Flt/to_str(Flt/rem(Flt/add(1.0, Nat/to_flt(n)), +inf.0))",
@@ -108,7 +108,7 @@ fn folded_and_executed_decompositions_agree() {
 ///
 /// The NaN operands are *assembled from bytes* rather than computed, with a runtime-tainted low byte, and that is the whole design of the table. A computed NaN carries whatever pattern the engine chose, so a row built on one could pass by coincidence of hardware; reinterpreting a pattern the program chose is bit-preserving on every engine, so a payload set here reaches the instruction on any architecture, and the tainted byte keeps the executed side from folding. The computed rows are the invalid operations, whose answer the model fixes as the default NaN where x86 and aarch64 disagree on the sign — so on an x86 host each is a row the check after the instruction has to win.
 ///
-/// **Measured, not argued**, 2026-09-22 on x86_64-unknown-linux-gnu: with `emit_flt_checked`'s NaN arm replaced by the hardware result, the first row to fail was `add(signaling, quiet)` — the engine answered its first NaN operand quieted, `:1:0:0:0:0:0:248:127`, where the model answers the greater pattern, `:2:18:0:0:0:0:248:255`. Reproduce by making that arm `vec![get(&result)]`.
+/// **Measured, not argued**, on x86_64-unknown-linux-gnu: with `emit_flt_checked`'s NaN arm replaced by the hardware result, the first row to fail was `add(signaling, quiet)` — the engine answered its first NaN operand quieted, `:1:0:0:0:0:0:248:127`, where the model answers the greater pattern, `:2:18:0:0:0:0:248:255`. Reproduce by making that arm `vec![get(&result)]`.
 #[test]
 fn folded_and_executed_nans_agree() {
     let bytes = |term: &str| {
@@ -185,7 +185,7 @@ fn folded_and_executed_nans_agree() {
 
 /// A reassociated product answers what the written one does, however large its partial products grow.
 ///
-/// `k(1)` is zero, so the product is zero, while the accumulator rebase in `curios-ersd` threads the factors the other way and multiplies `65536 · 65536` before it meets the zero. That once turned a program that computed into one that refused, which is why multiplication was kept out of the rebase; nothing refuses a size now, so the row is registered and the two orders differ only in what their partials build.
+/// `k(1)` is zero, so the product is zero, while the accumulator rebase in `curios-ersd` threads the factors the other way and multiplies `65536 · 65536` before it meets the zero. Nothing refuses a size, so multiplication is registered for the rebase, and the two orders differ only in what their partials build.
 ///
 /// **Both spellings are the same program and the pair is the claim.** Binding the factor before the recursive call is the shape the rebase envelope accepts; using it inline puts the addend after the call, which the envelope declines. Both answer `0`.
 #[test]
@@ -213,7 +213,7 @@ fn a_reassociated_product_agrees_with_the_written_one() {
 
 /// A shift far past the i31 answers the exact arithmetic, folded and executed alike.
 ///
-/// **This used to disagree, and then to refuse.** With `u32` carriers a fold had a width of its own, and `2^30 << 40` — `2^70`, whose low sixty-four bits are zero — read back through a widened `u64` intermediate as a representable `0` while the executed half trapped; once the carriers were unbounded the fold computed `2^70` and the executed half refused to box it. Now both compute it, so the rows pin the value as well as the agreement.
+/// **The rows pin the value as well as the agreement.** `2^30 << 40` is `2^70`, whose low sixty-four bits are zero, so a fold with a width of its own would answer a representable `0` where both halves compute `2^70`.
 #[test]
 fn a_shift_past_the_i31_answers_the_arithmetic_folded_and_executed() {
     let rows = [
@@ -238,7 +238,7 @@ fn a_shift_past_the_i31_answers_the_arithmetic_folded_and_executed() {
 
 /// A shift count past the carrier's width answers the arithmetic, not Wasm's modulo.
 ///
-/// **These agree by computing rather than by refusing, which is why they sit apart from the trap list.** `⌊v / 2^k⌋` is zero for every `k` at or above the width and every `v` the carrier holds, and zero is representable — so refusing here would refuse a value the theory has and the carrier can hold. `Natural`'s bignum shift in `curios-core` is the oracle: it answers zero, and both erased stages must too. Before the count was clamped rather than masked, `1024 >> 40` answered `4`.
+/// **These agree by computing rather than by refusing, which is why they sit apart from the trap list.** `⌊v / 2^k⌋` is zero for every `k` at or above the width and every `v` the carrier holds, and zero is representable — so refusing here would refuse a value the theory has and the carrier can hold. `Natural`'s bignum shift in `curios-core` is the oracle: it answers zero, and both erased stages must too, where masking the count would answer `1024 >> 40` as `4`.
 ///
 /// The left shifts are here for the case the trap list cannot cover: shifting *zero* by a count past the width is still zero, so the count alone must not decide a refusal.
 ///
@@ -260,7 +260,7 @@ fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
     }
 }
 
-/// The domain half, which is no longer a runtime concern: a negative narrowed to `Nat` and a zero divisor are refused where they are written, because `/sys` states both as preconditions.
+/// The domain half, which is not a runtime concern: a negative narrowed to `Nat` and a zero divisor are refused where they are written, because `/sys` states both as preconditions.
 ///
 /// Out of domain is the one failure an operation on a `Nat` or `Int` has, and its answer is at the type level: the zero divisor and the negative narrowing are ruled out by the preconditions the operations carry, so neither reaches the running program.
 #[test]
@@ -280,7 +280,7 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
     }
 }
 
-/// `2^30 + 2^30` folds to `2^31` at compile time, exactly as Core computes it, and adding the runtime zero keeps the literal alive to emission, where it materializes as a boxed magnitude built from its limbs — once a refusal, now a constant.
+/// `2^30 + 2^30` folds to `2^31` at compile time, exactly as Core computes it, and adding the runtime zero keeps the literal alive to emission, where it materializes as a boxed magnitude built from its limbs.
 #[test]
 fn a_folded_literal_past_the_i31_materializes_as_its_value() {
     assert_eq!(
@@ -291,7 +291,7 @@ fn a_folded_literal_past_the_i31_materializes_as_its_value() {
 
 #[test]
 fn a_closed_computation_folds_at_the_theory_s_width() {
-    // The erased carriers are unbounded, so a fold answers what Core answers. This once demonstrated a `u32` band between the folders and the runtime's width; there is no band now, and what it demonstrates is that the fold and the theory agree.
+    // The erased carriers are unbounded, so a fold answers what Core answers: what this demonstrates is that the fold and the theory agree.
     assert_eq!(
         run("use /std/{Nat, Io}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
@@ -300,7 +300,7 @@ fn a_closed_computation_folds_at_the_theory_s_width() {
 
 /// A growing fold declines rather than building a numeral past its allowance, and the program it leaves standing computes the value at run time instead.
 ///
-/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder stage ersd` shows the call arriving with both operands literal. Unbounded, a fold would be asked for a forty-million-bit numeral; the allowance declines instead, and a decline is invisible: the operation stays, and the running program builds the five megabytes the value is and reads its top bits back.
+/// **Nothing upstream closes this.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder stage ersd` shows the call arriving with both operands literal. Unbounded, a fold would be asked for a forty-million-bit numeral; the allowance declines instead, and a decline is invisible: the operation stays, and the running program builds the five megabytes the value is and reads its top bits back.
 #[test]
 fn a_growing_fold_declines_and_the_running_program_computes_the_value() {
     assert_eq!(
@@ -332,7 +332,7 @@ fn a_literal_divisor_sees_through_a_symbolic_dividend() {
 
 /// `Nat/to_byte` is the computed inverse of `to_nat`: a closed argument discharges its bound by reduction, an open one by refining `n < 256` at the call site, and past the bound the refusal is a typecheck fact rather than a runtime one.
 ///
-/// **The third case is what the domain bought.** The operation used to mask, so `Nat/to_byte(256)` compiled and answered `0` — a narrowing that changed a value, which is the one thing a narrowing may not do. It is now refused where it is written, and the two above say the refusal costs nothing a correct program was doing.
+/// **The third case is what the domain buys.** A masking operation would compile `Nat/to_byte(256)` and answer `0` — a narrowing that changed a value, which is the one thing a narrowing may not do. It is refused where it is written, and the two above say the refusal costs nothing a correct program does.
 #[test]
 fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     // Closed: the comparison reduces, so the proof is written nowhere.
@@ -416,11 +416,11 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
     );
 }
 
-/// A dispatch *key* narrows at erasure; a dispatch *value* no longer does.
+/// A dispatch *key* narrows at erasure; a dispatch *value* does not.
 ///
-/// **These were one boundary and are now two different things.** A written numeral used to narrow into the erased carriers at erasure and refuse what a `u32` could not hold. The carriers are unbounded now, so a literal crosses whole — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing stays, and it is the last one at this boundary.
+/// **A value and a case key are two different things at this boundary.** The erased carriers are unbounded, so a literal crosses whole — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing is the only one at this boundary.
 ///
-/// The dispatch half also guards a defect worth keeping named: `curios-text` once narrowed the key in the parser, four stages above this, and the failure backtracked — a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+/// The dispatch half also guards the parser, four stages above this: a digit run is an identifier too, so a key narrowed and refused there would backtrack, and an oversized case would fall past every `Nat` leaf to a plain `Binder` — `match n | 4294967296 => 7 end` would compile to `let 4294967296 = n; 7`, a match that dispatches on nothing and answers `7` for every input. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
 #[test]
 fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
     let refusal = |source: &str| {
@@ -442,7 +442,7 @@ fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
         "a numeral past every machine word is a value, not an error"
     );
 
-    // The same numeral as a dispatch case, which used to become a binder instead.
+    // The same numeral as a dispatch case, which the parser must not read as a binder.
     assert!(
         refusal(
             r#"

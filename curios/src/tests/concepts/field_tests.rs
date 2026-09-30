@@ -2,7 +2,7 @@
 
 use crate::tests::run;
 
-// A `Type`-sorted field and a `Type`-returning method both spell `Type` in the field type's result spine. The record pass lowered that span under `input_type`'s lexical `Generalizable` while the method-wrapper re-lowering met it in output position at the default `Flexible` — one shared universe seed, two roles, and the lowerer's seed assert panicked. The wrapper signature now lowers under the record's role, so the associated type registers, resolves through the table, and its projection unfolds definitionally: `v : alias` checks `3` against `Nat`, and `b : picked` checks `true` against `Bool`.
+// A `Type`-sorted field and a `Type`-returning method both spell `Type` in the field type's result spine. The method-wrapper signature lowers that span under the record's role — `input_type`'s lexical `Generalizable` — rather than at the default `Flexible` its output position would give, since one universe seed cannot take two roles; so the associated type registers, resolves through the table, and its projection unfolds definitionally: `v : alias` checks `3` against `Nat`, and `b : picked` checks `true` against `Bool`.
 #[test]
 fn a_concept_field_may_carry_a_type() {
     let source = r#"
@@ -29,7 +29,7 @@ fn a_concept_field_may_carry_a_type() {
     assert_eq!(run(source), b"3t");
 }
 
-// The higher-kinded twin exercises the same wrapper machinery with the dictionary supplied explicitly. The explicit `use` is deliberate: table resolution for an explicitly written type-former argument (`@Option` as a global reference rather than an imitation-solved metavariable) is a separate, still-open gap, so this pins the wrapper, the projection, and the definitional unfolding without depending on it.
+// The higher-kinded twin exercises the same wrapper machinery with the dictionary supplied explicitly. The explicit `use` is deliberate: it pins the wrapper, the projection, and the definitional unfolding without depending on table resolution for a written type-former argument.
 #[test]
 fn a_higher_kinded_type_field_projects_through_an_explicit_dictionary() {
     let source = r#"

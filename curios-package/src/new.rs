@@ -1,6 +1,6 @@
 //! Starting a package.
 //!
-//! Last of the machinery rather than first, and deliberately: scaffolding writes what everything else reads, so it can only be written once there is something for it to be right *about*. What it produces is a package the rest of this crate already accepts — no template escapes the rules, and nothing here knows a rule the manifest parser does not.
+//! What it produces is a package the rest of this crate already accepts — no template escapes the rules, and nothing here knows a rule the manifest parser does not.
 //!
 //! It writes every part a package has: a manifest, a library header, and one executable. A package can still be a program alone or a library alone — the manifest decides, and deleting either file says so — but *starting* one is not the moment to ask which, and a flag asking would only be answerable by somebody who already knows what the two are. Beside them goes a `.gitignore` for the store, since the one directory the toolchain generates is the one thing in a fresh package that should never be committed.
 

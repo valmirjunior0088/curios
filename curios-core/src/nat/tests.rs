@@ -31,7 +31,7 @@ fn cancellation_removes_one_occurrence_per_match() {
     assert_eq!(occurrences(&right, &c), 1, "`c` is shared with nothing");
 }
 
-// Regression: a pass that cancels nothing must return its operands *identically*, not merely equivalently. Rebuilding a sum through `sum_over_floor` re-associates and reorders it, so a stuck comparison rebuilt from reordered operands is a new term the caller reduces again — which reorders again. That oscillation is not a slow reduction, it is an unbounded one, and it overflowed the stack building the fixed prelude.
+// Regression: a pass that cancels nothing must return its operands *identically*, not merely equivalently. Rebuilding a sum through `sum_over_floor` re-associates and reorders it, so a stuck comparison rebuilt from reordered operands is a new term the caller reduces again — which reorders again. That oscillation is not a slow reduction, it is an unbounded one, and it would overflow the stack building the fixed prelude.
 #[test]
 fn cancellation_is_stable_when_nothing_is_shared() {
     let (a, b, c, d) = (sym(0, "a"), sym(1, "b"), sym(2, "c"), sym(3, "d"));

@@ -13,9 +13,9 @@ pub struct MemArg {
 
 /// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, tables, memories, element and data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces.
 ///
-/// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/toolchain/webassembly-gc-is-the-only-target.md); it was once enforced twice, because the roster physically could not express the alternative, and this crate is no longer the second enforcer.
+/// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/lowering/webassembly-gc-is-the-only-target.md), and this crate does not enforce it a second time.
 ///
-/// Field order mirrors operand order in the encoding wherever the two could disagree. The three copies — `ArrayCopy`, `MemoryCopy`, `TableCopy` — each name their *target* before their source, because that is the order the format writes the two indices in; a variant that listed them the other way would put the field called `source_name` in the destination slot, which is what `ArrayCopy` did until both of its consumers happened to pass one type for both.
+/// Field order mirrors operand order in the encoding wherever the two could disagree. The three copies — `ArrayCopy`, `MemoryCopy`, `TableCopy` — each name their *target* before their source, because that is the order the format writes the two indices in; a variant that listed them the other way would put the field called `source_name` in the destination slot, and a consumer passing one type for both would never notice.
 #[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
@@ -692,7 +692,7 @@ memory_accesses! {
 
 /// A flat instruction sequence — a function body, or a constant expression: a global's initializer, a table's, a segment's offset, one element of an expression list. The encoder appends the terminating `end` opcode itself, so builders supply only the instructions.
 ///
-/// One type serves both, so the constant-expression restriction is a contract on the builder rather than something this type can refuse. A constant expression must stay inside the *base* grammar — a single `t.const`, `global.get` of an immutable import, `ref.null`, `ref.func`, or GC constructor — because the extended-constant-expressions proposal sits outside the pinned envelope: Wasmtime's engine happens to accept it, `curios-binaryen`'s mask deliberately does not, so a wider expression would validate and then abort the optimizer. `optimize`'s round-trip over the emitted corpus is what detects a breach.
+/// One type serves both, so the constant-expression restriction is a contract on the builder rather than something this type can refuse. A constant expression must stay inside the *base* grammar — a single `t.const`, `global.get` of an immutable import, `ref.null`, `ref.func`, or GC constructor — because the extended-constant-expressions proposal sits outside the pinned envelope: Wasmtime's engine happens to accept it, `curios-binaryen`'s mask deliberately does not, so a wider expression would validate and then abort the optimizer. `curios_binaryen::optimize`, which every run in the cross-stage suite passes through, is what detects a breach.
 #[derive(Debug, Default, Clone)]
 pub struct Expr {
     pub instrs: Vec<Instr>,

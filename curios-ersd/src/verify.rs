@@ -6,7 +6,7 @@
 //!
 //! The two halves differ in whose fault a violation is. A broken structural rule is a malformed module, which only a faulty producer makes, so it panics — [`StructuralFault`] names which rule, and is a value only so this crate's tests can read one without the panic. A broken recursion rule is something a program can do, so it is the [`VerifyError`] handed back, naming members and calls by their source names for the refusal the elaborator renders.
 //!
-//! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it. It used to drive an explicit task stack, which reified three things the call stack already provides — sibling ordering, scope entry and exit, and unwinding — into a `Task` enum, a reversing `push_sequence`, and a driver loop that abandoned its pending work on the error path.
+//! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it.
 
 mod eager;
 
@@ -157,7 +157,7 @@ impl Module {
     ///
     /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a prefix cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the prefix is the thing that gets *stored*: the fixed prelude's image is erased, compacted and serialized without ever passing through [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), and a compaction that misses an identity rewrites nothing and reports nothing — the stale index still addresses a live slot, just the wrong entity. Without this the first walk over those bytes is a later program's own `finalize`, which reports the fault against that program.
     ///
-    /// The prelude's own build profile prices it: **76.1 ms against `erase_unit`'s 2344.9 ms** on 2026-08-25, debug, one call each. Retake with `cargo build --package curios-prelude --features profile` and read `verify_prefix` out of the `OUT_DIR/profile.tsv` it announces.
+    /// The prelude's own build profile prices it: **76.1 ms against `erase_unit`'s 2344.9 ms**, debug, one call each. Retake with `cargo build --package curios-prelude --features profile` and read `verify_prefix` out of the `curios-prelude-archive/.artifacts/profile.tsv` the elaborating build files.
     pub fn verify_prefix(&self) -> Result<(), VerifyError> {
         curios_profile::profile!("verify_prefix");
         self.assert_structure(Entry::Absent);
@@ -246,7 +246,7 @@ impl<'m> Verifier<'m> {
     ///
     /// The recursion point of the whole verifier — a block's statements open blocks of their own — so this is where [`recurse`] sits. Depth is the module's block nesting, which erasure generates rather than anyone writing.
     ///
-    /// An error propagates before the unbinding, exactly as the task-stack spelling abandoned its pending work: the walk is over, and a scope left standing cannot be observed.
+    /// An error propagates before the unbinding: the walk is over, and a scope left standing cannot be observed.
     fn enter_block(&mut self, id: BlockId) -> Result<(), StructuralFault> {
         recurse(|| {
             let statements = self.block(id)?.statements.clone();

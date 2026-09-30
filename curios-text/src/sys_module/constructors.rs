@@ -14,7 +14,7 @@ use {
 
 /// One `/sys` binding, before it is a [`TopItem`].
 ///
-/// **Every field a declaration has is a field here.** That is what removes the patch-after-build this roster used to need: a gloss, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
+/// **Every field a declaration has is a field here**, so nothing is patched after the build: a gloss, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
 pub(super) struct Decl {
     pub(super) doc: Option<Doc>,
     pub(super) vis_pub: bool,
@@ -26,7 +26,7 @@ pub(super) struct Decl {
 }
 
 impl Decl {
-    /// The signature a telescope, output and body make. A row with no parameters becomes a *constant* rather than a nullary function: the nullary function was the previous discipline's workaround — a top-level value binding would force-reduce its effectful body where a type-level effect was refused — and a description needs no thunk, being one already.
+    /// The signature a telescope, output and body make. A row with no parameters becomes a *constant* rather than a nullary function: a description needs no thunk, being one already.
     fn signature(params: Vec<(Plicity, String, Term)>, output: Term, body: Term) -> LetSignature {
         if params.is_empty() {
             return LetSignature::Name {
@@ -90,7 +90,7 @@ pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
 
 /// `decl` under `lines`, the block a `---` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
 ///
-/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value is narrowed is one rule stated once — `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
+/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value is narrowed is one rule stated once — `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
 pub(super) fn documented(lines: &[&str], decl: Decl) -> Decl {
     Decl {
         doc: Some(Doc {
@@ -239,7 +239,7 @@ pub(super) fn ternary(
 
 /// One `/sys` module, before the host's rows are folded into it.
 ///
-/// **The label is the key, and that is the whole of this restructure.** `/sys` used to be assembled by two independent passes — the carrier modules written by hand from the intrinsic table, the subject modules built from `curios-abi`'s store — emitting into one namespace with nothing to merge them. `Handle` is in both inputs, so the one collision was reconciled by lifting its rows out by string before the generic pass and appending them by hand, with a `panic!` if the row ever went missing. Keying the modules removes the removal: a host row joins the module its subject names, whether that module already exists or is created by the row, and `Handle` stops being a special case and becomes the one label that happens to have both.
+/// **The label is the key.** `/sys` has two inputs emitting into one namespace — the carrier modules written from the intrinsic table, the subject modules built from `curios-abi`'s store — and `Handle` is in both. Keyed by label, a host row joins the module its subject names, whether that module already exists or is created by the row, so `Handle` is no special case, only the one label that has both.
 ///
 /// **A `/sys` module carries no gloss of its own, and that is a decision rather than an omission.** `/sys` does build a documentation record — `/std`'s pages adopt declarations out of it — so a module here *could* carry one. A carrier's prose goes on its type former instead, which is the name a reader reaches for, and stating that in the type is what keeps the two from drifting into both being written.
 pub(super) struct SysModule {

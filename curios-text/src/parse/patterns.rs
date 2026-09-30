@@ -100,7 +100,7 @@ pub(super) fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
         })
 }
 
-// A binder pattern: a plain name (today's only case, unchanged, at `let`, lambda-parameter, and function-definition-sugar-parameter position — see `Pattern`), a tuple pattern, a struct pattern, or a parenthesized pattern (pure grouping, mirroring `parse_parens`). Struct and tuple forms are tried before the bare-name case — not after, as a plain identifier prefix (e.g. `Point` in `Point { z, w = ww }`) would otherwise be consumed by the binder case before the disambiguating `{`/`,`/`=` is ever seen, exactly like `parse_struct_lit` is tried before a bare name at the term level.
+// A binder pattern at `let`, lambda-parameter, and function-definition-sugar-parameter position (see `Pattern`): a plain name, a tuple pattern, a struct pattern, or a parenthesized pattern (pure grouping, mirroring `parse_parens`). Struct and tuple forms are tried before the bare-name case — not after, as a plain identifier prefix (e.g. `Point` in `Point { z, w = ww }`) would otherwise be consumed by the binder case before the disambiguating `{`/`,`/`=` is ever seen, exactly like `parse_struct_lit` is tried before a bare name at the term level.
 pub(super) fn parse_pattern<'a>() -> Parser<'a, Pattern> {
     memoize(MEMO_PATTERN, parse_pattern_inner())
 }
@@ -211,7 +211,7 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bin` cons leaves below (`parse_cons_ih`). Tried after `Ctor` and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace) — `pred+1` sets this apart visually from a plain binder in a way `pred + 1` doesn't need help with.
+// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bin` cons leaves below (`parse_cons_ih`). Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern and `refuse_glued_successor` refuses it by name.
 pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_label()
         .and_drop(preceded_by_space())
@@ -244,7 +244,7 @@ fn refuse_glued_successor<'a>() -> Parser<'a, MatchPattern> {
 
 // The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reads the numeral by value, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
 //
-// The numeral is kept whole. Narrowing it to the erased `u32` here made the parser choose `curios-ersd`'s width, and the failure was caught along with "this is not a numeral" — so an oversized dispatch case fell through to `Binder`, a digit run being an identifier, rather than refusing. Where that width is chosen is `curios-elab`'s erase boundary, which refuses what it cannot represent.
+// The numeral is kept whole, never narrowed to the erased `u32` here; `NatPattern::Lit` says why.
 pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_nat_digits().flat_map(|NatLiteral(value, _)| match value.is_zero() {
         true => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
@@ -317,7 +317,7 @@ fn parse_bin_cons_match_pattern<'a>(
         })
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
 pub(super) fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner())
 }

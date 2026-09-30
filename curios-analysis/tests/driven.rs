@@ -1,10 +1,10 @@
 //! The shared analyses, exercised through a real checker.
 //!
-//! These live here rather than beside the analyses in `curios-analysis` for a structural reason, not a filing one. Every analysis on that seam is written against `Env`/`Judge`, and `Judge`'s one method is `convert_at` — so testing one needs a *real* implementation of conversion. The only ones in the workspace are this crate's `Kernel` and the elaborator's `Context`, and both sit above `curios-analysis`. A test-only `Env` would be a third checker, which is exactly what nobody should write.
+//! These are an integration test rather than unit tests beside the analyses for a structural reason, not a filing one. Every analysis on that seam is written against `Env`/`Judge`, and `Judge`'s one method is `convert_at` — so testing one needs a *real* implementation of conversion. The only ones in the workspace are `curios-cert`'s `Kernel` and the elaborator's `Context`, and both sit above `curios-analysis`. A test-only `Env` would be a third checker, which is exactly what nobody should write.
 //!
 //! A dev-dependency cycle does not solve it either: a `#[cfg(test)]` module inside `curios-analysis` compiles that crate a second time, so `Kernel`'s `Judge` implementation would be against the *other* copy and the trait bound would not hold. An integration test links the real libraries, which is why this file is here and not there.
 //!
-//! What stays in `curios-analysis` is everything that needs no checker at all — the polarity lattice's own laws, the size-change matrix algebra, universe satisfiability. Those are unit tests of pure functions and belong beside them.
+//! What stays beside the analyses is everything that needs no checker at all — the polarity lattice's own laws, the size-change matrix algebra, the readings through local definitions. Those are unit tests of pure functions and belong beside them.
 
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
@@ -66,13 +66,13 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
 
 /// The deletion rule (Goguen–McBride–McKinna) decides a binder forced in two index positions by *convertibility*, and this is the direction no program reaches.
 ///
-/// Instrumenting `consolidate` and running the whole corpus — the fixed prelude through the kernel's own walk, plus every test program through both checkers — counts 5883 inversions, 20 of which re-force a binder. Sixteen refuse, on genuinely inconvertible `Bits` spines. The four that accept are all `prior == value`: the two forcings are *syntactically identical*, so a plain equality test would have decided every acceptance the corpus contains. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by nothing, which is precisely the condition under which a rule's mistakes stay invisible.
+/// Every re-forcing the corpus makes that the rule accepts has two *syntactically identical* forcings, so a plain equality test would decide every acceptance the prelude and the test programs contain. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by no program, which is precisely the condition under which a rule's mistakes stay invisible.
 ///
 /// So its answers are put to it directly. Every fixture forces one binder in the first index position and again in the second — the shape `refl(@z) : (z, z)` meets at `Eq()(a, b)` — and the first two differ in nothing but the family's sort, which is what makes them a control pair rather than two unrelated cases.
 ///
 /// At a proposition the two forcings `a()` and `b()` convert by irrelevance, so the rule deletes the redundant constraint and one solution survives: sound because `Eq : Prop` makes the system definitionally K, and harmless because the surviving substitution is interchangeable with the one it replaced. At a relevant family the same two are constructors a program tells apart, and each forcing was reached by injective steps, so the case is reachable only if `a()` is `b()`: the verdict is `Impossible`, the conflict rule arriving through a non-linear target, and it is what lets `match h end` close a hypothesis `Eq()(false, true)`. The third fixture is the control on *that*: two forcings that do not convert and do not clash either — one opaque function at two arguments, which may well agree — are dropped, the arm still checked with the binder unsolved.
 ///
-/// `Impossible` excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/soundness/per-term-rules/coverage.md`), routed there from index inversion. So the proposition's verdict is the one this holds hardest: the clash is asked of the walk a linear position is put to, whose tag test is licensed by the family's sort, and only after conversion said no — and at a proposition conversion says yes.
+/// `Impossible` excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/design/soundness/elimination/coverage.md`), routed there from index inversion. So the proposition's verdict is the one this holds hardest: the clash is asked of the walk a linear position is put to, whose tag test is licensed by the family's sort, and only after conversion said no — and at a proposition conversion says yes.
 #[test]
 fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
     enum Verdict {
@@ -159,7 +159,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
 
 /// The rule's third answer, which the pair above does not reach: a binder whose *type* is out of scope.
 ///
-/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. Instrumenting that branch and running the fixed prelude through the kernel's own walk, every program in `curios`'s corpus through both checkers, and this crate's own tests counts it firing **zero** times in all three: both kernel callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from this crate the branch is unreachable by construction.
+/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. No program reaches the branch: both kernel callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from the kernel it is unreachable by construction.
 ///
 /// It is pinned anyway, because the conservative answer is not the obvious one to write. `None => true` — no type, so nothing to disagree about, so keep the forcing — is the plausible slip, and it would accept a re-forcing that *no convertibility test ever decided*, which is the deletion rule discharging a constraint it never checked. Nothing else in the workspace would notice.
 ///
@@ -202,9 +202,9 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
 
 /// The clash rule's license is the registry, and a family the registry cannot answer for must not clash.
 ///
-/// Two different constructors of one family definitely clash only when the family is *relevant*: at a `Prop`-sorted family irrelevance makes every inhabitant the same value, so reading tag disjointness there contradicts conversion, and an arm excused as impossible on that reading is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/soundness/per-term-rules/index-inversion-and-k.md`). The sort is read out of `induct_decl`, so the whole of that protection rests on the lookup answering — and a lookup that answered nothing used to fall through to the tag check and answer `Impossible`: the analysis deciding the strong verdict *because* it was blind, where every other blindness on this seam — an unknown positivity name, an undecodable size, an unassumed binder — turns into a refusal. The branch is unreachable from either checker as far as the walks are known, a well-typed variant's family being registered wherever the term came from, but the fixture above pins an equally unreachable branch for the same reason: the conservative answer is not the obvious one to write, and nothing else in the workspace would notice the wrong one.
+/// Two different constructors of one family definitely clash only when the family is *relevant*: at a `Prop`-sorted family irrelevance makes every inhabitant the same value, so reading tag disjointness there contradicts conversion, and an arm excused as impossible on that reading is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/design/soundness/elimination/index-inversion-and-k.md`). The sort is read out of `induct_decl`, so the whole of that protection rests on the lookup answering — and a lookup that answered nothing and fell through to the tag check would answer `Impossible`: the analysis deciding the strong verdict *because* it was blind, where every other blindness on this seam — an unknown positivity name, an undecodable size, an unassumed binder — turns into a refusal. The branch is unreachable from either checker as far as the walks are known, a well-typed variant's family being registered wherever the term came from, but the fixture above pins an equally unreachable branch for the same reason: the conservative answer is not the obvious one to write, and nothing else in the workspace would notice the wrong one.
 ///
-/// Verified while the branch was wrong: the subject below answered `Impossible` for a family absent from the registry. The control pair holds what the correction must not have moved — the same position with the declaration present still clashes at a relevant sort, and still yields nothing at `Prop`.
+/// The control pair holds what the rule must not move: the same position with the declaration present still clashes at a relevant sort, and still yields nothing at `Prop`.
 #[test]
 fn a_family_the_registry_cannot_answer_for_does_not_clash() {
     let inhabitant = |family: &Global, tag: &str| {
@@ -313,7 +313,7 @@ fn a_negative_self_occurrence_is_refused() {
     );
 }
 
-/// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name that recorded nothing admitted the declaration outright. The refusal is the budget's: the alias was never read, so the analysis has no verdict of its own to give.
+/// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name recording nothing would admit the declaration outright. The refusal is the budget's: the alias was never read, so the analysis has no verdict of its own to give.
 #[test]
 fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let mut kernel = Kernel::new(0, SYNTAX);
@@ -361,7 +361,7 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
 
 /// An alias standing for the declaration itself is a strict occurrence, and with no budget to unfold it the set is still refused — the alias is read at `Mixed`, a non-strict path back to `Good` — but for the budget, which is all the verdict rests on. With the budget to unfold it the same set is admitted, and that control is what says the refusal was the budget's.
 ///
-/// Reported as not strictly positive before the analysis carried the driver's refusal, which is how a kernel out of budget came to blame `/std/Toml/Toml`, whose recursion reaches the walk through `Map`.
+/// Reporting it as not strictly positive would have a kernel out of budget blame a sound declaration, as it would `/std/Toml/Toml`, whose recursion reaches the walk through `Map`.
 #[test]
 fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
     let good_name = Global::Authored(Qualifier::from(["Good"]));
@@ -428,7 +428,7 @@ fn a_strict_self_occurrence_is_admitted() {
 
 #[test]
 fn a_huge_literal_call_argument_grades_without_expansion() {
-    // `rec f : (n: Nat) -> Nat = (n) => f(u64::MAX); f` — grading the literal argument must read the packed spine, not peel it: the unary expansion this replaces would loop once per successor, and the value is unbounded by the source that spelled it.
+    // `rec f : (n: Nat) -> Nat = (n) => f(u64::MAX); f` — grading the literal argument must read the packed spine, not peel it: a unary expansion would loop once per successor, and the value is unbounded by the source that spelled it.
     let mut kernel = Kernel::new(100_000, SYNTAX);
     let f = Free::local(1, Some("f"));
     let n = Free::local(2, Some("n"));
@@ -591,13 +591,13 @@ fn forms(term: &Term) -> Vec<&'static str> {
     }
 }
 
-/// The position-coverage differential (see `documentation/soundness/whole-module-passes/record_totality-t.md`): `Walk::walk` visits every child position `Subterm::any_child_term` reports, minus a named whitelist.
+/// The position-coverage differential (see `documentation/design/soundness/totality/nothing-reachable-from-a-type-is-partial.md`): `Walk::walk` visits every child position `Subterm::any_child_term` reports, minus a named whitelist.
 ///
-/// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. Route eight of this row's history was exactly that and nothing else: a projected inner group went unwalked, `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` closed to no call whatsoever, both groups classified `Total`, and `f(0)` diverged through `g` while (V) read the verdict.
+/// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. A projected inner group left unwalked is exactly that: `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` would close to no call whatsoever, both groups would classify `Total`, and `f(0)` would diverge through `g` while (V) read the verdict.
 ///
 /// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Partial` exactly when the walk reached the plant and `Total` exactly when it did not.
 ///
-/// **The rows are the fold's, not a list kept here.** Each specimen is one form with a distinct marker in every child position; the fold is asked for its children, and the call is planted at each child it reports. A list written by hand held a row for whatever its author thought of, and passed as it stood while the second boolean arm, every dispatch, nominal and eliminator arm, a nominal match's default, a `List` eliminator's element type, an ambient goal, a foreign call's arguments and a transient's children had none. Two things are asserted of every specimen before anything is planted: that the fold reports exactly the markers it was built from, so a specimen populating a field the fold does not visit fails here rather than passing unplanted, and that every form in `FORMS` has one.
+/// **The rows are the fold's, not a list kept here.** Each specimen is one form with a distinct marker in every child position; the fold is asked for its children, and the call is planted at each child it reports. A list written by hand holds a row for whatever its author thinks of, and passes while every position it forgot has none. Two things are asserted of every specimen before anything is planted: that the fold reports exactly the markers it was built from, so a specimen populating a field the fold does not visit fails here rather than passing unplanted, and that every form in `FORMS` has one.
 ///
 /// **What that does and does not hold.** A term-bearing field added to a form whose specimen is a struct literal is a compile error at that literal, and the marker that repairs it is planted with no further edit. `Func`, `FuncType`, `TupleType`, `Let` and `Rec` are built through `Term`'s constructors, their fields being private, so a field added behind one of those is held only by whoever extends the constructor.
 ///
@@ -905,7 +905,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }
     }
 
-    // The variable head is the node's own data rather than a child term since the head became typed, so the fold reports nothing there, but it is still a call position the walk must see.
+    // The variable head is the node's own data rather than a child term, so the fold reports nothing there, but it is still a call position the walk must see.
     let head: Term = Subterm::Instance(Instance {
         head: InstanceHead::Var(Var::free(planted())),
         levels: Vec::new(),
@@ -977,9 +977,9 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
 
 /// The same claim at the branch that actually decides it, which the fixture above does not reach: there `Bad` is *inside* the analyzed set, so its polarity comes from the fixpoint and the carried vector is never consulted by any rule. What separates the two coverage modes is the lookup for a name from *outside* the set, and `Coverage::Complete` answering it `Mixed` is the whole of the kernel not inheriting an elaborator-computed vector.
 ///
-/// So `Wrapper` is registered but withheld from the analyzed map, and its carried vector lies — `Strict` in a parameter its constructor would use negatively. `Outer` stores a `Wrapper(Outer)`. Under `Complete` the lookup declines to read the registry and returns `Mixed`, `Outer` reaches itself at `Mixed`, and the set is refused. Under `Partial` — the elaborator replaying a prelude, where an out-of-set name is one *this same pass* analyzed earlier — the registry answers `Strict` and the set is admitted. Same declarations, same kernel, opposite verdicts: that difference is the branch, and nothing else in the crate exercises it.
+/// So `Wrapper` is registered but withheld from the analyzed map, and its carried vector lies — `Strict` in a parameter its constructor would use negatively. `Outer` stores a `Wrapper(Outer)`. Under `Complete` the lookup declines to read the registry and returns `Mixed`, `Outer` reaches itself at `Mixed`, and the set is refused. Under `Partial` — the elaborator holding one unit, where an out-of-set name is one *this same pass* analyzed when its unit was elaborated — the registry answers `Strict` and the set is admitted. Same declarations, same kernel, opposite verdicts: that difference is the branch, and nothing else in the crate exercises it.
 ///
-/// It was measured firing nowhere before this test. Across a kernel walk of the whole prelude every one of 124 lookups resolved from the computed map, and across `curios`'s whole test corpus 30,271 did, with the `Complete` fallback taken zero times and the `Partial` registry read taken 26. A change routing `Complete` to the registry the way `Partial` does would therefore have passed every test in the workspace while making the certifier believe a conclusion it did not establish.
+/// No other test reaches it: across a kernel walk of the whole prelude and `curios`'s whole test corpus every `Complete` lookup resolves from the computed map. A change routing `Complete` to the registry the way `Partial` does would therefore pass every other test in the workspace while making the certifier believe a conclusion it did not establish.
 #[test]
 fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
     let mut kernel = kernel();
@@ -1250,7 +1250,7 @@ fn a_let_alias_of_the_arm_payload_descends() {
 
 /// The outer direction reaches a variable inside an index, and only a local's.
 ///
-/// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the second direction solves the outer variable there. The kernel always had this, the elaborator only bound an index that *was* a variable, and `solve_indices` is where both now get it. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.
+/// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the second direction solves the outer variable there. Both checkers get it from `solve_indices`. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.
 #[test]
 fn the_outer_direction_solves_a_variable_inside_an_index() {
     let n = Free::local(900, Some("n"));
@@ -1279,7 +1279,7 @@ fn the_outer_direction_solves_a_variable_inside_an_index() {
 
 /// A binder the first direction pins is rewritten through what the second solves, so the arm's substitution is idempotent.
 ///
-/// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first direction pins `k := n + 1`, and the second learns `n := 0` from the other position. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; composed, `k`'s value no longer mentions `n` at all. The kernel's `specialize` has always composed them this way, and the composition moved here with it.
+/// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first direction pins `k := n + 1`, and the second learns `n := 0` from the other position. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; composed, `k`'s value no longer mentions `n` at all.
 #[test]
 fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
     let mut kernel = kernel();
@@ -1319,7 +1319,7 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
     );
 }
 
-/// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. It used to read the argument as nothing and classify the group `Partial`, a verdict with no cause in the term that the drivers then reported as non-termination. The control is the same group with the budget to read it.
+/// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Partial`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.
 #[test]
 fn a_size_the_budget_cannot_read_refuses_the_classification() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -1350,7 +1350,7 @@ fn a_size_the_budget_cannot_read_refuses_the_classification() {
     assert_eq!(group_totality(&mut kernel(), group), Ok(Totality::Partial));
 }
 
-/// The conversion chain's respellings are probes: a connective's leaf with no value at the type level is read as written, an atom like any other, where it used to turn the comparison into the leaf's own failure. The two sides differ by a unit the truth table sees through once the leaf is an atom.
+/// The conversion chain's respellings are probes: a connective's leaf with no value at the type level is read as written, an atom like any other, rather than turning the comparison into the leaf's own failure. The two sides differ by a unit the truth table sees through once the leaf is an atom.
 #[test]
 fn a_connective_leaf_with_no_value_is_compared_as_written() {
     let mut kernel = kernel();
@@ -1380,7 +1380,7 @@ fn a_connective_leaf_with_no_value_is_compared_as_written() {
     assert_eq!(kernel.convert_at(&boolean, &this, &that), Ok(true));
 }
 
-/// Conversion's readers key atoms on spelling, so two sums of atoms that commute a sum inside their arguments met only where the positional congruence paired them, and an `Int` sum keeps the order it was written in: `h(i + j) + e(k + l)` against `e(l + k) + h(j + i)` paired `h` with `e` and was refused, whichever identities the heads held. A pair the chain decides nothing about is read once more with every atom's arguments forced, and the cancellation then pairs them. The control keeps one argument genuinely different, and stays apart.
+/// Conversion's readers key atoms on spelling, so two sums of atoms that commute a sum inside their arguments would meet only where the positional congruence pairs them, and an `Int` sum keeps the order it was written in: `h(i + j) + e(k + l)` against `e(l + k) + h(j + i)` would pair `h` with `e` and be refused, whichever identities the heads hold. A pair the chain decides nothing about is read once more with every atom's arguments forced, and the cancellation then pairs them. The control keeps one argument genuinely different, and stays apart.
 #[test]
 fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_them() {
     let int = || Term::intrinsic(Intrinsic::IntType);

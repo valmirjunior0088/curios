@@ -89,7 +89,7 @@ fn a_rigid_mismatch_still_reports_as_a_mismatch() {
 
 #[test]
 fn goal_reports_spell_no_universe_instances() {
-    // A goal under a match motive over a universe-polymorphic family used to report `Eq.{?u311}(…)` — an instance spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
+    // A goal under a match motive over a universe-polymorphic family must not report an instance such as `Eq.{?u311}(…)` — a spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
@@ -134,7 +134,7 @@ fn mismatch_reports_spell_no_universe_instances() {
 
 #[test]
 fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
-    // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: this fixture once read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed.
+    // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: unsuppressed, this fixture would read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed.
     let source = r#"
         use /std/{Nat};
         let g(A : Type) -> Nat = 0;
@@ -229,7 +229,7 @@ fn a_mismatch_marks_an_implicit_struct_parameter() {
 
 #[test]
 fn a_mismatch_over_an_applied_head_is_located() {
-    // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head once reached elaboration unspanned and reported with no snippet at all — while the same mismatch over a bare variable reported one.
+    // A value body's spine forms are rebuilt by the `!`-hoisting walk rather than routed through the span-stamping lowering entry, so an applied head can reach elaboration unspanned and report with no snippet at all, where the same mismatch over a bare variable reports one; this holds it to the snippet.
     let source = r#"
         use /std/{Nat, Str, Option};
         let bad : Str = Option/some(1);
@@ -286,7 +286,7 @@ fn an_abstract_witness_folds_back_in_a_mismatch_too() {
 
 #[test]
 fn goal_types_spell_negated_equality_as_neq() {
-    // `a != b` elaborates as an xor-negated equality call (no `BoolNot` intrinsic exists); the report folds the pair back to `!=`.
+    // `a != b` elaborates as a projection of `Eql`'s `neq` off the operand type's witness; the report folds it back to `!=`.
     let source = r#"
         use /std/{Nat, Bool, Eq};
         let claim : Eq()(1 != 2, true) = ?;

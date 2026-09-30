@@ -60,7 +60,7 @@ pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
 
 /// The type a foreign call produces over `operands`: the `Io` of the row's result shape, or for a row that diverges the `Io` of the type its first operand names.
 ///
-/// A diverging call yields whatever the region that holds it wanted, which is sound because `Io` has no eliminator: an inhabitant of `Io(False)` is a description that proves nothing. `documentation/design/language/an-exit-yields-any-io-and-there-is-no-never.md` is the decision.
+/// A diverging call yields whatever the region that holds it wanted, which is sound because `Io` has no eliminator: an inhabitant of `Io(False)` is a description that proves nothing. `documentation/design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` is the decision.
 pub fn foreign_produced(
     function: &ForeignFunction,
     operands: &[Term],
@@ -136,7 +136,7 @@ pub enum Intrinsic {
     ByteToNat(Term),
     /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
     ///
-    /// Before this field the operation *masked*, which made it total by changing a value — the one narrowing on a numeric carrier that did, and the thing `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
+    /// Masking instead would make the operation total by changing a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
     NatToByte {
         nat: Term,
         below: Term,
@@ -258,7 +258,7 @@ pub enum Intrinsic {
     },
     /// `same_length` proves `len(left) == len(right)`, which is the one bound a pointwise operation has.
     ///
-    /// Stated rather than extended, because no extension is forced: truncating to the shorter and padding to the longer are both total, and they disagree — a padded bit is absorbing for `and` where it is transparent for `or`, so the structure picks neither and a choice would be the author's. That is the test `documentation/design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md` sets, and the same one that put `NatToByte`'s bound in its type rather than masking to eight bits.
+    /// Stated rather than extended, because no extension is forced: truncating to the shorter and padding to the longer are both total, and they disagree — a padded bit is absorbing for `and` where it is transparent for `or`, so the structure picks neither and a choice would be the author's. That is the test `documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md` sets, and the same one that put `NatToByte`'s bound in its type rather than masking to eight bits.
     BinAnd {
         grain: Grain,
         left: Term,
@@ -330,7 +330,7 @@ pub enum Intrinsic {
         list: Term,
         function: Term,
     },
-    // (@T, @A, list : List(T), init : A, f : (T, A) -> A) -> A: a structural left fold, `f(x_n, … f(x_1, init))`. Reduces over the free-monoid shape — a literal run applies `f` element by element, a concatenation folds its operands in order threading the accumulator, an append folds its base and then applies `f` to the appended element — and stays neutral on a symbolic operand, so `fold([h, ..t], z, f) = fold(t, f(h, z), f)` is definitional. Erases to a bounded `Nat` fold over the list's length with one read per step, the loop the library's index-loop fold used to spell by hand.
+    // (@T, @A, list : List(T), init : A, f : (T, A) -> A) -> A: a structural left fold, `f(x_n, … f(x_1, init))`. Reduces over the free-monoid shape — a literal run applies `f` element by element, a concatenation folds its operands in order threading the accumulator, an append folds its base and then applies `f` to the appended element — and stays neutral on a symbolic operand, so `fold([h, ..t], z, f) = fold(t, f(h, z), f)` is definitional. Erases to a bounded `Nat` fold over the list's length with one read per step.
     ListFold {
         element: Term,
         result: Term,
@@ -1581,7 +1581,7 @@ impl Intrinsic {
     }
 }
 
-/// Which intrinsic type a match scrutinee is required to have. The legal selectors for `expect_intrinsic_head`/`elaborate_intrinsic_head` — exactly the type-former `Intrinsic`s those helpers accept, as a closed set so an out-of-range selector is unrepresentable rather than an `unreachable!` panic.
+/// Which intrinsic type a match scrutinee is required to have. The legal selectors for `curios-elab`'s `check_intrinsic_head`/`expect_intrinsic_head` — exactly the type-former `Intrinsic`s those helpers accept, as a closed set so an out-of-range selector is unrepresentable rather than an `unreachable!` panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicHead {
     Nat,

@@ -408,7 +408,7 @@ entry ~f0$main() =
     );
 }
 
-/// The node graph is a tree in everything the compiler builds, but the verifier skips a revisit rather than refusing a second parent — so the printer reports the second rather than duplicating the region under it.
+/// The verifier refuses a second parent, but this printer also reads modules that do not verify — so it reports the second visit rather than duplicating the region under it.
 #[test]
 fn a_node_reached_twice_is_reported_rather_than_duplicated() {
     let module = module_with(|module, _| {

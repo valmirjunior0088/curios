@@ -21,8 +21,6 @@ fn param(index: usize) -> Level {
 }
 
 /// Closure is about what a context may name, and it has two halves.
-///
-/// Moved here with the predicate it covers. It used to live in `curios-cert`, beside a copy of the rule that has since become this method — a test of a transcription, which is what the two checkers deciding closure separately amounted to.
 #[test]
 fn a_context_names_only_what_it_declares() {
     let within = UniverseContext {

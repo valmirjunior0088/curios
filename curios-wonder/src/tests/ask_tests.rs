@@ -10,9 +10,9 @@ use {
 
 /// One fact is reported once, however many subjects reach it.
 ///
-/// **The regression for a package's subjects overlapping.** `wonder diagnostics` with no target asks about the library and about every executable the package declares, and every executable is compiled against that library — so one unbound variable in it printed once per subject, three times in a package declaring two programs, and an agent walking its errors one at a time walked the same one three times.
+/// **A package's subjects overlap.** `wonder diagnostics` with no target asks about the library and about every executable the package declares, and every executable is compiled against that library — so without the collapse one unbound variable in it would print once per subject, three times in a package declaring two programs, and an agent walking its errors one at a time would walk the same one three times.
 ///
-/// Two subjects over one text stand in for that overlap. What the fix rests on is only that equal renderings are one fact, which the second half pins from the other side: two subjects saying different things still say both.
+/// Two subjects over one text stand in for that overlap. What the collapse rests on is only that equal renderings are one fact, which the second half pins from the other side: two subjects saying different things still say both.
 #[test]
 fn one_fact_reached_by_two_subjects_is_rendered_once() {
     let asked = |text: &str| Asked {

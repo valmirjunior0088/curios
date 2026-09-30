@@ -1,6 +1,6 @@
 //! Type-level partial arithmetic: a literal zero divisor reports through a `ReduceError`, never a panic.
 //!
-//! Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are unbounded at the type level, folds compute exactly, and the 31-bit envelope is enforced downstream, where `cont` materializes a value into an `i31ref`.
+//! Range, by contrast, never errors here: `Nat`/`Int` are unbounded at the type level and in the running program alike, folds compute exactly, and only materialization in `curios-emit` refuses a value its envelope cannot box.
 
 use super::test_support::{context, qed};
 use curios_core::*;
@@ -111,7 +111,7 @@ fn int_div_by_zero_reports() {
 fn int_arithmetic_is_unbounded() {
     let mut context = context();
 
-    // Past the runtime's i31 range the type level keeps computing exactly — the limit is the runtime's, enforced downstream, not the checker's.
+    // Past the i31 range the type level keeps computing exactly, as the running program does with a boxed magnitude.
     assert_eq!(
         reduce(
             &mut context,
@@ -139,7 +139,7 @@ fn int_arithmetic_is_unbounded() {
 fn flt_to_int_answers_the_exact_integer() {
     let mut context = context();
 
-    // The narrowing answers the *exact* unbounded integer, past what any runtime carrier holds: `2^31` is out of `i32` range, and that refusal belongs to the erasure boundary rather than here, where `Int` pretends ℤ.
+    // The narrowing answers the *exact* unbounded integer, past what any runtime carrier holds: `2^31` is past an i31, and `Int` pretends ℤ at the type level as the running program does with a boxed magnitude.
     let exact = Term::intrinsic(Intrinsic::FltToInt {
         flt: Term::intrinsic(Intrinsic::Flt(Floating::from(2147483648.0))),
         finite: qed(),

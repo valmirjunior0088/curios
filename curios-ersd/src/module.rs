@@ -213,7 +213,7 @@ impl Module {
                 return true;
             }
         }
-        // So is one from a top-level item, which lives in the item list and in no block: a `let` after the group that reads the member is the read that forces it, and a member dropped for want of seeing it lowered to a value the arena lacked.
+        // So is one from a top-level item, which lives in the item list and in no block: a `let` after the group that reads the member is the read that forces it, and dropping the member for want of seeing it would lower that read to a value the arena lacks.
         for &item in self.items() {
             if let Some(Statement::Let { rhs, .. }) = self.statement(item)
                 && rhs.operands().contains(&Atom::Value(member))

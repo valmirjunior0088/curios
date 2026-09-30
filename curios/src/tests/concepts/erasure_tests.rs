@@ -20,7 +20,7 @@ fn prop_concept_resolves_and_erases() {
     assert_eq!(run(source), b"3");
 }
 
-// A proof-returning method wrapper demanded by a top-level binding. The wrapper call returns an erased method, so the outer application's callee is proof content rather than a function — `erase_apply` collapses it to the unit constant (value-driven: a direct function reference like `/std/proc/exit` keeps its call). Regression test: this used to survive erasure as an application of an erased callee and panic `into_cont`.
+// A proof-returning method wrapper demanded by a top-level binding. The wrapper call returns an erased method, so the outer application's callee is proof content rather than a function — `erase_apply` collapses it to the unit constant (value-driven: a direct function reference like `/std/proc/exit` keeps its call). Without that collapse it would survive erasure as an application of an erased callee and panic `into_cont`.
 #[test]
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
@@ -40,7 +40,7 @@ fn prop_method_in_top_level_binding_collapses() {
     assert_eq!(run(source), b"ok");
 }
 
-// The `Type`-sorted twin: the concept record is kept, but the method's result is still a proposition, so the wrapper application collapses identically. Regression test: this used to reach runtime as a call of an erased unit and trap.
+// The `Type`-sorted twin: the concept record is kept, but the method's result is still a proposition, so the wrapper application collapses identically. Without it this would reach runtime as a call of an erased unit and trap.
 #[test]
 fn type_concept_prop_method_binding_collapses() {
     let source = r#"
@@ -96,7 +96,7 @@ fn a_witness_must_prove_its_concepts_law() {
     assert_eq!(run(source), b"42");
 }
 
-// The same law against an implementation that breaks it: `op(x) = x + 1` reduces `op(op(x))` to `x + 2` where the law demands `x + 1`, so the witness must be refused. The assertion names `type mismatch` rather than merely requiring some error, because this program failed with `unbound variable` while method wrappers re-lowered their field types in a scope binding no sibling — an error that arrives before the law is ever checked, and would otherwise pass for the wrong reason.
+// The same law against an implementation that breaks it: `op(x) = x + 1` reduces `op(op(x))` to `x + 2` where the law demands `x + 1`, so the witness must be refused. The assertion names `type mismatch` rather than merely requiring some error, because an `unbound variable` — method wrappers re-lowering their field types in a scope binding no sibling — would arrive before the law is ever checked, and pass for the wrong reason.
 #[test]
 fn a_witness_violating_its_concepts_law_is_rejected() {
     let source = r#"

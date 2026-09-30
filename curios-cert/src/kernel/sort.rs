@@ -8,11 +8,11 @@
 //!
 //! # Two roles, one body
 //!
-//! Asking a type's sort is two different questions depending on who asks, and they were one function for as long as that went unnoticed. [`Sort::of`] is a **lookup**: it classifies a type something has already checked, which is the only thing conversion can afford to call, since typing reaches conversion and the cycle would close. [`infer_sort`] is a **judgment**: it accepts a term *as* a type, and is what [`infer`](super::infer()) calls.
+//! Asking a type's sort is two different questions depending on who asks. [`Sort::of`] is a **lookup**: it classifies a type something has already checked, which is the only thing conversion can afford to call, since typing reaches conversion and the cycle would close. [`infer_sort`] is a **judgment**: it accepts a term *as* a type, and is what [`infer`](super::infer()) calls.
 //!
 //! They differ in exactly one function — [`Establish`], which says whether a type former's parts are classified or typed — and share everything else, the Π and Σ rules included. That is deliberate: the rules are subtle enough that a second copy would be a second chance to get them wrong, while the role is a one-word choice a caller has to make at the call site.
 //!
-//! The split exists because the roles were confused. `infer` answered for a `FuncType` and a `TupleType` with the lookup, so a former was admitted whatever its parts said — and `curios-cert/README.md`'s claim that the lookup "is reached only where typing has already run" was false of the four sites that were supposed to establish it. A Σ whose field type was a nominal occurrence with ill-typed arguments passed, and the projection rule then handed that field type back as a scrutinee at a forged equation.
+//! The split exists because the roles are easy to confuse. Answering a `FuncType` or a `TupleType` in `infer` with the lookup would admit a former whatever its parts said: a Σ whose field type is a nominal occurrence with ill-typed arguments would pass, and the projection rule would hand that field type back as a scrutinee at a forged equation.
 
 #[cfg(test)]
 mod tests;
@@ -50,7 +50,7 @@ impl Sort {
 
 /// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
 ///
-/// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, and both were taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family was classified as a well-formed type, and every consumer of the arity after that was wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
+/// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, so neither may be taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family, classified as a well-formed type, would leave every consumer of the arity wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
 pub(super) fn arity_matches(
     counted: Counted,
     expected: usize,
@@ -154,7 +154,7 @@ impl Sort {
 ///
 /// This is the *whole* of what the two roles in this module differ in. [`Sort::of`] is a lookup — it classifies a type that something has already checked — and passes itself. [`infer_sort`] is a judgment — it accepts a term *as* a type — and passes [`infer_type`]. Everything else, the Π and Σ rules included, is shared.
 ///
-/// Naming the difference is what keeps a caller from inheriting the wrong role. `infer`'s type-former arms inherited the lookup for as long as they existed, and the sentence in `curios-cert/README.md` saying `Sort::of` "is reached only where typing has already run" was false of them: a Σ whose field type was a nominal occurrence with ill-typed arguments was admitted, because computing a former's universe only ever classified its parts, and the projection rule then handed that field type back as a scrutinee.
+/// Naming the difference is what keeps a caller from inheriting the wrong role; the module documentation states what inheriting the lookup would admit.
 type Establish = fn(&mut Kernel, &Term) -> Result<Sort, KernelError>;
 
 /// Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
@@ -253,7 +253,7 @@ fn sort_of_binders<B: Bound>(
 ///
 /// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
-/// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
+/// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy reading the element's sort as the former's would type a list of proofs at `Prop`.
 pub(crate) fn sort_of_intrinsic(
     kernel: &mut Kernel,
     intrinsic: &Intrinsic,
@@ -391,9 +391,9 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
 ///
 /// Exactly one thing cannot be: a proof, because irrelevance makes any two inhabitants of a proposition interchangeable. Everything else can, **a type included**.
 ///
-/// That a type is erased is not the criterion, and reading it as one is what certified a closed inhabitant of `False`. Erasure governs what the *runtime* can observe; irrelevance is a claim about *definitional equality*, and conversion reads a type-valued position back in full. A proposition carrying `A : Type` is identified with one carrying `B`, so eliminating it — or projecting it, which meets no guard at all — makes `A` and `B` convertible, and transport does the rest. `crate::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds that derivation shut; `erased_half` asks the runtime question and is where the structural `Type(_) | Prop` test legitimately belongs.
+/// That a type is erased is not the criterion, and reading it as one would certify a closed inhabitant of `False`. Erasure governs what the *runtime* can observe; irrelevance is a claim about *definitional equality*, and conversion reads a type-valued position back in full. A proposition carrying `A : Type` is identified with one carrying `B`, so eliminating it — or projecting it, which meets no guard at all — makes `A` and `B` convertible, and transport does the rest. `crate::recheck::proposition_tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds that derivation shut; `erased_half` asks the runtime question and is where the structural `Type(_) | Prop` test legitimately belongs.
 ///
-/// Public for one reason: `curios-elab` writes this rule a second time as `is_prop`, and the two disagreed. A compile cannot observe that — the elaborator refuses such a declaration before the kernel is asked — so the two are compared directly by `curios-elab`'s `typing::tests::both_checkers_decide_non_informativeness_alike`, which needs to name this one. It answers a question about a type and admits nothing on its own, so exporting it widens what the trusted base can be *asked* without widening what it can be told.
+/// Public for one reason: `curios-elab` writes this rule a second time as `is_prop`, and a compile cannot observe the two disagreeing — the elaborator refuses such a declaration before the kernel is asked — so the two are compared directly by `curios-elab`'s `typing::tests::both_checkers_decide_non_informativeness_alike`, which needs to name this one. It answers a question about a type and admits nothing on its own, so exporting it widens what the trusted base can be *asked* without widening what it can be told.
 pub fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
     Ok(!Sort::of(kernel, type_)?.is_prop())
 }

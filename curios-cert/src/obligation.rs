@@ -6,11 +6,11 @@
 //!
 //! `curios-elab` seeds these from a hook its elaborator fires at every check site, on the argument that a later pass can only re-derive which terms are propositions incompletely. That argument is about a *syntactic walk*, and it does not reach this crate: the kernel is itself a typechecker, and it types every term in the module. So both positions come from one record kept during its own walk — a term checked against a `Prop`-sorted type is a proof, and a term checked against a sort is a type — and the coverage is exactly the coverage of the walk that produced it.
 //!
-//! Deciding it here rather than believing the elaborator is the point. This is the one obligation the trusted base used to take on another crate's word, which made an elaborator-only analysis the single defense for a whole class of `False`.
+//! Deciding it here rather than believing the elaborator is the point: taking this obligation on another crate's word would make an elaborator-only analysis the single defense for a whole class of `False`.
 //!
 //! # What is already in scope
 //!
-//! A compile judges only the user's items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
+//! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
 
 use {
     super::{Globals, Kernel, KernelError, Position, Sort},
@@ -62,7 +62,7 @@ fn holds_a_group(term: &Term) -> bool {
 ///
 /// The stamp comparison on a judged item runs after the closure, against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give.
 ///
-/// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and once the already-judged items stop being carried inside `module` there is nothing left in this walk that knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
+/// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and the already-judged items are not carried inside `module`, so nothing else in this walk knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
 ///
 /// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
 ///
@@ -198,7 +198,7 @@ pub(crate) fn erased_half(
     type_: &Term,
 ) -> Result<Option<Erased>, KernelError> {
     let reduced = kernel.reduce_forced(type_.clone())?;
-    // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate certified a closed inhabitant of `False`.
+    // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
     if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) {
         return Ok(Some(Erased::Type));
     }

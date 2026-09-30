@@ -40,7 +40,7 @@ fn file(built: &Path, filed: &Path) -> Result<bool, String> {
 ///
 /// `curios/build.rs` cannot rebuild the launcher, so it warns when a listed input is newer than the filed file. The list is cargo's own dep-info for the binary — every source rustc read, so a test file it never read is not in it — plus the workspace lock file, for a dependency bump the dep-info does not see; it is rewritten only when it changed, since the build script watches it too. The same comparison decides here whether a byte-identical rebuild refreshes the timestamp: an edit that changed no launcher byte — a comment, say — would otherwise leave that warning standing for a command with nothing left to do. A run in which nothing is newer touches nothing, which is what keeps a repeated `cargo x build` from recompiling the compiler that embeds the launcher.
 pub(crate) fn file_with_inputs(built: &Path, filed: &Path, listed: &Path) -> Result<(), String> {
-    // Created before the first write rather than before the copy, because the sidecar is what reaches the directory first. `.artifacts/` is a build product and is not committed, so on a clean checkout — CI's, and any fresh clone's — nothing has created it; the copy used to be its only creator, and a run got as far as the sidecar and failed there every time.
+    // Created before the first write rather than before the copy, because the sidecar is what reaches the directory first. `.artifacts/` is a build product and is not committed, so on a clean checkout — CI's, and any fresh clone's — nothing has created it.
     let directory = filed.parent().expect("a filed artifact has a parent");
     fs::create_dir_all(directory)
         .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;

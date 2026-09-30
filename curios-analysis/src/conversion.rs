@@ -17,7 +17,7 @@
 //!
 //! **Shared on the terms `curios-analysis` already states for itself.** The chain is algebra over the representation — the peels, the laws and the views are `curios-core`'s and `curios-algebra`'s, trusted by both checkers alike — and a second copy of it would be a second transcription of one function rather than a second opinion. What stays each checker's own is what does differ between them: the terms they are handed, how a residual is compared, and how levels are.
 //!
-//! **Two numbers of one operation are one number up to universe instances** (step 9). A number never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one. Before this chain was shared, a bare pair fell to the congruence, which compared the operands' levels and refused where they differed.
+//! **Two numbers of one operation are one number up to universe instances** (step 9). A number never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one. Left to the congruence, a bare pair would have its operands' levels compared and be refused where they differ.
 
 use {
     curios_algebra::Conclusion,
@@ -57,7 +57,7 @@ pub enum Outcome {
 pub struct Congruence {
     pub this_levels: Vec<Level>,
     pub that_levels: Vec<Level>,
-    /// `None` where the two sides are not one operation, which is unequal once the levels are compared — they are compared first, as the checkers always compared them, since the elaborator's comparison may constrain them.
+    /// `None` where the two sides are not one operation, which is unequal once the levels are compared — they are compared first, since the elaborator's comparison may constrain them.
     pub operands: Option<Vec<Obligation>>,
 }
 
@@ -79,7 +79,7 @@ pub fn convert_intrinsics(
     let this = driver.prepare(this);
     let that = driver.prepare(that);
 
-    // **A pair of `Nat`s decides how much of itself to build.** Both sides arrived head-forced, not merged. A literal against a sum with nothing left to force clashes from the head — a stuck symbolic summand is not definitionally a literal — and that is the answer a ten-definition web used to build 1 222 222 monomials to reach. Anything else is forced to its linear combination first, and the peels read the pair that produced.
+    // **A pair of `Nat`s decides how much of itself to build.** Both sides arrived head-forced, not merged. A literal against a sum with nothing left to force clashes from the head — a stuck symbolic summand is not definitionally a literal — where distributing first can build over a million monomials, over a ten-definition web, to reach the same answer. Anything else is forced to its linear combination first, and the peels read the pair that produced.
     // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them. `Int` draws the same line at its own product, and each normalizer leaves the other carrier's terms untouched. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so a side with a symbolic summand is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
     let (this, that) = match !(literal(&this) || literal(&that)) && (stuck(&this) || stuck(&that)) {
         false => (this, that),
@@ -174,7 +174,7 @@ enum Read {
 
 /// Steps 3 to 6 over one pair: the truth table, the connective trees, the comparisons' views and the peels.
 fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Read, ReduceError> {
-    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so everything below runs as it did.
+    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so a pair the table leaves undecided goes on to everything below.
     if decide_bool(
         driver,
         &Term::intrinsic(this.clone()),
@@ -255,7 +255,7 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
 
 /// Step 7: `this` and `that` read once more with every atom's arguments forced — `None` where the forcing moved neither side, or the forced pair decided nothing either.
 ///
-/// **Every reader above keys an atom on its spelling**, and the fold leaves a stuck application's arguments exactly as written, so `f(a + b)` and `f(b + a)` are two atoms to all of them though conversion decides that pair the moment it compares it directly. What a pair of them came to then fell to the congruence, whose operand order is a structural hash, and one equation held or failed with the order its binders were declared in. [`force_atoms`] forces what the readers read, once and for all of them, and only where the pair as it stood decided nothing — so it costs nothing on a pair that already decided.
+/// **Every reader above keys an atom on its spelling**, and the fold leaves a stuck application's arguments exactly as written, so `f(a + b)` and `f(b + a)` are two atoms to all of them though conversion decides that pair the moment it compares it directly. Left there, such a pair falls to the congruence, whose operand order is a structural hash, so one equation would hold or fail with the order its binders were declared in. [`force_atoms`] forces what the readers read, once and for all of them, and only where the pair as it stood decided nothing — so it costs nothing on a pair that already decided.
 ///
 /// **The congruence still meets the spelling it was handed.** A forced pair that decides nothing is dropped, so no reordered term reaches a checker's comparison; one that decides hands on an outcome whose residuals are the forced spelling's, a pair definitionally equal to the one asked about.
 fn read_forced(

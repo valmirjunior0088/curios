@@ -2,7 +2,7 @@
 //!
 //! Two intrinsics are equal when they are the same operation applied to convertible operands. That is a congruence rule rather than a computation rule — the computation already happened, since both sides arrived reduced and a foldable operation would have folded.
 //!
-//! The rule is stated *generically* rather than as one arm per operation, and once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands. A hand-written pair match over a roster of upwards of a hundred entries is a list whose omissions are silent — `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement, which is how `Bool`, `BoolType` and `ListMap` once went missing. What this module keeps is the elaborator's own part: its preparation, its packed-literal view, and its discharge.
+//! The rule is stated *generically* rather than as one arm per operation, and once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands. A hand-written pair match over a roster of upwards of a hundred entries is a list whose omissions are silent — `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement. What this module keeps is the elaborator's own part: its preparation, its packed-literal view, and its discharge.
 
 use {
     super::Convert,
@@ -73,7 +73,7 @@ impl Reducer for Elaborating<'_> {
 }
 
 impl Driver for Elaborating<'_> {
-    /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom indexes a truth table — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. So `f(a + 1) + f(c + 1)` against its commutation shared no summand, fell to the positional congruence, and was refused there as `a` against `c`. The kernel is handed zonked terms, and accepted the equation all along.
+    /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom indexes a truth table — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. Unprepared, `f(a + 1) + f(c + 1)` against its commutation would share no summand, fall to the positional congruence, and be refused there as `a` against `c` — where the kernel, handed zonked terms, accepts the equation.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved =
             crate::zonk_solved_term_metas(self.context, &Term::intrinsic(intrinsic.clone()));

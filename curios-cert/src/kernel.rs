@@ -65,7 +65,7 @@ use {
 
 /// Why the kernel refused a term.
 ///
-/// What a [`KernelError::Arity`] counted. One refusal, many tallies — a message reading `expected 1, found 0` with nothing to say what the 1 was sent a reader to the kernel's source to learn it was a universe level.
+/// What a [`KernelError::Arity`] counted. One refusal, many tallies — a message reading `expected 1, found 0` with nothing to say what the 1 was would send a reader to the kernel's source to learn it was a universe level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Counted {
     /// The levels an occurrence supplies, against the parameters its declaration's scheme binds.
@@ -428,11 +428,11 @@ impl Judge for Kernel {
 
 /// The kernel's context: what is in scope, what may unfold, and how much work a judgment may spend.
 ///
-/// Deliberately small, and now deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. This held seventeen loose fields, which is the same shape read from the other end: five independent jobs whose invariants were spread across the methods that happened to touch them. Each is now a component that states its own, and what remains here is the composition and the couplings that genuinely cross it.
+/// Deliberately small, and deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. Here each independent job is a component that states its own invariants, and what remains is the composition and the couplings that genuinely cross it.
 ///
 /// The one such coupling is worth naming, because it is why `Globals::insert` reports rather than acts: overwriting a definition invalidates every remembered reduct, which is a fact about `Globals` *and* `Memos` and therefore belongs to neither.
 ///
-/// Growing this struct is still how independence gets lost. A new *component* should have to argue for itself the way a new field used to.
+/// Growing this struct is how independence gets lost. A new *component* should have to argue for itself.
 pub struct Kernel {
     /// What the walk in progress has opened.
     scope: Scope,
@@ -452,7 +452,7 @@ pub struct Kernel {
     ///
     /// Handed in rather than defaulted, and deliberately not optional. An absent registry could only mean skipping the bound check, and a check that silently does not run is worse than one that is missing outright: the kernel would report a verdict it had not reached.
     syntax: SyntaxRegistry,
-    /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them was the route by which a correct polymorphic definition was refused.
+    /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them would refuse a correct polymorphic definition.
     ///
     /// The one field with no component of its own: it is a single vector replaced wholesale at each declaration boundary, and wrapping it would state nothing the type does not.
     assumed: Vec<UniverseConstraint>,
@@ -499,7 +499,7 @@ impl Kernel {
 
     /// The remembered weak-head reduct of a local-free `term`, per entry point, replayed for nothing.
     ///
-    /// The one hit that cannot fail, because it spends no steps: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent is what made a budget run out on work nobody did. [`Spend::charge_nothing`] and [`Memos`] state the two halves of why that is safe.
+    /// The one hit that cannot fail, because it spends no steps: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent would run a budget out on work nobody did. [`Spend::charge_nothing`] and [`Memos`] state the two halves of why that is safe.
     pub(crate) fn whnf_hit(&mut self, term: &Term, forced: bool) -> Option<Term> {
         let replay = self.memos.whnf(term, forced)?;
 
@@ -508,7 +508,7 @@ impl Kernel {
 
     /// The remembered type of a local-free `term`, with nothing spent and nothing minted.
     ///
-    /// **Nothing minted, unlike a reduct's hit.** A reduct's hit mints the identities its computation did, so that every later identity lands where a recomputation would have put it. For this table that recomputation is what it exists to avoid: it types a graph once per node where recomputing types it once per path, so the identities a recomputation would mint are counted over the tree, and on the graphs the table is for they outgrow the identity space — replayed, a `Str/split_once` claim stated in a type passed `2^32` in under two seconds. What the replay protected holds without it: the counter never falls, so every identity minted after a hit is above those the remembered inference opened, and it closed them before it returned. [`Spend`]'s module documentation states what is given up.
+    /// **Nothing minted, unlike a reduct's hit.** A reduct's hit mints the identities its computation did, so that every later identity lands where a recomputation would have put it. For this table that recomputation is what it exists to avoid: it types a graph once per node where recomputing types it once per path, so the identities a recomputation would mint are counted over the tree, and on the graphs the table is for they outgrow the identity space — replayed, a `Str/split_once` claim stated in a type exhausts the 32-bit identity space. What the replay protected holds without it: the counter never falls, so every identity minted after a hit is above those the remembered inference opened, and it closed them before it returned. [`Spend`]'s module documentation states what is given up.
     ///
     /// **Never while a case equation is in force.** Inside an arm a closed scrutinee *is* the arm's case value, so typing under one may reduce a type to something it does not reduce to outside, and the key cannot say which equations stood. The machine stands aside under the same condition for the same reason. Declining there costs the inference and nothing else.
     pub(crate) fn infer_hit(&self, term: &Term) -> Option<Term> {
@@ -528,7 +528,7 @@ impl Kernel {
 
     /// Remember a `term`'s weak-head reduct and the identities computing it minted.
     ///
-    /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. It was once charged besides, key and reduct, against a compilation-wide allowance at the tree footprint of each, and a thirteen-definition proof whose reducts were graphs with `2^n`-node trees spent a third of that allowance on entries that died with the declaration.
+    /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
         self.memos.store_whnf(term, forced, replay);
     }
@@ -737,7 +737,7 @@ impl Kernel {
 
     /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld.
     ///
-    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing now; this is where the reduction the old key performed eagerly, once per arm, actually happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
+    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing; this is where the reduction happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
     ///
     /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
@@ -788,7 +788,7 @@ impl Kernel {
 
     /// The type `name` was bound or declared at. Locals shadow definitions.
     ///
-    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's (see `documentation/soundness/per-term-rules/universe-instance-discharge.md`) and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
+    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's (see `documentation/design/soundness/formation/universe-instances-and-constraints.md`) and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
     pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, KernelError> {
         if let Some(local) = self.scope.local_type(name) {
             return Ok(Some(local));

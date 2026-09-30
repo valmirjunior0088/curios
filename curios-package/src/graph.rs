@@ -79,7 +79,7 @@ impl Walk<'_> {
         // The snapshot is read off the row, before anything is located: once the first dependent's pin is placed — which locates it, so its tree has to be there — a second dependent disagreeing about the name is refused whether or not its own tree has been materialized, which is what "before any of the three elaborates" has to mean.
         let snapshot = self.pinned(name, row);
 
-        // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
+        // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checked second, `b → c → b` would get past: `b` is placed on the way in, so the agreement branch below would return early and the walk emit `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
         if self.open.iter().any(|open| open == name) {
             return Err(format!(
                 "the dependencies cycle: {} depends on {:?} again",
@@ -109,7 +109,7 @@ impl Walk<'_> {
                     };
                 }
 
-                // A pin and a live row disagree about what the name *is*, and that is the fact to state. Comparing their locations instead found two directories, one of them the store's — the right directory and the wrong fact, sending the reader after a path nobody wrote. The live side is named by where its row points, not by locating it: the disagreement stands whether or not that place exists.
+                // A pin and a live row disagree about what the name *is*, and that is the fact to state. Comparing their locations instead would find two directories, one of them the store's — the right directory and the wrong fact, sending the reader after a path nobody wrote. The live side is named by where its row points, not by locating it: the disagreement stands whether or not that place exists.
                 (Some(pinned), None) => {
                     return Err(format!(
                         "the dependency {:?} is pinned to {} by {:?}, and taken live by {:?} from {}; a name is pinned or live, never both",

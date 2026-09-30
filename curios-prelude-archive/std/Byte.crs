@@ -47,7 +47,7 @@ pub let not(a: Byte) -> Byte =
 
 --- The byte shifted left by `count`, the bits carried past the width discarded.
 ---
---- `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it, and a count of a few hundred would leave the runtime's `i31` envelope and refuse — on the way to an answer that is `0`. The guard computes that answer instead of the number no machine holds.
+--- `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it — a number as wide as the count, on the way to an answer that is `0`. The guard computes that answer instead of the number.
 pub let shl(a: Byte, count: Nat) -> Byte =
     match count < 8
     | true => Nat/to_byte(Nat/and(Nat/shl(to_nat(a), count), 0xFF))

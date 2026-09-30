@@ -37,7 +37,7 @@ fn every_stage_is_observed_once_in_names_order() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // The exact case that used to overflow: a meta-free entrypoint (no holes) that still pulls in the whole std/std prelude. Assembling and traversing the old N-deep nested term overflowed the stack during construction and in every pass; the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
+    // A meta-free entrypoint (no holes) that still pulls in the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(/std/Nat, 5)
@@ -94,7 +94,7 @@ fn arena_erasure_stores_no_captures_for_the_prelude() {
 
 #[test]
 fn arena_erasure_handles_deep_input_on_the_default_stack() {
-    // A wide flat block (the shape whose N-deep nesting once overflowed the legacy pipeline); erasure, verification, and printing all stay on the default test-thread stack. Sized so quadratic *elaboration* cost — shared by both paths and out of erasure's scope — stays testable.
+    // A wide flat block (the shape an N-deep nesting would overflow on); erasure, verification, and printing all stay on the default test-thread stack. Sized so quadratic *elaboration* cost — shared by both paths and out of erasure's scope — stays testable.
     const BINDINGS: usize = 500;
 
     let mut source = String::new();

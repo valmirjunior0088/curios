@@ -49,7 +49,7 @@ impl Subterm {
 
     /// The group and index at the head of this application spine: [`as_rec_proj`](Self::as_rec_proj) read through every enclosing application, or of the term itself when it is none.
     ///
-    /// This, and not `as_rec_proj` on an application's immediate head, is what recognizes a folded recursive call. A member whose result is a function, applied past its own parameters, is `f(a)(b)` — the call `f(a)` applied to what is left — and its immediate head is that call rather than the member. Read one level deep, it was a neutral no demand ever unfolded.
+    /// This, and not `as_rec_proj` on an application's immediate head, is what recognizes a folded recursive call. A member whose result is a function, applied past its own parameters, is `f(a)(b)` — the call `f(a)` applied to what is left — and its immediate head is that call rather than the member. Read one level deep, it would be a neutral no demand ever unfolds.
     pub fn spine_rec_proj(&self) -> Option<(&RecGroup, usize)> {
         let mut term = self;
         while let Subterm::Apply(apply) = term {
@@ -73,7 +73,7 @@ impl Subterm {
         match self {
             Subterm::Type(level) => level_matches(level),
             Subterm::Intrinsic(intrinsic) => intrinsic.result_universes().iter().any(level_matches),
-            // A projection head's group context is this node's own data now that the head is typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
+            // A projection head's group context is this node's own data, the head being typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
             Subterm::Instance(Instance { head, levels }) => {
                 levels.iter().any(&mut level_matches)
                     || match head {
@@ -416,7 +416,7 @@ impl Subterm {
 
     /// Whether any free variable in this subterm is a binder rather than a top-level definition — the uncached spelling of [`Term::has_local_free`], which supplies the per-node memoization.
     ///
-    /// A local is a [`Free::Local`], so this is a discriminant test. It used to be a search for a marker character in the spelling, which a compiler-made *global* could set by accident — and once did.
+    /// A local is a [`Free::Local`], so this is a discriminant test rather than a search for a marker character in the spelling, which a compiler-made *global* could set by accident.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
             Subterm::Var(var)
@@ -739,7 +739,7 @@ impl Bound for Subterm {
                 },
             }),
             Subterm::Let(Let { bindings, tail }) => {
-                // Binding `i` sits under the `i` binders written before it, so bracket the visit at that depth; the enter/leave don't stack with `visit_scope(tail)`, which owns all the binders on its own. A forward loop over `bindings` is what a flat block buys over the old nested chain — no native frame per binding.
+                // Binding `i` sits under the `i` binders written before it, so bracket the visit at that depth; the enter/leave don't stack with `visit_scope(tail)`, which owns all the binders on its own. A forward loop over `bindings` is what a flat block buys over a nested chain — no native frame per binding.
                 let bindings = bindings
                     .iter()
                     .enumerate()

@@ -6,11 +6,11 @@
 //!
 //! [`Cost::FRAME`] is charged once per *new peak* of guarded reduction depth, so a judgment's whole depth bill is its peak times the frame price — an identity, not an estimate, and readable off a counter both checkers already keep. Every other row would need a cumulative accumulator on the hottest path in the trusted base, which `FRAME_UNITS`' own documentation gives as the reason it is a recipe rather than a probe. So this splits a judgment two ways, exactly: what depth cost, and what everything else did.
 //!
-//! That split is the one that was needed. Depth is the only row whose size is set by the reduction *strategy* rather than by the term, so it is the only one where the two checkers can disagree about the same program — and they did, by a factor of twenty, which is what this type was built to see.
+//! Depth is the only row whose size is set by the reduction *strategy* rather than by the term, so it is the only one where the two checkers can disagree about the same program, which is what this type exists to see.
 //!
 //! # It is an observation, never a control
 //!
-//! Nothing in either checker reads a [`Consumption`]. It is threaded out of a walk the way `Kernel::retained` is, so a default can be set against a figure rather than a guess, and so a probe can state what a program costs without bisecting a budget from outside the compiler.
+//! Nothing in either checker reads a [`Consumption`]. It is threaded out of a walk for a measurement to read, so a default can be set against a figure rather than a guess, and so a probe can state what a program costs without bisecting a budget from outside the compiler.
 
 use super::Cost;
 

@@ -33,13 +33,13 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 
 // === Source-style names (diagnostics) ========================================
 //
-// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`std/Vec/Vec`, `sys/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so the faithful `Display` for a bare term leaves names untouched.
+// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so the faithful `Display` for a bare term leaves names untouched.
 //
-// The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, so these axes were once three thread-locals installed around a render — which made a term's spelling depend on an enclosing frame nobody could see from the call, and made "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
+// The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, and thread-locals installed around a render would make a term's spelling depend on an enclosing frame nobody could see from the call, and "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — and in full where none reaches it. A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — `Module` display, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Module::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/toolchain/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — and in full where none reaches it. A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — `Module` display, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Module::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -51,7 +51,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // axis (g) — grouping: a flag under which a nested concatenation spells as the operand it is, `[..[..a, ..b], ..c]`, rather than splicing its entries into the enclosing literal. The splice is right everywhere the reader wants the program quoted rather than its lowering, and it is what makes two terms that differ only in how a run is grouped render as one string — which a mismatch report cannot afford, since grouping is a difference conversion can refuse on. The report's escalation sets it, first, because it changes nothing unless a nesting is present; nothing else does.
 //
-// axis (h) — witnesses: the concepts and witnesses a report spells against, and the witness binders in scope where its reader stands, so a witness reads as resolution would restore it. A `use` argument resolution would put back is left out — a binder in scope that no inner binder of its concept shadows, the unique shortest superclass path off one, a global witness no binder in scope reaches ([`restorable`]) — a function type's witness binder prints unnamed, as the surface requires, and a method projected off a witness prints as the call or operator a program writes. What resolution would not restore keeps its faithful spelling, since a different program is worse than an unpasteable one. Reports set it; `wonder stage`'s dumps and the kernel's refusals do not, for axis (c)'s reason. Why is `documentation/design/toolchain/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (h) — witnesses: the concepts and witnesses a report spells against, and the witness binders in scope where its reader stands, so a witness reads as resolution would restore it. A `use` argument resolution would put back is left out — a binder in scope that no inner binder of its concept shadows, the unique shortest superclass path off one, a global witness no binder in scope reaches ([`restorable`]) — a function type's witness binder prints unnamed, as the surface requires, and a method projected off a witness prints as the call or operator a program writes. What resolution would not restore keeps its faithful spelling, since a different program is worse than an unpasteable one. Reports set it; `wonder stage`'s dumps and the kernel's refusals do not, for axis (c)'s reason. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -329,7 +329,7 @@ impl Spelling {
             })
     }
 
-    /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked as it always did.
+    /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.
     fn nominal_marks(&self, name: &Global, arity: usize) -> Option<&[Plicity]> {
         let marks = self.nominal_plicities.as_ref()?.get(name)?;
         // A declaration whose vector does not match the occurrence is not one this can speak about: render flat rather than mark the wrong argument.
@@ -510,9 +510,9 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
 
 /// [`build_shorten`] for a render a reader looks at from inside `own`'s unit: a declaration sitting directly in that unit takes its bare label before anything around it may compete for the suffix.
 ///
-/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
+/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` would tie the two, so *neither* would shorten, and the name the reader had just written would report as `/Holds` while the one they could not reach reported as `Bool/Holds`.
 ///
-/// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one spelled a goal candidate — `? ≈ nil()` — that the reader could not paste.
+/// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one would spell a goal candidate — `? ≈ nil()` — that the reader could not paste.
 pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global, String> {
     // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition), and a unit listed in both tiers lists it in both; count distinct names, or such a name would look ambiguous with itself and never shorten.
     let own = own.iter().collect::<BTreeSet<_>>();
@@ -1225,7 +1225,7 @@ fn flt_rounded(rounding: Rounding, operation: &str) -> String {
     }
 }
 
-/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix (`InfixOp::symbol`); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
+/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, `xor`, conversions, `min`/`max`. Exactly the operators the surface language spells infix (`InfixOp::symbol`), each of which dispatches through its concept, `&&` and `||` included.
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
     Some(match intrinsic {
         Intrinsic::NatAdd(..)
@@ -1827,7 +1827,7 @@ fn sub(term: Term, frame: Frame) -> Printer {
     recurse(|| term_doc(term, frame))
 }
 
-/// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters so the flat form stays byte-identical to the fixed layout it replaced: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
+/// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
 fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) -> Printer {
     let lead = if spaced { line } else { soft_line };
     group(flat([
@@ -1975,7 +1975,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 cursor.advance(Term::free_var(&label));
             }
 
-            // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/syntax.md` spells. Unspaced for the same reason the surface printer is.
+            // Through `listed` like every other sequence: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/syntax.md` spells. Unspaced for the same reason the surface printer is.
             listed("{".into(), false, items, "}")
         }
         Subterm::Tuple(Tuple { fields, names }) => {

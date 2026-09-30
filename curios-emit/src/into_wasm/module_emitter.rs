@@ -241,7 +241,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
     /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`curios_cont::Slot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
     ///
-    /// A family's tag is `i8`. Its constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot wrote an `i31` reference.
+    /// A family's tag is `i8`. Its constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot would write an `i31` reference.
     fn emit_row_types(&mut self) {
         let fields: Vec<_> = self
             .table
@@ -320,7 +320,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
                         self.table.special_field(),
                         curios_wasm::FieldType {
-                            // The code field is the body's index in the shared funcref table, not a funcref: writing an `i32` skips the engine's per-store funcref-to-GC-heap intern at every construction.
+                            // The code field is the body's index in its arity's dispatch table, not a funcref: writing an `i32` skips the engine's per-store funcref-to-GC-heap intern at every construction.
                             storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
                                 curios_wasm::NumType::I32,
                             )),

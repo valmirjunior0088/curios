@@ -30,7 +30,7 @@ pub let tagged(tag: Nat, parts: List(Bytes)) -> Bytes =
 
 --- One polynomial lane: `acc · base + byte + 1` reduced modulo `prime`, folded over `b`.
 ---
---- Spelled with `Nat/rem` rather than `%` because the modulus is a parameter. `%` states `Lt(0, b)` on its divisor and has nowhere to put the evidence, and an obligation discharges by reduction, by a guard's refinement, or by a written proof — never by a search of what happens to be in scope. This telescope holds the proof, so it hands it over.
+--- The modulus is a parameter, so the evidence that it is positive is this telescope's `ok`, which `Nat/rem` is handed.
 let lane(b: Bytes, base: Nat, prime: Nat, @ok: Nat/Lt(0, prime)) -> Nat =
     Bytes/fold(b, 1, (byte, acc) => Nat/rem(acc * base + Byte/to_nat(byte) + 1, prime, @ok));
 
@@ -38,7 +38,7 @@ let lane(b: Bytes, base: Nat, prime: Nat, @ok: Nat/Lt(0, prime)) -> Nat =
 ---
 --- **Not stable across compiler versions: do not persist or transmit one.** Three polynomial lanes at distinct primes, which is enough for dedup, cache keys and bloom filters and is not adversarially resistant — anyone who chooses the input can collide it. Encode with `Hash/hash` where the bytes must keep meaning.
 ---
---- Every intermediate stays below `2^31`, which is what lets a mixer be written in `Nat` at all: an accumulator is below its prime, so a product is below `prime · base`, and each pair below is chosen to keep that inside the carrier. A wider mixer would need wrapping arithmetic, which `Nat` refuses rather than performs.
+--- Every intermediate stays below `2^31`: an accumulator is below its prime, so a product is below `prime · base`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
 pub let digest(b: Bytes) -> Bytes =
     Bytes/flatten([
         padded(Bytes/of_nat(lane(b, 131, 8388593)), 3),

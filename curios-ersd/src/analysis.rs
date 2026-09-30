@@ -160,7 +160,7 @@ impl Analysis {
 
 /// Per-function free values on demand — [`Analysis::free_values`]'s derivation for one function at a time, for a consumer that closes over a handful of functions and has no other question to put to a snapshot.
 ///
-/// The closed-term evaluator is that consumer. Closing a function was the one thing it read from a snapshot, and it took a fresh snapshot every round of a module that grows tenfold under its own reification, so a hello-world compile spent a second of its six re-deriving use counts and a reference graph nobody read. The memo derives exactly what the snapshot would — the same region walk, the same children, the same set — so a closure records its captures in the same order, and a function the module does not hold answers empty as the snapshot's lookup does.
+/// The closed-term evaluator is that consumer. Closing a function is the one thing it asks, and a fresh snapshot every round of a module that grows tenfold under its own reification would re-derive use counts and a reference graph nobody reads. The memo derives exactly what the snapshot would — the same region walk, the same children, the same set — so a closure records its captures in the same order, and a function the module does not hold answers empty as the snapshot's lookup does.
 pub struct FreeValues<'m> {
     module: &'m Module,
     memo: RefCell<BTreeMap<FunctionId, Rc<BTreeSet<ValueId>>>>,

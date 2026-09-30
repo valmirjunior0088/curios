@@ -1,13 +1,5 @@
 //! The erasure obligation: a partial value may not reach a proof, at any head a program can spell.
 
-//! End-to-end coverage for the two totality obligations.
-//!
-//! Erasure deletes types and it deletes `Prop`-sorted proofs, and both must be total: a divergent type breaks type formation, a divergent proof proves anything. What erasure *keeps* may diverge freely, which is why every rejection here is of a position and never of a definition.
-//!
-//! The size lattice and the classifier are unit-tested in `curios-analysis/src/totality/tests.rs`; these check what a user can observe, through the prelude-replay path a real program takes — where the analysis sees only the user suffix and reads the prelude's verdicts back from the archive.
-//!
-//! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
-
 use crate::tests::run;
 
 use super::test_support::*;
@@ -37,7 +29,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
 //
 // Each is keyed to one shape of application *head*, because the rule can only fire where the head's type can be synthesized: it reads the parameter telescope off that type to learn which parameters are propositions. A head shape sort synthesis cannot answer for is a silent hole rather than a rejection, which is why the coverage is enumerated by shape and not by one representative program.
 
-// A universe-polymorphic head. `@A : Type` generalizes the definition, so the call site's head is a universe instance rather than a plain name — the most common shape in the language, and the widest hole of this set: it admitted a one-line helper with no `match`, no data type, and no recursion but the forged proof's own.
+// A universe-polymorphic head. `@A : Type` generalizes the definition, so the call site's head is a universe instance rather than a plain name — the most common shape in the language, and the widest of this set: without the rule, a one-line helper with no `match`, no data type, and no recursion but the forged proof's own would pass.
 #[test]
 fn a_proof_at_a_polymorphic_head_is_rejected() {
     rejected_as_a_proof(
@@ -126,11 +118,9 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
     );
 }
 
-// The size-change engine never opened the group that called back. `Walk::walk` gives a *member reference* — a `rec` node whose tail selects one member — an arm above the general `rec` one, so that a self-reference cannot send the walk into the bodies it is already inside; `RecGroup::member_body` materializes each self-reference as a projection carrying the whole group, so descending would regenerate those bodies without end. That arm answered for every projection and not only the group's own: a projection of a *different* group fell into it, matched no branch, and returned, leaving that group's member bodies unwalked. The general arm below is there for exactly the case it thereby skipped — an inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
+// A call back into a group from inside another group's projected member. `Walk::walk` gives a *member reference* — a `rec` node whose tail selects one member — an arm above the general `rec` one, so that a self-reference cannot send the walk into the bodies it is already inside; `RecGroup::member_body` materializes each self-reference as a projection carrying the whole group, so descending would regenerate those bodies without end. That arm answers for a projection of *this* group alone: a projection of a different group falls to the general arm, because an inner group is classified on its own but its bodies may still call this group, and such a call is a real edge of this group's call graph.
 //
-// So a call back into `f` from inside the projected `g` was invisible, and so was `g`'s own call site inside `f`. Each group closed to no call at all, and a group with no recursive call is accepted — both classified `Total` while `f(0)` diverges through `g`, which is a closed inhabitant of `False`: `f`'s declared type is a proposition, so (V) is the whole defence and it read the engine's verdict.
-//
-// Verified while the hole was open: the program compiled, the compile-path kernel recheck raised no verdict, and `False/absurd` on the forged proof erased to an `unreachable` the runtime trapped on. The same loop with the inner group removed — `rec f(n : Nat) -> False = f(n);` — was refused throughout, which is what places the defect in the walk rather than in the obligation.
+// Answered by the member-reference arm instead, the call back into `f` from inside the projected `g` would be invisible, and so would `g`'s own call site inside `f`: each group would close to no call at all and be classified `Total` while `f(0)` diverges through `g`, a closed inhabitant of `False` — `f`'s declared type is a proposition, so (V) is the whole defence and it reads the engine's verdict. The same loop with the inner group removed, `rec f(n : Nat) -> False = f(n);`, is refused either way, which places the rule in the walk rather than in the obligation.
 #[test]
 fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     rejected_as_a_proof(
@@ -145,7 +135,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     );
 }
 
-// The accepting side of that same descent, and the reason the fix is not "a group whose body mentions a projection is partial". `outer` descends on its own parameter, and its arm projects a foreign group whose bodies the walk now enters. Nothing in `keep` calls back, so entering it must find no edge and leave both groups total — `outer` by its own `outer(p)`, `keep` by having no recursive call at all. Both types are propositions, so a spurious edge in either is a rejection rather than a silent loss of precision.
+// The accepting side of that same descent, and the reason the rule is not "a group whose body mentions a projection is partial". `outer` descends on its own parameter, and its arm projects a foreign group whose bodies the walk enters. Nothing in `keep` calls back, so entering it must find no edge and leave both groups total — `outer` by its own `outer(p)`, `keep` by having no recursive call at all. Both types are propositions, so a spurious edge in either is a rejection rather than a silent loss of precision.
 #[test]
 fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
     let source = r#"

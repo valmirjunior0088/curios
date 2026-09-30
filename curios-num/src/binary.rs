@@ -270,7 +270,7 @@ impl Binary {
 impl PartialEq for Binary {
     /// Equal bits, decided as cheaply as the representation allows.
     ///
-    /// **Two windows of one buffer at one offset are the same bits**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it bit by bit made a `Str` literal's check quadratic in wall clock where every counter said linear — 2.8 s of a 16 000-character literal's 2.9 s in the machine, 0.4 s with this arm — and `curios`' `str_literal_cost_measurements` carries the ladder.
+    /// **Two windows of one buffer at one offset are the same bits**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it bit by bit makes a `Str` literal's check quadratic in wall clock where every counter says linear, and `curios`' `str_literal_cost_measurements` carries the ladder.
     ///
     /// Two aligned windows compare as byte slices, which is the same answer at a word at a time; only an unaligned window pays the per-bit walk, and only against a buffer it does not share.
     fn eq(&self, other: &Self) -> bool {
@@ -291,11 +291,11 @@ impl Eq for Binary {}
 const HASH_SAMPLE_BYTES: usize = 32;
 
 impl Hash for Binary {
-    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`Binary::eq`] records on its own side of the same probe, where a window of one buffer is now equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
+    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`Binary::eq`] records on its own side of the same probe, where a window of one buffer is equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
     ///
     /// The length is hashed whole and at most `HASH_SAMPLE_BYTES` bytes are read from the packed form, spread across it with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`Binary::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
     ///
-    /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction. The streamed spelling is the only one now — the aligned arm's byte slice bought a bulk hash of the whole value, which is the cost this removes — so no two arms have to be kept agreeing byte for byte.
+    /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction. One streamed spelling serves every value — a bulk hash of an aligned value's byte slice would read the whole of it — so no two arms have to be kept agreeing byte for byte.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bit_length.hash(state);
 

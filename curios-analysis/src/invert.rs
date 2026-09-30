@@ -1,4 +1,4 @@
-//! Rung C of the indexed-inductive ladder: *inversion*. When an inductive match's scrutinee carries indices in constructor form, first-order unification of the actual indices against each case's target indices either pins arm binders to the values they are forced to take (`m + 1 ~ n + 1` pins `m := n`) or proves the case unreachable outright (`0` against `n + 1`) — which is what lets the arm be omitted, checker-verified, with no `impossible` keyword.
+//! *Inversion*. When an inductive match's scrutinee carries indices in constructor form, first-order unification of the actual indices against each case's target indices either pins arm binders to the values they are forced to take (`m + 1 ~ n + 1` pins `m := n`) or proves the case unreachable outright (`0` against `n + 1`) — which is what lets the arm be omitted, checker-verified, with no `impossible` keyword.
 //!
 //! # Shared, not duplicated
 //!
@@ -20,7 +20,7 @@ use {
 ///
 /// It does **not** hold for a binder under anything else. `blur(a)` is an arbitrary function of `a`: knowing its value recovers nothing, since `blur` need not be injective and in the case that motivated this rule is the constant zero. Reading occurrence as determination — asking only whether `a` appears anywhere in the target — is the mistake, and it is the difference between a singleton and a proposition with a payload a program can read.
 ///
-/// A constructor application reads like it should qualify, since constructors are injective, and this walk once descended into one. That rung is deliberately gone. It never ran: an elaborated target is stored as an application of the constructor's *function wrapper*, never as a saturated variant, so no declaration ever reached it. And had it run it would have been unsound at a `Prop`-sorted family, where irrelevance denies precisely the injectivity it assumes — `mk(a : Nat) : (Tag/t(a))` would report `a` as recovered although `Tag/t(0)` and `Tag/t(7)` are the same value, which is a payload a program can read out of a proposition and from there a closed inhabitant of `False`. Reinstating it needs the sort condition *and* targets normalized to variant form; until both, its absence is the stricter guard.
+/// A constructor application reads like it should qualify, since constructors are injective, and this walk deliberately does not descend into one. At a `Prop`-sorted family that would be unsound, since irrelevance denies precisely the injectivity it assumes — `mk(a : Nat) : (Tag/t(a))` would report `a` as recovered although `Tag/t(0)` and `Tag/t(7)` are the same value, which is a payload a program can read out of a proposition and from there a closed inhabitant of `False`. And an elaborated target is stored as an application of the constructor's *function wrapper*, never as a saturated variant, so a descent into variants would reach nothing. Descending needs the sort condition *and* targets normalized to variant form; without both, not descending is the stricter guard.
 ///
 /// Total by construction: a target this cannot decompose contributes nothing, so a shape nobody anticipated yields *fewer* determined binders and a stricter guard, never a looser one.
 ///
@@ -78,7 +78,7 @@ pub fn case_target_indices(telescope: Telescope<Vec<Term>>, vars: &[Term]) -> Ve
     }
 }
 
-/// The unifier, deliberately tiny: first-order, constructor-form. Per index position it decomposes matching constructor forms (`Nat` successor spines, variants by tag, tuples pointwise), solves an unbound arm binder against the rigid term it is forced to equal, and declares a clash on distinct constructors. A binder forced in more than one position is reconciled by the *deletion* rule (`consolidate`): forcings that convert are one constraint — sound because `Eq : Prop` makes the system definitionally K — and forcings that definitely clash make the case unreachable, as two distinct constructors met in one position do. Everything else — metavariables, opaque applications, key-shaped actuals at the top of a position (Rung B's territory) — it *refuses*: the arm stays mandatory and the binder unsolved.
+/// The unifier, deliberately tiny: first-order, constructor-form. Per index position it decomposes matching constructor forms (`Nat` successor spines, variants by tag, tuples pointwise), solves an unbound arm binder against the rigid term it is forced to equal, and declares a clash on distinct constructors. A binder forced in more than one position is reconciled by the *deletion* rule (`consolidate`): forcings that convert are one constraint — sound because `Eq : Prop` makes the system definitionally K — and forcings that definitely clash make the case unreachable, as two distinct constructors met in one position do. Everything else — metavariables, opaque applications, key-shaped actuals at the top of a position (index refinement's territory) — it *refuses*: the arm stays mandatory and the binder unsolved.
 pub fn invert_indices<J: Judge>(
     judge: &mut J,
     actuals: &[Term],
@@ -88,7 +88,7 @@ pub fn invert_indices<J: Judge>(
     invert_with(judge, actuals, targets, flex, false)
 }
 
-/// [`invert_indices`] for the outer direction: the flex variables are the *context's*, not an arm's, so a key-shaped actual at the top of a position is not something the flex side was refined to — there is nothing for a solution to cycle through — and a variable actual may therefore solve the flex target it meets. This is the kernel's spelling of the elaborator's `refine_head` orientation: the outer variable stands refined to the arm's term. The first direction keeps the guard, because there the flex side is the arm's own binders and rung B has already refined keys to them.
+/// [`invert_indices`] for the outer direction: the flex variables are the *context's*, not an arm's, so a key-shaped actual at the top of a position is not something the flex side was refined to — there is nothing for a solution to cycle through — and a variable actual may therefore solve the flex target it meets. This is the kernel's spelling of the elaborator's `refine_head` orientation: the outer variable stands refined to the arm's term. The first direction keeps the guard, because there the flex side is the arm's own binders and index refinement has already refined keys to them.
 pub fn invert_indices_outer<J: Judge>(
     judge: &mut J,
     actuals: &[Term],
@@ -103,8 +103,6 @@ pub fn invert_indices_outer<J: Judge>(
 /// Direction one pins a payload binder to the rigid actual it must equal ([`invert_indices`]). Direction two refines an outer variable to the target it must equal, and is the same unifier with its sides swapped ([`invert_indices_outer`]): it solves flexible variables on what is now the target side, the occurs check refusing a solution that mentions any other refinable variable — which is exactly the parameter cycle (`b := b + 1` through a family parameter) that must not substitute. The directions run in sequence, the first solution applied to the targets before the second runs, which keeps one equation from being solved twice in opposite orientations; and a pinned binder's value may mention an outer variable the second direction refined, so the first solution is rewritten through the second — the reverse cannot happen, the second having run on targets the first was already applied to — which makes the union idempotent in one pass.
 ///
 /// The outer variables are the locals the kernel's spelling of the actual indices names ([`locals_beneath`]), never a top-level name, whose meaning no case can refine: a local carrying a definition contributes the locals its definition names instead, which is what the index mentions once the `let` is substituted.
-///
-/// **This was the kernel's alone**, and the elaborator approximated it: it bound an index only when the index was a variable, recorded any other index as an equation keyed on the index itself — the reverse of what the first direction pins, or a fact the kernel does not have — and never reached an outer variable inside an index at all, so a case whose target `1` meets an actual `n + 1` taught the kernel `n := 0` and the elaborator nothing.
 ///
 /// `Impossible` when either direction finds a definite clash, which makes the case unreachable.
 pub fn solve_indices<J: Judge>(
@@ -163,7 +161,7 @@ fn invert_with<J: Judge>(
     consolidate(judge, solutions)
 }
 
-/// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, restored here as a *semantic* test in place of the old syntactic non-linearity refusal. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution.
+/// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, as a *semantic* test rather than a syntactic refusal of non-linear targets. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution.
 ///
 /// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq()(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Impossible`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
 ///
@@ -221,13 +219,13 @@ fn unify_index<J: Judge>(
     {
         let binder = *var.unwrap();
 
-        // At the top of a position a key-shaped actual is Rung B's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
+        // At the top of a position a key-shaped actual is index refinement's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
         if (top && !solve_keys) && matches!(&*actual, Subterm::Var(_) | Subterm::Proj(_))
             || matches!(&*actual, Subterm::Metavar(_))
         {
             return Ok(Step::Refuse);
         }
-        // The forced value must be *rigid*: a key-shaped actual that Rung B already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.
+        // The forced value must be *rigid*: a key-shaped actual that index refinement already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.
         if actual
             .free_vars()
             .iter()
@@ -266,7 +264,7 @@ fn unify_index<J: Judge>(
             if a.name != t.name {
                 return Ok(Step::Refuse);
             }
-            // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each was a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm that was excused as impossible becomes mandatory and a binder forced only here stays unsolved.
+            // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each would be a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm a clash would excuse stays mandatory and a binder forced only here stays unsolved.
             //
             // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
             // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.

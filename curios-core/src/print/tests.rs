@@ -208,7 +208,7 @@ fn a_family_with_one_kind_of_argument_prints_in_one_call() {
     assert_eq!(indices.spelled(&spelling).to_string(), "Sign(7)");
 }
 
-/// A lambda over exactly an indexed family's indices is the family at its parameters, which is writable now that the family takes its indices in a call of their own.
+/// A lambda over exactly an indexed family's indices is the family at its parameters, which is writable because the family takes its indices in a call of their own.
 #[test]
 fn a_lambda_over_a_familys_indices_prints_as_the_family_at_its_parameters() {
     let accessible = Global::Authored(Qualifier::from(["std", "WellFounded", "Accessible"]));
@@ -280,7 +280,7 @@ fn a_short_lambda_body_stays_on_the_arrows_line() {
     assert_eq!(identity.to_string(), "(x) => x");
 }
 
-/// A body that carries a break of its own — a `match` — still takes the line after the arrow and indents, as it did before the group.
+/// A body that carries a break of its own — a `match` — takes the line after the arrow and indents.
 #[test]
 fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
     let b = Free::local(0, Some("b"));

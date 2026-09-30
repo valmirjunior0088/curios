@@ -39,12 +39,12 @@ pub fn shared_engine() -> &'static Engine {
         config.wasm_function_references(true);
         config.wasm_gc(true);
         config.wasm_tail_call(true);
-        // The collector is left at `Collector::Auto`: the workspace `wasmtime` dependency compiles in only `gc-copying`, so `Auto` resolves to the copying (semi-space) collector — bump-allocation with an in-wasm fast path, so `struct.new`/`array.new` no longer round-trip through the `gc_alloc_raw` libcall the deferred-reference-counting collector requires.
+        // The collector is left at `Collector::Auto`: the workspace `wasmtime` dependency compiles in only `gc-copying`, so `Auto` resolves to the copying (semi-space) collector — bump-allocation with an in-wasm fast path, so `struct.new`/`array.new` do not round-trip through the `gc_alloc_raw` libcall the deferred-reference-counting collector would require.
 
-        // Sixteen mebibytes, because the engine's own growth policy only ever reacts to a single allocation not fitting after a collection — so under death-birth churn the heap parks within a doubling of the live set and the collector recopies the survivors continually. Sixteen is the smallest measured size on the good side of that knee for both churn-class workloads, and the cold-page tax that argues for smaller never registers until far above it; commit is lazy, so a program that allocates little touches little. The figures and the retake recipe live with `chain_collection_decomposition` and `spines_collection_decomposition`; the decision is this crate's `README.md`, "The heap is sized ahead of its churn".
+        // Sixteen mebibytes: the decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn", and the figures and their retake recipe live with `chain_collection_decomposition` and `spines_collection_decomposition`.
         config.gc_heap_initial_size(16 * 1024 * 1024);
 
-        // Under the `profile` feature, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-emit` emitted. Without it every sample landing in emitted wasm resolves to a bare address — which is what made the first runtime profile of a Curios program unreadable, its two largest buckets symbolicating into an unrelated host function's prologue.
+        // Under the `profile` feature, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-emit` emitted. Without it every sample landing in emitted wasm resolves to a bare address, or symbolicates into an unrelated host function's prologue.
         //
         // This is the guest-side half of the same flag `curios-profile` uses for the compiler, so one feature profiles both ends of a compile-and-run. It selects how compiled code is registered with the host rather than how it is compiled, so a `.cwasm` produced without it still deserializes against an engine built with it.
         #[cfg(feature = "profile")]

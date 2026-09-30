@@ -53,7 +53,7 @@ fn an_implicit_lambda_after_a_plain_argument_is_not_named_by_the_plain_ones_posi
     );
 }
 
-// The site is worked out for every refused argument, though only a misplaced lambda keeps it, so a plain mismatch at an `@` argument took the same path to the underflow.
+// The site is worked out for every refused argument, though only a misplaced lambda keeps it, so a plain mismatch at an `@` argument before any plain one takes the same path, where counting the plain arguments before it must not underflow.
 #[test]
 fn a_mismatched_implicit_argument_before_any_plain_one_is_refused_as_a_mismatch() {
     let report = error(

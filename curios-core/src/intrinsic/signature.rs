@@ -1,26 +1,24 @@
 //! What every intrinsic demands of its operands, and what it produces.
 //!
-//! `curios-cert`'s `infer_intrinsic` opens by calling itself a table — "an intrinsic's signature is fixed by the language, so this module is a table, and the table is the specification". It was right about what it wanted to be and wrong about what it was: a table written as a checking procedure can be *executed* by one caller and read by none. So the same signatures were written three times — here in `/sys`'s declarations (`curios-text`'s `sys_module`), again as the kernel's rules, and a third time as elaboration's — in three crates, with nothing checking the three agreed.
+//! An intrinsic's signature is fixed by the language, so it is a table, and the table is the specification. A table written as a checking procedure can be *executed* by one caller and read by none, which would leave each consumer its own copy — `/sys`'s declarations (`curios-text`'s `sys_module`), the kernel's rules, elaboration's — in three crates, with nothing checking the three agree.
 //!
 //! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
 //! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row — the roster's for a builtin, the declaration's own otherwise — so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
 //!
-//! **The third copy is checked rather than removed, and that is enough.** `/sys` still states every one of these types a second time, as the declarations a user actually calls — and it cannot drift, because elaborating a `/sys` body checks its operands against this table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced.
+//! **`/sys`'s copy is checked rather than removed, and that is enough.** `/sys` states every one of these types a second time, as the declarations a user actually calls — and it cannot drift, because elaborating a `/sys` body checks its operands against this table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced.
 //!
-//! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.
+//! Checked rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.
 //!
-//! **Preconditions belong here, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//! **Preconditions belong here.** A window is a start and a *count*, so `spine.rs`'s window fusion has no ordering bound to compose — building a fused window's `Le(s, e)` from its two halves would be transitivity of `<=`, an implication no equality procedure supplies, and a reducer that constructs proofs is a defect. The one bound a window keeps is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
 //!
-//! `NatToByte` was later still, and for neither reason: it was not missing a bound so much as answering without one, masking its operand to eight bits and calling that total. A narrowing that changes a value is what `documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids, and it was the only such row on a numeric carrier. Stating the domain removes the mask and buys the inverse besides — with the constructor's domain known, `ByteToNat` can reduce back through it, which is what lets a bound established in `Nat` survive a trip through `Byte`.
-//!
-//! `IntToNat` was late for the opposite reason — nothing stood in its way. It stated `NonNeg` on `/sys`'s declaration and then dropped the proof from its body, so the bound was re-checked wherever the wrapper application survived and nowhere else: unfolding left a bare narrowing that this table typed from an `Int` alone. That is the `Nat::Succ` shape the last paragraph refuses, one operation later. It has a single producer and no fusion path, so nothing had to compose a proof and carrying it cost a field.
+//! A narrowing carries its bound as an operand for the same reason, as [`Intrinsic::NatToByte`] and [`Intrinsic::IntToNat`] state: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving a bare narrowing this table would type from its operand alone, and one that masked instead would change a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. The stated domain buys the inverse besides: `ByteToNat` reduces back through `NatToByte`, which is what lets a bound established in `Nat` survive a trip through `Byte`.
 //!
 //! Channel creation carries its positive-capacity evidence as an operand. Coordination outcomes are ordinary registered inductives: every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers, and elaboration retains the resulting universe instance on `CellPoll` and `ChannelTake`. The registry supplies identities, not a separate declaration validator.
 //!
-//! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
+//! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/lowering/a-lowering-names-the-elimination-it-performs.md).
 //!
-//! **Totality is the point, not the coverage.** A signature every operation states is one no operation can be forgotten from, which is a stronger property than any individual entry. `Nat`'s successor payload is the standing example: `Nat::Succ` carries a `Term` — that is how `x + 3` is represented — and the kernel's `Intrinsic::Nat(_) => Ok(nat_type())` never checked it, so a successor over a `Bool` typed as a `Nat`. Nothing constructs one today, and the elaborator never would; catching an elaborator that did is the entire reason a second checker exists. Here that check is a consequence of the table being total rather than an arm someone remembered.
+//! **Totality is the point, not the coverage.** A signature every operation states is one no operation can be forgotten from, which is a stronger property than any individual entry. `Nat`'s successor payload is the standing example: `Nat::Succ` carries a `Term` — that is how `x + 3` is represented — and a rule `Intrinsic::Nat(_) => Ok(nat_type())` would type a successor over a `Bool` as a `Nat`. The elaborator never builds one; catching an elaborator that did is the entire reason a second checker exists, and here that check is a consequence of the table being total rather than an arm someone remembered.
 
 use {
     super::Intrinsic,
@@ -100,7 +98,7 @@ impl Intrinsic {
             )
         };
 
-        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The ones that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes`, and `Flt`'s `Finite` and `NonNeg` — were each a comparison or a conjunction of two under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
+        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. Named propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes`, and `Flt`'s `Finite` and `NonNeg` — would each be a comparison or a conjunction of two under the same reflection, and naming them would make the `/sys` roster reference a root above it.
         let holds =
             |decision: Intrinsic| decided(syntax.proof.holds, vec![Term::intrinsic(decision)]);
 
@@ -154,7 +152,7 @@ impl Intrinsic {
             IntAdd(..) | IntSub(..) | IntMul(..) | IntAnd(..) | IntOr(..) | IntXor(..) => {
                 bin_op(int_type(), int_type())
             }
-            // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, and it never did.
+            // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, which it does not.
             IntShl(..) | IntShr(..) => sig(
                 vec![Operand::At(int_type()), Operand::At(nat_type())],
                 int_type(),
@@ -359,7 +357,7 @@ impl Intrinsic {
                 bin_type(grain.other()),
             ),
 
-            // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, the case that used to be refused for having no element to read a type from.
+            // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, which has no element to read a type from.
             List { element, items } => sig(
                 std::iter::once(Operand::IsType)
                     .chain(items.iter().map(|_| Operand::At(element.clone())))

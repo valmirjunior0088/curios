@@ -12,7 +12,7 @@ use super::test_support::*;
 
 /// A totality stamp asserts the *closure* — elaboration's classification closes over mentions as the kernel's does — so the cross-check compares it against the closed verdict, not the local half.
 ///
-/// `reaches` is total in itself, stamped `Total`, and mentions the diverging `sink`: only the closure contradicts it. A comparison against the local half would pass it, as this one once did. Nothing reads the stamp afterwards — a later walk reads the certifier's record, which [`a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies`] holds — so what this guards is the two checkers' disagreement being reported where they disagree.
+/// `reaches` is total in itself, stamped `Total`, and mentions the diverging `sink`: only the closure contradicts it. A comparison against the local half would pass it. Nothing reads the stamp afterwards — a later walk reads the certifier's record, which [`a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies`] holds — so what this guards is the two checkers' disagreement being reported where they disagree.
 ///
 /// No surface program reaches it: the only stamp writer is `record_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
 #[test]
@@ -85,7 +85,7 @@ fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
 
 /// A later walk reads a carried unit's totality from the certifier's record and never from the stamps elaboration wrote, so a proof reaching a lying stamp is refused carried exactly as it is refused judged fresh.
 ///
-/// The library is certified with `reaches` honestly stamped `Partial`, and the record that walk leaves is mounted beside the same terms stamped `Total`. `held : Vouched` mentions only `reaches`, so its walk refuses it exactly when the environment's non-total set holds `reaches` — which the record says it does, whatever the stamp claims. Read off the stamp instead, the set held `sink` alone and the carried walk certified the proof with no verdicts at all; judged in one module from an empty environment, the same proof is refused, which is the second half here.
+/// The library is certified with `reaches` honestly stamped `Partial`, and the record that walk leaves is mounted beside the same terms stamped `Total`. `held : Vouched` mentions only `reaches`, so its walk refuses it exactly when the environment's non-total set holds `reaches` — which the record says it does, whatever the stamp claims. Read off the stamp instead, the set would hold `sink` alone and the carried walk would certify the proof with no verdicts at all; judged in one module from an empty environment, the same proof is refused, which is the second half here.
 #[test]
 fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() {
     let honest = fixture_certified(

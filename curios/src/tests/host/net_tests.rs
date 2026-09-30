@@ -343,7 +343,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
 
 /// An `Flt` that is *not* the last result, which is the shape a position restriction would have forbidden.
 ///
-/// Each result lands in a parameter held at its own carrier — the float in an `f64` register, the status as the guest boxed it — so where the float sits in the tuple costs nothing and needs no stack juggling. This is the test that stops the withdrawal rule in `represent.rs` from being widened back.
+/// Each result lands in a parameter held at its own carrier — the float in an `f64` register, the status as the guest boxed it — so where the float sits in the tuple costs nothing and needs no stack juggling. This is the test that stops the withdrawal rule in `represent.rs` from being widened.
 #[test]
 fn a_foreign_flt_may_stand_before_another_result() {
     let source = r#"

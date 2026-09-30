@@ -50,7 +50,7 @@ fn a_one_field_tuple_literal_synthesizes_against_a_written_goal() {
     );
 }
 
-// Settling the literal wakes whatever was parked on the metavariable it solved, and a woken obligation reports for itself. Here that is the missing tuple witness — the answer the program deserves, where before the same program said only that some type never gained structure.
+// Settling the literal wakes whatever was parked on the metavariable it solved, and a woken obligation reports for itself. Here that is the missing tuple witness — the answer the program deserves, rather than that some type never gained structure.
 //
 // The literal is *labeled* so the woken goal is one that genuinely misses: `/std/Tuple` shows every positional shape, and labels are part of a tuple type's identity. Synthesis from a labeled literal solves the metavariable exactly as a positional one does, so the mechanism under test is untouched.
 #[test]
@@ -188,7 +188,7 @@ fn a_tuple_argument_settles_inside_an_inferred_call() {
     assert_eq!(run(source), b"1");
 }
 
-// Settling inside the call commits to the argument's own product, so a later labeled annotation can no longer relabel it — the same commitment a bare `let z = (1, true)` makes. Pinned so the trade is visible: a program that relied on the drain-time pin is now refused by the same report as the bare literal.
+// Settling inside the call commits to the argument's own product, so a later labeled annotation can no longer relabel it — the same commitment a bare `let z = (1, true)` makes. Pinned so the trade is visible: a program relying on a drain-time pin is refused by the same report as the bare literal.
 #[test]
 fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
     let source = r#"

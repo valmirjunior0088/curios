@@ -158,7 +158,7 @@ fn bool_type() -> Term {
     Term::intrinsic(Intrinsic::BoolType)
 }
 
-/// An arm re-types `x` under its own name; a problem parked there is retried where `x` is live at its unspecialized type — the enclosing frame, where a drain or a turnaround after the arm runs it. The retry sees the arm's type, because the frame it runs in is the one the problem froze. Reapplying only names not already live lost exactly this.
+/// An arm re-types `x` under its own name; a problem parked there is retried where `x` is live at its unspecialized type — the enclosing frame, where a drain or a turnaround after the arm runs it. The retry sees the arm's type, because the frame it runs in is the one the problem froze. Reapplying only names not already live would lose exactly this.
 #[test]
 fn a_retry_sees_a_local_at_the_type_its_problem_froze() {
     let mut context = context();
@@ -275,7 +275,7 @@ fn a_nested_retry_restores_the_floor_around_it() {
     });
 }
 
-/// A metavariable born at an id the counter has not reached is never minted again: the next fresh id lies past it. A fixture states its metavariables that way, and a mint landing on one births a second metavariable over its record — which is how a candidate's re-validation, minting while it checked, replaced a test's solved hole with its own.
+/// A metavariable born at an id the counter has not reached is never minted again: the next fresh id lies past it. A fixture states its metavariables that way, and a mint landing on one births a second metavariable over its record — which is how a candidate's re-validation, minting while it checks, would replace a test's solved hole with its own.
 #[test]
 fn a_metavariable_born_ahead_of_the_counter_is_never_minted_again() {
     let mut context = context();
@@ -316,7 +316,7 @@ fn an_oracle_elaborates_a_term_that_writes_once() {
     assert_eq!(inside, 1);
 }
 
-/// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and each used to throw away the reducts the next node needed — while one that unwound a solution clears them, since a reduct cached since may have read it.
+/// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and a clear at each would throw away the reducts the next node needs — while one that unwound a solution clears them, since a reduct cached since may have read it.
 #[test]
 fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {
     let mut context = context();

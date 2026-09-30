@@ -16,7 +16,7 @@ use {
     std::collections::BTreeMap,
 };
 
-/// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart; with `a` written in its place the program takes half a second.
+/// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart.
 const TWO_INSTANCES_OF_ZIP: &str = r#"
     use /std/{Nat, List, Eq, Io, Bool};
     let same(@T: Type, l: List(T)) -> List(T) = l;
@@ -102,7 +102,7 @@ fn one_declaration_serves_two_universe_levels() {
 
 // A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for), so `carrier`, whose sole sort occurrence is the `Type` it stores, is monomorphic, while `holder`, whose level is tied to a `Type`-sorted parameter, generalizes.
 //
-// That asymmetry is what shuts [The refinement key](../../../documentation/soundness/what-the-kernel-consults/the-refinement-key.md)'s still-open elaborator-side copy against *source*. The defect needs two occurrences of one definition at differing instances whose values differ by level, and only a level carried into a payload can make a value differ — `Type u` embedded in a term is the entry's own counterexample. Such a level is body-only, so it never becomes a parameter, so no occurrence can choose one and the pair has no surface spelling. The entry records that nothing in the corpus spells it; what this pins is the stronger claim that nothing *can*, which is the half that does not decay when the corpus changes.
+// That asymmetry is what shuts [Case equations and their key](../../../documentation/design/soundness/elimination/case-equations-and-their-key.md)'s still-open elaborator-side copy against *source*. The defect needs two occurrences of one definition at differing instances whose values differ by level, and only a level carried into a payload can make a value differ — `Type u` embedded in a term is the entry's own counterexample. Such a level is body-only, so it never becomes a parameter, so no occurrence can choose one and the pair has no surface spelling. The entry records that nothing in the corpus spells it; what this pins is the stronger claim that nothing *can*, which is the half that does not decay when the corpus changes.
 //
 // The counts are asserted rather than a printout matched, because the parameter count is the thing the argument turns on and a printer is free to render it differently.
 #[test]
@@ -131,7 +131,7 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
     );
 }
 
-// **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which is how `Result`'s `Monad` witness came to take `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
+// **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which would leave `Result`'s `Monad` witness taking `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
 #[test]
 fn a_method_level_bounded_by_one_domain_is_that_domain() {
     let source = r#"
@@ -158,7 +158,7 @@ fn a_method_level_bounded_by_one_domain_is_that_domain() {
     );
 }
 
-// **A witness leaves its method levels to its callers.** `Mon`'s `ret` quantified `@A: Type` at a level of its own, bounded above by the domain of the family `M`; the witness's goal named that level only as an argument of its occurrence of `Mon`, where it counted as a result sort and went to zero, so `ret` through the witness took `Type 0` payloads only and `Mon/ret(Nat)` at `Box(Type)` was refused as a `Type` strictly below itself — the refusal `!` met at `Result(Str, Type)`. The method level is now the family's domain (`a_method_level_bounded_by_one_domain_is_that_domain`), which the witness's `(A: Type) => Box(A)` leaves to its caller. `small` is the control: the same witness at a small payload.
+// **A witness leaves its method levels to its callers.** `Mon`'s `ret` quantifies `@A: Type` bounded above by the domain of the family `M`, and that level is the family's domain (`a_method_level_bounded_by_one_domain_is_that_domain`), which the witness's `(A: Type) => Box(A)` leaves to its caller. At a level of its own, the witness's goal would name it only as an argument of its occurrence of `Mon`, where it counts as a result sort and goes to zero, so `ret` through the witness would take `Type 0` payloads only and refuse `Mon/ret(Nat)` at `Box(Type)` as a `Type` strictly below itself. `small` is the control: the same witness at a small payload.
 #[test]
 fn a_witness_leaves_its_method_levels_to_its_callers() {
     let source = r#"
@@ -180,7 +180,7 @@ fn a_witness_leaves_its_method_levels_to_its_callers() {
     assert_eq!(run(source), b"large");
 }
 
-// **An occurrence sits where its argument does.** `List(Nat)` checks `Nat : Type 0` against the level its occurrence of `List` mints, which records nothing a store keeps; standing in a signature, that level counted as interface and was generalized, so `pair_of` carried a parameter per occurrence, each above the `Type 0` both checkers had sized the enclosing tuple and `Io` by — a tuple type is sized from its parts' reducts, where the occurrence is gone. `UniverseSolver::finalize` settles an occurrence's level at its recorded floor instead, which is its argument's level, so the written type sits where its reduct does. `Tree` holds a list of itself and settles the same way rather than generalizing the list's level above the family's own. `keep` is the control: its `A` is a binder a caller chooses, and the occurrence of `List` over it settles at `A`'s level, which stays the one parameter.
+// **An occurrence sits where its argument does.** `List(Nat)` checks `Nat : Type 0` against the level its occurrence of `List` mints, which records nothing a store keeps; generalized as interface where it stands in a signature, that level would give `pair_of` a parameter per occurrence, each above the `Type 0` both checkers size the enclosing tuple and `Io` by — a tuple type is sized from its parts' reducts, where the occurrence is gone. `UniverseSolver::finalize` settles an occurrence's level at its recorded floor instead, which is its argument's level, so the written type sits where its reduct does. `Tree` holds a list of itself and settles the same way rather than generalizing the list's level above the family's own. `keep` is the control: its `A` is a binder a caller chooses, and the occurrence of `List` over it settles at `A`'s level, which stays the one parameter.
 #[test]
 fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
     let source = r#"
@@ -213,7 +213,7 @@ fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
     );
 }
 
-// **A goal deferred past its declaration settles at its least levels.** `rewrap`'s `!` asks for `Monad(Box)` before the unit has registered one, so the goal defers and is retried only after `rewrap`'s scheme has closed, where the witness it finds can be pinned to a level the goal already fixes and a constraint the witness brings reaches no scheme at all. `UniverseSolver::finalize` therefore makes a deferred goal ground — the levels it names settle, and so does every level a settlement lands on, `A`'s included — so a witness declared after its use leaves `rewrap` at `Type 0`. Left at `A`'s level instead, `/std/tcp/Socket/close_raising` offered its `A` at every level while the `Lift(Io, Io)` its `!` resolved later exists at one, and the kernel refused it. The control declares the witness first: the goal resolves while `rewrap`'s levels are open, and `A` stays the caller's. Ordering an item after the witnesses its `!` dispatches through would make the two agree.
+// **A goal deferred past its declaration settles at its least levels.** `rewrap`'s `!` asks for `Monad(Box)` before the unit has registered one, so the goal defers and is retried only after `rewrap`'s scheme has closed, where the witness it finds can be pinned to a level the goal already fixes and a constraint the witness brings reaches no scheme at all. `UniverseSolver::finalize` therefore makes a deferred goal ground — the levels it names settle, and so does every level a settlement lands on, `A`'s included — so a witness declared after its use leaves `rewrap` at `Type 0`. Left at `A`'s level instead, `/std/tcp/Socket/close_raising` would offer its `A` at every level while the `Lift(Io, Io)` its `!` resolves later exists at one, and the kernel would refuse it. The control declares the witness first: the goal resolves while `rewrap`'s levels are open, and `A` stays the caller's. Ordering an item after the witnesses its `!` dispatches through would make the two agree.
 #[test]
 fn a_goal_deferred_past_its_declaration_settles_at_its_least_levels() {
     let rewrap = "let rewrap(@A: Type, b: Box(A)) -> Box(A) = let a = b!; Box { value = a };";
@@ -296,7 +296,7 @@ fn the_same_quantifier_instantiates_at_a_type_below_it() {
     assert_eq!(run(&source), b"stratified");
 }
 
-// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq()(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. A twin fixture over a *prelude* family stood beside this one, where the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor passed it and the kernel refused the definition instead. It was written over `/std/Vec` when `Vec` was an indexed inductive; `/std` now has no `Type`-valued universe-polymorphic indexed family to state it over, and the prelude rung is held by the build rather than by a fixture: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
+// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq()(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it would zonk into the definition, where the elaborator's own arity check would refuse a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. Over a *prelude* family the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor would pass it and the kernel would refuse the definition instead — and `/std` has no `Type`-valued universe-polymorphic indexed family to state a fixture over, so that rung is held by the build: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
 #[test]
 fn a_refined_scrutinee_carries_the_family_universe_levels() {
     let source = r#"
@@ -321,7 +321,7 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
     assert_eq!(run(source), b"2");
 }
 
-// A solution committed while a recursive group elaborates is stamped with the group's instance when the group generalizes, as its signatures and registry entries are. `Eq()(a, a)` and `same2()(a, a)` in a constructor's payload solve the hidden `@A` to the family being declared, spelled from before it had an instance, and the recorded type of the call filling the hidden list kept that spelling past generalization, where the proof-totality check refused it as an instance with no levels. The written `@Wit` is the control, stamped with the payload it sits in.
+// A solution committed while a recursive group elaborates is stamped with the group's instance when the group generalizes, as its signatures and registry entries are. `Eq()(a, a)` and `same2()(a, a)` in a constructor's payload solve the hidden `@A` to the family being declared, spelled from before it had an instance; unstamped, the recorded type of the call filling the hidden list would keep that spelling past generalization, where the proof-totality check refuses an instance with no levels. The written `@Wit` is the control, stamped with the payload it sits in.
 #[test]
 fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     for payload in ["Eq()(a, a)", "same2()(a, a)", "Eq(@Wit)(a, a)"] {
@@ -340,7 +340,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Every other level is an occurrence's, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is two.
+// `use_call`'s two spellings of `zip` are two instances of one recursive group, related only by `u ≤ x1`, `v ≤ z1` if left apart, which the kernel would refuse. The elaborator identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Every other level is an occurrence's, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is two.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
     super::typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
@@ -354,7 +354,7 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
     );
 }
 
-// A level that occurs only in a declaration's result sort is one no use site can choose, and `finalize_definition` minimizes it rather than minting a parameter for it. The group path generalizes the same signatures, so the same rule must hold there: a `rec` returning a type, and a `rec` proof whose family level sits only in its result, take no more parameters than the `let` beside them. Without this a definition's scheme depended on which path elaborated it — a fact no reader can see once a group is decided by whether a body names itself.
+// A level that occurs only in a declaration's result sort is one no use site can choose, and `finalize_definition` minimizes it rather than minting a parameter for it. The group path generalizes the same signatures, so the same rule must hold there: a `rec` returning a type, and a `rec` proof whose family level sits only in its result, take no more parameters than the `let` beside them. Without this a definition's scheme would depend on which path elaborated it — a fact no reader can see once a group is decided by whether a body names itself.
 #[test]
 fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
     let source = r#"
@@ -398,9 +398,9 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
     );
 }
 
-// **An honest program that reaches the refusal, and what the message owes it.** The header above leaves open whether any surface program can, and two can: a *local* polymorphic definition applied to itself, and a recursive call at a level above its group's own. Neither is a paradox — the top-level twin of the first is admitted below, and stratification is what refuses them — so each is a program a user can write by accident and has no way to annotate out of, levels having no syntax.
+// **An honest program that reaches the refusal, and what the message owes it.** Two surface programs do: a *local* polymorphic definition applied to itself, and a recursive call at a level above its group's own. Neither is a paradox — the top-level twin of the first is admitted below, and stratification is what refuses them — so each is a program a user can write by accident and has no way to annotate out of, levels having no syntax.
 //
-// What these assert is therefore the *advice* rather than the refusal alone. The message used to print the constraint and a step count, so a reader met `?u784+1 ≤ ?u784` with nothing to do about it; it now carries the span the constraint came from, a level numbering local to the message, and the two facts that decide what to write instead. The raw metavariable id counts every level the unit has invented and moves with an edit anywhere, which is why the numbering exists and why a fixture may assert on it at all.
+// What these assert is therefore the *advice* rather than the refusal alone. A raw constraint such as `?u784+1 ≤ ?u784` gives a reader nothing to do, so the message carries the span the constraint came from, a level numbering local to the message, and the two facts that decide what to write instead. The raw metavariable id counts every level the unit has invented and moves with an edit anywhere, which is why the numbering exists and why a fixture may assert on it at all.
 #[test]
 fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy() {
     let source = r#"
@@ -466,7 +466,7 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
     );
 }
 
-// **A group's own levels are constrained by its own recursion, and the kernel has to read that.** A member used at a type one level up — `pick(@Type, …)` for `pick(@A: Type, …)` — needs `1 ≤ u` of the group's instance, a group being monomorphic in its universes. The elaborator records exactly that in the scheme, so the constraint was never missing; the kernel refused anyway, because its entailment decided a level's constant part structurally before reaching the hypotheses, and a parameter bounds no constant until something assumes it does.
+// **A group's own levels are constrained by its own recursion, and the kernel has to read that.** A member used at a type one level up — `pick(@Type, …)` for `pick(@A: Type, …)` — needs `1 ≤ u` of the group's instance, a group being monomorphic in its universes. The elaborator records exactly that in the scheme, and the kernel's entailment reaches the hypotheses before it decides a level's constant part structurally, since a parameter bounds no constant until something assumes it does.
 //
 // Both spellings are here because the two-member group is incidental: the same demand raised inside one self-recursive member refuses identically, so what the rule turns on is the group instance rather than the sibling.
 #[test]
@@ -497,7 +497,7 @@ fn a_self_recursive_call_a_level_above_its_own_certifies() {
     assert_eq!(run(source), b"0");
 }
 
-// **A type's spelling carries a universe its value need not.** `Pick(true)` is `Nat`, in `Type 0`, but a call to `Pick` is typed by `Pick`'s codomain, `Type 1`, which the other arm's quantifier over `Type` needs. `three`'s type is that call, so `same`'s `@A` meets it as written; solved by that spelling, `A` would sit in `Type 1`, where `Nat`'s `Eql` witness, at `Type 0`, then asks it to be strictly below itself. A solver that committed the rigid side as written did exactly that; one that commits the reduct names the type at its own universe.
+// **A type's spelling carries a universe its value need not.** `Pick(true)` is `Nat`, in `Type 0`, but a call to `Pick` is typed by `Pick`'s codomain, `Type 1`, which the other arm's quantifier over `Type` needs. `three`'s type is that call, so `same`'s `@A` meets it as written; solved by that spelling, `A` would sit in `Type 1`, where `Nat`'s `Eql` witness, at `Type 0`, then asks it to be strictly below itself. The solver commits the reduct instead, which names the type at its own universe.
 #[test]
 fn a_type_named_through_a_higher_universe_solves_at_its_own() {
     let source = r#"

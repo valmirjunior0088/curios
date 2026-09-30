@@ -78,7 +78,7 @@ struct DifferenceEdge {
     origin: Option<usize>,
 }
 
-/// One difference constraint over *indexed* nodes. Node identity is resolved once, at insertion: keeping `DifferenceNode` keys in the engine instead made every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
+/// One difference constraint over *indexed* nodes. Node identity is resolved once, at insertion: keeping `DifferenceNode` keys in the engine instead would make every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
 #[derive(Debug, Clone, Copy)]
 struct Arc {
     from: usize,
@@ -92,7 +92,7 @@ type Touched = (usize, i128, Option<usize>);
 
 /// A feasible potential over committed arcs — the one relaxation engine both consistency paths drive. The incremental graph commits destructively (`touched: None`; an inconsistency discards the whole graph), while the exact search journals every write so a refuted branch reverts in O(changes) — the only capability the two paths do not share.
 ///
-/// The invariant is that `distance` satisfies every arc in `arcs`. Committing more arcs restores it by relaxing outward from those arcs alone; re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — is what made the exact search dominate elaboration.
+/// The invariant is that `distance` satisfies every arc in `arcs`. Committing more arcs restores it by relaxing outward from those arcs alone; re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — would make the exact search dominate elaboration.
 #[derive(Debug, Clone, Default)]
 struct Potential {
     arcs: Vec<Arc>,
@@ -618,7 +618,7 @@ impl UniverseSolver {
 
     /// Substitute every solved metavariable in `level`, and in whatever those solutions name, to a fixed point.
     ///
-    /// Guarded by [`recurse`] rather than walked on a frame stack. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that this was once the tallest native recursion in the whole build — deep enough to leave the elaborator within about a megabyte of the default stack. That is data-shaped depth: a chain's length is a function of how many constraints reached the declaration, not of anything anyone wrote.
+    /// Guarded by [`recurse`] rather than walked on a frame stack. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that a native recursion over it would be the tallest in the whole build. That is data-shaped depth: a chain's length is a function of how many constraints reached the declaration, not of anything anyone wrote.
     ///
     /// The cycle guard is *path*-scoped, which the recursion carries for free: a metavariable is on the path exactly while its own call is open, so one already open resolves to itself, unsubstituted. That is also what forbids memoizing a completed level and reusing it elsewhere — off that path the same metavariable does substitute, so a shared answer would be wrong.
     ///
@@ -701,7 +701,7 @@ impl UniverseSolver {
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
     ///
-    /// The direction solves the lesser [`Provenance`] toward the greater — an inferred level toward an occurrence's, an occurrence's toward a chosen one — so the pair keeps the member that decides how it settles; a pair of one provenance takes a fixed direction. The commitment is deliberately incomplete — `max(1, α) = max(1, β)` also admits solutions with the metas apart below the shared constant — so a program that genuinely needs distinct shape-equal instances refuses where it previously over-generalized.
+    /// The direction solves the lesser [`Provenance`] toward the greater — an inferred level toward an occurrence's, an occurrence's toward a chosen one — so the pair keeps the member that decides how it settles; a pair of one provenance takes a fixed direction. The commitment is deliberately incomplete — `max(1, α) = max(1, β)` also admits solutions with the metas apart below the shared constant — so a program that genuinely needs distinct shape-equal instances is refused rather than over-generalized.
     fn default_shape_equal(&mut self, left: &Level, right: &Level) -> Result<(), UniverseError> {
         let left = self.zonk(left)?;
         let right = self.zonk(right)?;
@@ -743,9 +743,9 @@ impl UniverseSolver {
 
     /// Record an inequality. Consistency is *not* decided here.
     ///
-    /// It used to be: every insertion pushed, ran a full consistency check, and popped on refusal. That check is an incremental cycle detection over the difference graph — one relaxation pass per constraint — and it measured at 67 of the fixed prelude's 200 seconds of elaboration, across seventy-five thousand insertions at roughly a millisecond each. Nothing was buying that. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
+    /// Deciding it at every insertion — push, run a full consistency check, pop on refusal — would pay an incremental cycle detection over the difference graph, one relaxation pass per constraint, at each of the prelude's many insertions, and nothing would buy it. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
     ///
-    /// What still decides consistency is what always used a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` validates the universes it archives independently.
+    /// What decides consistency is what needs a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` decides every context it assumes independently.
     pub fn add_constraint(
         &mut self,
         mut constraint: UniverseConstraint,
@@ -905,7 +905,7 @@ impl UniverseSolver {
 
     /// Minimize the flexible levels in `metas` to their least solutions.
     ///
-    /// Solving is worklist-driven: a level is revisited only when one of the levels its bounds mention has just been solved. Rescanning every constraint for every level after every assignment is what made this quadratic in the size of a declaration's universe closure.
+    /// Solving is worklist-driven: a level is revisited only when one of the levels its bounds mention has just been solved. Rescanning every constraint for every level after every assignment would make this quadratic in the size of a declaration's universe closure.
     fn solve_flexible_in(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::solve_flexible_in");
         self.merge_forced_equalities(metas)?;
@@ -1027,7 +1027,7 @@ impl UniverseSolver {
     /// - **A level bounded by zero.** `max(…, a, …) ≤ 0` holds over the naturals only with `a` at zero, so each bare meta on the lower side of a constraint whose upper side is the zero level is zero. A part at a positive offset makes the store unsatisfiable, which is the consistency check's to report.
     /// - **A lone level equal to a maximum.** `a ≤ E` and `E ≤ a` with `a` a bare meta that `E` does not mention: `a` *is* `E`. This is solving for `a`, not unifying two maxima — `max(a, b) = max(c, d)` determines none of them and stays two constraints.
     ///
-    /// The last two are what conversion leaves behind when an equation's sides differ in more than one atom, which `add_eq`'s shape-equal default does not take: measured over the fixed prelude, 661 of its 4 346 recorded constraints were levels bounded by zero, each a parameter every caller had to supply as zero, and 80 were halves of lone equalities — `/std/Try`'s lift between two `Try`s alone carried seven and six, and the certifier's entailment paid for them in time. Solving them took the prelude's contexts from 6 277 parameters and 4 346 constraints to 5 489 and 2 941 — the constraints falling further than the solved levels, since a bound on a solved level is often trivially true — and its elaboration from 36.7 to 33.8 gigabytes allocated, its certification from 6.1 to 4.8.
+    /// The last two are what conversion leaves behind when an equation's sides differ in more than one atom, which `add_eq`'s shape-equal default does not take. Left unsolved, a level bounded by zero is a parameter every caller has to supply as zero, and a lone equality is two constraints the certifier's entailment pays for in time; solving them removes more constraints than levels, since a bound on a solved level is often trivially true.
     ///
     /// Each round collects *every* determined level rather than the first. Solving can expose new ones — `a ≤ c` and `c ≤ b` become mutual once `a` and `b` coincide — so rounds repeat to a fixpoint, but a round costs one pass over the store instead of one pass per solution. Within one round a solution may not mention a level another solution replaces, nor replace one another solution mentions, so no two solutions of a round refer to each other; the next round sees the store they rewrote.
     fn merge_forced_equalities(
@@ -1105,7 +1105,7 @@ impl UniverseSolver {
                     assignments.push((meta, level));
                 };
 
-                // The store is read once, and only the half a lone equality looks up is indexed: the constraints bounding a maximum by a bare meta. Ordering every constraint to find the few of that shape measured at five times the cost of the merge it serves.
+                // The store is read once, and only the half a lone equality looks up is indexed: the constraints bounding a maximum by a bare meta. Ordering every constraint to find the few of that shape would cost several times the merge it serves.
                 let bounding_a_meta = self
                     .constraints
                     .iter()
@@ -1410,7 +1410,7 @@ impl UniverseSolver {
 
     /// Identify each chosen level bounded only from above, by one other chosen level, with that level.
     ///
-    /// Such a level occurs where a caller passes a type — `pure(@A: Type, A) -> M(A)`'s `A`, bounded by `M`'s domain — and cumulativity already lets a caller pass anything smaller, so identifying it with its bound takes no program from a caller. What it takes away is an implementation's licence to answer at a smaller level: generalized apart, `Monad`'s three method levels were five parameters in all, a witness pinned them at zero and refused `!` at a large payload, and left generic they put maxima into the domains of the witnesses built over them, which a use could only meet as a disjunction. Lean's `Pure (f : Type u → Type v)` declares `pure {α : Type u}`, and Rocq's manual writes its monad `monad@{i}` with `unit : forall (A : Type@{i}), A -> m A`. A level with two bounds names no one level to be, and stays.
+    /// Such a level occurs where a caller passes a type — `pure(@A: Type, A) -> M(A)`'s `A`, bounded by `M`'s domain — and cumulativity already lets a caller pass anything smaller, so identifying it with its bound takes no program from a caller. What it takes away is an implementation's licence to answer at a smaller level: generalized apart, `Monad`'s three method levels would be five parameters in all, a witness would pin them at zero and refuse `!` at a large payload, and left generic they would put maxima into the domains of the witnesses built over them, which a use could only meet as a disjunction. Lean's `Pure (f : Type u → Type v)` declares `pure {α : Type u}`, and Rocq's manual writes its monad `monad@{i}` with `unit : forall (A : Type@{i}), A -> m A`. A level with two bounds names no one level to be, and stays.
     fn identify_bounded_choices(
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
@@ -1493,7 +1493,7 @@ impl UniverseSolver {
         self.minimize(&internal, &relevant)?;
         // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left.
         self.merge_forced_equalities(&relevant)?;
-        // A still-deferred witness goal is made ground, whatever bounds its levels and whoever chose them: the goal resolves after this scheme closes, and the witness it finds can only be pinned to a level the goal already fixes (`close_instance`), while a constraint it brings then reaches no scheme at all. So a level the goal names settles, and so does every level a settlement lands on, until the goal names none. Generalized, `/std/Io`'s `Read(Async, Input)` witness named the unapplied `Async` at a parameter while the `Read(Async, Handle)` witness its body resolved later sat at zero; settled one step only, `tcp/Socket/close_raising`'s `Try(Io, Io/Error, A)` left its `Io` at `A`'s level, offered at every level, while its `!` lifts `Handle/close`'s `Io` at zero through `Lift(Io, Io)`, whose two sides are one level, so the witness answered at zero alone.
+        // A still-deferred witness goal is made ground, whatever bounds its levels and whoever chose them: the goal resolves after this scheme closes, and the witness it finds can only be pinned to a level the goal already fixes (`close_instance`), while a constraint it brings then reaches no scheme at all. So a level the goal names settles, and so does every level a settlement lands on, until the goal names none. Generalized, `/std/Io`'s `Read(Async, Input)` witness would name the unapplied `Async` at a parameter while the `Read(Async, Handle)` witness its body resolves later sits at zero; settled one step only, `/std/tcp/Listener`'s `close_raising` would leave the `Io` of its `Try(Io, Io/Error, A)` at `A`'s level, offered at every level, while its `!` lifts `Handle/close`'s `Io` at zero through `Lift(Io, Io)`, whose two sides are one level, so the witness would answer at zero alone.
         let mut pending = pending
             .into_iter()
             .filter(|meta| relevant.contains(meta))
@@ -1522,7 +1522,7 @@ impl UniverseSolver {
             .filter(|meta| self.metas[meta.0].floored)
             .collect::<BTreeSet<_>>();
         self.settle(&occurrences, &floored)?;
-        // Last, a level the constraints reach but neither the type nor the body mentions — read after the occurrences settle, since settling one at a chosen level's bound makes that level the one the signature names; `Try`'s `Monad` witness took its payload at zero while the lambda binder that chose it went unmentioned. What is left is one nothing can observe — `/sys/List`'s body level, joined to its result by `v ≤ u` and nothing else — so it is settled rather than generalized, which is Rocq's restriction of a context to the universes its terms use.
+        // Last, a level the constraints reach but neither the type nor the body mentions — read after the occurrences settle, since settling one at a chosen level's bound makes that level the one the signature names; read before them, `Try`'s `Monad` witness would take its payload at zero while the lambda binder that chose it goes unmentioned. What is left is one nothing can observe — `/sys/List`'s body level, joined to its result by `v ≤ u` and nothing else — so it is settled rather than generalized, which is Rocq's restriction of a context to the universes its terms use.
         let interface = self.representatives(interface);
         let unmentioned = relevant
             .iter()
@@ -1769,7 +1769,7 @@ impl UniverseSolver {
         ///
         /// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
         ///
-        /// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions overflowed the native stack before the budget ever noticed. `/std/Async/block_on` reaches four hundred branches. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
+        /// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions would overflow the native stack before the budget ever noticed. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
         ///
         /// The recursion is what pairs a committed arc with its revert: the alternative that committed one owns it for exactly the call it is exploring, and reverts before reading that call's verdict.
         fn choose(
@@ -1927,7 +1927,7 @@ impl UniverseSolver {
 ///
 /// A free function on the solver side rather than a method on [`UniverseContext`]: deciding satisfiability is a judgment, and it runs a solver. The context itself is data and knows nothing about how it is checked.
 ///
-/// *Closure* is the other case, and it used to be spelled out here as well as in `curios-cert` — two identical loops, which is a second opinion worth nothing about a predicate too simple to have two implementations. It is [`UniverseContext::is_closed`] now, decided once on the data, which is the line this function's own note draws and did not apply to both halves.
+/// *Closure* is the other case, and it is [`UniverseContext::is_closed`], decided once on the data and called by both checkers: a second loop would be a second opinion worth nothing about a predicate too simple to have two implementations.
 pub(crate) fn universe_context_validate(context: &UniverseContext) -> Result<(), UniverseError> {
     if !context.is_closed() {
         return Err(UniverseError::EscapingLevel);

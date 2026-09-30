@@ -4,7 +4,7 @@
 //!
 //! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
-//! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo x runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What enforces this is not the feature declaration but `curios/src/bundle.rs`, whose guards scan the launcher image that actually ships for backend markers and hold it under a size ceiling — a Cranelift-carrying launcher was built and measured against them, and both refuse it.
+//! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo x runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
 //!
 //! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is always present, while everything that does need one lives in the `cranelift` module, gated once on the module rather than item by item. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
 
@@ -47,6 +47,6 @@ pub use lower::*;
 mod engine;
 pub use engine::*;
 
-/// Deliberately a namespace rather than flattened into the root, and one of the places in this workspace that keep one — `curios-ersd`'s and `curios-core`'s `test_support`, and `curios-analysis`'s `fixture`, are the others, for the same reason. The other crates' namespaces existed to hold colliding names apart and were dissolved into crate boundaries; this one is not about ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `run_bytes` would not. The path is the warning label.
+/// Deliberately a namespace rather than flattened into the root, and one of the places in this workspace that keep one — `curios-ersd`'s, `curios-core`'s and `curios-utilities`'s `test_support`, and `curios-analysis`'s `fixture`, are the others, for the same reason, which is not ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `run_bytes` would not. The path is the warning label.
 #[cfg(feature = "test-support")]
 pub mod test_support;

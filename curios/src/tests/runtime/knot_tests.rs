@@ -2,7 +2,7 @@
 
 use crate::tests::{error, run};
 
-/// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells now; this knot once lowered to a `RecInit` node whose machine lowering patched only *member* closures at the ready point, and `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — captured a value that did not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
+/// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells, so `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — reads a cell rather than capturing a value that does not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
 #[test]
 fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
     assert_eq!(
@@ -28,7 +28,7 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
     );
 }
 
-/// A knot's computed members are forced by need, so the order they are written in decides nothing: `table = build(len)` reads `size` through `build`, and reading it runs `size`'s initializer first — `43` whether `size` is written before or after. This program once printed `1` (the unfilled cell's placeholder), then trapped, then was refused at the erase boundary; it is the language's program and computes the language's answer now.
+/// A knot's computed members are forced by need, so the order they are written in decides nothing: `table = build(len)` reads `size` through `build`, and reading it runs `size`'s initializer first — `43` whether `size` is written before or after.
 #[test]
 fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first() {
     for (first, second) in [
@@ -84,7 +84,7 @@ fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
     }
 }
 
-/// The read no analysis sees: `p` is a parser over the later member `size`, and `n`'s initializer runs it at once through `Parse/run`, which applies `p`'s step as a *projected closure*. Forced by need that read simply runs `size`'s initializer — `42`, where the same program once computed `1` and then trapped on an empty cell. What remains for the runtime is the cycle below.
+/// The read no analysis sees: `p` is a parser over the later member `size`, and `n`'s initializer runs it at once through `Parse/run`, which applies `p`'s step as a *projected closure*. Forced by need that read simply runs `size`'s initializer — `42`. What remains for the runtime is the cycle below.
 #[test]
 fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
     assert_eq!(
@@ -108,7 +108,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
 
 /// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the empty result cell and consumed initializer channel are the cycle state. The initializer names the member in the report even when the force function is inlined.
 ///
-/// Gated on `profile` because that report names a frame only when the wasm name section survived Binaryen, and `to_cwasm` keeps it for a profiling build alone — the same shape as `fixpoint` and `churn`, each gated on the spans that supply what it reads. Ungated it failed under a plain `cargo test -p curios` with the frame rendered `<wasm function 10>`, which reads like a codegen regression and is not one.
+/// Gated on `profile` because that report names a frame only when the wasm name section survived Binaryen, and `to_cwasm` keeps it for a profiling build alone — the same shape as `fixpoint` and `churn`, each gated on the spans that supply what it reads. Ungated, a plain `cargo test -p curios` would render the frame `<wasm function 10>`, which reads like a codegen regression and is not one.
 #[cfg(feature = "profile")]
 #[test]
 fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
@@ -138,7 +138,7 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
 
 #[test]
 fn a_member_reading_itself_is_refused_before_it_can_trap() {
-    // The cycle the verifier can see without any summary: `p`'s initializer hands `p` to `Parse/map`, which reads it, so forcing `p` forces `p`. This compiled and trapped as a black hole while a direct self-read was exempt from the cycle graph for the sake of the *unused* `rec loop = loop`; the exemption is now the unused member's alone.
+    // The cycle the verifier can see without any summary: `p`'s initializer hands `p` to `Parse/map`, which reads it, so forcing `p` forces `p`. A direct self-read is in the cycle graph; only an *unused* member such as `rec loop = loop` is exempt.
     let error = error(
         r#"
         use /std/{Nat, Str, Bytes, Io, Result, Parse, rand, print};

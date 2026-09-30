@@ -255,7 +255,7 @@ fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
 fn scripted_stdin_lines_are_one_chunk_that_never_waits() {
     let (host, _io) = MockHost::builder().stdin_lines(["one", "two"]).build();
 
-    // Lines are the one armed chunk they have always been, so a reader crosses from one to the next without a poll between them.
+    // Lines are one armed chunk, so a reader crosses from one to the next without a poll between them.
     assert_eq!(
         host.handle_read(Handle::Stdin, 4),
         Ok(Some(b"one\n".to_vec()))

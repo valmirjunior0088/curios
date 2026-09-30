@@ -1,4 +1,4 @@
-//! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
+//! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
 //!
 //! For every corpus program this classifies each tuple construction and rope-slice result by how its value travels: projection, continuation transfer, known-function transfer, return, closure capture, heap storage, unknown call, and mixed flow. Values that merge at a parameter are surveyed as one region, because eligibility in the spec is a property of the merged flow rather than of a single construction site — the fold accumulator's arm constructions and the loop parameter they meet at are one candidate, not five.
 //! The census is a measurement, not an assertion: the ignored test prints the classification, and the machinery is pinned by the focused test below rather than by the survey's own figures.
@@ -159,7 +159,7 @@ enum Consumption {
 
 /// One tuple construction, as the survey needs to read it.
 ///
-/// The leading literal is what a variant classification rests on: `curios-ersd`'s door lowers a tagged constructor to `(tag, payload…)` with the tag a literal `Nat`, so a construction whose slot zero is a literal is one a family's discriminant travels in front of. A construction whose slot zero is a *value* is either an ordinary product or a variant the return protocol already rebuilt from fields — which is why the count of those is reported rather than assumed to be zero.
+/// The leading literal is what a variant classification rests on: `curios-ersd`'s door lowers a tagged constructor to its row `(tag, payload…)` with the tag a literal `Nat`, so a construction whose slot zero is a literal is one a family's discriminant travels in front of. A construction whose slot zero is a *value* is either an ordinary product or a variant the return protocol already rebuilt from fields — which is why the count of those is reported rather than assumed to be zero.
 #[derive(Debug, Clone, Copy)]
 struct TupleSite {
     node: NodeId,
@@ -230,12 +230,12 @@ impl Region {
 
     /// The class-merged width one region would travel at: a discriminant slot plus the payload slots its widest constructor carries.
     ///
-    /// It is the plain maximum because there is exactly one representation class to merge. `curios-emit` types every tuple field `(ref null any)`, so GHC's per-kind slot merge has nothing to distinguish here; the merge becomes interesting only when field representation stops being uniform, which the encoding decision names as `represent.rs`'s successor's subject rather than this one's.
+    /// It is the plain maximum because there is exactly one representation class to merge: `curios-emit` types every tuple field `(ref null any)`, so GHC's per-kind slot merge has nothing to distinguish here.
     fn width(&self) -> usize {
         self.arities.last().copied().unwrap_or(0)
     }
 
-    /// Whether the region's values come to rest or escape, rather than only travelling. The uniform-width alternative's reinstate gate reads this: padding at the door costs every value that rests, so a population that never rests is the one place paying at rest could be cheaper.
+    /// Whether the region's values come to rest or escape, rather than only travelling: padding at the door costs every value that rests, so a population that never rests is the one place paying at rest is free.
     fn rests(&self) -> bool {
         [
             "heap-storage",
@@ -249,7 +249,7 @@ impl Region {
         .any(|class| self.classes.contains(class))
     }
 
-    /// The spec's four-way flow classification, which is *not* [`Region::bucket`]: a return is a blocker for continuation splitting alone and this campaign's M2 subject, so the two readings disagree on purpose and both are reported.
+    /// The four-way flow classification, which is *not* [`Region::bucket`]: a return is a blocker for continuation splitting alone and the return protocol's subject, so the two readings disagree on purpose and both are reported.
     fn flow(&self) -> &'static str {
         let eligible: BTreeSet<&'static str> = [
             "projection",
@@ -420,7 +420,7 @@ impl<'m> Census<'m> {
             let node_id = NodeId::from_index(index);
             match node {
                 Node::LetValue { result, value, .. } => {
-                    // A tagged constructor is a `Variant` since family keying, and it is exactly the shape this census counts as a tuple site — the tag still sits at slot 0.
+                    // A family construction is a `Row`, and it is exactly the shape this census counts as a tuple site — its tag sits at slot 0.
                     if let ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms) = value {
                         let tag = match atoms.first() {
                             Some(Atom::Literal(Literal::Nat(tag))) => u32::try_from(tag).ok(),
@@ -593,7 +593,7 @@ impl<'m> Census<'m> {
 
     /// What each live function's return edges hand back, one entry per distinct shape.
     ///
-    /// Return components are surveyed apart from the merged regions above because a variant-width *return* need not contain a construction at all: an immediate family's bare constructor returns its payload, which seeds no region and would be invisible to a walk that starts at tuple sites. This is the measurement M2's gate reads.
+    /// Return components are surveyed apart from the merged regions above because a variant-width *return* need not contain a construction at all: an immediate family's bare constructor returns its payload, which seeds no region and would be invisible to a walk that starts at tuple sites.
     fn return_shapes(&self) -> BTreeMap<FunctionId, BTreeSet<ReturnShape>> {
         let mut shapes = BTreeMap::<FunctionId, BTreeSet<ReturnShape>>::new();
         let mut record = |owner: FunctionId, edge: &Edge, census: &Self| {
@@ -939,7 +939,7 @@ fn survey(label: &str, source: &str) -> Survey {
     }
 }
 
-/// The M0 corpus survey. Run explicitly:
+/// The corpus survey. Run explicitly:
 ///
 /// ```sh
 /// cargo test --package curios --all-features -- codegen::census::aggregate_flow_census --ignored --nocapture
@@ -947,43 +947,11 @@ fn survey(label: &str, source: &str) -> Survey {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, after the `/std` scan-spelling sweep, over the fourteen-program corpus: 852 regions — 747 blocked, 62 continuation-only, 31 needs-workers. Most regions repeat across programs because they live in `/std`'s shared plumbing; the per-program counts are stable at about 71 tuple sites and 17 slice sites each.
+/// Over the fourteen-program corpus: 585 regions — 522 blocked, 47 continuation-only, 16 needs-workers — and no variant regions at all. Most regions repeat across programs because they live in `/std`'s shared plumbing. The needs-workers owners are `/std/Str/fold`, `io/bind` and `main`. Three functions carry return edges of more than one shape — `/build` (`{Tuple(4), Bare}`), `/std/Nat/of_str` (`{Tuple(2), Bare}`) and `io/bind` (`{Tuple(2), Bare}`, escaping) — and none is evidence for a return-side mechanism: an escaping one is declined for escaping, and a `trees` node is stored in its parent, so splitting `/build`'s return relocates the allocation into the caller rather than removing it.
 ///
-/// The readings the value-lifetime campaign proceeds on:
+/// The boxed-tag annex reads 462 tag-led constructions, none of them read back at slot zero within its own flow. Read that as an upper bound rather than a count of dead tags: a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
 ///
-/// - The `/std/Str/fold` accumulator is `[continuation-only] tuple arity {2}: 5 ctors, 1 params, {continuation-transfer, projection}` in every string-walking program — M2's acceptance case is eligible exactly as specified.
-/// - The scan-state flow is `[blocked] tuple arity {1}` with every parameter mixed by `receives call results`: after the sweep the scan circulates through `step`'s returns rather than being rebuilt, so the region dissolves through the return protocol (M1a) and continuation splitting (M2), not through worker signatures. Before the sweep the same region carried arity `{1, 4}` — the nullary constructors lower to 1-tuples and `cont` to a 4-tuple, so no exact product shape ever described it.
-/// - The suffix-view rope region is `[blocked]` with `{rope-get, rope-len, rope-slice}` consumers and one continuation also receiving an empty-`Bytes` literal beside whole originals — the `Empty`/`Whole`/`Proper` mixing M4's descriptor form exists to carry.
-/// - The needs-workers bucket — M3's admission gate — is owned by `/std/Async/resume_after/2`, `/std/Async/run_guards/1`, `/std/Async/serve/1/1`, `/sys/Handle/write/1`, `io/bind`, and `main`; the scan state is *not* in it, for the shape reason above.
-/// - Reachable regions outside `/std` are owned by `io/bind` and the programs' own `main`s.
-///
-/// Retaken after M2 landed (same day): 681 regions — 574 blocked, 50 continuation-only, 57 needs-workers. Continuation scalar replacement dissolved about 170 regions corpus-wide, the fold accumulator's among them; what it left concentrates the surviving continuation-only candidates near the growth ceiling or behind arity mixing, and promotes some previously blocked flows into needs-workers as their continuation legs cleared.
-///
-/// Retaken after M4 landed (same day): the buckets read the same by coincidence of sums, but the slice sites underneath them halved — 19 to 10 in each standard string program, 41 to 29 in `monad_async` — because the window split virtualizes a suffix walk's views before the survey sees them.
-///
-/// # The variant-width survey
-///
-/// Taken **2026-08-17**, over the same corpus, before anything of the variant-width campaign had landed. Thirty-eight variant regions — a region whose constructions disagree about width — in three flow classes: 14 continuation-only, 12 known-call, 12 blocked, and **none at all in the return class**.
-///
-/// Underneath those thirty-eight there are only **three distinct shapes**, each repeated once per program that reaches it, because every one of them lives in shared `/std` plumbing:
-///
-/// - `(roster 2, width 2)`, ×14, owned by `main` and `io/bind` — an `Option` merging its nullary and unary constructors at a join.
-/// - `(roster 2, width 3)`, ×12, blocked by parameters that receive call results.
-/// - `(roster 2, width 4)`, ×12 — **the UTF-8 scan**, printed as `tuple variant arity {1, 4} width 4 tags {0, 2} +7 untagged: 17 ctors, 2 params, classes {continuation-transfer, known-function-transfer, projection}`, owned by `/std/Str/fold`, the scan `/std/Str/Valid/try` runs, `/std/Str/drop_width` and `main`. The tags are `lead` and `bad` riding 1-tuples; the seven untagged constructions are the resumes' rebuilds, whose slot zero is a *parameter* rather than a literal because `split_returns` already delivers the scan as fields.
-///
-/// That last line is the campaign's central reading and it corrects the specification twice. The discriminant is **not** a literal on every edge — a rebuilt return carries it as a parameter — so an origin lattice that demanded a tag-led construction would decline the one flow the campaign exists for. And the scan's flow class is **known-call**, not continuation-only: the region crosses a known call, so continuation splitting alone leaves a materialization at that boundary rather than clearing the per-character path.
-///
-/// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)`, so there is exactly one representation class and the class-merged width is the plain maximum arity. The largest observed is 4, against a `PARAM_SPLIT_GROWTH_LIMIT` of 16, so the existing ceiling clears every candidate and no second budget was invented to sit beside it.
-///
-/// **The M2 gate — variant-width return components — is three functions corpus-wide, and none of them is evidence for a return-side mechanism.** `/decode/1` and `/std/Nat/of_str/1` hand back `{Tuple(1), Tuple(2)}` and both *escape*, so the protocol declines them for the escaping reason and no width class would reach them. `/build` hands back `{Tuple(4), Bare}` — the immediate-family shape the encoding decision created, and the acceptance case M2 was written for — but a `trees` node is stored in its parent, so its values rest: splitting that return relocates the allocation into the caller rather than removing it, which is the reboxing balance the specification's own M3 clause names as disqualifying.
-///
-/// **The uniform-width alternative's gate** reports both never-resting populations as the two flows above (`tags {0,1} width 2` ×14, `tags {0,2} width 4` ×12) — so padding at the door would be paid by no stored value in this corpus, but it would also buy nothing that in-flight splitting does not, since neither population rests either way.
-///
-/// **The boxed-tag annex**, for the encoding decision's deferred item: 552 tag-led constructions, of which 429 are never read back at slot zero *within their own merged flow*. Read that as an upper bound rather than a count of dead tags — a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
-///
-/// Retaken once the campaign had landed (same day): **12 variant regions, every one of them blocked.** The continuation-only and known-call classes are empty, which is the acceptance case stated as absence — every variant-width flow the corpus reaches now travels as fields. The survivors are the `(2, 3)` shape, blocked by parameters that receive call results and by an unknown call, and the buckets underneath fell with them: 573 blocked to 546 and 57 needs-workers to 28. The return gate is unchanged at three functions, which is the point of refusing that milestone rather than deferring it.
-///
-/// Retaken **2026-09-28**, after the standard-library invariants work rewrote the UTF-8 decoder, every walk over text and the parsers: 585 regions — 522 blocked, 47 continuation-only, 16 needs-workers, from 546 and 28 at the retake above — and **no variant regions at all**. The `(roster 2, width 4)` scan this survey centres on is gone with the other eleven, and `/std/Str/drop_width`, one of its owners, no longer exists; which of the work's changes dissolved which region is not separated here. The needs-workers owners are `/std/Str/fold`, `io/bind` and `main`. The return gate is still three functions — `/build` (`{Tuple(4), Bare}`), `/std/Nat/of_str` (now `{Tuple(2), Bare}`) and `io/bind` (`{Tuple(2), Bare}`, escaping) — and the boxed-tag annex reads 462 tag-led constructions, none of them read back within its own flow.
+/// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)` and a row is padded to one width, so the class-merged width is the plain maximum arity, and `PARAM_SPLIT_GROWTH_LIMIT`'s 16 clears every candidate the corpus holds.
 #[test]
 #[ignore = "measurement: surveys the corpus rather than asserting"]
 fn aggregate_flow_census() {
@@ -1005,7 +973,7 @@ fn aggregate_flow_census() {
         mixed_returns.extend(survey.mixed_returns);
         for region in survey.regions {
             *buckets.entry(region.bucket()).or_default() += 1;
-            // The M3 admission gate reads the regions a worker signature would newly reach — not every region that happens to also cross a known call before being blocked by something else.
+            // The needs-workers bucket is the regions a worker signature would newly reach — not every region that happens to also cross a known call before being blocked by something else.
             if region.bucket() == "needs-workers" {
                 worker_owners.extend(region.owners.iter().cloned());
             }
@@ -1019,7 +987,7 @@ fn aggregate_flow_census() {
                 );
             }
 
-            // The boxed-tag annex the encoding decision deferred: a construction leading with a literal discriminant that nothing in its flow ever reads back. Counted over tag-led constructions rather than over families, because Cont holds no family identity — the tag is what survives the door.
+            // The boxed-tag annex: a construction leading with a literal discriminant that nothing in its flow ever reads back. Counted over tag-led constructions rather than over families, because Cont holds no family identity — the tag is what survives the door.
             if !region.tags.is_empty() {
                 tagged_constructions += region.tuple_sites.len() - region.untagged;
                 if !region.reads.contains(&0) {
@@ -1097,7 +1065,7 @@ fn aggregate_flow_census() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, when the limit read 24: `/std/Str/step` extent 37, `/std/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands. Retaken again after variant-width splitting (same day): step 26, classify 52, fold 63 — the refusal stands by a wider margin, and the reason it no longer matters is that the reconstruction the specializer was being weighed against is gone.
+/// Against a limit of 24: `/std/Str/step` extent 26, `/std/Str/classify` 52, `/std/Str/fold` 63 — so specializing `step` per tag is declined by the budget rather than by any rule, and raising the limit to admit it would admit per-tag clones of everything else this size. The fold does not call `step` (see `ladder`'s `the_per_character_walk_carries_its_scan_without_allocating`), so a retake reports the walkers alone.
 #[test]
 #[ignore = "measurement: reports the extents the specializer's budget compares"]
 fn step_specialization_extent() {
@@ -1123,7 +1091,7 @@ fn step_specialization_extent() {
     }
 }
 
-/// Pins the census machinery to the shapes the string walk still carries — and to the two it no longer does. The accumulator region dissolved when continuation scalar replacement landed (M2), and the suffix-view rope region dissolved when the window split landed (M4): both absences are the campaign's acceptance echoed by its own instrument. What survives, until a variant-width capability exists, is the scan-state flow: a blocked tuple region whose parameters receive call results.
+/// Pins the census machinery to the shapes a string walk does not carry: the accumulator travels as fields through continuation scalar replacement, and the suffix view as window fields through the window split, so neither survives as a region — and the census still surveys what remains.
 #[test]
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
@@ -1163,7 +1131,7 @@ fn surveys_the_fold_accumulator_region() {
     assert!(!regions.is_empty(), "the census still surveys the walk");
 }
 
-/// The death-birth tally for one program — the churn campaign's census instrument (its verdicts retired into `documentation/design/toolchain/a-pure-program-rebuilds-what-an-impure-one-would-mutate.md`), the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
+/// The death-birth tally for one program — the churn census instrument, whose verdicts are `documentation/design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md`'s — the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
 #[derive(Debug, Default)]
 struct Rebirth {
     /// Tuple constructions in the program.
@@ -1176,7 +1144,7 @@ struct Rebirth {
     spine_pairs: usize,
     /// Rope extends: appends, and every operand a concat merges.
     extends: usize,
-    /// Extends whose base's only use is that extend — the linearly threaded builder lever B recognizes.
+    /// Extends whose base's only use is that extend — the linearly threaded builder an in-place extend would recognize.
     linear_extends: usize,
     /// The functions that carry pairs, for locating concentrations.
     owners: BTreeSet<String>,
@@ -1284,7 +1252,7 @@ fn rebirth(census: &Census) -> Rebirth {
     tally
 }
 
-/// The M0 workloads — the corpus's cross-language entries, so the classifier reads the programs the results files time.
+/// The workloads — the corpus's cross-language entries, so the classifier reads the programs the results files time.
 const WORKLOADS: [(&str, &str); 3] = [
     (
         "chain",
@@ -1309,7 +1277,7 @@ const WORKLOADS: [(&str, &str); 3] = [
     ),
 ];
 
-/// The in-corpus spine-churn consumer the specification's evidence names: a driver that pulls the whole TOML decoder — and with it `/std/Map`'s table construction — into the surveyed module. The classifier only compiles it; nothing runs.
+/// The in-corpus spine-churn consumer: a driver that pulls the whole TOML decoder — and with it `/std/Map`'s table construction — into the surveyed module. The classifier only compiles it; nothing runs.
 pub(in crate::tests) const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
@@ -1336,7 +1304,7 @@ end
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, over the fourteen-program corpus, the three M0 workloads, and the TOML driver:
+/// Over the fourteen-program corpus, the three workloads, and the TOML driver:
 ///
 /// ```text
 /// == death-birth totals: 1168 tuple sites, 0 constructed-width pairs, 509 projected-width pairs, 24 under /std/Map; 136/256 extends linear
@@ -1346,7 +1314,7 @@ end
 ///
 /// # The reading
 ///
-/// The population is real and pervasive — 509 of 1168 constructions stand beside a dying matching-width value, so the specification's stop-evidence clause (the population rare outside the workloads) does not fire. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates where the specification's evidence said: `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And lever B's admission population exists: over half of all rope extends are linearly threaded — the base's only use is the extend that consumes it.
+/// The population is real and pervasive — 509 of 1168 constructions stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates in `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And over half of all rope extends are linearly threaded — the base's only use is the extend that consumes it.
 #[test]
 #[ignore = "measurement: surveys the corpus rather than asserting"]
 fn death_birth_census() {

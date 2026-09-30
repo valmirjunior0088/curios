@@ -36,7 +36,7 @@ pub(super) struct Closure {
 
 /// An immutable window over shared list elements — the list mirror of [`Binary`], so a suffix or a slice is a start and a length over the same allocation rather than a copy of the elements.
 ///
-/// This is the runtime's own shape, not an evaluator convenience: `ListRest` and `ListSlice` are windows over one rope, and the peel the interpreter performs has to cost what the door's `emit_peel` costs, or a walk the program takes in linear time is taken here in quadratic. Before this, a suffix was rebuilt element by element at every step.
+/// This is the runtime's own shape, not an evaluator convenience: `ListRest` and `ListSlice` are windows over one rope, and the peel the interpreter performs has to cost what the door's `emit_peel` costs, or a walk the program takes in linear time is taken here in quadratic.
 #[derive(Clone)]
 pub(super) struct ListWindow {
     items: Rc<[Value]>,

@@ -66,7 +66,7 @@ pub(crate) enum FltHelper {
     Sqrt,
     /// `(f64) -> f64`: the integral value nearest, a tie away from zero — the one direction of round-to-integral Wasm has no instruction for.
     Round,
-    /// `(f64, f64) -> f64`: the exact `fmod`, the dividend's sign on the answer — `%` on `Flt`, which WebAssembly has no instruction for. It used to be expanded inline as `x - trunc(x / y) * y`, which rounds at each step and disagrees with `fmod` on roughly half of all finite operand pairs — `1e8 % 3` came out `0` at runtime against the folded `1`.
+    /// `(f64, f64) -> f64`: the exact `fmod`, the dividend's sign on the answer — `%` on `Flt`, which WebAssembly has no instruction for. An inline `x - trunc(x / y) * y` would round at each step and disagree with `fmod` on roughly half of all finite operand pairs — `1e8 % 3` would come out `0` at runtime against the folded `1`.
     Rem,
     /// `(i32 negative, i64 significand, i32 exponent, i32 sticky, i32 direction) -> f64`: the binary64 `(-1)^negative · (significand + ε) · 2^exponent` rounds to, `ε` in `(0, 1)` when `sticky` is `1` and zero when it is `0`. The model's `round`, over a 64-bit significand.
     Pack,
@@ -1219,7 +1219,7 @@ impl<'a, 'b> FltEmitter<'a, 'b> {
         self.declare(FltHelper::Fma, scope, instrs);
     }
 
-    /// `$flt/rem (f64, f64) -> f64`: exact `fmod` over binary64, which WebAssembly has no instruction for. Long division by exponent-scaled subtraction, in f64 instructions alone: `t` starts at `|y|` and doubles while `2t ≤ |x|` (past the largest finite value the doubling gives `inf`, which fails the test and stops); then while `|x| ≥ |y|`, `t` halves until it no longer exceeds `|x|` and is subtracted. Each halving stays at or above `|y|`, so it is exact even in the subnormal range, and each subtraction has `t ≤ |x| < 2t`, which is Sterbenz's condition for exactness — so the result is the exact remainder `fmod` computes. The sign is the dividend's, as C defines it. Checked bit-for-bit against `fmod` over two million random pairs and the NaN, zero, infinity and extreme-magnitude grid before it was written down here; the worst case, the largest finite value against the smallest subnormal, takes a few hundred iterations.
+    /// `$flt/rem (f64, f64) -> f64`: exact `fmod` over binary64, which WebAssembly has no instruction for. Long division by exponent-scaled subtraction, in f64 instructions alone: `t` starts at `|y|` and doubles while `2t ≤ |x|` (past the largest finite value the doubling gives `inf`, which fails the test and stops); then while `|x| ≥ |y|`, `t` halves until it no longer exceeds `|x|` and is subtracted. Each halving stays at or above `|y|`, so it is exact even in the subnormal range, and each subtraction has `t ≤ |x| < 2t`, which is Sterbenz's condition for exactness — so the result is the exact remainder `fmod` computes. The sign is the dividend's, as C defines it. The worst case, the largest finite value against the smallest subnormal, takes a few hundred iterations.
     fn emit_flt_rem(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", f64_type());

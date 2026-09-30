@@ -1,6 +1,6 @@
 //! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a store mechanism.
 //!
-//! The store's own behaviour is covered where it lives, in `cache::payload`'s tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
+//! The store's own behaviour is covered where it lives, in `curios-verdicts`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
@@ -115,7 +115,7 @@ fn one_slot_serves_run_and_compile() {
     );
 }
 
-/// A stage is a question, and a question never writes the store: `wonder stage` compiles to answer and files nothing, so the plain invocation after it still compiles — where `--print`, which it replaced, filed what it built.
+/// A stage is a question, and a question never writes the store: `wonder stage` compiles to answer and files nothing, so the plain invocation after it still compiles.
 #[test]
 fn asking_for_a_stage_compiles_and_files_nothing() {
     let root = project("asking");
@@ -138,7 +138,7 @@ fn asking_for_a_stage_compiles_and_files_nothing() {
     );
 }
 
-/// A bare file has no project, hence no store and no slot — the declared-versus-bare split, unchanged.
+/// A bare file has no project, hence no store and no slot — the declared-versus-bare split.
 #[test]
 fn a_bare_file_files_nothing() {
     let root = temporary("bare");

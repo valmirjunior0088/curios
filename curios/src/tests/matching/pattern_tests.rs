@@ -32,7 +32,7 @@ fn a_fold_hypothesis_destructures_directly() {
     assert_eq!(io.output(), b"11");
 }
 
-// Regression test for a bug found while building the matrix pattern compiler: minting a synthetic binder for a single, unnested constructor arm (rather than reusing the written name directly) produced a core binder whose only label was that gensym — which the erasure pass's hint-based fresh naming then chained into another gensym, compounding until a reference outran its own binding. A plain flat match must still lower with no such indirection.
+// A single, unnested constructor arm reuses the written name rather than minting a synthetic binder: a core binder whose only label is a gensym is chained by the erasure pass's hint-based fresh naming into another gensym, compounding until a reference outruns its own binding. A plain flat match lowers with no such indirection.
 #[test]
 fn flat_option_match_lowers_without_synthetic_indirection() {
     let source = r#"
@@ -65,7 +65,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
     assert_eq!(run(source), b"845");
 }
 
-// The spec's own motivating example: a single tupled head, fully enumerated over two independent `Option`-shaped columns.
+// A single tupled head, fully enumerated over two independent `Option`-shaped columns.
 #[test]
 fn nested_ctor_pattern_dispatches_by_shape() {
     let source = r#"
@@ -151,7 +151,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"5");
 }
 
-// Regression test mirroring `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match must lower and run correctly end-to-end, exercising `compile_ctor`'s and `compile_nat`'s single-row fast paths together — guarding against reintroducing the erasure hint-compounding bug for the new carrier leaves.
+// The carrier-leaf twin of `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match lowers and runs end to end, exercising `compile_ctor`'s and `compile_nat`'s single-row fast paths together, which is where the erasure hint compounding would reappear for a carrier leaf.
 #[test]
 fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     let source = r#"

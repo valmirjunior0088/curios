@@ -1,6 +1,6 @@
 //! The four serialization entry points, with rkyv's vocabulary kept inside.
 //!
-//! These fix rkyv's error type to `rancor::Error`, hand back a `String`, and take rkyv's serializer, validator and deserializer bounds on themselves. A caller says [`to_bytes`] and [`from_bytes`]; the crate that owns the dependency says the rest, and `README.md` says why.
+//! These fix rkyv's error type to `rancor::Error`, hand back a `String`, and take rkyv's serializer, validator and deserializer bounds on themselves. A caller says [`to_bytes`] and [`from_bytes`]; the crate that owns the dependency says the rest.
 
 use {
     rkyv::{
@@ -16,7 +16,7 @@ use {
 
 /// Bytes written by [`to_bytes`], kept in rkyv's aligned buffer rather than copied into a `Vec`.
 ///
-/// The alignment is why this is a type rather than a `Vec<u8>`: rkyv writes its archive expecting a buffer aligned for the largest type it contains, and converting to a `Vec` to hand back would copy every byte of an image that can run to megabytes. Deref and `AsRef` cover what callers do with it — compare, hash, write to a file.
+/// A type rather than a `Vec<u8>` because rkyv serializes into its own `AlignedVec`, and converting that to a `Vec` to hand back would copy every byte of an image that can run to megabytes. The workspace builds rkyv `unaligned`, so no reader depends on the buffer's alignment. Deref and `AsRef` cover what callers do with it — compare, hash, write to a file.
 pub struct Serialized(AlignedVec);
 
 impl Deref for Serialized {

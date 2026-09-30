@@ -115,9 +115,9 @@ fn a_pin_of_a_live_member_is_not_acquired() {
     assert!(curate(&governing).unwrap().is_empty());
 }
 
-/// **A fetchable catalog row is acquired, and this is the regression.** The marker used to be resolved *after* the dispatch that decides what to fetch, so it landed in the store at a hash nothing had put there: `curate` acquired nothing, `order` then refused the dependency naming `curate`, and running it changed nothing. A dead end whose error message named the command that could not escape it.
+/// **A fetchable catalog row is acquired.** A marker resolved *after* the dispatch that decides what to fetch would land in the store at a hash nothing had put there: `curate` would acquire nothing, `order` would refuse the dependency naming `curate`, and running it would change nothing — a dead end whose error message names the command that cannot escape it.
 ///
-/// Asserted against the walk rather than against a fetch, so it needs no `git` and no network: what was broken is which acquisitions the walk collects.
+/// Asserted against the walk rather than against a fetch, so it needs no `git` and no network: what is under test is which acquisitions the walk collects.
 #[test]
 fn a_fetchable_catalog_row_is_acquired() {
     let root = tree(
@@ -265,7 +265,7 @@ fn pinned(origin: &Path, rev: &str, hash: &TreeHash) -> Acquisition {
 
 /// A revision the remote does not hold is refused naming the revision, never the hash.
 ///
-/// **The regression for the deep fetch reaching for `FETCH_HEAD`.** A refspec-less fetch points `FETCH_HEAD` at the remote's default branch, so falling back to it delivered *that* for any pin the shallow fetch could not serve — a wrong `rev` included. The hash then refused what arrived, which reads as "your hash is wrong" and sends a reader to correct the one column that was right; correcting it would have pinned whatever the default branch held that day.
+/// **The deep fetch never reaches for `FETCH_HEAD`.** A refspec-less fetch points `FETCH_HEAD` at the remote's default branch, so falling back to it would deliver *that* for any pin the shallow fetch could not serve — a wrong `rev` included. The hash would then refuse what arrived, which reads as "your hash is wrong" and sends a reader to correct the one column that is right; correcting it would pin whatever the default branch held that day.
 #[test]
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {

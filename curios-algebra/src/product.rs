@@ -40,7 +40,7 @@ pub fn distribute<C: Coefficient + Mul<Output = C>>(
     (constant, products)
 }
 
-/// Two monomials of one carrier with their factors paired by identity before anything reads them in order: one coefficient and one multiset of atoms is `Equal`, and one atom left on each side is `Sufficient` over their positions — `left`'s first, then `right`'s. `None` where the coefficients differ, or more than one atom is left on a side, so the caller's shape congruence decides as it did.
+/// Two monomials of one carrier with their factors paired by identity before anything reads them in order: one coefficient and one multiset of atoms is `Equal`, and one atom left on each side is `Sufficient` over their positions — `left`'s first, then `right`'s. `None` where the coefficients differ, or more than one atom is left on a side, so the caller's shape congruence decides instead.
 ///
 /// **A monomial's factor order is a hash, and a hash is not a value.** An unsolved metavariable ranks as itself and not as the term it is solved to, so `c · ?d · k` against `d · c · k` would pair `c` with `d` read in order, where pairing by identity leaves `?d` against `d` and solves it.
 ///

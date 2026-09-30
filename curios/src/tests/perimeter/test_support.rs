@@ -2,14 +2,6 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-//! End-to-end coverage for the soundness perimeter entries that nothing else guards.
-//!
-//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
-//!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
-//!
-//! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
-
 use {
     crate::tests::run_text,
     curios_pipeline::recheck_with_prelude as recheck,
@@ -443,7 +435,7 @@ pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
         /std/print("FORGED")
         "#;
 
-/// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it. Type-checked rather than run — it is the shape the erase boundary cannot lower.
+/// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it.
 pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
         use /std/{Nat, Eq};
 
@@ -824,7 +816,7 @@ pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-/// The premise every rule above is stated over and no entry under `documentation/soundness/` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and exit arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the current write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
+/// The premise every rule above is stated over and no entry under `documentation/design/soundness/` names: a type is a *pure* term. A description sitting at the type level is a value, not an error, so what refuses the program is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
 pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
@@ -845,7 +837,7 @@ pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     /std/print(forged)
     "#;
 
-/// The control, and it has more to guard than it used to. Only the refinement's escape into a *type* was ever at issue, so a fix that refused the elimination outright would be a brick — and now that the cure is a typing rule rather than a reduction guard, a rule that refused `Cell/poll` in every position would be exactly that brick. Forcing the poll yields an ordinary `Option(Bool)`, from which the fixture reads its Boolean.
+/// The control. Only the refinement's escape into a *type* is at issue, so a rule that refused the elimination outright, or refused `Cell/poll` in every position, would be a brick. Forcing the poll yields an ordinary `Option(Bool)`, from which the fixture reads its Boolean.
 pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
     use /std/{Cell, Bool, Option, Str};
 
@@ -861,15 +853,7 @@ pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
     )
     "#;
 
-// **The four paragraphs below are the history of a hole that is now closed by typing rather than by any of the guards they describe.** They are kept because this row's grade rests on what was actually attacked, and because a reader who meets `Cell/get` in a scrutinee should find out why it was hard before it was impossible. The program is still a regression fixture; what refuses it changed.
-//
-// The same premise, past the guard that closed the entry above, because that guard asked a question weak-head reduction cannot answer. `refuses_type_level_reduction` reduced the scrutinee and read the refusal, and `reduce` stops at a *stuck head* handing the application back with its arguments untouched — so `f(Cell/get(c))`, a variable-headed application carrying the effect in an argument, never reaches `reduce_intrinsic`, answers `Ok`, and is registered as a spelling that fixes a value. The effect is then inside a type: `Eq()(g(Cell/get(c)), true)` is admitted on those terms exactly as `Eq()(Cell/get(c), true)` was.
-//
-// `curios-cert` has the same hole for the same reason and is not the backstop here: `assume_case_value` records at its own `whnf`, whose `step_apply` likewise stops at a stuck head without visiting an argument. Both checkers register the equation, which is what makes this agreement on a wrong rule rather than a disagreement — and why, unlike the entry above, it compiled.
-//
-// Two heads rather than one because a nested refinement of a *single* key is dropped by the kernel by accident: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a local-free-less key. Refining `f(...)` outside and `g(...)` inside sidesteps that, and `h` carries the outer arm's knowledge across — so in `| true =>` the outer equation reads `h(Cell/get(c))` at `Eq()(g(Cell/get(c)), true)`, which is `step`'s parameter type as written. After `Cell/set(c, false)` the inner `match g(Cell/get(c))` refines that same spelling to `false`, `p` re-reads at `Eq()(false, true)`, and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`.
-//
-// Verified while the hole was open: the program **compiled**, the compile-path recheck raised nothing, and running it trapped in the Wasm — `False/absurd` on the forged proof erasing to the `unreachable` the arm reaches. The arm is reachable rather than merely well-typed: with the derivation replaced by a string the same program printed `REACHED: second read false`. And the acceptance was the refinement's doing rather than a fixture that never reached the check — the identical program with the derivation moved to the inner `| true =>` arm, where the spelling refines to `true`, was refused with `type mismatch`, `inferred Eq()(true, true)` against `expected Eq()(false, true)`.
+// The same premise behind a stuck head. With the read an argument of the parameters `f`, `g` and `h`, weak-head reduction stops at the head without visiting it, so one spelling of the read would be refined to `true` in the outer arm and, after `Cell/fill(c, false)`, to `false` in the inner one — `h` carrying the outer arm's knowledge across, so `p` re-reads at `Eq()(false, true)` and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`. Two heads rather than one because the kernel drops a nested refinement of a *single* key: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a key with no local free. The read's type is `Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the argument is refused before any arm records an equation.
 pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
@@ -893,9 +877,9 @@ pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
     )
     "#;
 
-/// The control, and it guards the brick this fix could have been: a scrutinee whose head is stuck is the *ordinary* case — `flip(b)` for a `b` nothing can instantiate — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. So a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
+/// The control, and it guards against a brick: a scrutinee whose head is stuck is the *ordinary* case — `flip(b)` for a `b` nothing can instantiate — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. So a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
 ///
-/// The head is a *definition* here for historical reasons only. `fixes_no_value` could read a definition's body and so let the application fix whatever the callee fixed, while a parameter's body does not exist yet — so the parameter spelling had to move out of this control and into the derivation below. Nothing is walked now, and [`a_parameter_headed_scrutinee_refines_again`] is that spelling brought back.
+/// The head is a *definition* here; [`a_parameter_headed_scrutinee_refines_again`] is the same control over a parameter.
 pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     use /std/{Eq, Bool, Str};
 
@@ -910,11 +894,7 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     /std/print(refined(false, Eq/refl()))
     "#;
 
-// The route no search over the term could have closed, and the one this whole discipline exists for. The scrutinee is `f(true)` for a *parameter* `f`: no `Intrinsic::CellGet` in it, none in anything it names, so every walk answered *pure* and both checkers recorded the equation. The caller then bound `f := (b) => Cell/get(c)`, and one spelling read `true` before the `Cell/set` and `false` after. Effectfulness of `f(true)` is not a property of `f(true)` — it is a property of the environment, and at the moment an arm records its equation the binder has no value to inspect, so asking the term was never sufficient.
-//
-// `fixes_no_value`'s cure was to ask a second question — does the walk read the body of every function the term would call — and refuse the equation when it does not. It worked and it was expensive in exactly the direction that matters: a *pure* opaque head stopped refining too, because nothing distinguished it. `(Bool) -> Bool` said nothing about purity, since the function space admitted `Cell/get`.
-//
-// Nothing is asked now, and the sentence that made the walk necessary is false. the current fixture's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)`; it does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than another clause in the walk (see `documentation/soundness/per-term-rules/a-term-outside-io-performs-no-effect.md`) — and [`a_parameter_headed_scrutinee_refines_again`] is what the walk was costing.
+// The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/soundness/effects/a-term-outside-io-performs-no-effect.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
 pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
@@ -939,7 +919,7 @@ pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     )
     "#;
 
-/// What the deleted walk was costing, and the reason this campaign is refinement-*restoring* rather than merely analysis-deleting. A parameter-headed scrutinee is the shape `fixes_no_value` had to refuse — it could not read a binder's body, so it could not tell a pure `f` from an effectful one — and refusing it withheld a refinement from every program that stated a hypothesis over an opaque head. Purity is a typing fact now, so the equation is licensed and `p` re-reads at the arm's value.
+/// A parameter-headed scrutinee refines. A walk over the term cannot read a binder's body, so it cannot tell a pure `f` from an effectful one, and refusing the equation would withhold a refinement from every program stating a hypothesis over an opaque head; purity is a typing fact, so the equation is licensed and `p` re-reads at the arm's value.
 pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     use /std/{Eq, Bool, Str};
 
@@ -952,7 +932,7 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     /std/print(refined((x) => x, true, Eq/refl()))
     "#;
 
-/// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so before the erasure obligations moved into `curios-cert` these were the class the trusted base took entirely on the elaborator's word.
+/// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
 pub(super) const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat, Bool};
     struct Box : pub Type { p : Bool/False }
@@ -992,7 +972,7 @@ pub(super) const PARTIAL_IN_FIELD: &str = r#"
 
 /// A diverging proof in a position the judgment *infers* rather than checks — a match scrutinee — inside a definition whose own type is relevant, so the body is not a proof position either.
 ///
-/// The elaborator records every settled node with the type it settled at, checked or inferred alike, so it has always caught this. The kernel recorded only checked positions, and nothing here is one: the elimination conjured a `Nat` from a proof that never terminates. This row read `elab=refuses, cert=accepts` until the kernel began seeding inferred positions too — the quadrant this matrix exists to make visible.
+/// Both checkers record every settled node with the type it settled at, checked or inferred alike. Nothing here is a checked position, and the elimination conjures a `Nat` from a proof that never terminates, so a checker seeding only checked positions would accept it — the quadrant this matrix exists to make visible.
 pub(super) const INFERRED_PROOF_POSITION: &str = r#"
     use /std/{Nat, Bool};
     struct Box : pub Type { p : Bool/False }
@@ -1142,7 +1122,7 @@ pub(super) enum Verdict {
 pub(super) fn both_checkers(source: &str) -> (Verdict, Verdict) {
     // A rule enforced by the grammar refuses here, before either checker exists. `foreign`'s wire contract is the standing example, and recording it is more honest than asserting the fixture parses: it says plainly that the rule is the parser's.
     //
-    // What it does not mean is that the contract rests on the parser alone, and this comment used to read as though it did. A host call's type is not something the kernel takes on trust: `Intrinsic::Foreign` carries a wire signature over `WireType`, a closed six-variant enum with no case for a nominal type, and `infer` *constructs* the result from it rather than reading one off the term. So the boundary holds from Core as well, where no surface program can reach — `curios-cert`'s `recheck::tests::a_forged_foreign_row_cannot_inhabit_a_proposition` forges a row and pins it. `NotAsked` below records that neither checker is *asked*, not that neither would refuse.
+    // What it does not mean is that the contract rests on the parser alone. A host call's type is not something the kernel takes on trust: `Intrinsic::Foreign` carries a wire signature over `WireType`, a closed six-variant enum with no case for a nominal type, and `infer` *constructs* the result from it rather than reading one off the term. So the boundary holds from Core as well, where no surface program can reach — `curios-cert`'s `recheck::foreign_tests::a_forged_foreign_row_cannot_inhabit_a_proposition` forges a row and pins it. `NotAsked` below records that neither checker is *asked*, not that neither would refuse.
     let entrypoint = match source.parse::<Entrypoint>() {
         Ok(entrypoint) => entrypoint,
         Err(error) => return (Verdict::Refuses(format!("{error:?}")), Verdict::NotAsked),
@@ -1259,7 +1239,7 @@ pub(super) enum Expect {
 
 /// Every fixture above, with what each checker is expected to say about it.
 ///
-/// The pair is the point. Both refusing is a rule covered twice; both accepting is a program that must compile. The kernel refusing what the elaborator accepts would be recorded conversion incompleteness, the safe direction. The elaborator refusing what the kernel *accepts* would be the trusted base resting on an elaborator-only analysis — the shape that made a whole class of `False` certifiable — and the four `partial_*` rows read that way until the erasure obligations moved into `curios-cert`.
+/// The pair is the point. Both refusing is a rule covered twice; both accepting is a program that must compile. The kernel refusing what the elaborator accepts would be recorded conversion incompleteness, the safe direction. The elaborator refusing what the kernel *accepts* would be the trusted base resting on an elaborator-only analysis, and no row may sit there.
 pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "multi_constructor_prop",
@@ -1394,7 +1374,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
             "kernel/module/tests.rs::a_proposition_may_not_carry_a_type",
         )),
     ),
-    // Both accepted this one: the sort of a parameterized intrinsic former was implemented twice on each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded where the rule lives, in `curios_cert::kernel::infer::tests`.
+    // The typing rule of a parameterized intrinsic former follows `Sort::of` rather than implementing the sort a second time, which is what refuses this. Its kernel half is guarded where the rule lives, in `curios-cert`'s `kernel/sort/tests.rs`.
     (
         "list_of_proofs_is_not_a_prop",
         A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION,
@@ -1415,7 +1395,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // Both must accept: the catch-all's instance is a rule they are supposed to decide the same way, and this row is where they were caught deciding it differently.
+    // Both must accept: the catch-all's instance is a rule they are supposed to decide the same way, and this row is where a difference would show.
     (
         "catch_all_at_its_scrutinee",
         A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE,
@@ -1516,7 +1496,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // Sort formation. Both accepting rungs reach the kernel, which is unusual on this map: most rows below refuse during elaboration and leave the certifier nothing to judge.
+    // What a proposition may carry. Both accepting rungs reach the kernel, which is unusual on this map: most rows below refuse during elaboration and leave the certifier nothing to judge.
     (
         "record_of_propositions",
         A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION,
@@ -1604,14 +1584,14 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Refuses("type mismatch"),
         Expect::NotAsked(None),
     ),
-    // **The quadrant this table had one instance of, and now has none.** Two proofs of one proposition passed to an opaque head were compared at `Type`, where irrelevance is never asked, so the kernel refused what the elaborator accepted. A variable head carries the telescope its arguments inhabit, and reading it is a lookup rather than an inference, so the arguments compare at their domains and the proofs discharge without being read.
+    // **Two proofs of one proposition passed to an opaque head.** Compared at `Type`, where irrelevance is never asked, the kernel would refuse what the elaborator accepts. A variable head carries the telescope its arguments inhabit, and reading it is a lookup rather than an inference, so the arguments compare at their domains and the proofs discharge without being read.
     (
         "a_spine_argument_compares_at_the_heads_domain",
         A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN,
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // **Four more sat in that quadrant, found by putting the checkers to programs rather than by reading this table.** The elaborator compares two applications of one definition by their spines before it unfolds either, typing each argument at the head's telescope, so two proofs meet irrelevance; the kernel forced both sides first, and the proof landed where nothing typed it — a stuck match's scrutinee, or a folded recursive call it then unfolded under fresh binders until the budget ran out. The kernel now compares the spines first too, and the elaborator's own rule reaches the universe-polymorphic head a definition mentioning `Eq` has, which it had skipped.
+    // **Two applications of one definition are compared by their spines before either unfolds.** Both checkers type each argument at the head's telescope, so two proofs meet irrelevance; forcing both sides first would land the proof where nothing types it — a stuck match's scrutinee, or a folded recursive call unfolded under fresh binders until the budget runs out. The rule reaches the universe-polymorphic head a definition mentioning `Eq` has.
     (
         "a_definition_applied_to_two_proofs_converts_before_unfolding",
         A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING,
@@ -1649,21 +1629,21 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The elaborator reduced both sides of a goal before asking whether its type was a proposition, and under an absurd arm's case equation Abel and Coquand's `Omega` reduces forever — so it spent its budget on two proofs irrelevance equates outright, a refusal the kernel, asking irrelevance first, never makes. Both now ask it first wherever nothing is flexible.
+    // Both checkers ask whether a goal's type is a proposition before reducing either side, wherever nothing is flexible: under an absurd arm's case equation Abel and Coquand's `Omega` reduces forever, so reducing first would spend the budget on two proofs irrelevance equates outright.
     (
         "a_proof_is_not_reduced_to_compare_it_with_another",
         A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER,
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The elaborator solved an implicit born outside an arm, inside it, with the arm's refinements suppressed, and its reducer handed back the refinement's universe-erased key as the reduct, so the solution held a bare `/std/Eq/Eq` the kernel refused as an occurrence stating no universe instance. The reducer now hands back the probe as spelled.
+    // An implicit born outside an arm is solved inside it with the arm's refinements suppressed, and the reducer hands back the probe as spelled rather than the refinement's universe-erased key, from which the solution would hold a bare `/std/Eq/Eq` the kernel refuses as an occurrence stating no universe instance.
     (
         "an_inferred_value_under_a_refined_proof_keeps_its_universe_instance",
         AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE,
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The same closure reached from `/std`'s own vocabulary, and the reason it is worth a row: `State`'s identity laws are a library's own equations, not adversarial programs. Each sets `State/bind`'s literal against a neutral — `f(a)` on the left, `m` on the right — and both now converge, the field comparing at the function type the declaration gives it rather than at `Type`, where a lambda never meets a projection. Associativity is the control: both sides are literals there, and it converged all along.
+    // The same closure reached from `/std`'s own vocabulary, and the reason it is worth a row: `State`'s identity laws are a library's own equations, not adversarial programs. Each sets `State/bind`'s literal against a neutral — `f(a)` on the left, `m` on the right — and both converge, the field comparing at the function type the declaration gives it rather than at `Type`, where a lambda never meets a projection. Associativity is the control: both sides are literals there.
     (
         "state_left_identity_converges",
         A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION,
@@ -1682,7 +1662,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The third disagreement was not conversion's at all. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes — so the kernel had the premise and refused anyway, because its entailment decided a level's *constant* part structurally before the hypotheses were reached. A parameter ranges over every natural when nothing is assumed; a hypothesis is what puts a floor under it.
+    // A level entailment rather than a conversion. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes; the kernel's entailment reaches the hypotheses before it decides a level's *constant* part structurally, since a parameter ranges over every natural when nothing is assumed and a hypothesis is what puts a floor under it.
     (
         "group_member_used_a_level_up_by_its_sibling",
         A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING,

@@ -1,378 +1,149 @@
 # Roadmap
 
-Tracks Curios development by feature area. Checkboxes reflect current codebase state, not chronological history — items whose description was later superseded by a rework are folded into the item that replaced them.
+The one list of Curios's work: every capability landed or pending, and every place the code falls short of a rule the documents state, each open line linked to the spec a contributor starts from.
 
-Specifications live under [roadmap/](roadmap). A campaign large enough to sequence gets its own directory, and so does a kind that has collected more than one — a shortcut that costs something today and was recorded when it was taken, a capability that does not exist yet and costs nothing until a consumer asks for it, or a cost the compiler could remove from code that is already correct. A specification with no siblings sits directly in `roadmap/` under its own name, since a directory holding one file says less than that file's name does. Those directories come and go as campaigns land, so listing `roadmap/` is how you see what is open — naming them here would go stale silently, and a directory cannot. Within a directory the numeric prefix is a reading order, and it is append-only: a landed specification leaves its number behind rather than renumbering its siblings.
+The areas follow [`design/`](design)'s subjects. Each opens with its open work, then lists what has landed, one line per capability; a landed line's detail is its design decision's, its crate's `README.md`'s and its tests'.
 
-An item's entry here is a summary and a link, never the specification in miniature. Name the capability and, for an unchecked item, what is wrong or missing today; leave rationale, mechanism, findings, and rejected alternatives to the owners named below.
+An open line says what is missing or wrong today, and where, and links its spec under [`roadmap/`](roadmap): one directory per area once the area holds two files, and a lone spec loose in `roadmap/` itself, its line directly under this description, before any area. Directories and specs carry their index in this file's order, renumbered when an item lands or is inserted. An area opens with its findings, `00-findings.md`: small fixes and possible bugs, each naming where, what is wrong, the fix, its check and its size, worked as one pass; an entry marked uncertain says what is not yet known, and is investigated before its fix is taken. Its specs follow, those where the code breaks a rule a document states first, then capabilities and costs, refined before unrefined, and last those waiting for a consumer. A spec states its context from the code, its goal, the decisions already settled and the questions still open, stages each with its own check, its verification, and its retirement. A spec not yet refined is marked "Not refined yet" and says what is known and what it waits on. A design decision states the intended rule, so where the code falls short the gap is an open line here, never a caveat there.
 
-Unchecked items may link to working implementation specifications. Unchecked items whose design is not refined yet instead link a placeholder specification marked "Not refined yet", possibly an umbrella covering several related items; the placeholder only reserves the specification location until refinement replaces it. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; record its design rationale and rejected alternatives under [`design/`](design) when cross-cutting or in the owning crate's `README.md` when crate-scoped; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
+When an item lands, its contracts go to the owning rustdoc, `README.md` and tests, its rationale and rejected alternatives to a design decision or the crate's `README.md`, and its line here becomes a checked summary; once nothing references the spec, the spec is deleted.
 
-## Language
+## Soundness
 
-### Core calculus
+- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, and four spellings the strict-positivity entry calls attacked have no fixture
+- [ ] [The two checkers' conversion held to each other](roadmap/01-soundness/01-conversion-held-across-checkers.md) — not refined yet; their conversion meets only where the corpus sends both, and their recurrence keys and untyped child positions differ
+- [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — not refined yet; an item under a name already in scope is not judged, and the mount disjointness that keeps one from arriving is checked in `curios-text`
+- [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [the relational layer](roadmap/04-arithmetic/08-relational-layer.md) has a consumer
+- [x] [Totality of everything erasure deletes](design/soundness/totality-of-the-erased-program.md): nothing reachable from a type and nothing at a proposition is partial, decided per recursive group by size-change termination, so no closed term inhabits `/std/Bool/False`
+- [x] [An independent kernel re-checks what the elaborator accepts](design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), the trusted base being `curios-cert` and the layer both checkers share
+- [x] [The soundness perimeter](design/soundness/the-soundness-perimeter.md): every rule that can admit a term, graded probed, argued or auditable, with its fixtures
+- [x] The checkers agree on what they accept: one rule records a case equation for both, and a solution, a candidate or a bound's fill is judged under the refinements it was born under
+- [x] The certifier files its own verdicts: each unit carries its record of every definition's totality and of what judging it read, and [a group's calls are the ones the kernel types](../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types)
+- [x] [A reduction step costs what it builds](design/soundness/a-reduction-step-costs-what-it-builds.md), deterministic across machines, with every memo cleared where the budget is restored
 
-- [x] Π-types and Σ-types, λ-abstraction, application and dependent pairs, with eta-reduction for both
-- [x] Named tuple fields
-- [x] `let` bindings, recursive by their body, and `let … and …;` groups, whose value-level mutual recursion is forced by need and guarded by the erased verifier
-- [x] Implicit cumulative `Type` hierarchy with declaration-local universe polymorphism
-- [x] `Prop` universe with definitional proof irrelevance, asked before either side is reduced in both checkers ([A proof is never reduced to decide what irrelevance decides](design/language/a-proof-is-never-reduced-to-decide-what-irrelevance-decides.md))
-- [x] Implicit arguments (`@`-marked binders), with plicity as part of function-type identity and lambda-binder insertion
-- [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/std/Bool/False`
+## Types
 
-### Data types
+- [ ] [Findings](roadmap/02-types/00-findings.md) — the kernel refuses to classify a universe instance over a bodiless scheme
+- [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-types/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
+- [ ] [A universe level settled before its evidence is in](roadmap/02-types/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
+- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-types/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits
+- [ ] [Flex–flex problems with distinct heads](roadmap/02-types/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
+- [ ] [Strict positivity through a type-former parameter](roadmap/02-types/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
+- [ ] [K-like reduction](roadmap/02-types/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
+- [x] Π- and Σ-types with eta for both, named tuple fields, and `let` bindings recursive by their body, with `let … and …;` groups
+- [x] [An implicit, cumulative universe hierarchy whose levels settle by where they came from](design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), polymorphic per declaration
+- [x] [`Prop`, strict, proof-irrelevant and definitionally K](design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md), irrelevance asked before either side is reduced
+- [x] [Plicity as part of function identity](design/types/plicity-is-part-of-function-identity.md): implicit binders, inserted lambda binders, and [one parameter group per call](design/types/a-call-fills-one-parameter-group.md)
+- [x] [Subsumption as a relation](design/types/subsumption-is-a-relation-not-a-traversal-order.md), decided structurally in both checkers
+- [x] Inductive families: constructor registry and dependent eliminators, indexed families, [coverage by index inversion](design/types/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md), the large-elimination guard, and [strict positivity modulo polarity](design/types/strict-positivity-modulo-polarity.md)
+- [x] [A motive is a term](design/types/a-motive-is-a-term-not-a-grammar.md), and an omitted one is the expected type, specialized per arm with no convoy
+- [x] Bidirectional elaboration: pattern unification over metavariable spines, re-validation in checking mode, postponement on a blocked conversion, right-biased imitation for flex-apply, and projections and matches that wait on a stuck head's metavariable
 
-- [x] Unified `struct` declarations (independent nominal and representation visibility)
-- [x] Inductive types (`induct` declarations), with independent nominal/representation visibility and opaque construction
-  - [x] Constructor registry & dependent eliminators
-  - [x] Indexed families (e.g. `/std/Tui/Layout/Sizes`), [applied to their parameters and then their indices](design/language/an-indexed-family-takes-its-indices-in-a-second-call.md)
-  - [x] Variant arity checking
-  - [x] Exhaustiveness/coverage checking (index inversion)
-  - [x] Large-elimination guard (restricts `Prop` → `Type` elimination; erasure reads a payload the guard admits as pinned back from the scrutinee's index)
-  - [x] [Strict positivity modulo polarity](design/language/strict-positivity-modulo-polarity.md) (per-parameter polarity vectors)
-- [x] Structure and concept groups (`struct A … and B …`, `concept A … and B …`, members naming one another)
+## Surface
 
-### Concepts and witnesses
+- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and the parser naming commitment twice and misstating its public surface
+- [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
+- [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
+- [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
+- [x] [Concepts resolved with global coherence](design/surface/concepts-resolve-with-global-coherence.md): one witness per key — a type's head, a tuple's shape, a partially applied constructor's stuck head — the orphan rule, decreasing premises, higher-kinded parameters, laws, associated types and superclass edges
+- [x] [Syntax forms closed, their meaning extended by witness](design/surface/syntax-forms-are-closed-semantics-extend-by-witness.md): every operator and `!` dispatches through a `/std` concept, and `Lift` embeds one monad in another, never chained
+- [x] [A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md), for `Spell`, `Eql`, `Ord` and `Hash`
+- [x] [A literal is realized by its expected type](design/surface/a-literal-is-realized-by-its-expected-type.md): numerals, characters as numerals, strings and block strings, packed `b[…]` and `x[…]`, and signed non-finite floats
+- [x] Pattern matching: nested, tuple and struct patterns compiled as a matrix over several scrutinees, the intrinsic match families, a final `_` default, and `choose` with refutable bind arms
+- [x] Sugar kept verbatim for printing: signature and field-function sugar, postfix `!`, projections, spreads in lists, packed literals and structure updates, trailing commas, and irrefutable destructuring binders
 
-- [x] Instance arguments (`concept` and `satisfy` declarations, deterministic resolution)
-- [x] The concept roster (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `And`, `Or`, `Cmp`, `Eql`, `Monad`, `Lift` and `Spell`, beside `Show`, `Ord` and `/std/Map`'s `Key`, all in `/std`)
-- [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
-- [x] Witness keys: a multi-parameter concept keys on the tuple of every parameter head, a tuple on the shape `{_, _}` with its labels, a function on the plicity vector `(_) -> _`, and a partially applied type constructor on its stuck head
-- [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via flex-apply imitation)
-- [x] `Lift` embeddings (`/std/Lift(M, N)`; one witness per ordered pair, never chained)
-- [x] Orphan rule (a witness is declared where its concept, or a type in its key, is)
-- [x] Witness groups (`satisfy C(A) { … } and D(B) { … }`, members resolving through one another)
-- [x] [Sealed concept representations](design/language/concept-representations-may-be-sealed.md) (`concept C(A): Type` — witness declarations, dictionary literals and raw projections confined to the declaring subtree)
-- [x] Concept laws (a field whose type is a proposition about earlier fields, discharged by `satisfy` at the implementations it supplies)
-- [x] Associated types (a field whose result is a sort — what lets `Div` state each carrier's own division precondition)
-- [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a concept literal, never in a `satisfy`, and an `Ord(A)` witness answers an `Eql(A)` goal by projection)
-- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` writes the body from the key's declaration)
+## Arithmetic
 
-### Pattern matching
+- [ ] [What conversion still decides by spelling or by cap](roadmap/04-arithmetic/01-decided-by-spelling-or-cap.md) — not refined yet; refinement lookup turns on a scrutinee's spelling and the checkers part over it, atoms pair by hash, Boolean agreement stops at a cap, and the law grid refuses parity as a clash, map fusion and a symbolic shift's exponent law
+- [ ] [Declared operations](roadmap/04-arithmetic/02-declared-operations.md) — `min`, `max`, `abs` and `sign` are library functions conversion sees unfolded, `pow` is no operation, the float identities that hold for every bit pattern are refused, and the families `Nat` declares are undecided at `Int`
+- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — `Divides` lacks its converse bridge, no `gcd` a type may mention exists, `Int` lacks multiplicative cancellation and its signed scale, and `Flt`'s `ord` is not proved a total order
+- [ ] [Exact rationals and their laws](roadmap/04-arithmetic/04-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
+- [ ] [Alternate floating-point exception handling](roadmap/04-arithmetic/05-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
+- [ ] [Correctly rounded elementary functions](roadmap/04-arithmetic/06-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract
+- [ ] [Proofs of rational–binary64 conversion](roadmap/04-arithmetic/07-binary64-conversion-proofs.md) — not refined yet; the boundary theorems need a specified connection to the primitive model, and a `/sys/Flt` fold trusts the Rust model rather than the Curios twin
+- [ ] [Relational facts decided in conversion, justified by checked evidence](roadmap/04-arithmetic/08-relational-layer.md) — not refined yet; waits for a consumer needing a relational fact by conversion rather than by proof
+- [x] The intrinsic carriers: `Bool`; `Byte`; [`Nat` and `Int` unbounded at run time, an i31 until they outgrow it](design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md); packed `Bits` and `Bytes` with O(1) windows and their bitwise vocabulary; `List`
+- [x] [`Flt` specified by a model the runtime conforms to](design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md): IEEE 754-2019 binary64 over every bit pattern, the five directions and `fma`, exceptions as values and the environment as a monad, decimal and hexadecimal text in every direction, and §9.4's reductions and §9.5's augmented operations
+- [x] [A partial primitive is totalized or states its domain](design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md), the bound reaching Core for the kernel to re-check
+- [x] [The carriers' algebra stays in conversion](design/arithmetic/the-carriers-algebra-stays-in-conversion.md): laws stated once over abstract atoms, one conversion chain for both checkers, and a law grid generated from each operation's declared families and audited
+- [x] [A law is decided where it neither respells nor invents](design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md): the sum normal form, Euclid's identity, a comparison split by sign, the `Nat`–`Int` embedding, a shift as a coefficient, a position through a window, a map by the identity, and Boolean agreement by truth table
+- [x] [A bound is a decided proposition discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md), filled on retry once its proposition is known
+- [x] [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), by linear arithmetic with a quotient's bounds, subtraction's cases and products, in an ordinary term both checkers recheck
+- [x] Certified division with remainder and divisibility (`/std/Nat/div_mod`, `/std/Nat/Divides`), and `Int`'s order carried from `Nat` along the embedding
 
-- [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler), and multi-scrutinee matrix matching (a tuple scrutinee matched column by column)
-- [x] Explicit match motives (a term checked against the eliminator's motive type)
-- [x] Dependent elimination at the ambient goal (an omitted motive over a variable scrutinee is the expected type, specialized per arm; no convoy)
-- [x] Intrinsic match families (Boolean, `Nat`, list, and packed `Bits`/`Bytes` arms)
-- [x] `choose` (an ordered guarded `Bool` ladder with a mandatory `_` default), with bind-arms (`| pattern = value =>`, Rust's `if let`; refutable LHS)
-- [x] Final `| _ =>` catch-all in dispatching matches (bare, final, and top-level only)
-- [x] Irrefutable destructuring patterns (tuple/struct) at `let`, parameter and `;` fold-hypothesis binders
-- [ ] [Typed patterns: a wildcard beside a concrete pattern in any column, coverage against the scrutinee's constructors, and redundant arms reported](roadmap/typed-patterns-spec.md)
+## Effects
 
-### Surface syntax
+- [ ] [Findings](roadmap/05-effects/00-findings.md) — a channel's nonblocking faces merge the outcomes the concurrency decision keeps apart
+- [ ] [Foreign calls past scalars and byte strings](roadmap/05-effects/01-foreign-calls-past-scalars.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
+- [x] [Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
+- [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
+- [x] [A host operation has one contract, checked at both ends](design/effects/a-host-operation-has-one-contract-checked-at-both-ends.md): each row typed in `curios-abi`, read by `/sys` as a `Result` or an `Option`, held to its row by the native adapter and by the guest, and conformed across the native, mock, plugin and browser hosts
+- [x] [Only a fiber waits](design/effects/only-a-fiber-waits.md): every peer-facing handle non-blocking, single-attempt writes and an explicit flush, write-once cells, bounded channels and level waiting in the guest heap
+- [x] Structured concurrency in `/std/Async`: fibers and tasks, `race`, `select` and `join_all`, `sleep` and `timeout`, scoped resources, and deadlock detection
+- [x] Host capabilities: terminal with raw mode, files and the filesystem over `Path`, clock and randomness, process IO and subprocesses, TCP with TLS, and serial ports
+- [x] Foreign functions: `foreign` declarations answered by a WebAssembly module a package names and pins, linked by `run` and `test`, and carried inside a `compile`d executable
 
-- [x] Multi-parameter function syntax sugar
-- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/std/Monad` concept)
-- [x] Field projection sugar (`.0`/`.label`)
-- [x] Function-field sugar in every field list, and trailing commas in every list
-- [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread, no tuple spread)
-- [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b[1, ..bits, 0]` — any position or count), and packed single-atom entry (`b[head, ..tail]`, `x[..acc, b]` — one `Bool`/`Byte` generator)
+## Lowering
 
-## Checking
+- [ ] [Findings](roadmap/06-lowering/00-findings.md) — a `Nat` shift by a count of `2³²` or more computing a different number, a sequence that long stopping on a bare trap, a flag licensing a deletion no pass performs, a merge path perhaps unreachable, a specialization key that reads any literal as a tag, and an assertion restating the verifier
+- [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/06-lowering/01-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand
+- [ ] [Contification of a function with several return contexts](roadmap/06-lowering/02-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
+- [x] [WebAssembly-GC is the only target](design/lowering/webassembly-gc-is-the-only-target.md), serialized by `curios-wasm` with text round-tripped against the binary writer, and optimized closed-world by Binaryen
+- [x] The erased IR: flat, verified arenas; erasure as transcription; behaviour-summary pruning, partial evaluation and monoid rebasing; one lowering into continuations
+- [x] The continuation IR: a pre-closure CPS graph with delayed closure conversion, an interprocedural optimizer, SCC specialization, a dataflow substrate for unboxed scalars, return through several continuations, and structured control flow by SCC condensation
+- [x] Value representation: [a variant collapses when nothing needs to distinguish it](design/lowering/a-variant-collapses-when-nothing-needs-to-distinguish-it.md), [a field is declared at the carrier its shape names](design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md), [a value costs when it is kept, not when it is named](design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md), and a closure carries its code as a table index
+- [x] [A lowering names the elimination it performs](design/lowering/a-lowering-names-the-elimination-it-performs.md), and [a refusal is a panic the emitter renders](design/lowering/a-refusal-is-a-panic-the-emitter-renders.md)
 
-### Elaboration
+## Tools
 
-- [x] Bidirectional dependent type checking with full definitional equality
-- [x] Unification solver
-  - [x] Pattern unification for higher-order metavariable spines
-  - [x] Re-validate solutions in checking mode
-  - [x] Surface residual unification constraints (a postponement, not a rigid mismatch)
-  - [x] Metavariable-blocked conversions postpone instead of mismatching
-  - [x] Solving reads materialized candidates and parks blocked goals under raw spellings
-  - [x] Packed-literal views in unification decomposition (solving-side only)
-  - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
-  - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
-  - [x] An implicit a candidate embeds, born under refinements the candidate's metavariable was not, is restricted to the ones they share as the candidate commits — a fresh metavariable solved in its place — rather than holding the candidate back
-  - [x] An embedded metavariable whose birth telescope holds binders the candidate's lacks is re-expressed over the candidate's metavariable's binders — applied to its spine's entries spelled in its own birth names, so an argument no entry reaches is pruned and one reached inside a non-pattern entry, `?E(r, v)` under a match type `?M(r, success(v))`, is carried by that entry — and silent holes are restricted as implicits are, a parked check's placeholder, of its own kind, excepted
-- [x] A projection whose head's type is stuck on a metavariable waits for it, parked with its elaborated head until the type reaches a tuple or a struct — an unannotated match's tuple arms settle at the drain, after a destructuring of it has read its fields — and a destructuring's projections are located at the field patterns they read
-- [x] A match whose scrutinee's type is stuck on a metavariable waits for it as a projection does, parked with its elaborated scrutinee and resumed in the mode it was met in, rather than refusing the scrutinee as not of the matched shape (`expected List but got ?`)
-- [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
-- [x] `spine_whnf` opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does, so a spine that does not match its lambda ends the walk instead of reaching `Telescope::open`'s assertion
+- [ ] [Findings](roadmap/07-tools/00-findings.md) — a test that exits early counted by its exit code, a formatter that moves comments onto the wrong line, refusals that print internal paths, lack a location, read one fault five ways or point elsewhere, a report spelling names through imported modules in full, test instruments that pass with their defect present, measurement readings the code has moved past, CLI refusals that come late or at the wrong code, a documentation build that succeeds in silence, a benchmark cross-check that compares nothing, a corpus nothing holds to the formatter, CLI migration shims and dead page styles
+- [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold
+- [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
+- [ ] [A binary reader for `curios-wasm`](roadmap/07-tools/03-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
+- [x] [A diagnostic spells what its reader can write](design/tools/a-diagnostic-spells-what-its-reader-can-write.md): spans across every stage, names as resolution reaches them, written goals reporting their scope and verified candidate fits
+- [x] [An argument names one subject, and each command states what it accepts](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md): `run`, `compile`, `document`, `test`, `curate`, `pin`, `new`, `lint`, `format`, `wonder` and `profile`
+- [x] `curios wonder`: diagnostics, tests, a declaration's fate in the optimizer and any pipeline rung, over the command line and a language server
+- [x] Editor support: a tree-sitter grammar, and Zed and VS Code extensions over `wonder server`
+- [x] [A printer states each fact once, where it is bound](design/tools/a-printer-states-each-fact-once-where-it-is-bound.md), with one layout engine and a canonical formatter verified by reparse
+- [x] [A lint is an exact finding read off the compilation](design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md): four, always on
+- [x] [A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)
+- [x] [A library is documented for its consumers, from the compilation that builds it](design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md)
+- [x] Profiling through `curios-profile`: `--profile` writes a stream as it runs, `curios profile` reads it back, and `cargo x profile` builds and folds one
+- [x] Distribution: CI, tag-triggered releases for Linux and macOS, a checksum-verified installer, and a browser playground
+- [x] The language reference, the command-line reference, and cross-language benchmarks against six other languages
 
-### The certifier
+## Architecture
 
-- [x] [Independent kernel in `curios-cert` re-checking what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)
-- [ ] The certifier's own verdicts, read from its own walk, and checked evidence in place of trusted search — parts of the verdicts campaign under [Compiler architecture](#compiler-architecture)
-
-### What conversion decides about the carriers
-
-- [x] [A law is decided where it neither respells nor invents](design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md) — a left shift by a literal count, parity, a position inside a window, a map by a function convertible to the identity, and De Morgan with absorption, each moved from the law grid's refused rows to its held ones
-- [x] [Euclid's identity, a comparison split by sign, `Nat/to_int` as an ordered-semiring embedding, and a shift by a symbolic count](soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md), each decided by both checkers and moved from the law grid's refused rows to its held ones
-- [x] [A product of two symbolic sums is its own weak-head form](design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md)
-- [x] [A stuck comparison is spelled one way](design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)
-- [ ] The carriers' algebra: one owner, declared operations, and bounds proved from the facts in scope
-  - [x] Algebra, part 0: [`x + 1 <= y` meets `x < y` at `Nat` as at `Int`](design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md), and [an implicit bound whose proposition is solved after its insertion is filled on retry](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)
-  - [x] Algebra, part 1: [one crate owns the carriers' algebra, and the checkers share its strategy](design/toolchain/one-crate-owns-the-carriers-algebra-and-the-checkers-share-its-strategy.md) — the arithmetic, Boolean, word and conversion laws stated once over abstract atoms in `curios-algebra`, one conversion chain for both checkers in `curios-analysis`, inversion reading only equivalent residuals, the law grid generated from each operation's declared families at every carrier and audited, and comparisons aligned through one linear view whose contract `curios-core`'s `linear` module publishes; [the carriers' algebra stays in conversion](design/language/the-carriers-algebra-stays-in-conversion.md), with casts rejected
-  - [ ] [Algebra, part 2: a bound that follows from the facts in scope is proved by the elaborator](roadmap/algebra/02-bounds-from-facts-spec.md) — a bound that follows from a hypothesis or a guard by linear arithmetic is refused, and the author writes the lemma chain; may begin, on the view and contract `curios-core`'s `linear` module publishes
-  - [ ] [Algebra, part 3: declared operations for `pow`, `min` and `max`, `abs` and `sign`, and the float identities](roadmap/algebra/03-declared-operations-spec.md) — `min`, `max`, `abs` and `sign` are library functions conversion sees unfolded, `pow` is no operation, and the float laws that hold for every bit pattern are refused
-  - [ ] [Algebra, part 4: relational facts decided in conversion, justified by checked evidence](roadmap/algebra/04-relational-layer-spec.md) — not refined yet; waits for a consumer that needs a relational fact by conversion rather than by proof
-  - [ ] [Algebra, part 5: what conversion still decides by spelling or by cap](roadmap/algebra/05-decided-by-spelling-or-cap-spec.md) — not refined yet; refinement lookup depends on how a scrutinee is spelled, two atoms convertible only past their arguments' forcing are paired by a hash, Boolean agreement stops at a fixed atom cap, unification proposes nothing through a polynomial, `Bytes/eql` has no reflection law, and the three sequence carriers are three representations inside the compiler
-
-### Compile-time cost
-
-- [x] Configurable type-checker reduction budget (the CLI's `--budget`, restored per declaration), in which [a reduction step costs what it builds](design/toolchain/a-reduction-step-costs-what-it-builds.md)
-- [x] Core calculus machinery (reduction & conversion performance)
-- [x] Elaboration and per-node memoization bounded by written binder nesting, never data length, and a function type elaborated in its size, not its size times its binders (measured)
-- [x] [A closed fold no longer costs what its data is long](design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md)
-- [x] [A type-level concatenation no longer copies what it joins](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md)
-- [x] A string literal is checked once per use
-- [x] The unfolding discard decides on progress
-- [x] Five measured cliffs where an ordinary spelling cost superlinearly, or refused
-- [ ] [Size cliffs: a long `let` chain, deep nesting, many bindings](roadmap/size-cliffs-spec.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local, so each refuses or does not finish past a size an ordinary program reaches
-
-## Numbers and intrinsic carriers
-
-### Carriers
-
-- [x] Intrinsics as orthogonal builtins _(uniform `/sys` builtin declarations)_
-- [x] `Bool` (conjunction, disjunction, exclusive or, and both equalities)
-- [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
-- [x] `Nat`, unbounded at run time as in the theory — an i31 while small and a boxed magnitude past it, with no arbitrary-precision library beside it ([Nat and Int are an i31 until they outgrow it](design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)) — with certified division with remainder and divisibility (`/std/Nat/div_mod` and `/std/Nat/Divides`)
-- [x] `Int`, unbounded at run time as `Nat` is, with its order carried from `Nat` along the embedding (a sign view, trichotomy, and the laws of `/std/Int/Lt` and `/std/Int/Le`)
-- [x] `Flt`, IEEE 754-2019 binary64 specified by a hardware-independent model stated in this repository: every bit pattern a value under one symmetric NaN rule, the five rounding directions and `fma`, exceptions as values and the environment as a monad, decimal and hexadecimal text in every direction, `/std/Dyadic` as a finite value's exact form, §9.4's reductions and §9.5's augmented operations, and [literals for the infinities and the default NaN of either sign](design/language/a-floats-non-finite-values-are-literals.md) (`+inf.0`, `-inf.0`, `+nan.0`, `-nan.0`)
-- [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
-- [x] Bitwise vocabulary on the packed carriers (`not`, `shl`, `shr`, `rotl`, `rotr` at both grains over `/sys`'s `replicate`, length-preserving and positional; `Bits` and `Bytes` read least-significant-first without exception, and `Bits` is level with `Bytes` on the surface they share)
-- [x] `List`
-- [x] `Cell` (write-once storage over any carrier, with empty construction, first-write `fill` and optional `poll`)
-- [x] [Guest coordination](design/language/guest-coordination-uses-write-once-cells-and-bounded-channels.md) — write-once cells, bounded channels, level waiting and threaded session state
-  - [x] [Ordinary `/sys/Option`](../curios-prelude-archive/README.md#optional-and-fallible-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
-  - [x] [Knot memoization](../curios-cont/README.md#mutation-hides-behind-instruction-atomicity) through a write-once result cell and a capacity-one initializer channel
-  - [x] [Guest channel storage](../curios-emit/README.md#cells-and-channels-occupy-the-guest-heap) with a positive-capacity obligation, atomic outcomes and consumed-slot release
-  - [x] Scheduler state threaded through its loop; opaque readiness waits and shared park claims
-  - [x] `Tui/Session` state threaded through reading, size tracking and drawing; [comparison measurements](../curios/src/tests/coordination.rs) recorded with their workloads
-- [x] [A host operation has one contract, checked at both ends](design/toolchain/a-host-operation-has-one-contract-checked-at-both-ends.md) — every builtin one typed row no term can contradict, held to it by the native adapter and by the guest
-  - [x] [`Byte` on the wire](syntax.md#foreign-declarations) and [exit as a diverging row](../curios-abi/README.md#exit-is-a-row-that-diverges)
-  - [x] [`Result` declared in `/sys`](../curios-prelude-archive/README.md#optional-and-fallible-values-belong-to-the-guest-foundation), preserving explicit `/std` re-exports and universe-polymorphic instantiation
-  - [x] [Checked host bindings](../curios-runtime/README.md#a-binding-is-held-to-its-row-and-a-violation-refuses-the-call) and [guest reply validation](../curios-emit/README.md#a-hosts-reply-is-held-to-its-row-where-the-guest-receives-it), with each row's ownership and resource transitions stated beside it in `curios-abi`'s table
-  - [x] [Single-attempt writes, an explicit flush, unbuffered standard output and classified poll failures](design/toolchain/the-host-never-waits-on-a-peer.md)
-  - [x] [`/sys` reads each row's outcome](../curios-prelude-archive/README.md#sys-mirrors-the-host-store-and-io-owns-only-the-sequencing) as a `Result` or an `Option` over wire-shaped Core calls; domain vocabulary retained in `/std`
-  - [x] Native, mock, plugin and browser conformance, with [checked browser hooks](../curios-js/README.md#a-compiled-program-carries-its-foreign-rows-and-a-hook-is-held-to-them) and [a Node-run browser suite](../curios-js/README.md#the-harness-is-tested-under-node) in the gate; [comparison measurements](../curios/src/tests/host_boundary.rs) recorded with their workloads
-- [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
-  - [x] The bound reaches Core and the kernel re-checks it, for every one of the thirteen
-  - [x] A bound is read off the node that carries it, and the oracle closed on a criterion
-  - [x] A fact is stated once, or the copies are checked — the fold arms' grain twins, the decomposition's carriers and its two measures, and a key's encoding
-
-### Numeric library
-
-- [ ] [Numeric laws: the Euclidean layer, the binary scales, the integer order, and the float bits](roadmap/numeric-laws-spec.md) — `Divides` lacks its converse bridge, no `gcd` a type may mention exists, `Int` lacks multiplicative cancellation and its signed scale, and `Flt`'s `ord` is not proved a total order
-- [ ] `Flt` past IEEE 754's required operations: its recommended exception handling and elementary functions
-  - [ ] [Flt, part 1: alternate floating-point exception handling](roadmap/flt/01-exception-handling-spec.md) — the remaining §8 policies and per-operation substitution and recording
-  - [ ] [Flt, part 2: correctly rounded elementary functions](roadmap/flt/02-elementary-functions-spec.md) — the §9.2 functions are absent; fuel and exhaustion still need a contract
-- [ ] Exact rationals, and their conversion to binary64 proved
-  - [ ] [Rat, part 1: exact rationals and their laws](roadmap/rat/01-exact-rationals-spec.md) — a canonical rational library, executable binary64 conversions, exact decimals and library proofs
-  - [ ] [Rat, part 2: proofs of rational–binary64 conversion](roadmap/rat/02-binary64-proofs-spec.md) — not refined yet; the formal boundary theorems need a specified connection to the primitive floating-point model
-
-## Modules and packages
-
-- [x] Cyclic module dependency resolution
-- [x] Subtree-scoped privacy: a declaration without `pub` is visible within its subtree
-- [x] Exact private-item-in-public-interface audit (signature-only, keyed on audiences)
-- [x] [A compilation is units folded over a dependency order](design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), every edge declared in a manifest
-- [x] Project manifest & discovery (identity declared once; scope reached through artifacts)
-- [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache; `curios pin` derives a row's hash from the delivery and writes it, so a pin is never computed by hand)
-- [x] [Payload reuse](soundness/admission-without-judgment/reused-payloads.md) (an unchanged target re-executes without recompiling)
-- [x] [A unit the store holds is a baseline, not a hit or a miss](design/toolchain/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) (a question compiles an edited unit over the stored one, reusing every item the edit did not reach; elaboration and parsing recover per item)
-- [x] `curios new` scaffolding (a package named after its directory, with both halves written)
-
-## Compiler architecture
-
-- [x] Pure pipeline driver crate (`curios-pipeline`), decoupled from runtime, Binaryen and CLI
-- [x] Crate boundaries
-  - [x] `curios-runtime`, isolating the Cranelift/Binaryen-free launcher
-  - [x] `curios-core`, separating the term representation from the elaborator
-  - [x] `curios-analysis`, separating the rules both checkers run
-  - [x] `curios-verdicts` and `curios-wonder` kept off the native back end
-  - [x] WebAssembly emission (`curios-emit`) and `curios-wasm` kept out of the prelude build
-  - [x] `curios-text` off the elaborator, with the term builders in `curios-core`
-- [x] Build-scoped archived prelude and replay (`curios-prelude-archive`, certified by `curios-prelude`), erased once at compiler build time and replayed from the archive
-- [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
-- [x] [Recursion restored to the defunctionalized walks](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
-- [ ] A verdict is a function of what it reads — the certifier's own verdicts and checked evidence, and a compilation scheduled as a graph of item tasks
-  - [x] Verdicts, part 1: [the certifier measured](../curios-cert/README.md#measuring-the-certifier) by item, walk stage and judgment against a recorded baseline, the profile fold reporting each span's self time and its costliest calls with their fields, and [Cranelift compiling in parallel](../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) in `curios` alone. The first reading found level entailment spending nine seconds on one `/std/Try` witness, and [entailment went forward to a least model](../curios-cert/README.md#level-entailment-is-forward-reasoning-to-a-least-model), with satisfiability decided by loop-checking the same model and the levels a declaration's constraints determine solved before it is generalized
-  - [x] Verdicts, part 2: [no memo outlives the declaration that filled it](design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md) — every table both checkers keep is cleared where the budget is restored and hits free, so nothing compiled earlier decides what a declaration can afford; the kernel's name-keyed unfold table is gone, pricing an unfold alone having been measured and rejected, and with it the compilation's retention allowance and the footprint every term carried to price it. Each declaration's consumption is sampled as `budget::consumed` in every profile. Erasure's one budget per unit, the finalization passes' one budget per module and the witness goals retried under a later item's budget are recorded in parts 5 and 6
-  - [x] Verdicts, part 3: [artifacts carry no minted identity](../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint) — a scope remembers a binder's hint or a global's name and never a local's identity, every counter starts at zero per unit instead of resuming above a predecessor's, and the universe-seed table is the unit's own; a unit's stored bytes do not change with what was compiled before it. Qualifiers and binder hints are interned once per process as `Copy` identities, and a span holds its source by `Arc` — reference-counted rather than interned, because a language server loads a new text on every edit and an interned one could never be freed. The universe seeds are each unit's own and travel beside its module, with the lowering's counts, rather than on it: invariants part 2 found the solver reads a seeded level's provenance off its seed's role ([A universe level settles by where it came from](design/language/a-universe-level-settles-by-where-it-came-from.md)), so the table carries that role to the solver and nothing past elaboration can reach it. Per-item metavariable and universe spaces wait on part 5's per-item context
-  - [x] Verdicts, part 4: [the certifier files its own verdicts](../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp) — every unit is certified by construction, carrying the certifier's record of each definition's totality, closed over what it mentions, and of what judging it read; later walks and erasure's termination flags read that record and never elaboration's stamp — and [a group's calls are the ones the kernel types](../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types), graded and closed by the engine the elaborator's discovery walk shares
-  - [ ] [Verdicts, part 5: one environment, and every read recorded](roadmap/verdicts/05-one-environment-spec.md) — the item graph is computed three times, and the elaborator threads state from item to item
-  - [ ] [Verdicts, part 6: a compilation is a graph of item tasks](roadmap/verdicts/06-item-tasks-spec.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
-  - [ ] [Verdicts, part 7: checked evidence and trusted reasoning](roadmap/verdicts/07-checked-evidence-spec.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [Algebra, part 4](roadmap/algebra/04-relational-layer-spec.md)'s relational layer has a consumer
-
-## Code generation
-
-### Erasure and the erased IR
-
-- [x] Closure capture analysis and atom-to-index erasure
-- [x] Ersd v2 (a flat, verified, first-order erased representation)
-  - [x] Module-owned arenas of single-operation statements, schemas, switches and folds
-  - [x] Derived arena analyses (free values, uses, and recursive components)
-  - [x] Erasure as pure transcription under the once-per-expression operand law
-  - [x] Behavior-summary pruning of unreachable pure items over the behavior oracle
-  - [x] Partial evaluation (closed-term folding and recursive literal-spine specialization)
-  - [x] Monoid worker/wrapper (deferred recursion rebased onto tail accumulators)
-  - [x] One normative lowering into the continuation interface, where encoding is decided
-  - [x] Production cutover to the arena replay path, and the legacy erasure deleted
-
-### The continuation IR
-
-- [x] CPS lowering with join blocks and tail instructions
-- [x] Continuation IR v2 (a pre-closure CPS graph replacing the region-based optimizer)
-  - [x] Arena-backed high CPS with delayed closure conversion
-  - [x] Interprocedural optimizer (folding, dead-code elimination, inlining, contification)
-  - [x] Recursive-SCC known-argument propagation, specialization, and branch specialization
-  - [x] Structured Wasm control flow by SCC condensation (a dispatcher per irreducible scope)
-  - [x] Region-optimizer late passes retired, and the CPS pipeline grew its own where earned
-- [x] A dataflow substrate for `curios-cont`, with unboxed scalar locals as its first payoff
-- [x] Returning through several continuations, so a tagged union becomes control flow
-- [x] A copied body reproduces the definitions nested inside it
-- [x] Moving an application into the function that returns it, so a monadic step stops allocating
-
-### Value representation
-
-- [x] Anyref-based uniform value representation with GC closures and tail calls
-- [x] [A variant collapses when nothing needs to distinguish it](design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)
-- [x] [A variant travels as the fields of its widest constructor](design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md)
-- [x] [A value costs when it is kept, not when it is named](design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md)
-- [x] [A monomorphic field carries its own type](design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md)
-- [x] [A closure carries its code as a table index](../curios-emit/README.md)
-- [x] [A pure program rebuilds what an impure one would mutate](design/toolchain/a-pure-program-rebuilds-what-an-impure-one-would-mutate.md)
-
-### WebAssembly
-
-- [x] Binary WebAssembly serialization, and text-format parsing and printing round-tripped against the binary writer
-- [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit), and full table and element section support (plural tables, every segment mode)
-- [x] Wasm-emission optimizations: `struct.new` construction with immutable fields, and direct `br` for single-target regions
-- [x] Binaryen closed-world post-optimization pass, observable as `Stage::WasmOptm` through `wonder stage`
-
-### Measured workloads
-
-- [x] [The map wall falls by classes, not by symptom](design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md), and the map's remaining distance is decomposed before it is spent
-- [x] An idiomatic string walk stops building a suffix and a closure per character
-
-## Runtime and host
-
-### Execution
-
-- [x] WebAssembly execution via a shared, GC-enabled wasmtime engine
-- [x] AOT `.cwasm` precompilation (deserialized and run without re-JITting)
-
-### Effects and IO
-
-- [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
-  - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
-  - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
-- [x] The effect tier retyped: `Io` where a module suspends, `Try` where it can fail
-- [x] Streams: `Async/Read` and `Async/Write` over every host handle, never a raw one
-- [x] Non-blocking IO: every peer-facing handle is non-blocking and never waits on a peer
-- [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
-- [x] Terminal, with raw mode and window size (`/sys/tty`, wrapped by `/std/Tty` with a restoring bracket; the terminal rows in `/std/Io`)
-- [x] File, and the filesystem over `Path` (`/std/fs` in `Try` over `Io`; the browser denies every row)
-- [x] Clock & randomness (`/std/time`, `/std/rand`)
-- [x] Process IO (`/std/proc`) and subprocesses (`/std/Command`: `spawn`, `run` and `status`, a child's pipes as streams)
-- [x] Client and server network (TCP), with TLS (https) for both
-- [x] Serial ports (`/sys/serial`, wrapped by `/std/Serial`: opened raw at a required speed and frame, DTR, RTS and the input discard, Linux enumeration)
-
-### Concurrency
-
-- [x] Structured concurrency in `/std/Async`
-  - [x] `map`, and `sleep`/`timeout`
-  - [x] Concurrent `race`/`first` over spawned tasks, `select` over offers, and `join_all` over a list of tasks
-  - [x] Fibers (`go`) and tasks (`spawn`/`join`/`cancel`), over `Future`/`await`
-  - [x] One park over opaque waits for handle readiness, elapsed time, filled cells or channel readiness, claimed once across its alternatives, with `yield_now` beside it; private guest probes run on idle rounds and an offer retries after waking ([guest coordination](design/language/guest-coordination-uses-write-once-cells-and-bounded-channels.md))
-  - [x] Scoped resource ownership (`using`), a finalizer run exactly once on both exits
-  - [x] Deadlock detection after scanning guest readiness, with no runnable job, handle wait or sleeper; reports the number of parked fibers and releases their guards
-- [x] A channel owns its state, and a fiber parks with none (`/std/Async/Channel`: a bounded queue with `Sender` and `Receiver` ends, every park one `park` over a list of offers claimed once)
-
-### Foreign functions
-
-- [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`ForeignStore`)
-- [x] Surface `foreign` declarations, accumulating a second `ffi`-tier store
-- [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`), filled from the manifest: a package names the WebAssembly module answering its declarations and which export answers which, `curate` fetches it against a file hash, `run` and `test` link it in process, and `compile` carries it inside the executable — so a program declaring `foreign` runs where there is no manifest, no sources and no compiler
-- [ ] [Foreign calls past scalars and byte strings](roadmap/foreign-calls-past-scalars-spec.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
+- [ ] [Findings](roadmap/08-architecture/00-findings.md) — the kernel's conversion inferring a type it should look up, a filter and a checker-shared bound each written twice, two printers that hand-roll their frames, an unused dependency of the certifier, a stack segment taken twice, an error path nothing reaches, names of a retired root, a test-only constructor in production, and history in a build script an edit would rebuild
+- [ ] [A shared term costs its size](roadmap/08-architecture/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
+- [ ] [One environment, and every read recorded](roadmap/08-architecture/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
+- [ ] [A compilation is a graph of item tasks](roadmap/08-architecture/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
+- [ ] [Size cliffs](roadmap/08-architecture/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local
+- [x] [A module is a compilation unit, and the prelude is an environment](design/architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): units folded over a dependency order, every edge declared in a manifest, and a package named `std` compiled as the standard library
+- [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen, the shared analyses apart from the certifier, and the emitter out of the prelude build
+- [x] The prelude built once per compiler build, archived and certified, and restored with no source fallback
+- [x] Packages: manifests and discovery, exactly pinned dependencies in a content-addressed store, and `curios pin` deriving a row's hash from the delivery
+- [x] [Cached verdicts](design/soundness/admission/cached-verdicts.md) and [reused payloads](design/soundness/admission/reused-payloads.md), and [a stored unit is a baseline for an item-level recompile](design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)
+- [x] A unit carries no identity another compilation could mint, and nothing branches on a name's spelling
+- [x] [Depth is bought with stack, not with hand-rolled frames](design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
+- [x] Compile cost: per-node memoization bounded by written binder nesting, a closed fold on the shared machine, a type-level concatenation that copies nothing, a string literal checked once per use, and the certifier measured by item and judgment
+- [x] [One crate is the authority for one external concern](design/architecture/one-crate-is-the-authority-for-one-external-concern.md), and [every gate step catches what no other step does](design/architecture/every-gate-step-catches-what-no-other-step-does.md)
 
 ## Standard library
 
-### Foundations
+- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Json` accepts a raw control character; a URL's port, `query_pairs` and `Flt`'s `div_mod` answer what their standard or contract does not; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Html`'s documentation overstates what it reads; `Int` may now be a `Map` key; and two definitions could say more with what the elaborator proves
+- [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
+- [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
+- [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
+- [x] Foundations: `Bool/True` and `Bool/False`, `Eq` and `Ordering`, `Option` and `Result`, `State`, `Try`, `Io/Error` and `Path`
+- [x] Collections: `List` and its helpers, `Vec` counting its list in its type, and `Map`, a canonical crit-bit trie over `Bytes` keys
+- [x] Text: proof-carrying UTF-8 `Str` addressed by proved byte positions, certified `Char`, parser combinators, typed format strings, and decimal conversions that round-trip
+- [x] Formats: `Json` over binary64, `Toml` 1.0.0, and `Html` as a tree
+- [x] Applications: an HTTP client and server over TCP and `Async`, command-line interfaces, and terminal programs with widgets
+- [x] [Explicit invariants](../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position): decoding and encoding carry their certificates, indices carry their bounds, and a host's facts arrive first-order
 
-- [x] Canonicalized module layout and registration
-- [x] Foundational proof/logic types (`/std/Bool/True`, `/std/Bool/False`), and equality and ordering (`/std/Eq`, `/std/Ordering`)
-- [x] Foundational sum types (`/std/Option`, `/std/Result`), with `/std/Result` its own monad, error first, and `!` as checked early return
-- [x] Pure state threading (`/std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
-- [x] The error channel over any monad (`/std/Try`: `raise`, `rescue`, `attempt` and `run`)
-- [x] The host's failure vocabulary (`/std/Io/Error`) and paths as host bytes (`/std/Path`)
+## Runtime
 
-### Collections — the tier every one of nine surveyed peers ships
-
-- [x] Core collections (`/std/List` and its helpers, and `/std/Vec`, which counts a list in its type)
-- [x] Key-value map (`/std/Map`: a canonical crit-bit trie over `Bytes` keys), with `Key(Nat)`, `Key(Byte)` and `Key(Bool)` over the encodings `/std/Hash` already gave them
-- [ ] [A certified sort and an `Ord`-keyed tree](roadmap/certified-sort-and-ord-tree-spec.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
-
-### Text and formats
-
-- [x] Proof-carrying UTF-8 string storage and decoding (`/std/Str`, over packed `Bytes`)
-- [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)
-- [x] Character literals realize as numerals (`Char` by default, `Nat`/`Byte`/`Int` from context)
-- [x] Parser-combinator library (`/std/Parse`) and typed format strings (`/std/Fmt`)
-- [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
-- [x] JSON codec (`/std/Json`; numbers are binary64 `Flt`, which is RFC 8259's interoperability recommendation, so only integers past 2⁵³ fail to round-trip)
-- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`/std/Toml`; conforming on floats and on the full 64-bit integer range)
-- [x] HTML as a tree (`/std/Html`, rendered escaped and read back as a browser reads it)
-
-### Applications
-
-- [x] HTTP client and server (`/std/http` over `tcp` + `Async`; a handler answers each connection)
-- [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
-- [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
-
-### Library-wide
-
-- [x] [Explicit invariants in the standard library](../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position) — decoding and encoding carry their certificates, text is addressed by proved byte positions (`Str/At`) and cut between them in O(1), one parser type is indexed by what its positions know, escaping is one walk, indices carry their bounds, and a host's facts arrive first-order; the compiler findings that stood in the way were fixed first
-- [ ] Standard-library invariants, continued — what the invariants work found and left; algebra part 0, under [What conversion decides about the carriers](#what-conversion-decides-about-the-carriers), took its prerequisites for the algebra campaign
-  - [x] Standard-library invariants, part 1: the checkers agree on what they accept — both checkers record a case equation by one rule, `curios_analysis::records_case_equation`, so a dead arm under a closed guard is refused where it is written and its report says the arm is never taken; a metavariable's solution, a goal's candidate and a parked bound's fill are judged under the refinements it was born under, so an implicit born in an arm may rest on the arm's guard and one born outside never does, whatever the guard is on, and `/std/Str` drops the implicit arguments it spelled by hand; the closed machine's memo is keyed by demand; the kernel's memo order is stated where it lives; and a stuck elimination's annotation is recorded in the perimeter as able to refuse and never to admit
-  - [x] Standard-library invariants, part 2: a written type sits where its reduct does — each universe level carries where it came from, a concept's method level is its family's domain, an occurrence settles at its recorded floor and a deferred witness goal is made ground ([A universe level settles by where it came from](design/language/a-universe-level-settles-by-where-it-came-from.md)), so `/std`'s contexts went from 4 472 universe parameters to 815, `List` takes one, `Monad` two and `pair_of` none; `!` sequences a large payload and `/std/Cli`'s `step` walks with it; and the kernel types a type as written, certifying `/std` faster than it did reducing first. No closed term of `False` was found: a written level overstates its reduct's, never understates it
-  - [ ] [Standard-library invariants, part 3: a shared term costs its size](roadmap/invariants/03-shared-term-costs-spec.md) — settlement is a quarter of `/std`'s elaboration, `capture` loses sharing while `shift`, `release` and the kernel's typing walk an open term per path, and a type-level `index_of` does not finish
-  - [ ] [Standard-library invariants, part 4: the library's remaining invented values](roadmap/invariants/04-remaining-invented-values-spec.md) — HTTP frames neither requests nor replies as RFC 9112 does, `Json` accepts `01`, the text formats re-check the UTF-8 of input that began as text, and no inventory says which defaults are specified
-  - [ ] [Standard-library invariants, part 5: a universe level only a parameter's type mentions is irrelevant](roadmap/invariants/05-nominal-universe-variance-spec.md) — `!` holds its region at the level of a nominal action it binds, since both checkers compare a nominal type's universe levels for equality, so `/std/Cli`'s `fill` binds through `Result/bind`
-  - [ ] [Standard-library invariants, part 6: what the universe work left](roadmap/invariants/06-universe-work-left-spec.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and `identify_universe_levels` commits two instances' levels equal where unfolding alone would decide
-
-## Diagnostics
-
-- [x] Span-based error quality across all stages
-- [x] [Diagnostic terms printed as their reader could write them](design/toolchain/a-diagnostic-spells-what-its-reader-can-write.md): each name as resolution reaches it from where the reader stands, each witness left out where resolution restores it
-- [x] A self-referential value reports rather than asserts, naming the path
-- [x] A bound whose subject does not terminate is refused by name, as a declared type is
-- [x] [A failing program names what failed](design/toolchain/a-refusal-is-a-panic-the-emitter-renders.md) (one sentence per class; no program can spell it)
-- [x] Written goals (`?`)
-  - [x] A bare goal reports its local scope, expected type, and any solution
-  - [x] Complete batches: one elaboration reports every reached goal, located
-  - [x] [Goal suggestions (`? ≈`)](design/toolchain/goal-suggestions-are-depth-one-fits-not-proof-search.md): sandboxed candidate fits, verified to compile, reaching what a program has not already mentioned
-
-## Tooling
-
-### Commands and editors
-
-- [x] CLI (`run`, `compile`, `test`, `document`, `curate`, `new`, `format`, `lint` and `wonder`)
-- [x] `curios wonder` — questions answered by the compilation, over a CLI and a language server
-  - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout)
-  - [x] `wonder cost` — what became of each declaration by the time the optimizer settled, `survived`, `specialized <n>` or `absorbed`, read off the continuation graph either side of the optimizer with no pass instrumented
-- [x] Editor support — a tree-sitter grammar, and Zed and VS Code extensions on `wonder server`
-- [x] Code formatter (`curios format`, in-place with `--check`; verified by reparse)
-- [x] [Linter](design/toolchain/a-lint-is-an-exact-finding-read-off-the-compilation.md) (`curios lint` — four exact, always-on lints read off name resolution: an unused import, binder, private declaration or dependency; reported beside diagnostics by `wonder` and the server, turned into an exit code by `lint` alone)
-- [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name = body;` declarations run by `curios test`, listed by `wonder tests`)
-- [x] [Documentation generator](design/toolchain/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md) (`curios document` writes a package's library interface as static pages under `.curios/documentation/`, read off the compilation that builds it; `---` documentation comments are syntax attached to the declaration below them)
-
-### Profiling
-
-- [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
-- [x] Profiling is a property of the build, not a subcommand (`curios profile` retired; a `profile` build files every span and event of whatever it ran to `.artifacts/profile.tsv` beside the crate that wrote it, and `cargo x profile` folds it)
-- [ ] [Profiling in the budget's own units](roadmap/profiling-in-budget-units-spec.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, counts no priced site, and writes every row as it is made
-
-### Distribution
-
-- [x] CI pipeline (formatting, lints, tests, documentation, the browser bundle and the grammar)
-- [x] Multi-platform release automation (Linux and macOS binaries, via tag-triggered releases)
-- [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
-- [x] Browser playground, with its run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi`)
-
-### Documentation and benchmarks
-
-- [x] Documentation: syntax overview and examples, and the full language reference
-- [x] Benchmarks: internal, and cross-language (a Docker harness against six other languages in seven columns, Rust compiled both natively and to WebAssembly)
+- [x] Execution on a shared, GC-enabled Wasmtime engine, from precompiled `.cwasm` compiled across threads
+- [x] A slim launcher embedded in the compiler, and self-contained executables carrying their foreign modules
+- [x] [The heap is sized ahead of its churn](../curios-runtime/README.md#the-heap-is-sized-ahead-of-its-churn)

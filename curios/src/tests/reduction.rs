@@ -1,6 +1,6 @@
 //! What a sequence costs to build at the *type* level, measured against what the same loop costs at runtime.
 //!
-//! `Bytes/slice` states `10 <= Bytes/len(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time — and it used to run it quadratically, because `normalize_concat` fused an all-literal concatenation into one packed value and so recopied everything accumulated so far on every step. `curios-core`'s `FUSION_CAP` stopped that, and its measure is what keeps a length over the resulting spine a single fold; the figures below are what those two decided, taken on both sides of them.
+//! `Bytes/slice` states `10 <= Bytes/len(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time. `curios-core`'s `FUSION_CAP` keeps `normalize_concat` from fusing an all-literal concatenation into one packed value — which would recopy everything accumulated so far on every step, a quadratic — and its measure keeps a length over the resulting spine a single fold.
 //!
 //! Three arms divide that cost, and the division is the point: the middle arm performs the same number of transitions as the last one and constructs nothing, so whatever separates them is construction rather than machinery.
 //!
@@ -170,9 +170,9 @@ fn elaboration_time(source: &str) -> Duration {
     elapsed
 }
 
-/// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and a cache hit charges nothing in either checker, so both absorb this entire class of defect and stay silent until a budget runs out. That is how a quadratic length went unnoticed, so the guard has to be an ordinary assertion at the ordinary budget.
+/// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and a cache hit charges nothing in either checker, so both absorb this entire class of defect and stay silent until a budget runs out. A quadratic length would go unnoticed that way, so the guard has to be an ordinary assertion at the ordinary budget.
 ///
-/// It went unnoticed for longer than it had to because the two checkers disagreed about the *price* as well: the kernel charged a memo hit what the computation it replaced had cost, so it refused at 8–16× the elaborator's budget for the same program, and a construction defect reached a user as a kernel refusal rather than as either checker's honest cost. That asymmetry is gone — see [`kernel_memo_charge_measurements`] — and this guard is what remains needed once the two agree.
+/// The two checkers price a memo hit alike — see [`kernel_memo_charge_measurements`] — so a construction defect surfaces as either checker's honest cost, and this guard is what catches it.
 ///
 /// Both carriers, at an iteration count that costs a small multiple of the default budget when a length is quadratic in the spine's depth and a small fraction of it when a length is a fold.
 #[test]
@@ -193,7 +193,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-16**, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation.
+/// **Release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation.
 ///
 /// ```text
 /// Bytes
@@ -211,114 +211,15 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///       2000    233.5ms    287.1ms    333.7ms         53.6ms         46.6ms        131072        262144
 /// ```
 ///
-/// **This table corrects an attribution the one below made.** The growing arm's floor now sits at the fixed arm's, within one power of two at every rung — where it was sixteen times it and doubling with the input — and the fixed arm's own floors did not move. What left was the frame row: the growing arm's accumulator, substituted unreduced, was forced into a chain whose walk priced one native frame per iteration, and the closed machine's eager substitution removes it. So the sixteenfold gap the table below calls "constructed payload" was overwhelmingly the *unforced accumulator's depth*: ten bytes of payload price six units a step, a native frame priced a thousand, and only the wall-time excess in the `growing-fixed` column — tens of milliseconds, growing linearly — was construction all along.
-///
-/// # What it printed with construction priced, before the closed machine
-///
-/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`. The floor columns are units of reduction *work*, not transitions, and are not comparable to the pre-pricing table below except in shape.
-///
-/// ```text
-/// Bytes
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    120.1ms    117.8ms    123.8ms          0.0ns          6.0ms         65536       1048576
-///       1600    105.8ms    128.1ms    140.0ms         22.3ms         11.9ms        262144       2097152
-///       3200    106.8ms    154.7ms    173.7ms         47.9ms         19.0ms        262144       4194304
-///       6400    108.2ms    203.6ms    248.3ms         95.4ms         44.7ms        524288       8388608
-///
-/// List
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250    116.6ms    106.7ms    118.3ms          0.0ns         11.7ms        131072        524288
-///        500    118.6ms    110.3ms    126.5ms          0.0ns         16.2ms        131072       1048576
-///       1000    119.1ms    117.9ms    135.5ms          0.0ns         17.6ms        262144       2097152
-///       2000    119.0ms    131.5ms    151.7ms         12.5ms         20.2ms        262144       4194304
-/// ```
-///
-/// **This table is the work's own verdict, and the two floor columns are the whole of it.** The fixed-payload arm builds nothing and its floor barely moves across the ladder — 65 536 to 524 288 over an eightfold input, and within a factor of two of what it was before pricing. The growing arm performs *the same transitions* and its floor is now sixteen times the fixed arm's and doubles exactly with the input. That gap is constructed payload, and before this work the counter could not see one unit of it: the same two columns used to sit within 2× of each other whichever arm was running.
-///
-/// **The `Bytes` ladder's last rung is inside the sweep again**, where it read `> 524288` before — not because the program got cheaper but because the default it is swept against was recalibrated with the pricing.
-///
-/// # What it printed before construction was priced
-///
-/// Taken **2026-08-14**, **release**, same machine, with the fusion cap and the measure in place and the counter still charging one unit per transition.
-///
-/// ```text
-/// Bytes
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    186.9ms    166.1ms    168.6ms          0.0ns          2.4ms         65536        131072
-///       1600    154.0ms    176.3ms    186.5ms         22.3ms         10.1ms        131072        262144
-///       3200    156.0ms    197.9ms    219.5ms         41.9ms         21.6ms        262144        524288
-///       6400    156.2ms    249.4ms    288.6ms         93.2ms         39.2ms        524288      > 524288
-///
-/// List
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250    170.7ms    155.2ms    171.9ms          0.0ns         16.7ms         16384         65536
-///        500    168.5ms    159.7ms    172.4ms          0.0ns         12.7ms         32768        131072
-///       1000    167.7ms    165.7ms    182.4ms          0.0ns         16.7ms         65536        262144
-///       2000    169.6ms    177.4ms    198.1ms          7.8ms         20.8ms        131072        524288
-/// ```
-///
-/// # What it printed before any of this
-///
-/// The same command on the same machine, before the cap and the measure existed. This is the baseline the work is read against, and the arms that did *not* move are as much of the evidence as the ones that did.
-///
-/// ```text
-/// Bytes    n=800: fixed-opaque 3.5ms  growing-fixed   6.4ms   floors  65536 / 131072
-///          n=1600:              23.5ms                12.6ms         131072 / 262144
-///          n=3200:              41.7ms                38.0ms         262144 / 524288
-///          n=6400:              93.6ms               128.9ms         524288 / > 524288
-/// List     n=250:                0.0ns                44.9ms          16384 /  65536
-///          n=500:                0.0ns               138.4ms          32768 / 131072
-///          n=1000:               0.0ns               487.6ms          65536 / 262144
-///          n=2000:               8.4ms                  1.8s         131072 / 524288
-/// ```
-///
-/// **Every budget floor doubles when the iteration count doubles — in every one of these tables.** That held even when the growing arm was quadratic in *time*, on both carriers, for the arm that constructs nothing and the arm that constructed quadratically. The step counter priced this loop identically whichever it was running, which is the whole of what it could not see, and the reason the memory column below was the one that moved. Pricing construction is what finally separated the two arms in the column that decides acceptance.
-///
-/// **The fixed-payload arm did not move**, which is what makes the rest a removal rather than a reallocation: 3.5 / 23.5 / 41.7 / 93.6 ms became 0.0 / 22.3 / 41.9 / 93.2 ms.
-///
-/// **The growing arm's excess over it went from quadratic to linear.** On `Bytes` its per-rung growth was 1.97×, 3.02×, 3.39× — converging on the 4× a quadratic gives for a doubled input — and is now 4.2×, 2.1×, 1.8×. On `List` it was 3.08×, 3.52×, 3.69× and the arm cost 1.8 s at n = 2000; it now costs 20.8 ms, and does not grow.
-///
-/// **`Bytes` needed eight times the iteration count to show what `List` showed**, which is why the two ladders differ. A packed byte copy is a `memcpy`; an element copy is a reference-count increment per element. Same shape, two orders of magnitude apart in the constant.
+/// **The two arms' floors sit within one power of two of each other at every rung**, and both double with the input: the transitions are what a budget sees, and ten bytes of payload price six units a step. Construction shows in the wall-time excess of the `growing-fixed` column alone — tens of milliseconds, growing linearly.
 ///
 /// # Peak memory
 ///
-/// Taken the same day, same profile, from outside the process because a high-water mark read from inside it would already have been returned to the allocator:
+/// Taken from outside the process, because a high-water mark read from inside it would already have been returned to the allocator:
 ///
 /// ```sh
 /// /usr/bin/time -l target/release/curios compile bytes_growing_6400.crs -o out
 /// ```
-///
-/// | Arm | n = 800 | n = 6400 | before, n = 800 | before, n = 6400 |
-/// | --- | --- | --- | --- | --- |
-/// | opaque | — | 74.8 MiB | 75.3 MiB | 75.5 MiB |
-/// | fixed | — | 87.9 MiB | 75.7 MiB | 87.8 MiB |
-/// | growing | 80.4 MiB | 126.6 MiB | 87.8 MiB | 396.3 MiB |
-///
-/// **The growing arm's excess over baseline fell from 321 MiB to 52 MiB** — a sixfold reduction to produce the same 64 KiB value — and its growth across the ladder (5.6 / 9.5 / 15.7 / 51.8 MiB) is no longer quadratic. That is the whole point of the work: the accumulator stops being recopied every step.
-///
-/// **The opaque and fixed arms are unmoved**, at 74.8 against 75.5 and 87.9 against 87.8 MiB. The fixed arm still retains about 2 KiB per transition while constructing nothing, growing linearly, and that figure is untouched by any of this — it is a property of the machinery rather than of what a transition builds, and it is the floor a budget default has to respect: at that rate a million transitions admit roughly two gigabytes before a single byte of payload is built.
-///
-/// **One figure this corrects.** The specification says compile-time evaluation of a small fraction of the runtime measurement's size "already costs gigabytes". It did not even before this work: the largest iteration count the default budget admits for this arm is around 6400, and that cost 321 MiB. Gigabytes are reached by the shape, but only past a budget the compiler does not ship.
-///
-/// # The fixed prelude, which the cap must not move
-///
-/// The other half of the gate, from the build script's own capture rather than `cargo`'s wall clock, because `cargo build` is mostly `rustc` and its RSS says nothing about elaboration:
-///
-/// ```sh
-/// touch curios-prelude-archive/std/lib.crs
-/// cargo build --package curios-prelude-archive --features profile
-/// # target/debug/build/curios-prelude-archive-*/out/profile.tsv
-/// ```
-///
-/// | Span | Retained | Allocated | Allocations | Before |
-/// | --- | --- | --- | --- | --- |
-/// | `elaborate_and_zonk_module` | 248.7 MiB | 10 210.3 MiB | 67 383 115 | 248.7 MiB / 10 208.7 MiB / 67 368 289 |
-/// | `erase_unit` | 47.9 MiB | 665.0 MiB | 6 319 619 | 47.9 MiB / 664.8 MiB / 6 318 194 |
-///
-/// Reported peak, printed by the build as a warning: **606.6 MiB**, before and after, identical across runs.
-///
-/// **Compare the allocation columns, not the time one.** Time here is a debug build under a capture and moves by seconds between runs; allocation volume, allocation count and the reported peak come back bit-identical, because they are counted rather than sampled. The prelude moved by **+0.02%** in allocations and not at all in retained memory or reported peak — the cost of the measure's segment list running over values that are one to three generators long.
-///
 #[test]
 #[ignore = "measurement: reports what a type-level accumulation costs rather than asserting"]
 fn type_level_sequence_cost_measurements() {
@@ -384,7 +285,7 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-16**, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
+/// **Release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
 ///
 /// ```text
 /// Bytes
@@ -402,77 +303,9 @@ fn type_level_sequence_cost_measurements() {
 ///       2000            262144        262144          1x
 /// ```
 ///
-/// **Parity held through the machine, and every floor fell about sixteenfold.** The two checkers run one shared evaluator for the closed accumulation, so agreement here is structural now rather than measured luck; the scattered 2× rungs are adjacent powers of two, which the sweep cannot distinguish. The fall is the frame row leaving: the accumulator that was substituted unreduced and forced into a chain at the end priced one native frame per iteration, and prices a machine frame now. Where the two checkers *do* part is a `Str` literal — [`str_literal_cost_measurements`] carries that table — and it is a difference in how many times the elaborator demands one scan, not in what a demand costs.
+/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation; the scattered 2× rungs are adjacent powers of two, which the sweep cannot distinguish. Where the two checkers *do* part is a `Str` literal — [`str_literal_cost_measurements`] carries that table — and it is a difference in how many times the elaborator demands one scan, not in what a demand costs.
 ///
-/// # What it printed with construction priced, before the closed machine
-///
-/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`.
-///
-/// ```text
-/// Bytes
-///          n  floor elaborator  floor kernel  divergence
-///        800           1048576       1048576          1x
-///       1600           2097152       2097152          1x
-///       3200           4194304       4194304          1x
-///       6400           8388608       8388608          1x
-///
-/// List
-///          n  floor elaborator  floor kernel  divergence
-///        250            524288        524288          1x
-///        500           1048576       1048576          1x
-///       1000           2097152       2097152          1x
-///       2000           4194304       4194304          1x
-/// ```
-///
-/// **Every rung is 1×.** The two checkers agreed on this program's cost exactly, on both carriers and at every size — which is more than the memo change alone bought, and says the two evaluators differ in what they do far less than they differed in what they charged.
-///
-/// # What it printed with memo hits free but construction unpriced
-///
-/// ```text
-/// Bytes
-///          n  floor elaborator  floor kernel  divergence
-///        800             16384         16384          1x
-///       1600             16384         32768          2x
-///       3200             32768         65536          2x
-///       6400             65536        131072          2x
-///
-/// List
-///          n  floor elaborator  floor kernel  divergence
-///        250              4096          8192          2x
-///        500              8192         16384          2x
-///       1000             16384         16384          1x
-///       2000             32768         32768          1x
-/// ```
-///
-/// # What it printed before either
-///
-/// The same command on the same machine, with a hit charged the whole recorded cost of the computation it replaced.
-///
-/// ```text
-/// Bytes
-///          n  floor elaborator  floor kernel  divergence
-///        800             16384        131072          8x
-///       1600             16384        262144         16x
-///       3200             32768        524288         16x
-///       6400             65536      > 524288           —
-///
-/// List
-///          n  floor elaborator  floor kernel  divergence
-///        250              4096         65536         16x
-///        500              8192        131072         16x
-///       1000             16384        262144         16x
-///       2000             32768        524288         16x
-/// ```
-///
-/// **The elaborator column did not move, and that is what identifies the change as the kernel's pricing.** Its hits were already free; every figure in it is identical on both sides. The kernel's fell by 8× or 16× at every rung that had a figure on both sides, and the `Bytes` ladder's last rung came back inside the sweep at all.
-///
-/// **The divergence is what a user met.** The compile path puts the same budget to both checkers, so `budget_floor` above — which reports the larger — was reporting the kernel's number throughout, and a program the elaborator accepted within its budget was refused for exhaustion by the kernel with no disagreement about any rule. That happened twice while the free monoid's measure was being developed.
-///
-/// **What no longer reproduces here.** The 8–16× was measured across every rung of both ladders and is now 1–2×, which is two evaluators differing rather than two price lists differing. A residual factor of two is expected and is not evidence of anything: the sweep doubles, so adjacent powers of two are one step apart.
-///
-/// # Whole-unit certification, which the clearing must not move
-///
-/// Free hits come with the `whnf`/`forced` tables cleared at every declaration boundary, and 1107 clearings over a module walk is the cost that had to be checked. It is `curios-prelude-archive`'s `stored_prelude_measurements` that takes this figure, and the retake is recorded there: **6.2 s before, 6.1 s after**, 0 refusals both times, and `kernel_memo_parity` passing unchanged on both sides.
+/// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion, at 8–16× the elaborator's floor, programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that is the number a user would meet, with no disagreement about any rule.
 #[test]
 #[ignore = "measurement: reports what a memo hit costs the kernel rather than asserting"]
 fn kernel_memo_charge_measurements() {
@@ -578,7 +411,7 @@ fn cost_row(label: &str, source: &str) {
     );
 }
 
-/// A literal folded at the type level is folded once however many types mention it. Its certificate, `True/qed()`, has no universe to instantiate, so every mention is one term to the reduction cache; when an earlier certificate was instantiated at a fresh level per mention, the four mentions here were four keys and four full folds.
+/// A literal folded at the type level is folded once however many types mention it. Its certificate, `True/qed()`, has no universe to instantiate, so every mention is one term to the reduction cache; a certificate instantiated at a fresh level per mention would make the four mentions here four keys and four full folds.
 #[test]
 fn a_literal_mentioned_in_several_types_is_folded_once() {
     let literal = "0123456789".repeat(30);
@@ -603,7 +436,7 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 
 /// An item's verdict is the same compiled alone and after its neighbours. Item `_a` states one type-level claim over a literal; item `_b` states the same claim and a second one, so a reduct `_a` left behind would answer half of `_b`'s work for nothing. `_b` is the heaviest declaration either way; each checker spends the same on it in both programs, and one unit short of that, each refuses it in both.
 ///
-/// **A guard on this tree rather than a regression test.** Every item's finalization rewrites its universe levels and clears the reducts with them, so `_b` met a cold table after `_a` even while the table outlived a declaration. What keeps it from outliving one is held where it is kept: `curios-elab`'s `a_closed_reduct_does_not_outlive_its_declaration`, and in each checker `what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it`.
+/// **A guard on this tree rather than a regression test.** Every item's finalization rewrites its universe levels and clears the reducts with them, so `_b` meets a cold table after `_a` whether or not the table outlives a declaration. What keeps it from outliving one is held where it is kept: `curios-elab`'s `a_closed_reduct_does_not_outlive_its_declaration`, and in each checker `what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it`.
 #[test]
 fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
     let claim = |literal: String| format!("Eq()(Str/len(\"{literal}\"), 300)");
@@ -676,7 +509,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-09-28**, **debug**, on `aarch64-apple-darwin`, after the standard-library invariants work, which rewrote how a literal's validity is decided and replaced the cut's `Str/slice` with `Str/before` at a position.
+/// **Debug**, on `aarch64-apple-darwin`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
 ///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
@@ -692,126 +525,13 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///   Str n=500, cut               39445       1      38421         67423       39489       1      38465             0     1.0x
 /// ```
 ///
-/// **A character still costs 69 units on each checker**, read between the `n=4000` and `n=8000` rows as in the table below: the decision behind the certificate was rewritten and its price did not move.
+/// **A character costs 69 units on each checker**, read between the `n=4000` and `n=8000` rows. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. Guarded depth is flat in the literal's length on both checkers, and so is the cost in use count.
 ///
 /// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers; its elaborator retention is 2 395 units, 3.7%, above the bare row's.
 ///
-/// **The `kernel/elab` column reads 1.0× at every size, and the elaborator's retention is still flat**: 64 997 to 65 965 units across the ladder, one unit per eight characters as before, about 2 900 above the previous take. The `n=250` and `Bytes` rows still measure the heaviest declaration other than the literal, now 27 130 units on the elaborator where it was 25 832.
+/// **The `kernel/elab` column reads 1.0× at every size, and the elaborator's retention is flat**: 64 997 to 65 965 units across the ladder, one unit per eight characters.
 ///
-/// # What it printed on 2026-09-17
-///
-/// Taken **2026-09-17**, **debug**, on `x86_64-unknown-linux-gnu`, with the literal's certificate `True/qed()` against the decided `Str/Valid`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
-///
-/// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250           25832       2      23784         62091       27078       6      20934             0     1.0x
-///   Str literal, n=500           39445       1      38421         62122       39485       1      38461             0     1.0x
-///   Str literal, n=1000          73945       1      72921         62184       73985       1      72961             0     1.0x
-///   Str literal, n=2000         142945       1     141921         62309      142985       1     141961             0     1.0x
-///   Str literal, n=4000         280945       1     279921         62559      280985       1     279961             0     1.0x
-///   Str literal, n=8000         556945       1     555921         63059      556985       1     555961             0     1.0x
-///   Str n=500, 1 uses            39445       1      38421         62286       39485       1      38461             0     1.0x
-///   Str n=500, 3 uses            39445       1      38421         62286       39485       1      38461             0     1.0x
-///   Bytes literal, n=500         25832       2      23784         61809       25534       6      19390             0     1.0x
-///   Str n=500, sliced            39445       1      38421         62145       39485       1      38461             0     1.0x
-/// ```
-///
-/// **A character costs 69 units on each checker**, where it cost 45 in the table below. Every change to `/std/Str` and to both checkers since then lies between the two, the certificate's among them, and which of them moved the price was not bisected. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. The kernel's peak depth on a literal is 1, where it was 2.
-///
-/// **The `n=250` and `Bytes` rows no longer measure a literal.** Each checker reports its heaviest declaration, and in those two programs that is none of the program's own: a program that only prints is refused below about 26 000 units on standard-library terms — `Eql(B)` at 20 000, `Write(Async, Serial)` at 25 000 — so the floor is work every compilation repeats over `/std`, which has grown since the table below, `Write(Async, Serial)` among it. The `Bytes` control says nothing about a proof-free literal until that floor sits below one again.
-///
-/// **The elaborator's retention is flat**: 62 091 to 63 059 units across the ladder, about one unit per eight characters, where it grew by four a character.
-///
-/// # What it printed on 2026-08-22
-///
-/// Taken **2026-08-22**, **release**, on `x86_64-unknown-linux-gnu`, with the elaborator's conversion forcing a folded recursive call before comparing it, a window comparing equal to itself by identity, and the declaration-scoped memo tables no longer charged against the allowance.
-///
-/// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250           16655       1      15631         33461       22363       6      16219             0     1.3x
-///   Str literal, n=500           27905       1      26881         34546       28776       2      26728             0     1.0x
-///   Str literal, n=1000          50405       1      49381         36716       51276       2      49228             0     1.0x
-///   Str literal, n=2000          95405       1      94381         41091       96276       2      94228             0     1.0x
-///   Str literal, n=4000         185405       1     184381         49841      186276       2     184228             0     1.0x
-///   Str literal, n=8000         365405       1     364381         67341      366276       2     364228             0     1.0x
-///   Str n=500, 1 uses            27905       1      26881         35037       28776       2      26728             0     1.0x
-///   Str n=500, 3 uses            27905       1      26881         35037       28776       2      26728             0     1.0x
-///   Bytes literal, n=500          8541       2       6493         19540       20502       6      14358             0     2.4x
-///   Str n=500, sliced            27905       1      26881         29786       28776       2      26728             0     1.0x
-/// ```
-///
-/// The kernel's `retained` column reads its unfold table alone now, and a literal unfolds nothing monomorphic; the day before, with its term-keyed tables still charged, it read 184 567 to 202 959 across the ladder.
-///
-/// **The elaborator's retention is linear now** — 33K to 67K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof was then `of_scan_eq(b, refl_scan(b))`, and checking it asked conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
-///
-/// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `Binary`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remained grew as about n^1.5 at the top of that ladder, was left measured rather than chased, and is chased in the section above: it was the same walk on the other side of the same probe.
-///
-/// # What the wall clock did when the hash stopped reading the whole value
-///
-/// Taken **2026-09-19**, **release**, on `x86_64-unknown-linux-gnu`, over one `print` of an n-character literal, with `wonder diagnostics` — so each row holds one constant, the prelude's own 0.28 s, which the marginal column removes. Retake it by building `--release` and timing that command at the three lengths.
-///
-/// ```text
-///   n        before   marginal   after    marginal
-///   8 000     0.58 s     0.30 s   0.58 s     0.30 s
-///   16 000    1.02 s     0.74 s   0.90 s     0.62 s
-///   32 000    2.11 s     1.83 s   1.57 s     1.29 s
-/// ```
-///
-/// **A doubling cost 2.47× and costs 2.07×**, which is n^1.30 against n^1.05 — linear to what this ladder can tell. The unit columns do not move: nothing about what reduction builds or transitions changed. What changed is that a term node's hash is *computed* once per node although it is memoized after, and peeling a literal builds one node per element, each holding a window one element shorter than the last; reading every byte of each is the same per-element walk the equality arm above removed, and `Binary`'s hash now reads a bounded sample instead. The n=8 000 row is the control: unchanged, so the constant did not move under the change.
-///
-/// # What it printed before conversion forced a folded call
-///
-/// Taken **2026-08-16**, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the scan. `depth` is the peak guarded reduction level; `other` is what the declaration spent on everything but the frame row. The first four columns are the elaborator's, the next four the kernel's. Units are machine-independent by construction, and a debug run of the same ladder reproduces every unit column exactly.
-///
-/// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250           44613       1      43589       2560644       22400       6      16256        184663     0.5x
-///   Str literal, n=500           84363       1      83339       9596043       28776       2      26728        185252     0.3x
-///   Str literal, n=1000         163863       1     162839      37213713       51276       2      49228        186430     0.3x
-///   Str literal, n=2000         322863       1     321839     146636588       96276       2      94228        188805     0.3x
-///   Str literal, n=4000         640863       1     639839     582232338      186276       2     184228        193555     0.3x
-///   Str literal, n=8000        1276934       1    1275910     999999990      366276       2     364228        203055     0.3x
-///   Str n=500, 1 uses            84363       1      83339       9596534       28776       2      26728        185360     0.3x
-///   Str n=500, 3 uses            84363       1      83339       9596534       28776       2      26728        185360     0.3x
-///   Bytes literal, n=500          9302       2       7254         22209       20539       6      14395        171164     2.2x
-///   Str n=500, sliced            84363       1      83339       9587945       28776       2      26728        179159     0.3x
-/// ```
-///
-/// # What the figures decide
-///
-/// **Guarded depth is flat in the literal's length, on both checkers.** The scan used to nest one native reduction level per byte, and a character cost 1 088 units with 1 024 of them the frame row; on the machine the whole ladder runs at a peak of one or two levels, and **a character costs 45 units on the kernel and 159 on the elaborator** — transitions, openings, and machine bookkeeping, no frame row at all.
-///
-/// **The ceiling moved from between 16 625 and 16 750 characters to between 185 000 and 200 000**, found by the same length bisection at the default budget: a 185 000-character literal compiles and a 200 000-character one is refused. That is the order of magnitude the closed machine's acceptance asked for, with the elaborator's per-character price the binding side.
-///
-/// **The kernel/elab column is a demand count, not a price list.** Both checkers run the same machine on the same closed scan, so one demand costs both the same; the elaborator's 3.5× is it demanding the scan at several sites and spellings — checking, conversion, and the passes after — where the kernel demands it once and replays its memo. The construction-dominated programs in [`kernel_memo_charge_measurements`] still floor at 1× between the checkers, which is where the price-list parity claim lives and holds.
-///
-/// **Use count is flat**, which is what spec 01's first milestone bought and this keeps honest. **Cutting should not be what costs.** The cut row cuts the literal with `Str/before` at a position, whose boundary is decided by the one byte at it and discharged by reduction, so it should sit on the bare row; the tables below measured the `Str/slice` it replaced, which supplied its bounds with `@drop_width_within` and did.
-///
-/// **Wall clock is superlinear where units are exactly linear.** The bisection's rungs, release: 16K in 7.1 s, 32K in 22.6 s, 64K in 82.5 s, 128K in 249.5 s, 185K in 492.5 s — growth near n^1.8 against unit columns that are linear to the third digit. The unit model prices what a reduction builds and transitions, not the O(size) hashing of large keys the elaborator's caches perform; the excess wall shares a source with the retention residue below.
-///
-/// # The retention residue, as it stood before the forcing
-///
-/// **The kernel's retention is flat across the ladder** — 184K to 203K units from n=250 to n=8000, where it was 3.2M rising quadratically to 774M and a quota cliff. The quadratic's recorded cause, the scan's unreduced accumulator chain, is gone with the machine's eager substitution, and the kernel's side went with it entirely.
-///
-/// **The elaborator's did not, and the chain was therefore never most of its story.** Its retention still grew as roughly 37·n² units — about three-quarters of its pre-machine figure — and saturated the retention quota the compilation then held near n ≈ 5 200. What the same table shows is that saturating cost this program nothing: the n=8000 row's units were linear on trend, so the refused entries were not ones this walk re-needed. The source was the conversion stepping above, and the section at the top is where it went.
-///
-/// # What it printed before the closed machine
-///
-/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin` — the table the machine is measured against, kept whole because every claim above is a delta from it.
-///
-/// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250          278374     255      17254       3186474      279697     256      17553       3360434     1.0x
-///   Str literal, n=500          550374     505      33254      12366375      550947     506      32803      12541116     1.0x
-///   Str literal, n=1000        1094374    1005      65254      48819921     1093447    1006      63303      48996224     1.0x
-///   Str literal, n=2000        2182374    2005     129254     194102046     2178447    2006     124303     194281474     1.0x
-///   Str literal, n=4000        4358374    4005     257254     774166296     4348447    4006     246303     774351974     1.0x
-///   Str literal, n=8000       11261744    8005    3064624    1000000000    14422506    8006    6224362     999999999     1.3x
-///   Str n=500, 1 uses           550374     505      33254      12366576      550947     506      32803      12541224     1.0x
-///   Str n=500, 3 uses           550374     505      33254      12366576      550947     506      32803      12541224     1.0x
-///   Bytes literal, n=500          5064       2       3016         17331       17992       7      10824        188255     3.6x
-///   Str n=500, sliced           550374     505      33254      12357908      550947     506      32803      12532062     1.0x
-/// ```
+/// **The `n=250` and `Bytes` rows do not measure a literal.** Each checker reports its heaviest declaration, and in those two programs that is none of the program's own: a program that only prints spends about 27 000 units on standard-library terms, work every compilation repeats over `/std`. The `Bytes` control says nothing about a proof-free literal until that floor sits below one.
 #[test]
 #[ignore = "measurement: reports what a Str literal costs rather than asserting"]
 fn str_literal_cost_measurements() {
@@ -824,7 +544,7 @@ fn str_literal_cost_measurements() {
         cost_row(&format!("Str literal, n={n}"), &str_literal(n, 0));
     }
 
-    // Flat in use count is what spec 01's first milestone bought; a regression here is that milestone coming undone.
+    // Flat in use count: a regression here is a literal checked once per mention.
     for uses in [1, 3] {
         cost_row(&format!("Str n=500, {uses} uses"), &str_literal(500, uses));
     }
@@ -848,15 +568,15 @@ fn str_literal_cost_measurements() {
 /// cargo test --release --package curios -- --ignored --nocapture combinator_web_cost_measurements
 /// ```
 ///
-/// The third of the parity probes, and the one aimed at a gap that was an *exponent* rather than a multiple. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they used to disagree without disagreeing about any rule — a scrutinee whose subject mentions a binder, which the kernel reduced once per arm to key its case refinement and the elaborator did not reduce at all.
+/// The third of the parity probes. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they can part by an *exponent* without disagreeing about any rule — a scrutinee whose subject mentions a binder, which a checker reducing it once per arm to key its case refinement would pay for per definition in the web.
 ///
-/// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one that used to grow; the last is the control that says the trigger was the binder rather than the `match`.
+/// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one such keying would grow; the last is the control that says the trigger is the binder rather than the `match`.
 ///
-/// It asserts nothing beyond each arm checking at all. `curios`' `scrutinee_refinement_measurements` carries the wall clocks and the refusals beside it.
+/// It asserts nothing beyond each arm checking at all. `scrutinee_refinement_measurements` carries the wall clocks beside it.
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`.
+/// **Release**, `aarch64-apple-darwin`.
 ///
 /// ```text
 ///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
@@ -871,11 +591,11 @@ fn str_literal_cost_measurements() {
 ///   web n=20, closed              9302       2       7254         75477       22400       6      16256        201785     2.4x
 /// ```
 ///
-/// **Every unit column is constant**, across five sizes and all three consumptions, and the ratio is 2.4× everywhere. Twenty definitions at fourteen — the size that refused — cost what eight do.
+/// **Every unit column is constant**, across the sizes and all three consumptions, and the ratio is 2.4× everywhere: twenty definitions cost what eight do.
 ///
-/// The heaviest declaration is the same one in every row, and that is what the flatness is *about*: it is `probe`, the declaration holding the `match`, and what it costs no longer has anything to do with the web it scrutinizes. Before the key moved to the written spelling this row grew by a factor of two per definition and refused at fourteen; the wall clocks and the refusals are in `curios`' `scrutinee_refinement_measurements`.
+/// The heaviest declaration is the same one in every row, and that is what the flatness is *about*: it is `probe`, the declaration holding the `match`, and what it costs has nothing to do with the web it scrutinizes. Keyed on the reduced spelling rather than the written one, this row would grow by a factor of two per definition.
 ///
-/// Retention was the one column that still separated the rows, linearly in the web: an equation is *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm. The column went with the retention allowance, once no memo outlived the declaration that filled it.
+/// Retention is the one column that separates the rows, linearly in the web: an equation is *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm.
 #[test]
 #[ignore = "measurement: reports what a combinator web costs each checker rather than asserting"]
 fn combinator_web_cost_measurements() {
@@ -900,7 +620,7 @@ fn combinator_web_cost_measurements() {
 
 /// **The guard [`str_literal_cost_measurements`] cannot be**, because a probe is ignored and nothing runs it.
 ///
-/// What it holds is the shape of a literal's cost rather than a number, and the closed machine is what set the shape: guarded reduction depth *flat* in the literal's length on both checkers, a per-character price in transitions and machine frames far below [`Cost::FRAME`], and neither checker paying a multiple of the other for the same reduction. The first two are the machine's whole yield — a literal used to nest one native reduction level per byte and cost 1 088 units a character, 1 024 of them the frame row, which capped a literal near 16 700 characters; the third failed within living memory on its own, when the kernel's memo stopped short of its internal levels and charged 5.3× the elaborator at the same depth.
+/// What it holds is the shape of a literal's cost rather than a number, and the closed machine is what set the shape: guarded reduction depth *flat* in the literal's length on both checkers, a per-character price in transitions and machine frames far below [`Cost::FRAME`], and neither checker paying a multiple of the other for the same reduction. The first two are the machine's yield — a recursive strategy nests one native reduction level per byte and pays the frame row per character; the third is what a checker's memo stopping short of its internal levels breaks.
 ///
 /// The bound is stated against [`Cost::FRAME`] rather than as a literal because the quantity asserted is *that no per-character native frame is being paid at all*: a per-character price within even a quarter of the frame row means closed evaluation has fallen off the machine and back onto the recursive strategy, which is the silent cliff this guard exists to catch.
 #[test]
@@ -908,7 +628,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
     let (elaborator_small, kernel_small) = declaration_cost(&str_literal(500, 0));
     let (elaborator_large, kernel_large) = declaration_cost(&str_literal(1000, 0));
 
-    // The literal's scan runs on the machine's explicit stack, so doubling the literal moves guarded depth not at all — where it used to move it by exactly the added byte count.
+    // The literal's scan runs on the machine's explicit stack, so doubling the literal moves guarded depth not at all.
     assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
     assert_eq!(elaborator_large.peak_depth(), elaborator_small.peak_depth());
 
@@ -928,7 +648,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
         elaborator_large.units(),
     );
 
-    // Flat in use count: what spec 01's first milestone bought, and the defect this line of work was opened on.
+    // Flat in use count: a literal is checked once however many types mention it.
     let (_, kernel_used) = declaration_cost(&str_literal(500, 3));
     assert_eq!(kernel_used.units(), kernel_small.units());
 }
@@ -976,13 +696,13 @@ fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
     );
 }
 
-/// **The construction-dominated fixture the acceptance criteria ask for**, and it is deliberately not the accumulate-then-slice shape above: capping fusion made that program's construction linear, so it now refuses on ordinary step cost like any other long computation and would be testing the wrong thing.
+/// **The construction-dominated fixture the acceptance criteria ask for**, and it is deliberately not the accumulate-then-slice shape above: with fusion capped that program's construction is linear, so it refuses on ordinary step cost like any other long computation and would test the wrong thing.
 ///
-/// A shift is the shape no representation change can flatten. It has no loop, so nothing amortizes it; its result is `bits(value) + amount` wide and the amount is a numeral the program writes, so no operand size bounds it. Before construction was priced this compiled in well under a second while building fifty megabytes of magnitude, with the counter charging a handful of transitions.
+/// A shift is the shape no representation change can flatten. It has no loop, so nothing amortizes it; its result is `bits(value) + amount` wide and the amount is a numeral the program writes, so no operand size bounds it. Priced by transitions alone it would compile in well under a second while building fifty megabytes of magnitude.
 ///
 /// The paired control is [`a_bound_behind_a_parameter_evaluates_nothing`](super::numeric) in spirit and the second arm here in fact: the same term at an amount the budget affords still folds, so what the first arm demonstrates is a refusal about *size* rather than about the operation.
 ///
-/// **The subject stands under an obligation rather than in a match scrutinee, and it had to move there.** `Bytes/drop` states `Le(k, len(b))`, a decided proposition whose subject stands in a type, so discharging it *is* reducing the shift — which is what makes this fixture about construction at all. The program it replaced put the same shift under `match Nat/le(1, big)`, and nothing in either checker demands a top-level match's scrutinee: what evaluated it was the kernel reducing every non-variable scrutinee to key a case equation, which for a *local-free* scrutinee like this one it then discarded, since `Scope::refine` records only local-bearing keys. The two-tier key stopped that reduction, and this fixture stopped testing anything — both arms of it, since the affordable arm was not folding either. The pricing itself never moved: what changed is that the program has a demander again, chosen to be one a user would actually write.
+/// **The subject stands under an obligation rather than in a match scrutinee.** `Bytes/drop` states `Le(k, len(b))`, a decided proposition whose subject stands in a type, so discharging it *is* reducing the shift — which is what makes this fixture about construction at all. Nothing in either checker demands a top-level match's scrutinee, so the same shift under `match Nat/le(1, big)` would evaluate nothing and test nothing; the demander here is one a user would actually write.
 #[test]
 fn an_oversized_construction_is_refused_before_it_is_allocated() {
     let shift = |amount: u64| {
@@ -1010,9 +730,9 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
 
 /// Repeated concatenation is bounded by *cumulative* charges even though every individual result fits: the budget is never refunded, so a loop that builds a growing value pays for each of them and runs out on the total.
 ///
-/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program. The refusing count moved once, deliberately: a hundred thousand iterations refused under the recursive strategy and fits under the closed machine, so the arm that must refuse ran two million against the default budget — the property held is that a count exists past which cumulative construction refuses, not where it sits.
+/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program. The property held is that a count exists past which cumulative construction refuses, not where it sits: a hundred thousand iterations fit under the closed machine.
 ///
-/// The budget is stated, at a thirtieth of the default, because the refusing arm's cost is the budget it spends before refusing: two million iterations against thirty million steps was the suite's second-slowest test, all of it the wait for exhaustion. The measured floors above put two thousand iterations under `2^19`, so `2^20` affords the fitting arm with the same headroom the default gave it, and a hundred times the iterations exhausts it as surely as a thousand times exhausted the default.
+/// The budget is stated, at a thirtieth of the default, because the refusing arm's cost is the budget it spends before refusing: two million iterations against the default's thirty million steps would be among the suite's slowest tests, all of it the wait for exhaustion. The measured floors above put two thousand iterations under `2^19`, so `2^20` affords the fitting arm with the same headroom the default gave it, and a hundred times the iterations exhausts it as surely as a thousand times exhausted the default.
 #[test]
 fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
     const BUDGET: u64 = 1 << 20;
@@ -1074,20 +794,20 @@ fn paired_fold(width: usize, paired: bool) -> String {
 
 /// **A recursive call whose result is read at two positions is evaluated once, not twice.**
 ///
-/// The machine records a forced application's value under the application itself, and [`Frame::Head`](curios_core) used to drop that key on the one path whose head is a recursive member — on the premise, written in its eval arm, that *a member selection's calls never repeat within a run because the fold argument strictly shrinks*. That premise is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so each level demanded the same call twice and the fold cost `2^n`.
+/// The machine records a forced application's value under the application itself, the path whose head is a recursive member included. That *a member selection's calls never repeat within a run because the fold argument strictly shrinks* is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so without the record each level would demand the same call twice and the fold would cost `2^n`.
 ///
-/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level and was never affected, so a regression that slowed both equally would not read as this defect.
+/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so a regression that slowed both equally would not read as this defect.
 ///
-/// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form reads `[12146, 39978, 481810, 7547642]`, increments `[27832, 441832, 7065832]`, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
+/// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form's increments grow with every four bits, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
 ///
-/// The figures, `cargo test --package curios -- a_recursive_call_read_twice`, 2026-08-24, aarch64-apple-darwin:
+/// The figures, `cargo test --package curios -- a_recursive_call_read_twice`, on aarch64-apple-darwin:
 ///
 /// ```text
-///   width   single    paired (before)    paired (after)
-///       4     8622             11058              9789
-///       8     8622             38954             10469
-///      12     8622            480850             11149
-///      16     8622           7546746             11829
+///   width   single   paired
+///       4     8622     9789
+///       8     8622    10469
+///      12     8622    11149
+///      16     8622    11829
 /// ```
 #[test]
 fn a_recursive_call_read_twice_is_evaluated_once() {
@@ -1122,7 +842,7 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     );
 }
 
-/// A packed fold costs the elaborator linearly in the length folded. Its per-step bound is the decided `i < i + (kp + 1)`, settled by cancellation; when it was built as an inductive proof by recursion on the remaining length, every step paid the steps left, and a fold over a 2 KB literal at the type level ran out of budget where an indexed walk finished.
+/// A packed fold costs the elaborator linearly in the length folded. Its per-step bound is the decided `i < i + (kp + 1)`, settled by cancellation; an inductive proof by recursion on the remaining length would make every step pay the steps left, and a fold over a 2 KB literal at the type level would run out of budget where an indexed walk finishes.
 #[test]
 fn a_packed_fold_costs_linearly_in_its_length() {
     let program = |bytes: usize| {

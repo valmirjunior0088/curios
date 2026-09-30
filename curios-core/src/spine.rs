@@ -65,7 +65,7 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     }
 }
 
-/// Two monomials of one carrier — two `Nat` products or two `Int` products — with their factors paired by identity before anything reads them in order: one coefficient and one multiset of factors is `Equal`, and one factor left on each side is `Sufficient` over that pair. `None` for anything else, so the caller's shape congruence decides as it did.
+/// Two monomials of one carrier — two `Nat` products or two `Int` products — with their factors paired by identity before anything reads them in order: one coefficient and one multiset of factors is `Equal`, and one factor left on each side is `Sufficient` over that pair. `None` for anything else, so the caller's shape congruence decides.
 ///
 /// **A monomial's factor order is a hash, and a hash is not a value.** The product fold sorts factors by their structural hash, which is canonical only while every factor is what it will stay: an unsolved metavariable hashes as itself and not as the term it is solved to, and so does a factor convertible to another without being identical. The shape congruence compared factors in that order, so `c · ?d · k` against `d · c · k` paired `c` with `d` and refused, where cancellation leaves `?d` against `d` and solves it — and whether the positions happened to line up could turn on a comment line elsewhere in the file. Summands have had exactly this pairing, by cancellation, all along; this is the product's.
 ///
@@ -92,7 +92,7 @@ pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(
     }
 }
 
-/// Two `Nat` or `Int` equalities, or two disequalities, with their sides paired by identity up to universe instances rather than by position: one pair of sides is `Equal`, and one side left on each is `Conclusion::Sufficient` over those two. `None` for anything else, so the caller's shape congruence decides as it did.
+/// Two `Nat` or `Int` equalities, or two disequalities, with their sides paired by identity up to universe instances rather than by position: one pair of sides is `Equal`, and one side left on each is `Conclusion::Sufficient` over those two. `None` for anything else, so the caller's shape congruence decides.
 ///
 /// **A comparison's side order is a hash**, as a monomial's factor order is ([`peel_monomial`]). The linear views respell two comparisons alike before any peel reads them, each side of the difference where its atoms' ranks put it, and a rank is a structural hash, which an unsolved metavariable takes from its own number. The shape congruence then compared sides in that order, so `?w != y` against `x != y` paired `?w` with `x` or with `y` according to where `?w` sorted, and a rule that solves the metavariable solved it or not as metavariables minted earlier in the item moved its number. Pairing by identity leaves `?w` against `x` wherever the two were put.
 ///
@@ -137,7 +137,7 @@ fn decide(equal: bool) -> Verdict {
 
 /// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by `curios-algebra`'s `same_leaves`, over leaves identified as written: the same set is `Equal`, anything else is `Undecided`, never `Impossible`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
 ///
-/// Decided here rather than by a canonical spelling in the fold, on the record `documentation/roadmap.md` keeps of the `&&`/`||` cliff: a fold that normalized a tree whole on every step paid for the whole tree at every leaf, where a comparison flattens each side once. A leaf that is convertible but not identical is the caller's shape congruence's, as before, so declining costs reductions and never correctness.
+/// Decided here rather than by a canonical spelling in the fold: a fold that normalizes a tree whole on every step pays for the whole tree at every leaf, where a comparison flattens each side once. A leaf that is convertible but not identical is the caller's shape congruence's, so declining costs reductions and never correctness.
 pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let (conjunction, left_leaves) = bool_leaves(left)?;
     let (that, right_leaves) = bool_leaves(right)?;
@@ -204,7 +204,7 @@ pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 ///
 /// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
 ///
-/// The cancellation itself is `curios-algebra`'s, the one `Nat::cancel_common` runs for the reduction-side comparison and subtraction folds — one law, three readers — and so is what it concludes: both residuals gone is equality, a surviving positive floor against nothing is impossible, and anything else is a smaller pair for the caller to keep comparing. `Nat::cancellation_deduced` rebuilds that pair as terms, and this function only gates it. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
+/// The cancellation itself is `curios-algebra`'s, the one `Nat::cancel_common` runs for the reduction-side comparison and subtraction folds — one law, three readers — and so is what it concludes: both residuals gone is equality, a surviving positive floor against nothing is impossible, and anything else is a smaller pair for the caller to keep comparing. `Nat::cancellation_deduced` rebuilds that pair as terms, and this function only gates it. A non-canonical `Succ(0, _)` needs no guard of its own: `Nat::rebuild` collapses a zero floor, so no arm states it.
 ///
 /// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it.
 ///

@@ -2,7 +2,7 @@
 //!
 //! Every crate that wants a measurement point depends on this crate unconditionally — it is close to empty until its `enabled` feature is on — and declares its own `profile` feature as `profile = ["curios-profile/enabled", …]`. A measurement point is then one statement or one wrapped expression, and this crate is the only place in the workspace that names `tracing` at all. Three macros ask three questions — how long, how big, and why:
 //!
-//! - [`profile!`] as the first statement of a function times the whole function, the successor of the retired `#[cfg_attr(feature = "profile", tracing::instrument(…))]` attribute — which could not survive re-export, because its expansion requires a crate literally named `tracing` in the invoking crate's extern prelude. It takes fields after the name — a `group` field is what makes a per-item span report *which item* rather than an average over all of them — and an `=>` form times one expression rather than the enclosing function.
+//! - [`profile!`] as the first statement of a function times the whole function. It is a macro rather than `tracing::instrument`, whose expansion requires a crate literally named `tracing` in the invoking crate's extern prelude and so cannot be re-exported. It takes fields after the name — a `group` field is what makes a per-item span report *which item* rather than an average over all of them — and an `=>` form times one expression rather than the enclosing function.
 //! - [`note!`] states *why* a decision went the way it did, for a refusal that has neither a duration nor a size. It carries the `profile` gate itself, and it is what keeps `tracing` named in this crate alone.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep. It is for a number that varies; a site that would always record the same number is a call counter, and a span already counts its calls.
 //! - `trace` and `install` — present under `enabled`, so they carry no link here — are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller: this crate names no path, so nothing here decides where a stream lands. They are the only producers, and profiling is configured where it is used, in code.
@@ -13,7 +13,7 @@
 //!
 //! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why a third instrument measures magnitude beside time and bytes, why the allocator counts process-wide and is installed by this crate, and why the library emits records rather than summaries are `README.md`'s decisions.
 //!
-//! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation, removed once the question is answered, never left as a metrics API.
+//! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing.
 
 #[cfg(feature = "enabled")]
 pub use tracing;
@@ -42,7 +42,7 @@ pub use tracing;
 /// curios_profile::profile!("declaration", group = %item.describe());
 /// ```
 ///
-/// **One row per distinct group value**, so a group is for a bounded set — top-level declarations, stages, passes — and never for a span that runs per node. The value is also formatted at *every* span creation rather than once per distinct value, which is the same depth discipline [`sample!`] carries and for the same reason.
+/// **One row per distinct group value**, so a group is for a bounded set — top-level declarations, stages, passes — and never for a span that runs per node. The value is also formatted at *every* span creation rather than once per distinct value, so a group on a span that runs per node would pay a formatting per node.
 ///
 /// Any other field is kept with the call it describes: a fold keeps a row's costliest calls with the fields each was created with (`ProfileSummary::slowest`), which is how a span answers *which call* was slow and *what it was handed*. That is an investigation's question, and a field formatted at every call is an investigation's price, so such a span is added to isolate one question and removed once it is answered.
 ///

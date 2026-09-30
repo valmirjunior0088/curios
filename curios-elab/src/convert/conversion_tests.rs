@@ -13,7 +13,7 @@ use {
 ///
 /// One partial computation at two fresh instances — `bin_get` past the end of an empty `Bin`, whose evaluation refuses — must convert *without being evaluated*: deciding that two spellings of one computation agree may not cost the computation. That is the verdict-and-method half, and any rewrite of `identify_universe_levels` that starts reducing here turns the `Ok(true)` below into an error.
 ///
-/// The second assertion is the license, and it is what separates the sound mechanism from the one `value_conversion_does_not_identify_distinct_type_payloads` records falling: acceptance must come *with* the level identification that justifies it — after the call the two metas are one level, so the accepted goal is literally reflexive. The old projection comparison accepted while leaving the metas untouched, acceptance with no residue, and this assertion was red under it (mutation-checked by restoring that comparison). A deliberately more complete future rule — say, accepting rigid-distinct instances on a head whose levels provably never reach a value — would also fail this assertion, and revisiting it then is a deliberate expectation change, not a regression.
+/// The second assertion is the license, and it is what separates the sound mechanism from a projection comparison, which `value_conversion_does_not_identify_distinct_type_payloads` records the cost of: acceptance must come *with* the level identification that justifies it — after the call the two metas are one level, so the accepted goal is literally reflexive. A projection comparison accepts while leaving the metas untouched, acceptance with no residue, and fails this assertion (mutation-checked). A deliberately more complete future rule — say, accepting rigid-distinct instances on a head whose levels provably never reach a value — would also fail this assertion, and revisiting it then is a deliberate expectation change, not a regression.
 #[test]
 fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let mut context = context();
@@ -68,9 +68,9 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     );
 }
 
-/// The value-conversion fast path used to read `project_erased_universes` as a quotient by definitional equality, and its premise was the one `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` refuted for the kernel's copy of the same reading: a `Type` payload embeds a level *in a term*, so two spellings the projection identifies can be two genuinely different values. `wrap(Type 0)` and `wrap(Type 1)` at a relevant `E` are the direct witness — two constructor values differing in a relevant payload, which the projection collapsed to one spelling and accepted with no residue for the declaration boundary to refuse.
+/// Reading `project_erased_universes` as a quotient by definitional equality rests on the premise `documentation/design/soundness/elimination/case-equations-and-their-key.md` refutes for the kernel's copy of the same reading: a `Type` payload embeds a level *in a term*, so two spellings the projection identifies can be two genuinely different values. `wrap(Type 0)` and `wrap(Type 1)` at a relevant `E` are the direct witness — two constructor values differing in a relevant payload, which the projection would collapse to one spelling and accept with no residue for the declaration boundary to refuse.
 ///
-/// Verified while the hole was open: on the identical goal, seeded with the identical declaration, this side's `convert` answered true and `curios_cert::convert` answered false — the goal-level conversion differential (see `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`), put to the one rule the two sides spelled most differently. The false acceptance was fenced twice — no surface program reaches it, a body-carried level being minimized rather than generalized (`curios`'s `tests::universes` holds that construction), and a module elaborated through it would still have been refused by the kernel on the compile path — but each fence is a fact about the neighbours, not about the rule.
+/// The goal-level conversion differential (see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`) puts the identical goal, seeded with the identical declaration, to both sides. A false acceptance here would be fenced twice — no surface program reaches it, a body-carried level being minimized rather than generalized (`curios`'s `tests::universes` holds that construction), and the kernel would still refuse a module elaborated through it on the compile path — but each fence is a fact about the neighbours, not about the rule.
 ///
 /// Under `identify_universe_levels` the pair of unequal ground levels declines the fast path with nothing inserted, and the structural payload comparison then refuses the goal as the universe inconsistency `1 ≤ 0` — which is what the assertion pins: an `Err` naming the universe arithmetic, where the kernel's boolean spells the same refusal as `Ok(false)`. The control is this file's first fixture, `value_conversion_does_not_unfold_terms_differing_only_by_universes`: the fast path's sound population — one computation at two identifiable instances — must keep converting without being evaluated.
 #[test]
@@ -457,7 +457,7 @@ fn distinct_recursive_heads_with_identical_bodies_converge_coinductively() {
     let f = context.fresh(Some("f"));
     let g = context.fresh(Some("g"));
     let a = context.fresh(Some("a"));
-    // Identical bodies, distinct names: each round unfolds both sides to the same stuck match and re-opens its `some` arm at a fresh binder — the recurrence differs from the previous round only in that opening entropy, so the canonicalized history recognizes the cycle and assumes it. No finite disagreement exists: the functions are bisimilar. Before goal canonicalization this pair spun to `Err(Exhausted)`.
+    // Identical bodies, distinct names: each round unfolds both sides to the same stuck match and re-opens its `some` arm at a fresh binder — the recurrence differs from the previous round only in that opening entropy, so the canonicalized history recognizes the cycle and assumes it. No finite disagreement exists: the functions are bisimilar.
     let body = recursive_matcher(&mut context, &f, 0);
     context.define(&f, &body, None);
     let body = recursive_matcher(&mut context, &g, 0);
@@ -487,7 +487,7 @@ fn distinct_recursive_heads_with_differing_bodies_is_false() {
 
 #[test]
 fn growing_recursive_unfolding_spends_the_budget() {
-    // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, and this shape drives native recursion deep enough to overflow the stack somewhere above 20,000 steps — well under the shipped default. See the note in `Context::new`.
+    // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.
     let mut context = Context::new(20_000, SYNTAX);
     let x = context.fresh(Some("x"));
     let m = context.fresh(Some("m"));
@@ -566,8 +566,7 @@ fn folded_recursive_call_against_neutral_head_is_false() {
     assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
 }
 
-// === `Rec` (local groups, still a term-level construct — no lambda-lifting
-// in this design) ============================================================
+// === `Rec` (local groups, a term-level construct — no lambda-lifting in this design) ===
 
 #[test]
 fn rec_is_alpha_equivalent() {
@@ -666,7 +665,7 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
     );
 }
 
-/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs, the inner recursive call recurs — and the recurrence, whose sides then differ in nothing but levels once the solved metavariable is materialized, is identified rather than assumed. Assuming it was what left two universe parameters where the program had one level.
+/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs, the inner recursive call recurs — and the recurrence, whose sides then differ in nothing but levels once the solved metavariable is materialized, is identified rather than assumed. Assuming it would leave two universe parameters where the program has one level.
 #[test]
 fn a_recurrence_whose_sides_differ_only_in_levels_is_identified_rather_than_assumed() {
     let mut context = context();
@@ -693,7 +692,7 @@ fn a_recurrence_whose_sides_differ_only_in_levels_is_identified_rather_than_assu
     );
 }
 
-/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the pair recurs — because no commitment can join `Type 0` to `Type 1`; the coinductive rule used to assume the recurrence and hand the kernel a pair it refuses. The kernel's twin shares the name.
+/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the pair recurs — because no commitment can join `Type 0` to `Type 1`; assuming the recurrence coinductively would hand the kernel a pair it refuses. The kernel's twin shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
     {
@@ -732,7 +731,7 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
     }
 }
 
-/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone accepted it with the levels untouched — the pair the kernel refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
+/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone would accept it with the levels untouched — the pair the kernel refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
 #[test]
 fn two_instances_kept_apart_only_by_a_metavariable_identify_their_levels_once_it_is_solved() {
     {

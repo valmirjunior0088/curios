@@ -27,7 +27,7 @@ pub(super) fn elaborate_let(
                 )
             };
 
-            // A silent hole as the annotation is the lowering of a typeless local `let x = e`: infer the body's type instead of checking the body against the hole. This is what lets a lambda/tuple/atom body — which `check` against an unsolved hole would reject — be bound without an annotation. A written goal `let x : ? = e` is a bare metavariable too but not a hole (`MetavarOrigin` states the rule): it takes the annotation path below, as every other annotation site does, so the goal term is elaborated, solved by the check and reported by zonk. Otherwise check the body against the (possibly partial) annotation, as before.
+            // A silent hole as the annotation is the lowering of a typeless local `let x = e`: infer the body's type instead of checking the body against the hole. This is what lets a lambda/tuple/atom body — which `check` against an unsolved hole would reject — be bound without an annotation. A written goal `let x : ? = e` is a bare metavariable too but not a hole (`MetavarOrigin` states the rule): it takes the annotation path below, as every other annotation site does, so the goal term is elaborated, solved by the check and reported by zonk. Otherwise check the body against the (possibly partial) annotation.
             let (type_elaborated, body_elaborated) = match &*type_ {
                 Subterm::Metavar(metavar) if metavar.is_hole() => {
                     let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
@@ -54,7 +54,7 @@ pub(super) fn elaborate_let(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        // In one pass rather than merged a binding at a time: each binding's type carries metavariable spines as long as the binders before it, so re-closing every later binding at each earlier one was cubic in the block's length.
+        // In one pass rather than merged a binding at a time: each binding's type carries metavariable spines as long as the binders before it, so re-closing every later binding at each earlier one would be cubic in the block's length.
         Ok((Term::let_block(triples, tail_elaborated), tail_type))
     })
 }
@@ -144,7 +144,7 @@ pub(super) fn elaborate_rec(
             Subterm::Rec(rec) => rec.group,
             _ => unreachable!("let constructs a recursive block"),
         };
-        // Before the members are defined and the tail elaborated: a local `rec Bad : Type = (Bad) -> False` overflows the stack at its first use, which is in that tail. Named by the hints the program wrote, not by the gensyms elaboration minted for them.
+        // Before the members are defined and the tail elaborated: a local `let Bad: Type = (Bad) -> False;` unfolds without end at its first use, which is in that tail. Named by the hints the program wrote, not by the gensyms elaboration minted for them.
         let names = rec
             .tail
             .hint_iter()
@@ -213,7 +213,7 @@ pub(super) fn elaborate_num_lit(
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
     let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
 
-    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/std/Char` value it has always denoted.
+    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/std/Char` value it denotes.
     let default_type: Term = match num_lit {
         NumLit::Number { sign, .. } if sign.is_marked() => int_type.clone(),
         NumLit::Number { .. } => nat_type.clone(),
@@ -283,7 +283,7 @@ pub(super) fn elaborate_num_lit(
                 let value = if sign.is_negative() { -value } else { value };
                 (Intrinsic::Flt(value), flt_type)
             }
-            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report named the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` refused `1` against `?`.
+            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report would name the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` would refuse `1` against `?`.
             _ => {
                 let Mode::Check(expected) = &mode else {
                     unreachable!("Infer-mode target is always the Nat/Int shape default");
@@ -313,7 +313,7 @@ pub(super) fn elaborate_num_lit(
                 Subterm::Intrinsic(Intrinsic::IntType) => {
                     (Intrinsic::Int(Integer::from(code)), int_type)
                 }
-                // Everything else — the `Char` default, an expected `/std/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has always had.
+                // Everything else — the `Char` default, an expected `/std/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has.
                 _ => {
                     let value = character_value(context, *character);
                     return elaborate(context, &value, mode);
@@ -386,7 +386,7 @@ impl InfixMethod {
 
     /// The operator's arguments and result type: the two written operands, then one inserted argument for every binder the method declares past them.
     ///
-    /// A concept method is not required to be exactly binary. `Div` states the domain its carrier's division is defined on and takes a proof of it, so `a / b` has a third slot to fill — filled here the way an omitted argument is filled at any other application, which is what routes it through the same discharge. Opening the telescope at two values regardless is what this did before, and it panicked on the arity the moment a declaration carried a third binder.
+    /// A concept method is not required to be exactly binary. `Div` states the domain its carrier's division is defined on and takes a proof of it, so `a / b` has a third slot to fill — filled here the way an omitted argument is filled at any other application, which is what routes it through the same discharge. Opening the telescope at two values regardless would panic on the arity the moment a declaration carried a third binder.
     ///
     /// Each argument comes back beside the mark its *slot* declares, not beside the mark its origin suggests. The rebuilt application is re-elaborated — by erasure's re-derivation, by zonking, by archive restoration — and the arity check at that point counts written arguments against explicit slots, so an inserted proof passed off as explicit is an arity error at every later pass. This is [`elaborate_func_check`]'s idempotence requirement on the application side.
     fn arguments(
@@ -528,7 +528,7 @@ pub(super) fn elaborate_bang(
 
     // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
     //
-    // **A rigid region the imitation cannot read is refused here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing, `?M(?B)` can never meet it, and the wrapper's inference had only one outcome: `no witness of Monad(?) found`, against a premise of a call the author never wrote, showing a hole where the region's own type was already known. Acceptance is unchanged; what the reader is told is not.
+    // **A rigid region the imitation cannot read is refused here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing, `?M(?B)` can never meet it, and the wrapper's inference would have only one outcome: `no witness of Monad(?) found`, against a premise of a call the author never wrote, showing a hole where the region's own type was already known. Refusing here changes no acceptance, only what the reader is told.
     let Some(monad) = region_monad(context, &region, term.span())? else {
         return Err(Error::bang_region_not_a_monad(region).at_opt(term.span()));
     };
@@ -546,7 +546,7 @@ pub(super) fn elaborate_bang(
     elaborate(context, &app, mode)
 }
 
-/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers as before.
+/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers the monad itself.
 fn region_monad(
     context: &mut Context,
     region: &Term,
@@ -574,7 +574,7 @@ fn region_monad(
 
 /// The region's monad read off the application directly, by abstracting its final argument — the fallback for a region whose *value slot* is still unsolved.
 ///
-/// **Which is not the same as a region with no monad, and reporting it as one refused a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`] for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` was reported at the `!` — and annotating the enclosing type, which changes nothing about the monad, made the same program compile.
+/// **Which is not the same as a region with no monad, and reporting it as one would refuse a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`] for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` would be reported at the `!` — while annotating the enclosing type, which changes nothing about the monad, makes the same program compile.
 ///
 /// The rule is the one `documentation/syntax.md` already states for witness resolution — "an under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one". This applies it where conversion could not guess it.
 ///
@@ -767,7 +767,7 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<Mo
     }
 }
 
-/// The [`MonadShape`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`), or carrying one in a *context* argument (`Try(M, E, A)` under the same telescope), keys that binder by the argument that fixes it (see [`binder_key`]), and one no argument fixes keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a [`Probe`]: a type with no reading abstains, and a wrong abstention still costs a message, never a solution.
+/// The [`MonadShape`] of `declared`'s result when the explicit arguments `args` saturate it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`), or carrying one in a *context* argument (`Try(M, E, A)` under the same telescope), keys that binder by the argument that fixes it (see [`binder_key`]), and one no argument fixes keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a [`Probe`]: a type with no reading abstains, and a wrong abstention still costs a message, never a solution.
 fn declared_result_shape(
     context: &mut Context,
     declared: &Term,
@@ -825,7 +825,7 @@ fn declared_result_shape(
         return Ok(Some(shape));
     }
 
-    // A result headed by one of the telescope's own binders — `M(Result(E, A))` under `(@M: (Type) -> Type, …, m: Try(M, E, A))` — is the base an argument fixes: the explicit parameter whose declared type mentions the binder is read against its argument's own declared shape, position for position, so `Try/run(t)!` lifts as the action `t` was declared over. Still a read: nothing elaborates, and an argument that keys on nothing at that position abstains as before.
+    // A result headed by one of the telescope's own binders — `M(Result(E, A))` under `(@M: (Type) -> Type, …, m: Try(M, E, A))` — is the base an argument fixes: the explicit parameter whose declared type mentions the binder is read against its argument's own declared shape, position for position, so `Try/run(t)!` lifts as the action `t` was declared over. Still a read: nothing elaborates, and an argument that keys on nothing at that position abstains.
     let Subterm::Apply(apply) = &*whnf else {
         return Ok(None);
     };

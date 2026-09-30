@@ -33,7 +33,7 @@ fn labels(module: &SysModule) -> Vec<&str> {
         .collect()
 }
 
-// The rule `host_fn`'s zero-arity path used to spell separately: a description with nothing to bind is a value, and `LetSignature::Func` with an empty telescope would lower to a binderless lambda instead.
+// A description with nothing to bind is a value, and `LetSignature::Func` with an empty telescope would lower to a binderless lambda instead.
 #[test]
 fn an_empty_telescope_lowers_to_a_constant_rather_than_a_nullary_function() {
     let signature = pub_let("stdin", nat(), nat_lit(0)).into_let().signature;
@@ -65,7 +65,7 @@ fn a_telescope_lowers_to_the_function_sugar_carrying_every_plicity_mark() {
     assert!(matches!(&params[0].label, Pattern::Binder(Some(binder)) if binder.as_str() == "T"));
 }
 
-// The whole of what `documented` used to need a `match`, an assertion and a `panic!` arm to do.
+// What `documented` attaches, read back off the declaration it built.
 #[test]
 fn a_gloss_lands_on_the_declaration_it_is_written_above() {
     let declaration = documented(&["Their sum.", "", "A second paragraph."], nat_succ());

@@ -31,9 +31,9 @@ pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
 
 /// One strict zonk: the context it reads, and every node it has zonked.
 ///
-/// **A node is zonked once per pass.** What a node zonks to is a function of the node and of the context's solutions and universe solver, which the pass holds immutably, so a second occurrence of a node may take the first one's answer. A solution is spliced at every occurrence of its metavariable, and a solution stored as a reduct is a graph whose tree can be exponential in its depth: remembered by node, each is zonked in its own size and once per module rather than once per occurrence. The memo is a [`NodeMemo`], whose span rule hands each occurrence its own span; a refusal is not remembered, and propagates as it did.
+/// **A node is zonked once per pass.** What a node zonks to is a function of the node and of the context's solutions and universe solver, which the pass holds immutably, so a second occurrence of a node may take the first one's answer. A solution is spliced at every occurrence of its metavariable, and a solution stored as a reduct is a graph whose tree can be exponential in its depth: remembered by node, each is zonked in its own size and once per module rather than once per occurrence. The memo is a [`NodeMemo`], whose span rule hands each occurrence its own span; a refusal is not remembered, and propagates.
 ///
-/// It derefs to the [`Context`], so the walk below reads the context as it did before there was a pass, and hands it to anything that takes one.
+/// It derefs to the [`Context`], so the walk below reads the context through it, and hands it to anything that takes one.
 struct Zonk<'a> {
     context: &'a Context,
     zonked: RefCell<NodeMemo>,
@@ -65,7 +65,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     type Solution = (Vec<Free>, Term);
     /// The metavariables whose solutions this walk is inside right now.
     ///
-    /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation died by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
+    /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation would die by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
     ///
     /// Leaving the re-entered occurrence unexpanded is this pass's own contract rather than a concession: it materializes what is committed and *keeps unresolved holes visible*, and a metavariable substitution cannot resolve is exactly such a hole. The strict walk, which owes a meta-free term, charges its depth instead and lets the budget refuse.
     type Active = Rc<RefCell<BTreeSet<MetavarId>>>;
@@ -77,7 +77,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     ) -> B {
         let rewrite_solutions = Rc::clone(&solutions);
         let rewrite_active = Rc::clone(&active);
-        // Memoized on node identity, so a graph is materialized once per node and stays a graph: the candidates `convert`'s solver materializes are reducts, whose trees can be exponential in their depth, and unmemoized this walk paid the tree — an eight-character search stated in a type never finished. The memo is sound because the hook answers from the node alone within one visit: it reads no depth, and the active set it consults is the same at every call, since each nested materialization restores it before returning.
+        // Memoized on node identity, so a graph is materialized once per node and stays a graph: the candidates `convert`'s solver materializes are reducts, whose trees can be exponential in their depth, and unmemoized this walk would pay the tree. The memo is sound because the hook answers from the node alone within one visit: it reads no depth, and the active set it consults is the same at every call, since each nested materialization restores it before returning.
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
@@ -128,7 +128,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     let collected = Rc::clone(&found);
     let mut visit = Visit::rewriting(
         |_, _| None,
-        // An entry's `metavars` already covers everything under it, each shared node once, so the walk stops at the entries it is handed; asked again at every node below, it was asked once per path.
+        // An entry's `metavars` already covers everything under it, each shared node once, so the walk stops at the entries it is handed; asked again at every node below, it would be asked once per path.
         Box::new(move |_, term| {
             collected.borrow_mut().extend(term.metavars());
             Some(term.clone())
@@ -368,7 +368,7 @@ fn validate_instance_arities<B: Bound>(
     let owner = owner.to_string();
     let error = Rc::new(RefCell::new(None));
     let found = Rc::clone(&error);
-    // Inspection only — the hook always returns `None` and the rebuilt value is discarded. Memoized on node identity so a structurally shared term is checked once per distinct node rather than once per occurrence: an unmemoized rewrite here rebuilt, and immediately dropped, one node per occurrence, which on a lowered string literal is O(n^2) of pure garbage.
+    // Inspection only — the hook always returns `None` and the rebuilt value is discarded. Memoized on node identity so a structurally shared term is checked once per distinct node rather than once per occurrence: an unmemoized rewrite here would rebuild, and immediately drop, one node per occurrence, which on a lowered string literal is O(n^2) of pure garbage.
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| {
@@ -1012,7 +1012,7 @@ fn zonk_term(context: &Zonk, term: &Term) -> Result<Term, Error> {
 
     // The level itself, charged when it is a new peak, exactly as `reduce` charges its own bracket — see [`Context::enter_level`] and [`Cost::FRAME`], whose documentation states why the row exists: `recurse` grows the native stack rather than aborting, and nothing else bounds total depth.
     //
-    // Substitution is a route into unbounded computation like any other, and it was the one route the budget did not price. A metavariable whose solution reaches the metavariable again sends this walk down forever, and every level it takes is memory `recurse` asks the allocator for; uncharged, the compilation died by exhausting the machine instead of refusing the program. Charged, the declaration's own budget decides, and the answer is a fact about the program rather than about how much memory the host had.
+    // Substitution is a route into unbounded computation like any other. A metavariable whose solution reaches the metavariable again sends this walk down forever, and every level it takes is memory `recurse` asks the allocator for; uncharged, the compilation would die by exhausting the machine instead of refusing the program. Charged, the declaration's own budget decides, and the answer is a fact about the program rather than about how much memory the host had.
     context.enter_level().map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(term.clone(), refusal)

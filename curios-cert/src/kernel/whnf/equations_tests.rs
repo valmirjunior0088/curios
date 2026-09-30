@@ -31,7 +31,7 @@ fn a_case_equation_does_not_outlive_its_scope() {
 
 /// An arm's case equation reaches the reduct and not the table.
 ///
-/// This is the load-bearing half of the memos' first invariant, and it is a claim held in one component about another: the tables that outlive an arm hold only *local-free* terms, while [`Scope::refine`](super::super::Scope) records only a *local-bearing* scrutinee, so the two sets are disjoint and no remembered reduct that outlives an arm can rest on an equation it retracted — and the local-bearing tables, which may, are cleared with it. What stood behind that pair was `curios-prelude-archive`'s `kernel_memo_parity`, which averages the whole prelude rather than aiming at the interlock — coverage by corpus, the standard the perimeter declines to accept elsewhere.
+/// This is the load-bearing half of the memos' first invariant, and it is a claim held in one component about another: the tables that outlive an arm hold only *local-free* terms, while [`Scope::refine`](super::super::Scope) records only a *local-bearing* scrutinee, so the two sets are disjoint and no remembered reduct that outlives an arm can rest on an equation it retracted — and the local-bearing tables, which may, are cleared with it. `curios-prelude-archive`'s `kernel_memo_parity` averages the whole prelude rather than aiming at the interlock — coverage by corpus, the standard the perimeter declines to accept elsewhere — so this aims at it.
 ///
 /// Both terms are needed and they check different halves. The open one is the equation's subject: inside the arm it reduces to `1` where nothing outside makes it anything but stuck, so the retraction has something to fail to survive — without that inequality the assertion below would hold of a kernel that had never refined anything. The closed one crosses the *other* gate: `machine_admissible` declines the closed machine while any equation is live, so its inside reduct comes from the recursive strategy, and the outside call — where the machine would otherwise run — is served by the table entry that strategy stored. Both routes have to reach the same value as a kernel that never entered the arm at all, which is what `control` is.
 ///
@@ -79,7 +79,7 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     );
 }
 
-/// The same interlock from the other side, which the local-bearing memo made a question: a stuck reduct remembered *before* an arm must not answer inside it, where an equation has since made the term something else — and the arm's answer, remembered inside, must not answer after it.
+/// The same interlock from the other side, which a local-bearing memo raises: a stuck reduct remembered *before* an arm must not answer inside it, where an equation has since made the term something else — and the arm's answer, remembered inside, must not answer after it.
 ///
 /// This is the fixture for the rule that a local-bearing reduct lives exactly as long as the set of equations in force: `Memos::begin_equations` clears the local tables where an equation is assumed, where it is retracted, and around a settlement. The open term is reduced before the arm, inside it, and after it; the first and third are the stuck successor and the second is `1`, and the uncached kernel agrees on all three. Mutation-checked: dropping the clear at `Kernel::refine` answers the inside reduction from the entry the outside one stored, and the middle assertion is what sees it.
 #[test]
@@ -123,7 +123,7 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
     );
 }
 
-/// A local-bearing term is remembered for as long as the equations in force stand: the second reduction within a declaration spends nothing, exactly as a closed term's does. This is what the web of definitions an index inversion forces — each naming the one before it twice, a local in every one — was re-derived `2^n` times for want of.
+/// A local-bearing term is remembered for as long as the equations in force stand: the second reduction within a declaration spends nothing, exactly as a closed term's does. Without it, the web of definitions an index inversion forces — each naming the one before it twice, a local in every one — would be re-derived `2^n` times.
 #[test]
 fn a_local_bearing_reduct_is_a_free_hit_within_its_span() {
     let mut kernel = kernel();
@@ -168,11 +168,11 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
     assert_eq!(answered, Ok(nat(0)));
 }
 
-/// The two consultation points answer one equation alike, and the match between them is structural — universe instances included, since the key stopped being a universe-erased projection.
+/// The two consultation points answer one equation alike, and the match between them is structural — universe instances included, since the key is not a universe-erased projection.
 ///
 /// The key is taken as the kernel's own reduct of a written term whose inner operand folds, so it is a spelling that exists only as a reduct: the written form can reach it through reduction alone, which is what makes the ask at the stuck value the only probe that can see it. The control kernel — the same two reductions with no equation assumed — pins the two premises the subject rests on: the key differs from the written spelling, so the two probes below genuinely take different routes to it, and the key re-reduces to itself, which is the idempotence argument for merging the points in executable form.
 ///
-/// Mutation-checked the other way around from `a_case_equation_answers_a_term_the_budget_cannot_reduce`: with the ask at the stuck reduct removed from `whnf_within`, the written probe handed back the unrefined key, so this is the fixture that distinguishes that point; with the ask before decomposition removed instead, both probes still answered, the key's own spelling being re-derived by decomposition and caught at the reduct. Neither pre-existing case-equation fixture moved under either mutation, which is the coverage gap this pair was written to close.
+/// Mutation-checked the other way around from `a_case_equation_answers_a_term_the_budget_cannot_reduce`: with the ask at the stuck reduct removed from `whnf_within`, the written probe handed back the unrefined key, so this is the fixture that distinguishes that point; with the ask before decomposition removed instead, both probes still answered, the key's own spelling being re-derived by decomposition and caught at the reduct. Neither other case-equation fixture moved under either mutation, which is why this pair exists.
 #[test]
 fn the_two_consultation_points_answer_one_equation_alike() {
     let n = binder(1, "n");
@@ -214,11 +214,11 @@ fn the_two_consultation_points_answer_one_equation_alike() {
 
 /// The escalation: an equation recorded as written still answers the spelling only reduction reaches.
 ///
-/// This is the half of the two-tier key that keeping the *written* spelling alone would lose, and losing it is not hypothetical — keying the kernel on the written form and stopping there refused prelude items whose decided propositions no longer collapsed to `True`. Here the subject probes with the equation's reduct, which the written spelling cannot match; the answer comes from a reduced spelling `refined_reduct` settled on demand, at the stuck-reduct probe point, because that is where a spelling reduction produced arrives.
+/// This is the half of the two-tier key that keeping the *written* spelling alone would lose, and losing it is not hypothetical — keying on the written form alone refuses prelude items whose decided propositions then fail to collapse to `True`. Here the subject probes with the equation's reduct, which the written spelling cannot match; the answer comes from a reduced spelling `refined_reduct` settled on demand, at the stuck-reduct probe point, because that is where a spelling reduction produced arrives.
 ///
 /// The control fixes the premise the fixture rests on: the written form has to reduce to something else, or the probe below would hit the written spelling and this would be testing the first tier over again.
 ///
-/// Mutation-checked three ways, all of which return the unrefined `n + 64`. Removing the escalation from `refined_reduct` leaves only the written spelling, which does not match. Narrowing `Scope::hide_refinements_from` to withhold nothing — or to withhold the equations inside the settling one but not it — makes the settlement meet its own equation at the reducer's first probe and settle the reduced spelling to the case value it was assuming, which no reduct will ever equal. None of the three moved [`a_local_free_term_is_never_refined`], [`a_case_equation_reaches_the_reduct_and_not_the_memos`] or either pre-existing consultation-point fixture.
+/// Mutation-checked three ways, all of which return the unrefined `n + 64`. Removing the escalation from `refined_reduct` leaves only the written spelling, which does not match. Narrowing `Scope::hide_refinements_from` to withhold nothing — or to withhold the equations inside the settling one but not it — makes the settlement meet its own equation at the reducer's first probe and settle the reduced spelling to the case value it was assuming, which no reduct will ever equal. None of the three moved [`a_local_free_term_is_never_refined`], [`a_case_equation_reaches_the_reduct_and_not_the_memos`] or either consultation-point fixture.
 #[test]
 fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
     let n = binder(1, "n");
@@ -250,7 +250,7 @@ fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
 
 /// Settling an equation's reduced spelling withholds every equation assumed *inside* it, and not only the equation itself.
 ///
-/// **This is what makes a deferred reduction mean what an eager one meant.** The reduction this replaced ran at registration, when the equations inside the arm did not exist yet and the stack below it was already frozen; running it later has to reconstruct that view, or the reduct rests on an equation that retracts before the entry holding it does — a remembered spelling outliving its own justification.
+/// **This is what makes a deferred reduction mean what an eager one would.** A reduction at registration runs before the equations inside the arm exist, with the stack below it frozen; running it later has to reconstruct that view, or the reduct rests on an equation that retracts before the entry holding it does — a remembered spelling outliving its own justification.
 ///
 /// The subject nests an inner equation over `n + 1` inside an outer one, then probes with the outer equation's true reduct — what a kernel that never assumed the inner one computes, which is what `control` is for. Reaching it means the settlement did not consult the inner equation.
 ///
@@ -440,7 +440,7 @@ fn a_comparison_refined_answers_its_dual_negated() {
 ///
 /// `List/slice`'s bound arrives as `i + 1 <= len` where the guard deciding it was written `i < len`, and the two are one proposition on `Nat`: `whnf` retries a miss on the successor spelling, carrying the literal across rather than negating it as the dual retry does. Without it a guard discharges a bound only when the author spelled the comparison the way the standard library's signature happens to.
 ///
-/// **Both operands are spelled as a program spells them, which is what the retry has to survive.** The guard's own operand is the *unreduced* call — a real one records `List/len(l)`, the application the author wrote, and the bound arrives with that call already folded to its intrinsic — so the seam is asked of the key's settled reduct rather than of the record. The first cut asked only the written spelling; it answered this fixture while both surface programs still refused, and the kernel then refused what the elaborator had accepted, which is the disagreement the second checker exists to produce. The stand-in here is a definition the key mentions and the probe does not, which is the same asymmetry with nothing else in it.
+/// **Both operands are spelled as a program spells them, which is what the retry has to survive.** The guard's own operand is the *unreduced* call — a real one records `List/len(l)`, the application the author wrote, and the bound arrives with that call already folded to its intrinsic — so the seam is asked of the key's settled reduct rather than of the record. Asking the written spelling alone answers this fixture while a surface program is still refused, the kernel refusing what the elaborator accepts. The stand-in here is a definition the key mentions and the probe does not, which is the same asymmetry with nothing else in it.
 #[test]
 fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
     let index = binder(1, "i");
@@ -498,7 +498,7 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
 
 /// A guard written through a dispatch answers its dual at the first probe, in the arm the decision procedure proves dead, exactly as the elaborator answers it there.
 ///
-/// **This is the divergence the resolved spelling closes.** A comparison through a concept elaborates to an application — `(?w).1(a, hi)` — whose intrinsic shape only a reduction of its head exposes, and the kernel used to meet that shape only as the settled reduct of the written key: at the second probe point, after the decision procedure had folded the probe, and as that fold's result. The elaborator registers the dispatch-resolved spelling beside the written one and asks it first. In an arm whose guard is decided against its case value, the two then answered the dual spelling from different sources — the elaborator from the equation, the kernel from the procedure — and a program the elaborator accepted was refused by the kernel. `std/Str/Valid`'s three-byte decoding meets it: its false arm of `cp % 4096 / 64 <= 63` asks `63 < cp % 4096 / 64`.
+/// **This is the divergence the resolved spelling closes.** A comparison through a concept elaborates to an application — `(?w).1(a, hi)` — whose intrinsic shape only a reduction of its head exposes. Met only as the settled reduct of the written key — at the second probe point, after the decision procedure has folded the probe — that shape would be answered from the procedure, where the elaborator, which registers the dispatch-resolved spelling beside the written one and asks it first, answers it from the equation: in an arm whose guard is decided against its case value, a program the elaborator accepts would be refused by the kernel. `/std/Str/Valid`'s three-byte decoding meets it: its false arm of `cp % 4096 / 64 <= 63` asks `63 < cp % 4096 / 64`.
 ///
 /// The stand-in for the dispatch is a witness holding the method, projected and applied as elaboration spells a concept call — a head that carries no name, which is the shape both checkers resolve — and the subject `n % 64` is one whose bound the procedure reads. The control pins the premise: with no equation, the procedure folds the probe to `false`, so the arm is dead and the subject's `true` can have come only from the equation, read the other way.
 ///
@@ -662,7 +662,7 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     assert_eq!(answered, Ok(Term::intrinsic(Intrinsic::Bool(true))));
 }
 
-/// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses where it used to refuse the judgment it serves.
+/// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses rather than refusing the judgment it serves.
 #[test]
 fn an_operand_with_no_value_is_compared_as_written() {
     let mut kernel = kernel();

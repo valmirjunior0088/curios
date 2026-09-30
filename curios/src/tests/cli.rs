@@ -90,7 +90,7 @@ fn help_answers_on_stdout_and_exits_zero() {
     );
 }
 
-/// A line the specification refuses goes to standard *error* and exits 2 — the distinction the scripted host learned to make for this, since a concatenation of both streams cannot show it.
+/// A line the specification refuses goes to standard *error* and exits 2 — the distinction the scripted host's separate record of standard error makes visible, since a concatenation of both streams cannot show it.
 #[test]
 fn a_refused_line_reports_on_stderr_and_exits_two() {
     let (system, io) = MockHost::builder()

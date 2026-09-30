@@ -454,7 +454,7 @@ fn an_unwritable_store_refuses_once_and_stops_nothing() {
 ///
 /// **A unit with nothing on disk is the gap, and `RootSource::supplied` is what builds one.** It holds no directory, so `Verdicts::slot` declines to address it: the fold compiles it every time and places nothing for it, which leaves `Verdicts::placed` one entry shorter than the scope it folded. [`Verdicts::payload_get`] derives its own chain through `Verdicts::chain`, which refuses that unit outright — so a payload filed against the short chain is addressed under a prefix the probe never computes. Nothing stale comes back; a slot is simply written that nothing will ever read, on every invocation, forever.
 ///
-/// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the store's own shape rather than on a reuse verdict, because the defect never produced a wrong answer to assert against: it produced a write.
+/// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the store's own shape rather than on a reuse verdict, because the failure it guards against produces no wrong answer to assert against: it produces a write.
 #[test]
 fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
     let root = project("gapped");

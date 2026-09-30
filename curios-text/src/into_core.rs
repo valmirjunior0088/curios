@@ -1,3 +1,14 @@
+//! Lowering one unit's surface modules to a [`curios_core::Module`], over the units already lowered.
+//!
+//! [`into_core_unit`] runs a unit through these passes, in order:
+//!
+//! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the scope's, then every module they declare loaded through its source.
+//! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
+//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
+//! 4. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
+//! 5. **Ordering** (`order`): the unit's own items sorted so each one's value dependencies come before it.
+//! 6. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
+
 mod audit;
 use audit::*;
 
@@ -91,7 +102,7 @@ impl<'a> Reach<'a> {
     ///
     /// `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A target inside a visible prefix, or inside the reader's own, passes through.
     ///
-    /// **Visibility is the whole rule, and the tier only chooses the wording.** `/sys` used to be closed by a privilege comparison between two roots; it is closed now because no unit but the standard library declares a dependency on it, and the standard library does. That is one rule where there were two, and the one that remains is the one a package's manifest already states. Whether the prefix is a closed root decides which refusal a reader gets — "use the `/std` module" rather than "declare it" — because telling a program to declare `/sys` would be advice it cannot take.
+    /// **Visibility is the whole rule, and the root's kind only chooses the wording.** `/sys` is closed because no unit but the standard library declares a dependency on it, and the standard library does — the rule a package's manifest already states, with no privilege comparison between roots beside it. Whether the prefix is a closed root decides which refusal a reader gets — "use the `/std` module" rather than "declare it" — because telling a program to declare `/sys` would be advice it cannot take.
     ///
     /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and why this one may not write it, which is the difference between a diagnostic and a riddle.
     fn guard(&self, _consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
@@ -172,7 +183,7 @@ fn writable_paths(
     paths
 }
 
-// Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code. Asked of the mount itself rather than of the name it owns, because only a whole mount is internal — a module inside one is reachable exactly as far as its mount is.
+// Whether `label` names an internal root: discoverable so the unit that declares it can resolve it by absolute path, and refused to every other. Asked of the mount itself rather than of the name it owns, because only a whole mount is internal — a module inside one is reachable exactly as far as its mount is.
 fn is_internal_root(mounts: &[Mount], label: &str) -> bool {
     let prefix = Qualifier::from([label]);
 
@@ -215,11 +226,11 @@ struct Resolved<'a> {
     modules: HashMap<Qualifier, Rc<Module>>,
     /// Where each `mod` the unit declares was written, by the module it declares — what the `unused-declaration` lint underlines for a whole dead module.
     mod_spans: HashMap<Qualifier, Span>,
-    /// The entry's own module graph, over whatever a prepared prelude already established. Every insertion below targets a module the entry declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
+    /// This unit's own module graph, over what the units in scope established. Every insertion below targets a module the unit declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
     table: Scoped<'a, ModuleInfo>,
 }
 
-/// Opaque fixed Text state restored from the build-scoped prelude artifact.
+/// One unit's text-stage state — its resolution tables, its lowered module and what the lowering recorded beside it — opaque outside this crate and carried on the unit for the units compiled after it.
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct PreparedText {
@@ -354,9 +365,9 @@ impl PreparedText {
 impl<'a> Resolved<'a> {
     /// Discover every module `source` declares, over what `scope` already established.
     ///
-    /// **One walk, where the entry and a mounted unit each had their own.** They differed in where a root's items came from and in which prefixes the compilation root lists as children, both of which are answered below rather than duplicated: two copies of a tree walk agree by being read, which is the shape every configuration-dependent defect in this stage has had.
+    /// **One walk for the entry and a mounted unit.** They differ in where a root's items come from and in which prefixes the compilation root lists as children, both of which are answered below rather than duplicated: two copies of a tree walk agree only by being read, which is the shape every configuration-dependent defect in this stage has had.
     ///
-    /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
+    /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (which rejects any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
     fn of(
         source: &UnitSource<'_>,
         scope: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
@@ -371,7 +382,7 @@ impl<'a> Resolved<'a> {
 
         // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
         //
-        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
+        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here would silently hide the scope's mounts — `/std` among them — from a unit being compiled against them, which the test that says a unit reaches a mounted name holds.
         let mut root_info = scan_module_info(source.root_items())?;
         for child in mounted_children(scope_mounts.iter().chain(own)) {
             root_info.insert_child(&Label::from(child), true)?;
@@ -487,7 +498,7 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
 
 // The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments (as written, so explicit).
 //
-// **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal arrived with no line at all — and a duplicate between two witnesses of one module named that module twice and nothing else, which a reader cannot act on. The head name and each argument carry the spans this joins; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
+// **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all — and a duplicate between two witnesses of one module would name that module twice and nothing else, which a reader cannot act on. The head name and each argument carry the spans this joins; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
 fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
     let written = |head: Term, last: Option<&Span>| match (concept.span(), last) {
@@ -652,7 +663,7 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed in the phase-3 fixed point, not here.
+                // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed by the `pub use` fixed point (`interface::resolve_unit`), not here.
                 match &use_item.group {
                     UseGroup::Named(items) => {
                         for item in items {
@@ -717,7 +728,7 @@ fn process_items(
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
             }
-            // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
+            // A test takes no parameters, so it is not function sugar — but it lowers to a `() -> Test` thunk, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
             TopItem::Test(test) => {
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 context.record_import_scope(Some(&name));
@@ -726,7 +737,7 @@ fn process_items(
                 let output = curios_core::Term::var(curios_core::Var::free(
                     curios_core::Free::global(context.syntax().test.test_type.qualifier()),
                 ));
-                // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test` so `Test/main` can hold it unforced and run only the one it selected, which is what the parentheses used to spell before they were dropped from the surface.
+                // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test` so `Test/main` can hold it unforced and run only the one it selected.
                 let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
                 let body = func_sugar_lambda(&[], &test.body);
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
@@ -889,7 +900,7 @@ fn process_items(
                         let induct_decl =
                             curios_core::Term::induct_type(name, param_vars, index_vars);
 
-                        // The type constructor takes its parameters and then its indices, one call each: `Vec : (T : Type) -> (n : Nat) -> Type`, applied `Vec(T)(n)`, so `Vec(T)` is the family its matches eliminate — see documentation/design/language/an-indexed-family-takes-its-indices-in-a-second-call.md. A family with only one of the two takes it in one call, and a nullary one is its normal form outright. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
+                        // The type constructor takes its parameters and then its indices, one call each: `Vec : (T : Type) -> (n : Nat) -> Type`, applied `Vec(T)(n)`, so `Vec(T)` is the family its matches eliminate — see documentation/design/types/a-call-fills-one-parameter-group.md. A family with only one of the two takes it in one call, and a nullary one is its normal form outright. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
                         let index_binders = index_tys
                             .iter()
                             .cloned()
@@ -920,10 +931,10 @@ fn process_items(
                 //
                 // Making this conditional is not the two-line change the neighbours make it look like, and both halves were measured rather than reasoned. `mentions_itself` reads `free_vars_shared()`, but an inductive's recursion lives in its *registry entry* — `InductType` holds `name: Global` as a field, not a `Var` — so the test is false for every inductive, recursive ones included, and reaching for it lowers a recursive inductive such as `/std/Cli/Values` as a `Let` that loses `elaborate_module_rec`'s `context.assume` and leaves its own name unbound while the registry telescopes rebuild. Reading the reach through `order::induct_free_vars` instead clears that and then fails at `/std/Async/Future/State` with `universe instance has 1 arguments but its scheme expects 0`: the group is also where a universe-polymorphic inductive's levels are generalized, and as a `Let` the scheme comes out monomorphic while occurrences still pass a level.
                 //
-                // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that today — a folded spelling reduces correctly since `unfold_rec_apply` learned to apply a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
+                // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that — a folded spelling reduces correctly, `curios-elab`'s `unfold_rec_apply` applying a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
                 flat_items.push(FlatItem::Rec(type_flat_items));
 
-                // Step 2: constructor bindings. Each is a function whose body injects the variant as a tagged tuple.
+                // Step 2: constructor bindings. Each is a function whose body injects the variant, an intrinsic `Variant` normal form.
                 for u in group {
                     for c in &u.cases {
                         let name = curios_core::Global::Authored(
@@ -1063,7 +1074,7 @@ fn process_items(
                         .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                         .collect::<Vec<_>>();
 
-                    // A repeated label is refused at the one that arrived second, as a repeated declaration is. Nothing else catches it: a structure's fields are not module declarations, so they never reach `insert_binding`'s check, and the telescope below keeps both — a literal set them both and every `.label` read the first, silently. The tuple-type twin of this is `curios_elab`'s `DuplicateTupleLabel`, which a `struct` never reaches because its fields never elaborate as one.
+                    // A repeated label is refused at the one that arrived second, as a repeated declaration is. Nothing else catches it: a structure's fields are not module declarations, so they never reach `insert_binding`'s check, and the telescope below would keep both — a literal would set them both and every `.label` read the first, silently. The tuple-type twin of this is `curios_elab`'s `DuplicateTupleLabel`, which a `struct` never reaches because its fields never elaborate as one.
                     let mut declared = BTreeSet::new();
                     for field in &s.fields {
                         if let Some(label) = &field.param.label
@@ -1270,7 +1281,7 @@ fn process_items(
                     //
                     // One group because a call fills exactly one: `show(A) -> Str` declares one parameter list, so `Show/show(value)` is one call, where a wrapper returning the field as a value would be called `Show/show()(value)` — the concept's parameters and the witness are context the declaration never writes as a call. A field that is not written as a function, `Carrier : Type` or a type alias of a function, is the value it holds, reached by the call that supplies the witness: `Sized/Carrier(@Nat)`.
                     //
-                    // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope, which is why it survived. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
+                    // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
                     //
                     // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
                     let param_refs = param_vars.iter().collect::<Vec<_>>();
@@ -1439,7 +1450,7 @@ fn process_items(
 
 /// What a unit is lowered from: the modules under the prefixes it claims, and — for the one unit that has one — its entrypoint.
 ///
-/// **One resolver, where there were two arms.** The two ways a tree used to arrive here — parsed from a file graph as the entry program is, handed over already parsed as the fixed prelude is — differed in nothing but where a module body came from, which is exactly the question a [`RootSource`] answers. What survives is the one genuine difference: an executable carries a tail expression and owns the empty prefix, and a library does neither.
+/// **One resolver.** A tree parsed from a file graph, as the entry program is, and one handed over already parsed, as the fixed prelude is, differ in nothing but where a module body comes from, which is exactly the question a [`RootSource`] answers. The one genuine difference is this: an executable carries a tail expression and owns the empty prefix, and a library does neither.
 pub struct UnitSource<'a> {
     entrypoint: Option<&'a Entrypoint>,
     source: &'a RootSource,
@@ -1564,9 +1575,9 @@ impl<'a> UnitSource<'a> {
 
 /// Lower one unit against the units already lowered.
 ///
-/// **This is the whole of what used to be three functions.** They differed in where their items sat, whether anything was already in scope, and where four counters started — every one of which is an argument here. `into_core` was the no-scope entry spelling, kept for `curios-text`'s own tests; `prepare_prelude` was the mounted spelling; `into_core_with_prelude` was the entry spelling with one predecessor. Three copies of one walk agreed by being read, which is the shape every configuration-dependent defect in this stage has had.
+/// **One walk for every configuration.** Where a unit's items sit, whether anything is already in scope, and where four counters start are all arguments here; a copy of the walk per configuration would agree with the others only by being read, which is the shape every configuration-dependent defect in this stage has had.
 ///
-/// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient where a copy was used.
+/// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient rather than a copy.
 ///
 /// An entry source's final term is lowered too — a refusal in it is this lowering's — and handed back only by the entry's own spelling, [`into_core_with_prelude`]: a unit is a [`curios_core::Module`] alone.
 pub fn into_core_unit(
@@ -1592,7 +1603,7 @@ fn into_core_unit_within(
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
-    // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic this campaign exists to stop producing.
+    // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
     let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
     let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
     let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
@@ -1651,7 +1662,7 @@ fn into_core_unit_within(
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
-    // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
+    // No floor: a witness's ordinal is scoped to its declaring module, which lies within this unit's mounts, and those are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
     let imports = RefCell::new(curios_core::Imports::default());
@@ -1773,7 +1784,7 @@ fn into_core_unit_within(
         syntax,
     });
 
-    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
+    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     let items = order_flat_items(flat_items, &induct_decls, &struct_decls, syntax)?
         .into_iter()
         .map(FlatItem::into_core)

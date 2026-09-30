@@ -209,7 +209,7 @@ impl Nat {
         let right_terms = Self::distributable(&mut atoms, right);
         let (floor, products) = distribute(&left_terms, &right_terms);
 
-        // **One node per distinct monomial, not one per product.** A cross product builds the same monomial many times over — every pair of summands whose factors multiply to it — and each fresh spine had to be cache-warmed on construction and then compared structurally when the sum merged it, because an equal spine built a moment earlier was a different allocation and `Rc::ptr_eq` could not see it. On a nine-definition web of definitions each naming the one before it twice that was 198 793 spines, 204 113 structural comparisons every one of which concluded equal, and 2.4 s of a 6.1 s compile. A monomial is a list of handles, so a lookup walks nothing, and each handle stands for the one allocation its factor was first read as — which is what makes every element comparison inside the sum a pointer test.
+        // **One node per distinct monomial, not one per product.** A cross product builds the same monomial many times over — every pair of summands whose factors multiply to it — and a fresh spine per product would be cache-warmed on construction and compared structurally when the sum merges it, since an equal spine built a moment earlier is a different allocation `Rc::ptr_eq` cannot see. A monomial is a list of handles, so a lookup walks nothing, and each handle stands for the one allocation its factor was first read as — which is what makes every element comparison inside the sum a pointer test.
         let mut canonical: HashMap<Monomial, Term> = HashMap::new();
         let summands = products
             .into_iter()
@@ -228,7 +228,7 @@ impl Nat {
                 Self::scaled(coefficient, spine)
             })
             .collect::<Vec<_>>();
-        // The two magnitudes that say what distribution in full costs: monomials built against summands kept. On a web of definitions each naming the one before it twice they read 198 793 against 9 083 at nine definitions and 1 222 222 against 25 412 at ten — products grow as the square of what survives, which is what an eager cross product is.
+        // The two magnitudes that say what distribution in full costs: monomials built against summands kept, the first growing as the square of the second, which is what an eager cross product is.
         curios_profile::sample!("multiply::products", summands.len() as u64);
         let merged = Self::sum_over_floor(summands, floor);
         #[cfg(feature = "profile")]
@@ -476,7 +476,7 @@ impl Nat {
         }
     }
 
-    /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold no longer performs on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md`.
+    /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
     ///
     /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is priced here by what it builds — the concat fold's idiom, one collection and one node per product — because `operand_bound` at the fold prices by literal width, and a symbolic cross product read as zero bits.
     pub fn normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
@@ -564,7 +564,7 @@ impl Nat {
     ///
     /// **A multiset, never a set.** `a + a + b` against `a + c` cancels *one* `a` and leaves `a + b` against `c`. Cancelling both would read `a + b ⋈ c` off `a + a + b ⋈ a + c`, which is false — and false definitional equations are the route this file's soundness perimeter records as reaching `False` by congruence.
     ///
-    /// **Summands pair by equality up to universe instances.** A definitionally equal pair spelled two ways still does not cancel — the match does not reduce candidates against each other, so incompleteness in that direction costs reductions and never correctness. What it *does* see through is an instance, because two occurrences of a polymorphic name are independently instantiated and would otherwise be two terms: `len(xs)` written twice never cancels against itself, and every bound mentioning one stays stuck. Erasing before the comparison is [`crate::project_erased_universes`], and what licenses it here is the carrier rather than erasure: Core offers no elimination from a type or a level into a `Nat`, so two summands differing only in their instances denote one number. That is not true of terms in general — `Type u` is a value that differs by its level — which is why the same projection is unsound as a refinement key, as `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records.
+    /// **Summands pair by equality up to universe instances.** A definitionally equal pair spelled two ways still does not cancel — the match does not reduce candidates against each other, so incompleteness in that direction costs reductions and never correctness. What it *does* see through is an instance, because two occurrences of a polymorphic name are independently instantiated and would otherwise be two terms: `len(xs)` written twice never cancels against itself, and every bound mentioning one stays stuck. Erasing before the comparison is [`crate::project_erased_universes`], and what licenses it here is the carrier rather than erasure: Core offers no elimination from a type or a level into a `Nat`, so two summands differing only in their instances denote one number. That is not true of terms in general — `Type u` is a value that differs by its level — which is why the same projection is unsound as a refinement key, as `documentation/design/soundness/elimination/case-equations-and-their-key.md` records.
     ///
     /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
     ///

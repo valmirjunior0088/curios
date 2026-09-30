@@ -16,7 +16,7 @@ pub struct Prefix<'a> {
 }
 
 impl<'a> Prefix<'a> {
-    /// Everything `units` established, in dependency order. Empty is the entrypoint's case: nothing is in scope, so that unit defines every name it mentions.
+    /// Everything `units` established, in dependency order. An empty prefix puts nothing in scope, so the unit compiled against it defines every name it mentions.
     pub fn over(units: &'a [&'a Unit]) -> Self {
         Self { units }
     }

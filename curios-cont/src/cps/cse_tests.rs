@@ -186,7 +186,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     module.verify().unwrap();
 }
 
-/// `b[1]` and `b[1, 0]` pack into the same byte, so an operand key built from packed bytes made these two comparisons duplicates and the second answered the first's result. Compiled, the program printed `false` for `x == b[1, 0]` where `x` was `b[1, 0]`.
+/// `b[1]` and `b[1, 0]` pack into the same byte, so an operand key built from packed bytes would make these two comparisons duplicates, and the second would answer the first's result — `false` for `x == b[1, 0]` where `x` is `b[1, 0]`.
 #[test]
 fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
     let mut module = Module::new();

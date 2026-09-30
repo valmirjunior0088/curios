@@ -70,7 +70,7 @@ fn arms(body: &Term) -> Cases {
     }
 }
 
-/// The reason the form exists. `w : Q(n, x, h)` with `h : P(n, x)`: stated at the ambient goal, each arm inhabits `Q(n, x, h)` specialized — `Q(0, a(), h)` with `h` shadowed at `P(0, a())` — and `w` does so once shadowed itself. The family stating the same result, `(i, s) => Q(i, s, h)`, cannot be typed under its own binders, since `h : P(n, x)` is not a `P(i, s)`, which is what used to force a convoy.
+/// The reason the form exists. `w : Q(n, x, h)` with `h : P(n, x)`: stated at the ambient goal, each arm inhabits `Q(n, x, h)` specialized — `Q(0, a(), h)` with `h` shadowed at `P(0, a())` — and `w` does so once shadowed itself. The family stating the same result, `(i, s) => Q(i, s, h)`, cannot be typed under its own binders, since `h : P(n, x)` is not a `P(i, s)`, which is what would otherwise force a convoy.
 #[test]
 fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
     let mut kernel = kernel();
@@ -272,7 +272,7 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     ));
 }
 
-/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Nat` eliminator counting a literal down to `Type`, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. That read reported `NotAMotive` whatever it was refused for, which sent a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
+/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Nat` eliminator counting a literal down to `Type`, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. Reporting `NotAMotive` whatever that read was refused for would send a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
 #[test]
 fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
     let attempt = |budget: u64, ambient: bool| {

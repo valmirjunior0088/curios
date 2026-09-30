@@ -1,6 +1,6 @@
 //! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated and judged alone, with everything outside the closure replayed from the baseline as a predecessor's items are.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
 //!
 //! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation in lowering order across the unit, so the same declaration lowered after different neighbours carries different ids at the same positions; [`Term::equal_modulo_metas`] identifies them by position instead. Everything else compares exactly — spans and binder names excepted, as always — so a moved declaration is not a change and a renamed parameter is not one either.
 
@@ -22,7 +22,7 @@ use {
 
 /// Compile one unit against `scope` over `baseline`: lower whole, diff, elaborate and judge the closure, erase whole.
 ///
-/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the lowering's order, the same erasure onto the scope's arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the prefix's and appends: what an incremental erasure would save is a later question.
+/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the lowering's order, the same erasure onto the scope's arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the prefix's and appends.
 pub fn compile_unit_over(
     budget: u64,
     scope: Prefix<'_>,

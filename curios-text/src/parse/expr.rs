@@ -101,7 +101,7 @@ pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
 
 // Parses the part of a `let` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and for every member after `and`, whose types cannot be inferred.
 //
-// The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report was the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
+// The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report would be the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
 pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature(true)
         .or(parse_required_name_signature(true))
@@ -179,7 +179,7 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             .map(|()| Suffix::Bang))
 }
 
-/// Folds a postfix chain onto its head, one node per suffix. Every intermediate node takes the span from the head's start to its own suffix's end — `acts.0` inside `acts.0!`, `f(x)` inside `f(x).1` — so an error at a node in the middle of a chain reports there rather than at the nearest spanned ancestor, which for a hoisted action is the outermost `!` of its region. A head without a span (a bare name) leaves the chain's own nodes unspanned, and the caller's `with_span` over the whole chain covers those as before.
+/// Folds a postfix chain onto its head, one node per suffix. Every intermediate node takes the span from the head's start to its own suffix's end — `acts.0` inside `acts.0!`, `f(x)` inside `f(x).1` — so an error at a node in the middle of a chain reports there rather than at the nearest spanned ancestor, which for a hoisted action is the outermost `!` of its region. A head without a span (a bare name) leaves the chain's own nodes unspanned, and the caller's `with_span` over the whole chain covers those.
 pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term {
     suffixes
         .into_iter()
@@ -210,7 +210,7 @@ pub(super) fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
     spanned(parser).map(|(span, term)| term.with_span(trimmed(span)))
 }
 
-/// The span cut back to the term's own text, which every span a term is stamped with passes through — the wrapper's, a postfix chain's and a `let` block's alike. Every atom parser consumes the whitespace after it, so a span built from where the parse stopped ran on to the next operator or delimiter, and a caret underlined the blanks after an operand; the same run, comment included, is what the `?` oracle, the language server and the test runner's body slice read. A comment is stepped over through the table `parse_whitespace` records it in, complete for everything the parser consumed by the time this runs. The formatter, which needs the far end — a comment past a separator is paid onto its line by the term that reaches it — recovers it from the source text in `print_term` rather than from the span.
+/// The span cut back to the term's own text, which every span a term is stamped with passes through — the wrapper's, a postfix chain's and a `let` block's alike. Every atom parser consumes the whitespace after it, so a span built from where the parse stopped would run on to the next operator or delimiter, and a caret underline the blanks after an operand; the same run, comment included, is what the `?` oracle, the language server and the test runner's body slice read. A comment is stepped over through the table `parse_whitespace` records it in, complete for everything the parser consumed by the time this runs. The formatter, which needs the far end — a comment past a separator is paid onto its line by the term that reaches it — recovers it from the source text in `print_term` rather than from the span.
 fn trimmed(mut span: Span) -> Span {
     loop {
         let text = &span.source.text[span.start..span.end];
@@ -312,7 +312,7 @@ pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> Parser<'a, Term> {
 }
 
 pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term> {
-    // One `many0` loop per precedence level, folded by move. The previous spelling recursed once per operator *and* deep-cloned the accumulated left spine at every link (`let here = left.clone()` before the catch), so an N-operator chain cost N native frame nests and O(N²) cloned nodes — the same per-element-recursion class the flat `let` block in `parse_let` was rebuilt to avoid. Native depth is now bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
+    // One `many0` loop per precedence level, folded by move. Recursing once per operator and deep-cloning the accumulated left spine at every link would cost an N-operator chain N native frame nests and O(N²) cloned nodes — the per-element-recursion class the flat `let` block in `parse_let` avoids. Native depth is bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
     many0(move || {
         parse_infix_op().flat_map(move |op| {
             let precedence = op_precedence(op);
@@ -338,7 +338,7 @@ fn starts_operand(char: char) -> bool {
     char.is_alphanumeric() || matches!(char, '_' | '(' | '[' | '{' | '"' | '\'' | '@' | '/')
 }
 
-// An infix symbol glued to an operand on either side is refused by the rule, once the loop above has ended. `parse_infix_op` refuses it with the reason already — `preceded_by_space` and `require_space` each name the missing whitespace — but the loop's arm is caught so the loop can end at a non-operator, a caught failure is discarded, and the enclosing form then reported the token it wanted: `Expected ';', obtained '/'` for `a/ 2`, the spelling the reference warns about, and for the glued `a+b` every other language writes. Probed without consuming, so a symbol spaced on both sides is left for the loop or an enclosing level exactly as before; only the refusal consumes, reading the symbol raw so the caret underlines it alone and the failure is past the choice point.
+// An infix symbol glued to an operand on either side is refused by the rule, once the loop above has ended. `parse_infix_op` refuses it with the reason already — `preceded_by_space` and `require_space` each name the missing whitespace — but the loop's arm is caught so the loop can end at a non-operator, a caught failure is discarded, and the enclosing form would then report the token it wanted: `Expected ';', obtained '/'` for `a/ 2`, the spelling the reference warns about, and for the glued `a+b` every other language writes. Probed without consuming, so a symbol spaced on both sides is left for the loop or an enclosing level; only the refusal consumes, reading the symbol raw so the caret underlines it alone and the failure is past the choice point.
 fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
     // The term's own parser has consumed the whitespace after it, so the probe stands at the symbol and asks the byte before it, as `parse_infix_op` does.
     look_ahead(
@@ -403,7 +403,7 @@ fn refuse_non_term<'a>() -> Parser<'a, Term> {
     })
 }
 
-// The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` read the word as its keyword and failed one token in, which won [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — reported `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
+// The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` would read the word as its keyword and fail one token in, which wins [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — would report `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
 fn refuse_declaration_head<'a>() -> Parser<'a, ()> {
     look_ahead(take_while(is_identifier_char)).flat_map(|head| match head {
         "mod" | "use" | "pub" | "induct" | "struct" | "foreign" => take_while(is_identifier_char)

@@ -1,10 +1,10 @@
 //! The TOML codec, decoded and re-encoded in emitted wasm.
 //!
-//! **Every document in this module is a row of one program, compiled once, and run by one test.** The program is the codec plus a `match` over a row number the host supplies on stdin; `codec()` compiles it and the test runs every table's rows against it. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs the Cont fixpoint seventy-odd rounds over the whole codec — about twenty seconds in release and three and a half minutes in debug — and that cost is per *program*, not per document. Ten programs of a handful of documents each were ten of those; one program is one.
+//! **Every document in this module is a row of one program, compiled once, and run by one test.** The program is the codec plus a `match` over a row number the host supplies on stdin; `codec()` compiles it and the test runs every table's rows against it. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs a long Cont fixpoint over the whole codec, and that cost is per *program*, not per document, so one program for every document pays it once.
 //!
-//! One test rather than one per table, for the same cost seen from the test harness: a test per table shared the program through a `OnceLock`, so the first to ask compiled it while the other ten held a test thread each doing nothing but wait — eleven of the suite's twelve threads parked for the whole compile, at the end of the run where nothing was left to fill them. One test holds one thread, and reports every mismatched row at once where the split reported a table's first.
+//! One test rather than one per table, for the same cost seen from the test harness: tests per table sharing the program through a `OnceLock` would each hold a test thread doing nothing but wait while the first compiled it. One test holds one thread, and reports every mismatched row at once rather than a table's first.
 //!
-//! The documents are literals and reach the decoder as written. The evaluator does not unroll a closed decode — a claim this module's header once made, and which the stage profile of such a program refutes: elaboration and `evaluate_closed_terms` together are under a second of it, and the fixpoint is the rest — so nothing here needs a taint to reach the emitted codec. The long binary literals still use one, digit runs repeated a `(opaque + 1) * n` number of times, because a literal of thirty digits is the thing a reader should not have to count.
+//! The documents are literals and reach the decoder as written. The evaluator does not unroll a closed decode — the stage profile of such a program puts its cost in the fixpoint, not in elaboration or `evaluate_closed_terms` — so nothing here needs a taint to reach the emitted codec. The long binary literals still use one, digit runs repeated a `(opaque + 1) * n` number of times, because a literal of thirty digits is the thing a reader should not have to count.
 
 use {
     super::{Compiled, compile, run},
@@ -283,7 +283,7 @@ const FLOAT_BITS: &[Row] = &[
     },
 ];
 
-/// Each malformed input pinned to the *message* it is rejected with, not merely to the fact that it is rejected. The decoder hands these strings to its caller through `Result(Str, _)`, so they are contract rather than debug output — and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this table can. Every rejection is the refusing parser's own reason: the date-time, fraction and exponent parsers commit once their prefix can be nothing else, so `val_number_digit`'s `or` reports `invalid date` rather than restoring the position, reading `2021` as an integer and failing on the line end — which is what this table showed before `Parse/commit` existed, `expected end of input` for every date-time and `leading zero` for `00:00:61`.
+/// Each malformed input pinned to the *message* it is rejected with, not merely to the fact that it is rejected. The decoder hands these strings to its caller through `Result(Str, _)`, so they are contract rather than debug output — and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this table can. Every rejection is the refusing parser's own reason: the date-time, fraction and exponent parsers commit once their prefix can be nothing else, so `val_number_digit`'s `or` reports `invalid date` rather than restoring the position, reading `2021` as an integer and failing on the line end.
 const REASONS: &[Row] = &[
     Row {
         expr: r##"reason("i = 1__2")"##,
@@ -347,7 +347,6 @@ const REASONS: &[Row] = &[
     },
 ];
 
-/// Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, and arrays of tables against tables, against the three that are allowed.
 /// Each refusal rendered whole by `Toml/Error/to_str`: a syntax refusal names the byte offset the parser stopped at, and a broken construction rule names the key path being applied. `message` is the reason alone, which the reasons table pins.
 const LOCATIONS: &[Row] = &[
     Row {
@@ -372,6 +371,7 @@ const LOCATIONS: &[Row] = &[
     },
 ];
 
+/// Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, and arrays of tables against tables, against the three that are allowed.
 const TABLE_CONFLICTS: &[Row] = &[
     Row {
         expr: r##"verdict("dup = 1\ndup = 2")"##,
@@ -644,7 +644,7 @@ fn run_row(index: usize) -> String {
 
 /// Every row of every table, then the rounded floats, in the program's order: what each prints against what its table expects.
 ///
-/// The tables — scalar documents round-tripping deterministically, string forms and escapes, the RFC 3339 subset of date-times, integer boundaries in every radix, binary64 bit patterns and correctly rounded floats, the rejections of malformed numbers and escapes and of table-construction conflicts, nested arrays and inline tables reaching a fixpoint, comments and line endings and trailing input — were one test each until the compile they share made that a cost; see the module header. A mismatch names its row, and every mismatch is reported at once.
+/// The tables — scalar documents round-tripping deterministically, string forms and escapes, the RFC 3339 subset of date-times, integer boundaries in every radix, binary64 bit patterns and correctly rounded floats, the rejections of malformed numbers and escapes and of table-construction conflicts, nested arrays and inline tables reaching a fixpoint, comments and line endings and trailing input — are one test because of the compile they share; see the module header. A mismatch names its row, and every mismatch is reported at once.
 #[test]
 fn every_document_prints_what_its_table_expects() {
     let expectations = TABLES

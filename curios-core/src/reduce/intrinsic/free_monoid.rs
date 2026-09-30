@@ -29,7 +29,7 @@ pub(super) enum Shape<L> {
 
 /// Classify a reduced `Bin` value into its product shape (generators are bytes).
 ///
-/// **The literal arm materializes the whole run**, one `u8` per generator — which at the bit grain is a byte per *bit*, eight times the value's own width. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` no longer reaches here for a wholly-literal value, which answers from the free monoid's measure instead, but every symbolic shape still falls through to the homomorphism and still pays this.
+/// **The literal arm materializes the whole run**, one `u8` per generator — which at the bit grain is a byte per *bit*, eight times the value's own width. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
 pub(super) fn bin_shape(
     reducer: &mut impl Reducer,
     grain: Grain,

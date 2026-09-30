@@ -276,7 +276,7 @@ fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
     assert_eq!(storage(&module)[&param], Storage::Boxed);
 }
 
-/// The case the emitter caught and the unit tests did not. `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `machine::lower` lambda-lifts it onto that function as an extra `anyref` parameter. Deciding it from its binding scope alone answers `Raw(Nat)` — and then the callee, which holds it as a parameter, loads it with no unboxing and hands a `(ref any)` to an `i32.sub`. `trees` miscompiled exactly this way, in `/std/Str/fold/2`.
+/// `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `curios-emit`'s `machine::lower` lambda-lifts it onto that function as an extra `anyref` parameter. Deciding it from its binding scope alone would answer `Raw(Nat)` — and the callee, which holds it as a parameter, would load it with no unboxing and hand a `(ref any)` to an `i32.sub`.
 #[test]
 fn a_value_free_in_another_function_stays_boxed() {
     let mut module = Module::new();

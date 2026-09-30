@@ -118,7 +118,7 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// The store's tool, and the only thing in this toolchain that reaches the network. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
+    /// The store's tool, and with `pin` one of the two commands that reach the network, both through the one fetcher `curios-package`'s `curate` holds. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
     #[command(about = "Materialize what the manifests reference")]
     Curate {
         #[command(flatten)]
@@ -376,15 +376,15 @@ pub(crate) enum Query {
 {all-args}{after-help}"
 )]
 pub(crate) struct Cli {
-    /// `--budget` where it stood before it belonged to the commands that elaborate: parsed only to be refused with the spelling that works, and hidden, because it is no flag of this position.
+    /// `--budget` written before the command, where it is no flag: parsed only to be refused with the spelling that works — after a command that elaborates — and hidden.
     #[arg(long = "budget", value_name = "UNITS", hide = true)]
     pub(crate) misplaced_budget: Option<OsString>,
 
-    /// `--manifest` where it stood before it belonged to the commands that resolve against a package, parsed and hidden for the same reason.
+    /// `--manifest` written before the command, parsed and hidden for the same reason: it belongs after a command that resolves against a package.
     #[arg(long = "manifest", value_name = "PATH", hide = true)]
     pub(crate) misplaced_manifest: Option<OsString>,
 
-    // Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including the eight the integration suite spawns under `--all-features`, all of them onto one path.
+    // Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including every one the integration suite spawns under `--all-features`, all of them onto one path.
     //
     // It takes the destination rather than defaulting to one, so no path is spelled in the compiler at all. The reader chooses where the stream goes and reads it back from there, which is one spelling instead of two that have to agree. Global, because what it measures is the invocation rather than one command, so it may stand on either side of the command.
     //

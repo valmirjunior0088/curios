@@ -8,7 +8,7 @@
 //!
 //! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
-//! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("/Tree/node", [spell(l), …])` for a constructor, `Spell/record("/Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its constructor's absolute path applied to its explicit payloads, so the text re-parses from any module that sees the names; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
+//! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its explicit payloads, so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
 //! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
 //!
@@ -77,7 +77,7 @@ pub(crate) fn elaborate_derive(
         .first()
         .cloned()
         .expect("a derivable concept takes the type it is derived for as its first parameter");
-    // Reduced once, here, because this is the term every refusal *prints*. Reducing the whole concept application above unfolds a nullary inductive's name into its recursive definition, so `satisfy Spell(T);` refused with three lines of `rec #0: Type = T; #0` where the author wrote `T` — while a struct key (already a `StructType`) and a parameterized one (an `Apply` with a nominal head) printed their names. One more reduction reaches the `InductType` all three share, which is the form every other diagnostic in the compiler prints. `subject` used to take this step itself.
+    // Reduced once, here, because this is the term every refusal *prints*. Reducing the whole concept application above unfolds a nullary inductive's name into its recursive definition, so a refusal of `satisfy Spell(T);` would print three lines of `rec #0: Type = T; #0` where the author wrote `T` — while a struct key (already a `StructType`) and a parameterized one (an `Apply` with a nominal head) print their names. One more reduction reaches the `InductType` all three share, which is the form every other diagnostic in the compiler prints.
     let key = reduce_with(context, &key)?;
     let site = Site {
         concept: name,
@@ -199,7 +199,7 @@ fn transparent(
     Ok(())
 }
 
-/// The path a declaration or constructor spells as: the type's own name and, for a constructor, its tag — `Ordering/lt`, `Point` — which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all. The absolute path re-parsed everywhere but read as `/std/Ordering/Ordering/lt()` in every test report, and a report is where a spelled value is read.
+/// The path a declaration or constructor spells as: the type's own name and, for a constructor, its tag — `Ordering/lt`, `Point` — which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all. An absolute path would re-parse everywhere but read as `/std/Ordering/Ordering/lt()` in every test report, and a report is where a spelled value is read.
 fn path(name: &Global, tag: Option<&str>) -> String {
     let qualifier = name
         .qualifier()

@@ -1,7 +1,5 @@
 //! Every scalar intrinsic's emitted shape: the fast path it computes in, the helper it grows through, and the guard it refuses through.
 
-//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
-
 use {super::test_support::*, curios_num::Rounding};
 
 /// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
@@ -110,7 +108,7 @@ fn nat_to_int_is_the_identity() {
     assert_refuses_nothing(&wat);
 }
 
-/// A literal past the i31 is a boxed magnitude built from its limbs, where it used to be a refusal.
+/// A literal past the i31 is a boxed magnitude built from its limbs.
 #[test]
 fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
     let wat = wat(&intrinsic_main(

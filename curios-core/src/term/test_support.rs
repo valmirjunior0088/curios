@@ -29,7 +29,7 @@ pub(super) fn distinct_nodes(term: &Term) -> usize {
     seen.len()
 }
 
-/// Deeper than the ~50,000 steps at which a growing conversion used to abort the process, so a regression is a stack overflow rather than a slow test.
+/// Deep enough that a walk recursing natively per link overflows a default stack, so a regression is a stack overflow rather than a slow test.
 pub(super) const DEEP: u32 = 100_000;
 
 /// A left-nested application spine `((x a) a) …`, `DEEP` links tall.

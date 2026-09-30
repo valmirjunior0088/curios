@@ -80,7 +80,7 @@ where
     })
 }
 
-/// Zero or more repetitions of the parser `f` builds. Takes a parser-building closure rather than a parser because [`Parser`] is single-use — every iteration needs a fresh instance. Stops at the first recoverable failure; an uncaught (fatal, input-consuming) failure aborts the whole parse, and a repetition that succeeds without consuming input panics rather than loop forever.
+/// Zero or more repetitions of the parser `f` builds. Takes a parser-building closure rather than a parser because [`Parser`] is single-use — every iteration needs a fresh instance. Stops at the first recoverable failure; a [`commit`](crate::commit)ted failure aborts the whole parse, and a repetition that succeeds without consuming input panics rather than loop forever.
 pub fn many0<'a, T, F>(f: F) -> Parser<'a, Vec<T>>
 where
     T: 'a,
@@ -98,7 +98,7 @@ where
     many_core(f, true)
 }
 
-/// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances past it, `Ok(None)` means it wasn't there (a recoverable failure — the caller ends the list), and an uncaught failure propagates. Panics on zero-width progress, like the repetition combinators. The separator step of [`sep_by_core`]'s loop.
+/// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances past it, `Ok(None)` means it wasn't there (a recoverable failure — the caller ends the list), and a committed failure propagates. Panics on zero-width progress, like the repetition combinators. The separator step of [`sep_by_core`]'s loop.
 fn parse_separator<'a, S, G>(
     g: &mut G,
     state: ParserState<'a>,
@@ -191,7 +191,7 @@ where
     sep_by_core(f, g, false, true)
 }
 
-/// One or more `f` items separated by `g` (separators dropped). Commits after each successful separator: a separator not followed by an item is an error, so trailing separators are rejected — [`sep_by0_trailing`] is the variant that admits them.
+/// One or more `f` items separated by `g` (separators dropped). Once a separator is consumed the next item is mandatory, as in [`sep_by0`], so trailing separators are rejected — [`sep_by1_trailing`] is the variant that admits them.
 pub fn sep_by1<'a, T, S, F, G>(f: F, g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,

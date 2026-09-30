@@ -43,7 +43,7 @@ pub(crate) struct DeferredRefusal {
     pub error: Error,
 }
 
-/// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk stood here before, and it rendered a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
+/// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk would render a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
 fn display_goal(context: &mut Context, goal: &Term) -> Term {
     super::resolved_for_display(context, goal)
 }
@@ -1000,7 +1000,7 @@ pub(crate) fn register_witness(
         key,
     } = read_witness_signature(context, signature)?;
 
-    // Termination (Paterson's conditions): every `use` premise is strictly smaller than the concept application it serves — its variables are this witness's own binders, none of them occurs more often than in the head, and it has fewer nodes in all — so resolution through it is structurally decreasing, with no fuel or tabling. A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`, which the variables-only rule this replaced refused for nothing: the constant weighs one node and decreases like any other.
+    // Termination (Paterson's conditions): every `use` premise is strictly smaller than the concept application it serves — its variables are this witness's own binders, none of them occurs more often than in the head, and it has fewer nodes in all — so resolution through it is structurally decreasing, with no fuel or tabling. A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`, which a variables-only rule would refuse for nothing: the constant weighs one node and decreases like any other.
     let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();
     let (head_size, head_occurrences) = measure(&params, &binder_names);
     for (plicity, _, type_) in &binders {
@@ -1036,11 +1036,11 @@ pub(crate) fn register_witness(
         }
     }
 
-    // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/roadmap.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
+    // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/design/surface/concepts-resolve-with-global-coherence.md`). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
-    // **No root is exempt.** `/std` used to be, on the grounds that it and `/sys` are one coordinated standard library rather than independent packages — but every concept `/std` witnesses is `/std`'s own, so clause one admits every one of its witnesses on its own terms, including the tuple-keyed ones and the ones keyed on a `/sys`-homed carrier whose head owns nothing. An exemption that decides nothing is a rule nobody can check, and the one root it covered was the one corpus large enough to have proved it unnecessary.
+    // **No root is exempt.** Exempting `/std`, on the grounds that it and `/sys` are one coordinated standard library rather than independent packages, would decide nothing: every concept `/std` witnesses is `/std`'s own, so clause one admits every one of its witnesses on its own terms, including the tuple-keyed ones and the ones keyed on a `/sys`-homed carrier whose head owns nothing. An exemption that decides nothing is a rule nobody can check.
     //
-    // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all. It used to compare `RootId`s, and every ordinary root was the one value `RootId::Entry` — so two packages compared equal and the rule went inert exactly where two independent authors could collide.
+    // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all: two packages are two mounts, which is exactly where two independent authors could collide.
     //
     // A declaration owned by no mount matches nothing, including another unowned one: `owns` answers `false` unless both sides name a mount. That is the conservative direction — such a witness can only be refused, never admitted by an accidental `None == None`.
     let declaring = context.mount_of(&Global::Authored(*module));

@@ -171,9 +171,9 @@ fn the_standard_library_documents_from_the_archive() {
 
 /// **A declaration that is not a `let` resolves the names in its signature too.**
 ///
-/// The import scope a page resolves through is recorded per declaration by the lowering, and it was recorded for a `let` and a `test` and nothing else — so a concept, an inductive, a structure, a witness or a foreign had none, and `imports_of` fell back to the union of its module's `let`s. A module with no `let` therefore resolved nothing at all: `/std/Show` is a `use` line and a concept, and its one method's return type rendered as plain text while `/std/Spell`'s identical one linked, because `Spell` happens to have renderer `let`s that import the same name.
+/// The import scope a page resolves through is recorded per declaration by the lowering, for a concept, an inductive, a structure, a witness and a foreign as for a `let` and a `test` — so a module with no `let` still resolves its signatures, where falling back to the union of its module's `let`s would resolve nothing: `/std/Show` is a `use` line and a concept, and its one method's return type links as `/std/Spell`'s identical one does.
 ///
-/// `/std/Show` is the whole shape of the bug in one module, which is why it is the subject. Asserted on a *member*, since no other test in this tree asserts on a member's marks at all.
+/// `/std/Show` is the subject because it holds no `let` at all. Asserted on a *member*, since no other test in this tree asserts on a member's marks at all.
 #[test]
 fn a_concept_method_resolves_the_names_in_its_signature() {
     let documentation = standard_library();
@@ -215,7 +215,7 @@ fn a_concept_method_resolves_the_names_in_its_signature() {
     );
 }
 
-/// **The adopted half of that claim: the declarations are there.** Hiding `/sys` is half a property, and the sibling below pins only the half that is an absence — which a bundle satisfies perfectly by dropping every adopted declaration on the floor. That is exactly what splitting the prelude into two units did: the surface tree a declaration was rendered from left with the unit, and 112 names across 23 re-exports vanished from the record without a single check going red.
+/// **The adopted half of that claim: the declarations are there.** Hiding `/sys` is half a property, and the sibling below pins only the half that is an absence — which a bundle would satisfy perfectly by dropping every adopted declaration on the floor, as rendering off a unit's own surface tree alone does once the prelude is two units.
 ///
 /// Read off the record rather than the rendered pages, because what is at issue is whether the declaration exists at all — and asserted per carrier, since one surviving name would satisfy any count.
 #[test]

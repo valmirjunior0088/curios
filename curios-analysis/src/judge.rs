@@ -2,15 +2,15 @@
 //!
 //! # Why some analyses are shared and others are written twice
 //!
-//! [`Reducer`](curios_core::Reducer) already draws this line for intrinsic folding: the arithmetic is algebra over the representation and belongs in this crate, while how far an operand reduces before a fold sees it is a strategy each side supplies for itself. The traits here extend that line to whole analyses, and the test for which side an analysis falls on is:
+//! [`Reducer`](curios_core::Reducer) already draws this line for intrinsic folding: the arithmetic is algebra over the representation and belongs to `curios-core`, while how far an operand reduces before a fold sees it is a strategy each side supplies for itself. The traits here extend that line to whole analyses, and the test for which side an analysis falls on is:
 //!
 //! > Do the two checkers see different inputs?
 //!
 //! Reduction, conversion, and the typing judgment stay **duplicated**. The elaborator's versions see metavariables, refinements, expected types, parked goals, and memoized derivations; the kernel's see finished terms and no caches at all. Different inputs and different strategies are where a systematic mistake is both likely and expensive, and where two verdicts are genuinely two samples.
 //!
-//! One part of conversion is shared all the same, because it is algebra rather than strategy: what two intrinsics are to each other — the carriers' peels, laws and views, and the congruence read off an operation's signature — which [`convert_intrinsics`](crate::convert_intrinsics) states once and each checker discharges by its own judgment. Its rules were `curios-core`'s and `curios-algebra`'s whichever checker ran them before the chain was shared too; what two copies bought was a second transcription of one function, which a slip could make disagree without either copy holding a second opinion about arithmetic. What holds it is what holds any shared rule: the algebra's own tests over bare atoms and concrete values, and the law grid, held through both checkers, as integration evidence.
+//! One part of conversion is shared all the same, because it is algebra rather than strategy: what two intrinsics are to each other — the carriers' peels, laws and views, and the congruence read off an operation's signature — which [`convert_intrinsics`](crate::convert_intrinsics) states once and each checker discharges by its own judgment. Two copies would buy a second transcription of one function, which a slip could make disagree without either copy holding a second opinion about arithmetic. What holds it is what holds any shared rule: the algebra's own tests over bare atoms and concrete values, and the law grid, held through both checkers, as integration evidence.
 //!
-//! Index inversion, strict positivity, and size-change totality are the other case. All three run *post-zonk*, on final meta-free terms — which is exactly what the kernel is handed. Two runs of a total function on identical input is one sample, not two: duplicating them would buy a diff test, which property-testing the single implementation buys more cheaply, and would cost thousands of trusted lines written twice.
+//! Index inversion, strict positivity, and size-change totality are the other case: each is a total function of the terms it is handed, and what the checkers hand them differs only in what [`Env`] answers. Two runs of a total function on one input is one sample, not two: duplicating them would buy a diff test, which property-testing the single implementation buys more cheaply, and would cost thousands of trusted lines written twice.
 //!
 //! # The concession this records
 //!
@@ -24,9 +24,9 @@ use curios_core::{Bound, Exhaustion, Free, Global, InductDecl, StructDecl, Subte
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
 ///
-/// Two halves, and they are paired here because they were paired at every site that needed them. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
+/// Two halves, paired because every site that needs one needs both. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
 ///
-/// Written once because it was written three times and the three had already drifted: two spellings excluded `Metavar` and one included it. It is excluded here, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The difference is inert either way, since every analysis on this seam runs post-zonk on meta-free terms; were one ever reached, declining to force it leaves the term opaque, which is the refusing direction for all three callers.
+/// `Metavar` is excluded, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The kernel hands this seam meta-free terms; where the elaborator hands it one holding a metavariable, declining to force it leaves the term opaque, which is the refusing direction for every caller.
 pub(crate) fn forceable(term: &Term) -> bool {
     matches!(
         &**term,

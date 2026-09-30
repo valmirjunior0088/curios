@@ -232,9 +232,9 @@ impl Lowerer<'_> {
 
     /// Tie a recursive knot by need. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. Every reference to a member calls its force at the referencing region's entry (see [`Lowerer::with_cell_reads`]).
     ///
-    /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator already did for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program now agrees with both on every forward reference, whatever the verifier can or cannot see through. The lowering once ran the initializers eagerly in an order it computed and later in source order, handing each a cell holding a placeholder and then nothing; a member read out of order computed with the placeholder, then trapped, and now computes what it should. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
+    /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator does for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program agrees with both on every forward reference, whatever the verifier can or cannot see through. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
     ///
-    /// Function members take the same forcing reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: a knot with function members once lowered to a `RecInit` node whose machine lowering patched *escaping member* closures at the ready point, and a closure born inside an initializer that merely *called* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — captured the computed value before it existed, which nothing below the CPS verifier's lexical scope rules could see.
+    /// Function members take the same forcing reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: patching only *escaping* member closures at a ready point would miss a closure born inside an initializer that merely *calls* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — which would capture the computed value before it exists, where nothing below the CPS verifier's lexical scope rules could see it.
     fn lower_knot(
         &mut self,
         group: &RecGroup,
@@ -1005,7 +1005,7 @@ impl Lowerer<'_> {
         continuation
     }
 
-    /// Lower a variant match: the tag (`TupleGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TupleGet(1 + i)`) and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
+    /// Lower a variant match: the tag (`RowGet(row, 0)`) selects an arm through a `Switch`; each arm binds its payload from the slots its constructor's fields occupy and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
     #[allow(clippy::too_many_arguments)]
     fn lower_match_variant(
         &mut self,
@@ -1240,7 +1240,7 @@ impl Lowerer<'_> {
 
     /// One collapsed arm body: a lone payload aliases the scrutinee, which *is* the payload under the collapsed encoding; a wider row projects untagged fields. Returns a body rather than a continuation because the caller inlines it with no dispatch to target it.
     ///
-    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`](Self::lower_immediate_arm) instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::Intrinsic::ImmediateGet`].
+    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`](Self::lower_immediate_arm) instead. Sharing this function with it would miscompile a loop that does arithmetic on the payload; see [`curios_cont::Intrinsic::ImmediateGet`].
     fn lower_collapsed_arm(
         &mut self,
         arm: &VariantArm,
@@ -1726,7 +1726,7 @@ impl Lowerer<'_> {
 
     /// Lower a control-splitting statement (an application, cell, or intrinsic) returning to a fresh continuation. That continuation receives the statement's results — one for value-producing forms, zero for a cell write, whose bound result is the unit carrier.
     ///
-    /// The continuation is named after the operation it resumes from, read off the node `make` builds rather than passed in: where a call returns to and where an eliminator's arms converge are different things, and calling both of them `join` left four fifths of the hints in a dump saying the wrong one.
+    /// The continuation is named after the operation it resumes from, read off the node `make` builds rather than passed in: where a call returns to and where an eliminator's arms converge are different things, and calling both of them `join` would leave most of the hints in a dump saying the wrong one.
     fn split(
         &mut self,
         result: ValueId,

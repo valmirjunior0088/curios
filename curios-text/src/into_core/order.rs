@@ -1,8 +1,8 @@
-//! Phase 5: reordering declarations so each one's value dependencies come before it (outer in the fold), since a cyclic name graph means source order is no longer a valid binding order.
+//! Reordering declarations, the lowering's last pass, so each one's value dependencies come before it (outer in the fold), since a cyclic name graph means source order is not a valid binding order.
 //!
 //! A stable Kahn pass keeps independent declarations in source order. A genuine value cycle leaves nodes unorderable, and they are emitted in source order for someone above to answer for: a declaration's own name is bound by the group it becomes, so a *self*-referencing witness is repaired by `curios_elab::elaborate_module_let` lowering it into a group of one, and a cycle between two witnesses is refused there by name — neither reaches the kernel as an unbound reference. Nothing else can form a cycle at all: definitions that name one another are one group, `let ... and` states it in the source, and a cycle the source did not declare is refused here by name.
 //!
-//! **One partition, over the unit's own items.** This pass used to sort the fixed prelude ahead of everything else, because the prelude and the entry arrived as one item list and the prelude half had to be emitted first. They do not arrive together any more: a unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by the scope rather than by a node in this graph. The partition that expressed that, and the two panics that guarded the prelude half of it, are gone with it — a cycle is a cycle whoever wrote it, and it is reported as one.
+//! **One partition, over the unit's own items.** A unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by the scope rather than by a node in this graph. A cycle is a cycle whoever wrote it, and it is reported as one.
 
 use {
     super::*,
@@ -375,7 +375,7 @@ pub(super) fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, A
     });
 
     lets.filter_map(|let_| {
-        // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test now, where it used to be a leading-`/` test on the spelling.
+        // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test, not a leading-`/` test on the spelling.
         let direct = let_.body.direct_type_alias_target(&let_.type_);
         let target = *direct
             .or_else(|| let_.body.transparent_alias_target())

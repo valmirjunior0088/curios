@@ -10,12 +10,12 @@ pub enum Sign {
 }
 
 impl Sign {
-    /// Whether any mark was written — what retires the old `signed` boolean.
+    /// Whether any mark was written.
     pub fn is_marked(self) -> bool {
         !matches!(self, Sign::Unmarked)
     }
 
-    /// Whether the written mark was `-` — what retires the old `negative` boolean.
+    /// Whether the written mark was `-`.
     pub fn is_negative(self) -> bool {
         matches!(self, Sign::Negative)
     }

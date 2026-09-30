@@ -170,7 +170,7 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
     assert!(!report.contains("uses_a"), "{report}");
 }
 
-/// The boundary of that omission: a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them and refuses nothing, so every test the unit declares is in the tail and runs. A filter over the entry module's survivors once dropped them all, and each test exited without a word.
+/// The boundary of that omission: a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them and refuses nothing, so every test the unit declares is in the tail and runs. A filter over the entry module's survivors would drop them all, and each test would exit without a word.
 #[test]
 fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     let mut unit = RootSource::supplied();

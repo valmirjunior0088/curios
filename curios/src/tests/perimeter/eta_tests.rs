@@ -1,18 +1,10 @@
 //! Eta at a function and a record, and where irrelevance takes over from comparison.
 
-//! End-to-end coverage for the soundness perimeter entries that nothing else guards.
-//!
-//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
-//!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
-//!
-//! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
-
 use crate::tests::run;
 
 use super::test_support::*;
 
-// Eta and untyped child positions, the row that carried an argument and no program at all. Conversion is type-directed, so eta is what converts `f` with `(x) => f(x)` and `p` with `(p.0, p.1)` without either side having to be written in that shape. Both rules are *accepting*, so each widens what counts as equal, and the two refusals beside them are what keep the acceptance from reading as "any two functions convert" and "any two records convert": drop the binder from the expansion and the equation dies, swap the components and it dies. Without them a `compare` that answered `true` at every Π and every Σ would satisfy the accepting rung and nothing here would notice.
+// Eta and untyped child positions. Conversion is type-directed, so eta is what converts `f` with `(x) => f(x)` and `p` with `(p.0, p.1)` without either side having to be written in that shape. Both rules are *accepting*, so each widens what counts as equal, and the two refusals beside them are what keep the acceptance from reading as "any two functions convert" and "any two records convert": drop the binder from the expansion and the equation dies, swap the components and it dies. Without them a `compare` that answered `true` at every Π and every Σ would satisfy the accepting rung and nothing here would notice.
 #[test]
 fn converts_a_function_and_a_record_with_their_expansions() {
     assert_eq!(
@@ -75,15 +67,15 @@ fn still_compares_a_records_relevant_component() {
     );
 }
 
-// **The position this row was written about is not untyped any more.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they used to meet `ground`, where the goal type is `Type` and irrelevance is never asked, so the kernel refused what the elaborator accepted. That was the matrix's only accept-then-refuse row and the row this clause was stated over.
+// **The position this row is about is typed.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they meet the head's telescope rather than `ground`, where the goal type is `Type`, irrelevance is never asked, and the kernel would refuse what the elaborator accepts.
 //
-// A variable head has a typed context after all: it was assumed or declared at a function type, and its telescope is what its arguments inhabit, exactly as a declaration's field telescope is what a field inhabits. Reading it is a lookup rather than an inference, so the spine costs what it did and conversion consults nothing new. A universe instance of a variable and a `rec` member carry one the same way. What remains untyped is a head that names no type here — a record projection or a stuck elimination — and a binder carrying `ground_scope`'s stand-in, which is not a function type and so hands back no telescope.
+// A variable head has a typed context after all: it was assumed or declared at a function type, and its telescope is what its arguments inhabit, exactly as a declaration's field telescope is what a field inhabits. Reading it is a lookup rather than an inference, so the spine costs nothing more and conversion consults nothing new. A universe instance of a variable and a `rec` member carry one the same way. What remains untyped is a head that names no type here — a record projection or a stuck elimination — and a binder carrying `ground_scope`'s stand-in, which is not a function type and so hands back no telescope.
 #[test]
 fn a_spine_argument_compares_at_the_heads_domain() {
     assert_eq!(run(A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN), b"1");
 }
 
-// **Two applications of one definition are decided by their spines before either is unfolded, in both checkers.** The kernel used to force both sides first, and the proof they differ in then landed in a stuck match's scrutinee, which is compared at `Type` — so it refused what the elaborator, comparing the spines of one global first, accepted.
+// **Two applications of one definition are decided by their spines before either is unfolded, in both checkers.** Forcing both sides first would land the proof they differ in in a stuck match's scrutinee, which is compared at `Type`, and refuse what comparing the spines of one global first accepts.
 #[test]
 fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     assert_eq!(
@@ -92,7 +84,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     );
 }
 
-// The same pair where the definition mentions `Eq`, which makes it universe-polymorphic: each occurrence is an instance at levels of its own. The elaborator's spine rule matched a bare variable head only, so it refused this one itself; its heads are now compared after the spines, which is when their levels are identified.
+// The same pair where the definition mentions `Eq`, which makes it universe-polymorphic: each occurrence is an instance at levels of its own. Its heads are compared after the spines, which is when their levels are identified; a spine rule matching a bare variable head only would refuse it.
 #[test]
 fn a_polymorphic_definition_applied_to_two_proofs_converts() {
     assert_eq!(
@@ -110,7 +102,7 @@ fn an_intrinsic_applied_to_two_proofs_converts_at_their_proposition() {
     );
 }
 
-// The ordinary program the kernel's old order could not finish: a recursive function passing a proof along, unfolded under fresh binders at every round, so the conversion recurrence never saw its goal again and the kernel spent its whole budget before refusing.
+// An ordinary program that forcing first cannot finish: a recursive function passing a proof along, unfolded under fresh binders at every round, so the conversion recurrence would never see its goal again and would spend the whole budget before refusing.
 #[test]
 fn a_recursive_function_carrying_a_proof_converts_without_unfolding() {
     assert_eq!(
@@ -119,7 +111,7 @@ fn a_recursive_function_carrying_a_proof_converts_without_unfolding() {
     );
 }
 
-// The same function eliminating its proof in an arm, which the kernel refused outright once unfolded: the two eliminations differ only in their scrutinees, and a scrutinee is compared at `Type`.
+// The same function eliminating its proof in an arm, which unfolding first refuses outright: the two eliminations differ only in their scrutinees, and a scrutinee is compared at `Type`.
 #[test]
 fn a_recursive_function_matching_its_proof_converts() {
     assert_eq!(run(A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS), b"1");
@@ -134,7 +126,7 @@ fn two_accessibility_proofs_at_one_recursive_call_convert() {
     );
 }
 
-// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** Inside the arm of `match h(Top, Top)` the case equation makes that proof `refl`, the cast along it reduces, and Abel and Coquand's `Omega(h)` unfolds forever — no recursion anywhere, so the totality obligations have nothing to refuse. The elaborator reduced both proofs before asking what their type was, and ran out of budget comparing two inhabitants of `T`. Outside the arm the same comparison was always accepted. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
+// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** Inside the arm of `match h(Top, Top)` the case equation makes that proof `refl`, the cast along it reduces, and Abel and Coquand's `Omega(h)` unfolds forever — no recursion anywhere, so the totality obligations have nothing to refuse. Outside the arm the same comparison is accepted either way. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
 #[test]
 fn a_proof_is_not_reduced_to_compare_it_with_another() {
     assert_eq!(run(A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER), b"1");
@@ -142,23 +134,23 @@ fn a_proof_is_not_reduced_to_compare_it_with_another() {
 
 // **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
 //
-// The restriction is a proxy for that invariant rather than a second guarantee: a `Var` is as arbitrary a term as any other, and the invariant is a property of the *callers* rather than of this function. `struct_eta` now says so in its own documentation, which is where it was missing.
+// The restriction is a proxy for that invariant rather than a second guarantee: a `Var` is as arbitrary a term as any other, and the invariant is a property of the *callers* rather than of this function. `struct_eta` says so in its own documentation.
 //
-// This fixture used to be the sharpest spelling of "a nominal struct's eta survives an *untyped* position", and it is not any more: its comparison is `Sealed { one = p, two = q }` against `b` as arguments of `f`, and a spine's arguments now take the telescope their head carries. So the position is typed, the fixture reaches `struct_eta` from a typed goal, and what it still holds is the vacuous walk itself.
+// Its comparison is `Sealed { one = p, two = q }` against `b` as arguments of `f`, and a spine's arguments take the telescope their head carries, so the position is typed: the fixture reaches `struct_eta` from a typed goal, and what it holds is the vacuous walk itself.
 #[test]
 fn a_nominal_structs_eta_is_not_forfeited_there() {
     assert_eq!(run(A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE), b"1");
 }
 
-// **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. The kernel used to compare both at `Type` anyway and refused every proof-carrying value built from a different proof of the same fact — `Str/concat` did not associate, and `Vec/eq_of_list` exists because `Eq/refl()` was refused there. Both checkers now compare fields and payloads at the telescope, and the four equations below are the shapes that were refused: a field, a payload, a standard-library constructor, and the string law that first exposed it.
+// **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. Both checkers compare fields and payloads at the telescope; compared at `Type`, every proof-carrying value built from a different proof of the same fact would be refused, and `Str/concat` would not associate. The four equations below are those shapes: a field, a payload, a standard-library constructor, and the string law.
 #[test]
 fn a_proof_field_does_not_distinguish_two_literals() {
     assert_eq!(run(A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS), b"1");
 }
 
-// **`/std`'s own laws are what forced the rest of it.** `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`, and two things had to change for it to converge. The field compares at the function type the declaration gives it, where eta opens both sides at a fresh state, instead of at `Type` where a lambda never meets a projection. And a stuck *application* counts as the neutral inhabitant it is: `struct_eta` took a variable or a projection, so the law was refused not on its content but on the shape of the side it was stated against.
+// **`/std`'s own laws need the rest of it.** `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`, and two things make it converge. The field compares at the function type the declaration gives it, where eta opens both sides at a fresh state, rather than at `Type`, where a lambda never meets a projection. And a stuck *application* counts as the neutral inhabitant it is, where a `struct_eta` taking only a variable or a projection would refuse the law not on its content but on the shape of the side it is stated against.
 //
-// A refusal there fell through to `unfolded_retry`, and it still does — an application may have an unfolding left where a variable and a projection have none, so the eta attempt is tried first and a failure hands the pair on rather than deciding it.
+// A refusal there falls through to `unfolded_retry` — an application may have an unfolding left where a variable and a projection have none, so the eta attempt is tried first and a failure hands the pair on rather than deciding it.
 #[test]
 fn a_structs_function_field_meets_a_neutral_application() {
     assert_eq!(
@@ -167,7 +159,7 @@ fn a_structs_function_field_meets_a_neutral_application() {
     );
 }
 
-// The right identity is the same law with a variable on the neutral side, which `struct_eta` always admitted — so this one needed the typed field alone, and it is what separates the two halves of the change.
+// The right identity is the same law with a variable on the neutral side, which `struct_eta` admits as a variable — so this one needs the typed field alone, and it is what separates the two halves.
 #[test]
 fn a_structs_function_field_meets_a_neutral_variable() {
     assert_eq!(run(A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE), b"1");

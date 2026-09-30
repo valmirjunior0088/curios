@@ -30,7 +30,7 @@ pub struct Governing {
     pub umbrella: Option<Umbrella>,
     /// The umbrella's members by declared name, each with the directory its manifest sits in — empty when no umbrella governs, which is what makes every marker a mismatch there.
     ///
-    /// Read once, here, because every question about a member is answered against it: the dependency walk asks whether a `member` row names one and whether a direct pin may not, and `curate` asks where to look further. Two readers spelling the lookup for themselves came to two answers — one refused a member nothing declared and the other walked past it — and a fetch was performed on behalf of an umbrella the compile then refused.
+    /// Read once, here, because every question about a member is answered against it: the dependency walk asks whether a `member` row names one and whether a direct pin may not, and `curate` asks where to look further. Two readers spelling the lookup for themselves could come to two answers — one refusing a member nothing declared, the other walking past it — and fetch on behalf of an umbrella the compile then refuses.
     pub members: BTreeMap<String, PathBuf>,
     /// The governing root: the umbrella's directory when one governs, and the package's otherwise. `.curios/` sits beside it.
     pub root: PathBuf,
@@ -52,7 +52,7 @@ impl Governing {
 
     /// What governs an invocation started where the process is standing.
     ///
-    /// The working directory is read here rather than by each caller, because "where the invocation started" is this lookup's own input and every caller had to spell the same two lines to supply it.
+    /// The working directory is read here rather than by each caller, because "where the invocation started" is this lookup's own input and every caller would otherwise spell the same two lines to supply it.
     pub fn here(manifest: Option<&Path>) -> Result<Self, String> {
         let directory = std::env::current_dir().map_err(|error| error.to_string())?;
 
@@ -74,7 +74,7 @@ impl Governing {
     ///
     /// The explicit override exists for scripting, and it overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
     pub fn at(manifest: &Path) -> Result<Self, String> {
-        // Canonical through `identity`, which is what reads a bare `curios.toml` as the working directory's: its parent is `""`, which canonicalizes to nothing, and this used to refuse the file as missing.
+        // Canonical through `identity`, which is what reads a bare `curios.toml` as the working directory's: its parent is `""`, which canonicalizes to nothing, so canonicalizing the parent directly would refuse the file as missing.
         let manifest = identity(manifest);
 
         let Manifest::Package(package) = Manifest::from_path(&manifest)? else {

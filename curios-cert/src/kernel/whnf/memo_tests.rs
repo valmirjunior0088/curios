@@ -61,7 +61,7 @@ fn a_redefinition_clears_the_memos() {
 
 /// A term-keyed memo hit spends nothing, so the same closed term reduced twice within one declaration costs its full price once and O(1) after.
 ///
-/// This is what a hit charging the recorded cost of the computation it replaces got wrong. That charge prices what a memo-free evaluator would have spent rather than what this kernel did, and recorded costs compound — a subterm hit twice per level makes the charge exponential in a structure the memos evaluate linearly — which is how a 262 144-step budget came to be declared exhausted after 6 547 actual reduction steps.
+/// Charging a hit the recorded cost of the computation it replaces would price what a memo-free evaluator would have spent rather than what this kernel did, and recorded costs compound — a subterm hit twice per level makes the charge exponential in a structure the memos evaluate linearly.
 #[test]
 fn a_repeated_reduction_within_one_declaration_is_free() {
     let mut kernel = kernel();
@@ -89,7 +89,7 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
 
 /// What a declaration spends does not depend on what the declarations before it reduced. The first declaration here reduces a definition's body and then unfolds the definition by name, and the second unfolds it again: the second spends exactly what unfolding it costs a kernel that reduced nothing before it.
 ///
-/// It is the property a table outliving its declaration broke, whether its hits were free or charged at the price its first computation paid — which counted that computation's own free hits, so the declaration that unfolded a name first decided what every later one was charged. The occurrence is local-bearing, so it takes the strategy's delta rather than the closed machine.
+/// A table outliving its declaration would break it, whether its hits were free or charged at the price its first computation paid — which counts that computation's own free hits, so the declaration that unfolded a name first would decide what every later one is charged. The occurrence is local-bearing, so it takes the strategy's delta rather than the closed machine.
 ///
 /// Mutation-checked: keeping any reduct table across [`Kernel::restore_budget`] fails it.
 #[test]
@@ -117,7 +117,7 @@ fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
     );
 }
 
-/// Memoization may only *reduce* what a judgment spends. That is what makes free hits monotone against the kernel that shipped before them — no program that certified then can stop certifying now — and it is the half of the old bit-identical invariant this design keeps: a semantic refusal is budget-independent, so only an exhaustion point can move, and it can only move later.
+/// Memoization may only *reduce* what a judgment spends. That is what makes free hits monotone against an uncached kernel — no program it certifies stops certifying with the memos on — and it is the half of a bit-identical invariant this design keeps: a semantic refusal is budget-independent, so only an exhaustion point can move, and it can only move later.
 ///
 /// The subject reduces the same closed term twice in *separate* calls, so the inequality is strict: the memoized kernel's second call is a table hit where the uncached kernel runs the machine again. Repetition inside one call would no longer separate them, because the machine's own run-scoped values are a memo both kernels get.
 #[test]

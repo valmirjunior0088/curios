@@ -1,4 +1,4 @@
-//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the rows [`trace`](crate::trace()) wrote and recomputes the timings, allocation figures and magnitude distributions the old collector used to keep in memory.
+//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the rows [`trace`](crate::trace()) wrote and recomputes timings, allocation figures and magnitude distributions from them.
 //!
 //! Every statistic here is derived, which is the point. A duration is an exit differenced against its entry, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the `V` rows — so a question the columns below do not answer is asked of the file directly rather than by changing what a capture keeps.
 //!
@@ -6,7 +6,7 @@
 //!
 //! **A truncated stream folds.** Rotation discards the older file, so the surviving one can open in the middle of a span's life: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
 //!
-//! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process. Which files a rotated stream occupies is the writer's decision, so it is answered here rather than by whoever asks.
+//! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process.
 
 use {
     crate::{escape, predecessor},
@@ -158,7 +158,7 @@ pub fn fold_at(path: &Path) -> io::Result<ProfileReport> {
 impl ProfileReport {
     /// The report as tab-separated tables: the spans, the magnitude sites beneath them, and — for a stream whose run never returned — the stack it was inside.
     ///
-    /// One renderer, because there were two. The CLI and the prelude build script each formatted these columns by hand and had already drifted apart in which ones they printed, which is the drift a second implementation of one format buys.
+    /// The one renderer, so no two readers of a report print different columns of it.
     pub fn render(&self) -> String {
         let mut rendered = format!(
             "total_ms\tself_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tself_allocated_mb\tallocs\ttarget\tname\tgroup\t(peak {:.1} MiB)\n",
@@ -481,7 +481,7 @@ impl Fold {
         let Some(value) = field(columns, "value") else {
             return;
         };
-        // A magnitude is unsigned; a site that reported a negative one is read as having reported none of it, exactly as the collector this replaced did.
+        // A magnitude is unsigned; a site that reported a negative one is read as having reported none of it.
         let value = value
             .parse::<i64>()
             .map(|value| value.max(0) as u64)

@@ -1,4 +1,4 @@
-//! The lexical half of the kernel's state: assumptions, local definitions, counterfactual refinements, and the witness scope, all bracket-disciplined by `enter`/`leave`.
+//! The lexical half of the elaborator's state: assumptions, local definitions, counterfactual refinements, and the witness scope, all bracket-disciplined by `enter`/`leave`.
 //!
 //! Everything here lives and dies with binder frames — the opposite lifetime from the flat stores in [`Program`](super::Program) and [`Solutions`](super::Solutions). Cache coordination stays with the `Context` façade: a frame write that must clear or stamp the caches does so there, so this type's methods are pure store operations.
 //!
@@ -597,7 +597,7 @@ impl Frames {
             })
     }
 
-    /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so `solve_refinement_free`'s committed (refinement-free) spelling stays a term the live refinement can still fire on.
+    /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so a solution `solve_at_birth` commits with the live refinements suppressed stays a term the live refinement can still fire on.
     pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
         self.refinement_scrutinees
             .iter()
@@ -710,7 +710,7 @@ impl Frames {
             return (telescope.clone(), spine.clone());
         }
 
-        // One entry per name, at its innermost binding. `check_generalized_arm` re-`assume`s a generalized hypothesis under its case-specialized type and its *original* name, deliberately shadowing the ambient binder, so `local` can hold the same `Free` twice. Γ is a context rather than a stack of bindings: a shadowed entry is unreachable by construction, and leaving it in gives every metavariable born in such an arm a spine with a repeated argument — which `Convert::solve`'s inversion cannot invert, since a name reachable through two slots is not provably determined. The candidate is then refused by the scope check for mentioning a hypothesis that is plainly in scope, and the implicit surfaces as never solved.
+        // One entry per name, at its innermost binding. `retype_locals` re-`assume`s a generalized hypothesis under its case-specialized type and its *original* name, deliberately shadowing the ambient binder, so `local` can hold the same `Free` twice. Γ is a context rather than a stack of bindings: a shadowed entry is unreachable by construction, and leaving it in gives every metavariable born in such an arm a spine with a repeated argument — which `Convert::solve`'s inversion cannot invert, since a name reachable through two slots is not provably determined. The candidate is then refused by the scope check for mentioning a hypothesis that is plainly in scope, and the implicit surfaces as never solved.
         //
         // Keeping the *last* occurrence keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was itself generalized — that is what the generalization set is — so every mentioner is re-assumed after it, and no surviving entry refers to the occurrence that was dropped.
         let locals = &self.local[self.visible_local_start()..];
@@ -740,7 +740,7 @@ impl Frames {
         (telescope, spine)
     }
 
-    /// Freeze the live local frame (the way metavariable birth freezes Γ): the base frame persists for the whole elaboration, so only the local frames are captured, and they are the whole of a retry's context — `Context::with_retry_frame` hides whatever other frames are live when the retry runs, where this once assumed they had all popped.
+    /// Freeze the live local frame (the way metavariable birth freezes Γ): the base frame persists for the whole elaboration, so only the local frames are captured, and they are the whole of a retry's context — `Context::with_retry_frame` hides whatever other frames are live when the retry runs.
     pub(crate) fn freeze(&self) -> FrozenFrame {
         // The frames a retry would hide are not this problem's context either, so a problem parked during a retry freezes what the retry sees. Definitions are the exception, as they are for every lookup: a definition restored by being left live sits in a hidden frame, and is still the problem's.
         let from = self.retry_floor.unwrap_or(1);

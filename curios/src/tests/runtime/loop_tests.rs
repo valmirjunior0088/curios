@@ -5,17 +5,17 @@ use {
     curios_runtime::MockHost,
 };
 
-// `match_reads_an_effectful_scrutinee_once` stood here. It pinned erasure aliasing a non-variable scrutinee before projecting, and it could only *observe* that through a re-read: matching `Cell/get(c)` and writing the cell in the arm made a second erasure of the scrutinee visible as a wrong binder value. `Cell/get(c) : Io(Nat)` is no longer a scrutinee at all — `Io` has no eliminator — so the program is a type error rather than a regression fixture, and a scrutinee that type-checks is now pure, which makes re-erasing one unobservable. The aliasing itself still happens and still matters for code size; `tests::codegen` is where a claim about emitted shape belongs. `io_monad::an_io_scrutinee_is_refused` holds the typing half.
+// Erasure aliases a non-variable scrutinee before projecting, which matters for code size and is unobservable at run time: a scrutinee that type-checks is pure, since `Io` has no eliminator (`effects::an_io_scrutinee_is_refused` holds that half), so re-erasing one changes nothing a program sees. `tests::codegen` is where a claim about emitted shape belongs.
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
-    // The rope representation's whole promise: a naive packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step, Θ(n²), which at this count still burns minutes where the loop takes milliseconds; a regression fails on the suite's patience. The final slice + print also pins the force → memo → host-write path end to end.
+    // The rope representation's whole promise: a naive packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. A representation copying the accumulator per step would be Θ(n²), minutes at this count where the loop takes milliseconds, so a regression fails on the suite's patience. The final slice + print also pins the force → memo → host-write path end to end.
     //
-    // **This is the direct spelling, restored, and its compiling at all is the closed machine's living proof.** `Bytes/slice` states `10 <= Bytes/len(b)`, a *decided* proposition, so `built` stands in a type and the compiler runs the whole accumulation at elaboration — a closed evaluation the machine affords inside the default budget where the recursive strategy refused it sixteen times over at the historical count, and where the pre-cap fusion before that exhausted the host. The test therefore proves both halves at once: the type level evaluates a twenty-five-thousand-step closed fold without a frame row, and the emitted program runs the same loop over the rope in linear time. A `head_of` indirection kept the subject opaque through both earlier eras; `tests::numeric`'s `a_bound_behind_a_parameter_evaluates_nothing` still holds that spelling, as the proof that opacity computes nothing rather than as anyone's workaround.
+    // **This is the direct spelling.** `Bytes/slice` states `10 <= Bytes/len(b)`, a *decided* proposition, so `built` stands in a type and the compiler runs the whole accumulation at elaboration — a closed evaluation the machine affords inside the default budget. The test therefore proves both halves at once: the type level evaluates a twenty-five-thousand-step closed fold without a frame row, and the emitted program runs the same loop over the rope in linear time. `tests::numeric`'s `a_bound_behind_a_parameter_evaluates_nothing` holds the opaque spelling, as the proof that opacity computes nothing.
     //
-    // **The count moved from the historical 100 000 when the direct spelling returned**, because the spelling makes elaboration run the loop too, at a measured ~160 units an iteration across the two checkers — the historical count costs the type level sixteen million units and this one four, which keeps the test seconds while leaving a quadratic regression minutes. The discrimination the count exists for is unchanged.
+    // **The count is 25 000 because the spelling makes elaboration run the loop too**, at a measured ~160 units an iteration across the two checkers — four million units at this count, which keeps the test seconds while leaving a quadratic regression minutes.
     //
-    // The design this follows from is `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
+    // The design this follows from is `documentation/design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
         use /std/{Bytes, Nat, Str, Io};
@@ -36,7 +36,7 @@ fn accumulation_loops_are_linear_by_construction() {
 
 #[test]
 fn peel_loops_are_linear_by_construction() {
-    // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a fresh write-once `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout.
+    // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a fresh write-once `Cell` each step, so no compile-time pass can rescue it: a copying slice would be Θ(n²) and fail on the timeout.
     assert_eq!(
         run(r#"
         use /std/{Byte, Bytes, Nat, Str, Cell, Option, Io};
@@ -123,7 +123,7 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
 
 #[test]
 fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
-    // The immediate encoding end to end: leaves ride bare i31 payloads, nodes stay tagged tuples, and the match's kind test reunites them — over a runtime-tainted depth so the tree is genuinely built and walked in emitted code. Depth 4 numbers its 31 nodes 1..31, so the sum prints 496.
+    // The immediate encoding end to end: leaves ride bare i31 payloads, nodes stay tagged rows, and the match's kind test reunites them — over a runtime-tainted depth so the tree is genuinely built and walked in emitted code. Depth 4 numbers its 31 nodes 1..31, so the sum prints 496.
     let (system, io) = MockHost::builder().stdin_lines(["4"]).build();
     run_text(
         r#"
@@ -164,7 +164,7 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
 
 /// Narrowed through `try_to_nat` because the subject *is* a NaN on one edge — the fixture unwraps against `+nan.0` deliberately — so `NonNeg` is undischargeable by construction rather than by cost, and the deciding pair is the only correct shape. (`flt_of_str_returns_option` is the other side of that line: its subject is computed but always a number, so it takes the bounded form.)
 ///
-/// An `Option(Flt)` built in a bind's continuation, unwrapped against `+nan.0`, is the shape that ran the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and with `curios_cont::Literal::Flt` compared under IEEE equality `forward_continuations` read that untouched edge as rewritten on every round. The literal is bitwise now; this is the program that found it, kept so the fixpoint's convergence on a NaN-carrying edge is asserted end-to-end rather than only at the pass.
+/// An `Option(Flt)` built in a bind's continuation, unwrapped against `+nan.0`, is a shape that would run the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and were `curios_cont::Literal::Flt` compared under IEEE equality, `forward_continuations` would read that untouched edge as rewritten on every round. The literal compares bitwise, and this program keeps the fixpoint's convergence on a NaN-carrying edge asserted end-to-end rather than only at the pass.
 #[test]
 fn a_nan_default_on_a_runtime_option_converges() {
     assert_eq!(

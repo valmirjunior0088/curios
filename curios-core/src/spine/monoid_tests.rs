@@ -21,7 +21,7 @@ fn nats(run: impl IntoIterator<Item = u32>) -> Term {
     })
 }
 
-// **How a literal run is grouped is invisible to the peel, and that is the premise the fusion cap rests on.** Reduction fuses an all-literal concatenation into one value today; capping that leaves the `Concat` node standing instead, so a capped spelling and the literal it would have fused to must still decide equal. They do because `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges every pair of adjacent runs, so both groupings reach the same segment list before anything is compared.
+// **How a literal run is grouped is invisible to the peel, and that is the premise the fusion cap rests on.** Reduction fuses an all-literal concatenation into one value up to the cap and leaves the `Concat` node standing past it, so a capped spelling and the literal it would have fused to must still decide equal. They do because `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges every pair of adjacent runs, so both groupings reach the same segment list before anything is compared.
 //
 // A trailing symbolic operand is what makes this a test rather than a tautology: without it both sides are all-literal, reduction fuses each into one value on the way in, and the assertion holds without the peel having decided anything. With it, neither side fuses and the peel is the only thing that can equate them.
 #[test]
@@ -131,7 +131,7 @@ fn peel_bin_still_clashes_a_reordered_run() {
     );
 }
 
-// **A nesting the prefix step cannot enter still comes back flat.** Two sides whose leading chunks are unlike — convertible or not, the peel cannot tell — used to decline as `Undecided` with the nesting intact, and the caller's shape congruence then refused a two-operand concatenation against a three-operand one before comparing a single chunk. Regrouping is the identity on values, so both segment lists ride back on `Equivalent` and the caller's next round compares one operand list against another.
+// **A nesting the prefix step cannot enter still comes back flat.** Two sides whose leading chunks are unlike — convertible or not, the peel cannot tell — declined as `Undecided` with the nesting intact would let the caller's shape congruence refuse a two-operand concatenation against a three-operand one before comparing a single chunk. Regrouping is the identity on values, so both segment lists ride back on `Equivalent` and the caller's next round compares one operand list against another.
 #[test]
 fn peel_bin_regroups_a_nested_concat_whose_leading_chunks_differ() {
     let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));

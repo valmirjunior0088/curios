@@ -92,7 +92,7 @@ pub struct OsHost {
     args: Vec<Vec<u8>>,
     /// The blocking-DNS worker pool, started on the first `dns_lookup` so programs that never resolve a name pay for no threads.
     resolver: OnceLock<OsResolver>,
-    /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. The first host state with an exit obligation: a terminal left raw outlives the process that switched it.
+    /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. Host state with an exit obligation: a terminal left raw outlives the process that switched it.
     termios: Mutex<Vec<(Vec<u8>, Termios)>>,
 }
 

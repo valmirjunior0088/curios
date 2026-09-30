@@ -1,8 +1,6 @@
 //! The fold with the fixed prelude in front of it.
 //!
-//! **The scope-agnostic half is [`compile_entrypoint`], and it stays that way.** It takes a [`Prefix`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once.
-//!
-//! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(prelude), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
+//! **The scope-agnostic half is [`compile_entrypoint`], and it stays that way.** It takes a [`Prefix`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any prefix it likes.
 
 #[cfg(test)]
 mod tests;
@@ -35,9 +33,9 @@ where
 
 /// The standard fold: the fixed prelude's roots, then `units` compiled in the order given, each against everything before it, reusing what `cache` holds — what every entry point here puts in front of its subject, and so what each of them is a method of.
 ///
-/// **One value rather than three arguments, because the three are one decision.** Every entry point took the budget, the units and the cache and meant the same thing by them; what varied was the subject compiled on top. Spelled apart, that decision was restated at every call, and it pushed the entry points past the argument count a signature carries — the test build to eight, behind an allowance.
+/// **One value rather than three arguments, because the three are one decision.** Every entry point takes the budget, the units and the cache and means the same thing by them; what varies is the subject compiled on top. Spelled apart, that decision would be restated at every call and push the entry points past the argument count a signature carries.
 ///
-/// **The order *is* the dependency order.** Nothing here resolves or sorts one, because deciding a scope is still the caller's job and only the shape of the standard prefix is settled here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what a manifest's declared dependencies replace.
+/// **The order *is* the dependency order.** Nothing here resolves or sorts one, because deciding a scope is the caller's job and only the shape of the standard prefix is settled here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what a manifest's declared dependencies replace.
 #[derive(Clone, Copy)]
 pub struct Fold<'a> {
     budget: u64,

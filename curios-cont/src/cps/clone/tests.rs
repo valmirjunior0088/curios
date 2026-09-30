@@ -4,7 +4,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// `outer` binds a local, then defines `inner` inside its own body — and `inner` reads that local. The nesting is what every copier used to refuse, and the shared read is why a nested definition cannot be copied by a separate call: its body names a value the enclosing copy is renaming.
+/// `outer` binds a local, then defines `inner` inside its own body — and `inner` reads that local. The shared read is why a nested definition cannot be copied by a separate call: its body names a value the enclosing copy is renaming.
 fn nesting_module() -> (Module, FunctionId, FunctionId) {
     let mut module = Module::default();
     let param = module.add_value(Some("param".into()));
@@ -95,6 +95,6 @@ fn a_nested_definition_reads_the_copy_s_value_not_the_original_s() {
     let Node::ApplyCont(ref edge) = *module.node(copied_body).unwrap() else {
         panic!("the nested definition returns the local it read")
     };
-    // The whole reason the copiers had to become one: copying this definition separately would have left it naming a value the enclosing copy had already renamed.
+    // Copying this definition separately would leave it naming a value the enclosing copy has already renamed, which is why the copiers share one extent.
     assert_ne!(edge.args, vec![Atom::Value(original_local)]);
 }

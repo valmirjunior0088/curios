@@ -122,7 +122,7 @@ fn a_small_universe_is_admitted_where_a_larger_one_is_wanted() {
     ));
 }
 
-/// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w` is among the hypotheses — discarding them was the route by which a correct polymorphic definition was refused.
+/// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w` is among the hypotheses — discarding them would refuse a correct polymorphic definition.
 #[test]
 fn a_definition_checks_under_its_own_constraints() {
     let (u, w) = (

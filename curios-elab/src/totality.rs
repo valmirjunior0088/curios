@@ -10,9 +10,9 @@ use reach::*;
 #[cfg(test)]
 mod tests;
 
-/// Which half of erasure an obligation guards — `curios-cert`'s type, re-exported rather than restated.
+/// Which half of erasure an obligation guards — `curios-analysis`'s type, the one `curios-cert` names too, re-exported rather than restated.
 ///
-/// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it was two vocabularies that could drift while describing one thing. The certifier's is the one that survives, because it is the half `KernelError::NotTotal` already exports.
+/// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it would be two vocabularies that could drift while describing one thing.
 pub use curios_analysis::Erased;
 use {
     super::{Context, Error, is_prop, zonk},
@@ -28,11 +28,7 @@ use {
     },
 };
 
-/// Every top-level definition's totality.
-///
-/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
-///
-/// `inherited` carries the totality of definitions `module` references but does not define — the replayed prelude prefix. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program. Classify one definition against the verdicts already recorded, and record it.
+/// Classify one definition against the verdicts already recorded, and record it, by the rule [`classify_module`] states.
 ///
 /// The whole-module pass needs a fixpoint because it sees every item at once. Items arrive here in dependency order, so everything a definition mentions is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
 pub fn record_definition_totality(
@@ -55,11 +51,6 @@ pub fn record_definition_totality(
     Ok(())
 }
 
-/// Obligation (T), at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
-///
-/// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
-///
-/// It reads the *lowered* type, before elaboration touches it, so the mentions it sees are the written ones. That is why it is an early net rather than a replacement: the post-zonk gate still runs, and still sees everything elaboration produces.
 /// The first global `term` names by spelling whose recorded totality is not total — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
 pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
     term.free_vars()
@@ -72,7 +63,7 @@ pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global>
         })
 }
 
-/// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate used to spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/language/totality-of-the-erased-program.md`'s.
+/// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate would otherwise spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
 pub(crate) fn exhausted_bound(
     context: &Context,
     error: Error,
@@ -91,6 +82,11 @@ pub(crate) fn exhausted_bound(
     }
 }
 
+/// Obligation (T), at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
+///
+/// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
+///
+/// It reads the *lowered* type, before elaboration touches it, so the mentions it sees are the written ones. That is why it is an early net rather than a replacement: the post-zonk gate still runs, and still sees everything elaboration produces.
 pub fn check_written_type_totality(
     context: &mut Context,
     type_: &Term,
@@ -106,6 +102,11 @@ pub fn check_written_type_totality(
     }
 }
 
+/// Every top-level definition's totality.
+///
+/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
+///
+/// `inherited` carries the totality of definitions `module` references but does not define — its predecessor units'. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program.
 pub fn classify_module(
     context: &mut Context,
     module: &Module,
@@ -278,16 +279,14 @@ fn faults(
 
 /// Every term either erased-half obligation has zonked, shared across both of them and across both the types they test and the terms they keep.
 ///
-/// Not an optimization detail but a contract. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice. Measured over the prelude: 185,271 entries collapse to 31,955 distinct recorded types, zonked at 27.6 s in one pass and 27.3 s in the other, the same work to three digits; and 59,818 kept positions collapse to 17,051 distinct terms.
+/// Not an optimization detail but a contract. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice, and hash-consing collapses the recorded entries to far fewer distinct types and terms.
 ///
 /// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the passes for the reason either could memoize alone — the solution set is final once `zonk_module` has run.
 ///
-/// The cost is memory. This is held across both obligations rather than dropped between them, and the prelude's peak rose 52 MiB when it started spanning them. That is the trade; the cache is not free, it is cheaper than the work it removes.
+/// The cost is memory: this is held across both obligations rather than dropped between them. That is the trade; the cache is not free, it is cheaper than the work it removes.
 pub type Zonked = HashMap<Term, Term>;
 
-/// `term` zonked, through `cache`.
-///
-/// The four call sites that need this are two types and two terms across the two obligations; before this they were four copies of the same match, two of which had no cache at all.
+/// `term` zonked, through `cache`: the two types and two terms the two obligations zonk.
 fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Error> {
     if let Some(done) = cache.get(term) {
         return Ok(done.clone());
@@ -316,9 +315,9 @@ pub fn check_type_totality(
 
 /// The terms elaboration settled *at a sort* — a term whose type is `Type` or `Prop` is itself a type, wherever it was written.
 ///
-/// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a motive, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` handed a partial value to a type-level function with nothing seeded, while the same type in an annotation was rejected.
+/// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a motive, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` would hand a partial value to a type-level function with nothing seeded, while the same type in an annotation is rejected.
 ///
-/// The two seedings are **incomparable**, not nested, which a count of each obscured: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope — the re-derivation that cost (V) six defects. Taking the union costs one pass over already-recorded terms and needs neither.
+/// The two seedings are **incomparable**, not nested: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope. Taking the union costs one pass over already-recorded terms and needs neither.
 fn checked_type_positions(
     context: &mut Context,
     cache: &mut Zonked,
@@ -384,7 +383,7 @@ fn checked_proof_positions(
     let mut positions = Vec::new();
 
     for (term, type_, site) in checked {
-        // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question and the one that was being re-asked: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one — 185,271 entries over the prelude, measured before this memo existed. Keying the outer memo on the raw type rather than folding both into one map is what keeps `is_prop`'s dedup exactly as wide as it was — raw types that differ but zonk alike still share a verdict.
+        // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one. Keying the outer memo on the raw type rather than folding both into one map keeps `is_prop`'s dedup as wide as the zonked types — raw types that differ but zonk alike still share a verdict.
         //
         // Sound because zonk is a pure function of the solution set, and the solution set is final here: `zonk_module` has run, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
         let type_ = zonked(context, cache, &type_)?;
@@ -445,7 +444,7 @@ fn report(
 ///
 /// A member of a partial group may not have a sort in an *extractable* position of its type: its codomain after peeling arrows, or any component reachable by projection. Parameter positions are exempt, so an ordinary partial polymorphic program keeping `@A : Type` is untouched.
 ///
-/// This exists because `rec Bad : Type = (Bad) -> False` overflows the compiler's stack while elaborating its first *use* — reducing `Bad` rebuilds an arrow whose domain is `Bad` — which is long before any whole-module gate runs. Without it the compiler aborts where it should diagnose. The closure form is what makes the language sound; this is what makes it answer.
+/// This exists because `let Bad: Type = (Bad) -> False;` unfolds without end while elaborating its first *use* — reducing `Bad` rebuilds an arrow whose domain is `Bad` — which is long before any whole-module gate runs. Without it the compiler reports a spent budget where it should name the definition. The closure form is what makes the language sound; this is what makes it answer.
 pub fn check_rec_totality(
     context: &mut Context,
     group: &RecGroup,
@@ -494,7 +493,7 @@ type LocalMemo = HashMap<Term, bool>;
 
 /// Whether `term` contains a call to a diverging host row or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
 ///
-/// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so the native per-node recursion this replaces cost one stack frame per byte *and* re-walked the shared tail once per position — quadratic in the literal's length. Measured on a 640-byte literal, that was 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright. Depth is not steps, so the reduction budget cannot bound either one.
+/// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so a native per-node recursion would cost one stack frame per byte *and* re-walk the shared tail once per position — quadratic in the literal's length. Depth is not steps, so the reduction budget cannot bound either one.
 ///
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
 fn locally_partial(

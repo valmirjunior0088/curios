@@ -13,7 +13,7 @@ fn literal_prints_its_bytes() {
     assert_eq!(run(source), b"hello");
 }
 
-// A literal's proof is `True/qed()` against the decided `Valid` — constant size, discharged by running the scan over the bytes — so the term is a packed `Bytes` and an O(1) proof, and what bounds a literal's length is the reduction budget. It was not always: the proof used to be a right-nested derivation of an inductive validity family, one link per byte, and elaborating it overflowed a default 2MB test thread near ~50 bytes. This 500-byte literal is an order of magnitude past that old cliff and no longer reaches deeply into anything; it is kept as the regression against a literal's cost becoming linear in its length again.
+// A literal's proof is `True/qed()` against the decided `Valid` — constant size, discharged by running the scan over the bytes — so the term is a packed `Bytes` and an O(1) proof, and what bounds a literal's length is the reduction budget. This 500-byte literal is the regression against a literal's cost becoming linear in its length: a proof built as a right-nested derivation of an inductive validity family, one link per byte, would reach as deep as the literal is long.
 #[test]
 fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff

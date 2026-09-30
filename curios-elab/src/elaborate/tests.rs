@@ -505,7 +505,7 @@ fn a_num_lit_realizes_at_bool_only_for_zero_and_one() {
     assert!(elaborate(&mut context, &negative, Mode::Check(bool_())).is_err());
 }
 
-/// A monad's shape reads its context arguments as probes: one the budget cannot afford propagates the refusal, where it used to key on nothing — compatible with any region — and let the `!` oracle go ahead on that reading.
+/// A monad's shape reads its context arguments as probes: one the budget cannot afford propagates the refusal, rather than keying on nothing — compatible with any region — and letting the `!` oracle go ahead on that reading.
 #[test]
 fn a_context_argument_the_budget_cannot_read_propagates_the_refusal() {
     let mut context = Context::new(100_000, SYNTAX);

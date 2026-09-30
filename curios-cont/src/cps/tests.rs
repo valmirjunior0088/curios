@@ -9,7 +9,7 @@ use {
     std::collections::BTreeMap,
 };
 
-/// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping, which is how this was found.
+/// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping.
 #[test]
 fn a_later_split_moves_every_group_past_it() {
     let mut module = Module::new();
@@ -131,7 +131,7 @@ fn verifier_rejects_intrinsic_arity_mismatch() {
     );
 }
 
-/// The vocabulary clause of `verify_rows`: a value minted as a structural tuple and read as a row — the rebuild `split_returns` used to emit for a class whose only own return edges were tail calls — is refused here, not at the `ref.cast` the emitter would otherwise produce for it. The mirror mismatch, a row read structurally, is refused by the same clause.
+/// The vocabulary clause of `verify_rows`: a value minted as a structural tuple and read as a row — the rebuild a per-function `split_returns` would emit for a class whose only own return edges are tail calls — is refused here, not at the `ref.cast` the emitter would otherwise produce for it. The mirror mismatch, a row read structurally, is refused by the same clause.
 #[test]
 fn verifier_rejects_a_read_in_the_other_vocabulary() {
     for (minted_as_row, read_as_row) in [(false, true), (true, false)] {
@@ -267,7 +267,7 @@ fn list_map_is_not_an_intrinsic_opcode() {
 
 #[test]
 fn every_guarded_operation_is_classified_as_trapping() {
-    // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard, while a wildcard defaulting to `Total` would answer `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
+    // Each of these emits a guard in `into_wasm`, while a wildcard defaulting to `Total` would answer `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
     for op in [
         Intrinsic::FltOfLeBytes,
         Intrinsic::FltToNat,

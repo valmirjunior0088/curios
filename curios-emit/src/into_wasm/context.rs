@@ -212,9 +212,9 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// Refuse to hand an aggregate construction to a register.
     ///
-    /// A `Tuple` or `List` construction is a heap reference, so loading one at a scalar carrier emits `ref.cast (ref i31)` over a `struct.new`. That traps at run time, in a function far from whatever decided the carrier, which is exactly how it went unnoticed.
+    /// A `Tuple` or `List` construction is a heap reference, so loading one at a scalar carrier emits `ref.cast (ref i31)` over a `struct.new`. That traps at run time, in a function far from whatever decided the carrier.
     ///
-    /// **The representation analysis does not rule this out, which is why the check is here.** An aggregate's own definition offers `Offer::Never`, so no demand settles raw on *it* — but a continuation parameter it flows into is `Offer::Open` and settles raw from its own uses, whatever reaches it, and the edge then coerces every argument to that carrier before anything looks at what it is. So the invariant is the *door's*: `curios-ersd`'s lowering must never route an aggregate into a parameter something reads as a scalar. It broke once, when an immediate arm's binder was aliased to its scrutinee and the payload had no definition of its own to refuse the demand; the only symptom was a program that trapped for every input but zero. Both halves of the population are checked — a region binding and a `hoist`ed const — and both are pinned by `should_panic` fixtures in this module's tests.
+    /// **The representation analysis does not rule this out, which is why the check is here.** An aggregate's own definition offers `Offer::Never`, so no demand settles raw on *it* — but a continuation parameter it flows into is `Offer::Open` and settles raw from its own uses, whatever reaches it, and the edge then coerces every argument to that carrier before anything looks at what it is. So the invariant is the *door's*: `curios-ersd`'s lowering must never route an aggregate into a parameter something reads as a scalar. It breaks where an immediate arm's binder is aliased to its scrutinee, leaving the payload no definition of its own to refuse the demand — which is why `curios_cont::Intrinsic::ImmediateGet` exists. Both halves of the population are checked — a region binding and a `hoist`ed const — and both are pinned by `should_panic` fixtures in `aggregate_tests`.
     ///
     /// A panic rather than a diagnostic, per this workspace's rule for invariants: a program's fault is reported to its author, but this crate's own broken contract is not something to emit code for.
     fn refuse_raw_aggregate(&self, value_name: &EmissionValueName, load_as: &LoadAs) {
@@ -293,7 +293,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
-            // A packed value is small-canonical — an immediate inside its grain's envelope, a rope past it — so a position demanding the rope goes through its grain's box helper, which materialises an immediate and casts (trapping on null) exactly as the bare cast here used to. The grain rides the load because the two immediate layouts share no runtime discrimination.
+            // A packed value is small-canonical — an immediate inside its grain's envelope, a rope past it — so a position demanding the rope goes through its grain's box helper, which materialises an immediate and casts (trapping on null) as a bare cast would. The grain rides the load because the two immediate layouts share no runtime discrimination.
             LoadAs::Bin(grain) => {
                 let func_name = match grain {
                     Grain::X => self.table().bytes_box_func(),
@@ -316,9 +316,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine integer: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating to a word for a position, refusing past the host wire's `i64`. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
     ///
-    /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` made two, with the common case on the straight line. A block cannot consume a value from outside itself, which is what put the producer in here rather than a scratch local every narrowing in a function wrote.
-    ///
-    /// **Measured against that scratch local** (2026-09-22, x86-64 Linux, release, best of five after a warmup, whole process): `chain` −4%, `churn` −4.5%, `spines` −2%, `trees` unchanged, `lcg` +2%. The likely reason for `lcg`, unconfirmed: its loop narrows the counter for its dispatch and then tests the same counter's i31 for the monus fast path, and two `ref.test`s over one local were a value Binaryen could share, where a branch is not. `br_on_cast`, taking the branch on the common case, measured worse on `lcg` (+3%) for the same gains. Retake by compiling `programs/{lcg,trees,chain,churn,spines}` with each build and timing `echo N | ./program` at `benchmarks/entrypoint.sh`'s sizes, the builds interleaved.
+    /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` would make two, with the common case on the straight line. A block cannot consume a value from outside itself, which is why the producer runs in here rather than into a scratch local every narrowing in a function would write.
     fn narrow_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
@@ -414,7 +412,7 @@ impl<'a, 'b> Context<'a, 'b> {
     ///
     /// **A resume parameter is a reference, with one exception the analysis is allowed to make.** `represent.rs` withdraws the register offer on every continuation a call, a cell operation or a call-shaped intrinsic returns to, because the emitter hands those results over as references and has no cheaper store to make. A host import is withdrawn the same way but for one wire type: an `Flt` result crosses back as a raw `f64`, so its parameter is held in a register and `local_type` declares it `f64`.
     ///
-    /// The assert states the rest rather than trusting it — any *other* raw carrier here is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back. `Repr::Flt` is admitted rather than the assert being dropped, because it is the only carrier a host result can now legitimately arrive at and every other one is still a bug.
+    /// The assert states the rest rather than trusting it — any *other* raw carrier here is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back. `Repr::Flt` is admitted rather than the assert being dropped, because it is the only carrier a host result can legitimately arrive at, and every other one is a bug.
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
         let block_data = self.find_block(resume);
 
@@ -722,7 +720,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
 
-        // The special field is the body's `i32` table index; `call_indirect` reads the funcref out of the table itself, so nothing here materializes one. A shell's zeroed field selects the null slot and traps, exactly as the null funcref did.
+        // The special field is the body's `i32` table index; `call_indirect` reads the funcref out of the table itself, so nothing here materializes one. A shell's zeroed field selects the null slot and traps.
         output.push(curios_wasm::Instr::StructGet {
             type_name: envr_type,
             field_name: self.table().special_field(),
@@ -1077,7 +1075,7 @@ impl LoadAs {
     }
 }
 
-/// How a host-import operand of the given wire type is loaded at the call site: a `Bool` or a `Byte` as its word, a `Nat` or `Int` narrowed to the wire's `i32` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: a `Bool` or a `Byte` as its word, a `Nat` or `Int` narrowed to the wire's `i64` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {

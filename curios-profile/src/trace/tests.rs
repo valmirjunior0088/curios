@@ -59,7 +59,7 @@ fn a_span_is_written_as_creation_entry_exit_and_close() {
     );
 }
 
-// A callsite is named once however many spans it opens: the `D` row is the definition and every later row refers to it by index. This is what keeps a row narrow enough to write 350 thousand of them.
+// A callsite is named once however many spans it opens: the `D` row is the definition and every later row refers to it by index, which keeps every other row narrow.
 #[test]
 fn a_callsite_is_defined_once_and_referred_to_by_index() {
     let buffer = Buffer::default();
@@ -78,7 +78,7 @@ fn a_callsite_is_defined_once_and_referred_to_by_index() {
     }
 }
 
-// Every field is written, whatever its type and whatever its name. The collector this replaced visited exactly one field of one event and dropped the rest, so a field added at a call site was silently discarded; the point of the stream is that it cannot be.
+// Every field is written, whatever its type and whatever its name, so a field added at a call site cannot be silently discarded.
 #[test]
 fn every_field_a_span_or_an_event_carries_is_written() {
     let buffer = Buffer::default();
@@ -121,7 +121,7 @@ fn a_field_holding_a_tab_or_a_newline_is_escaped() {
     assert_eq!(rows.lines().count(), 6, "{rows}");
 }
 
-// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count. Falsifiable only because this crate installs its counting allocator in every binary it is linked into, its own test binary included; see `count.rs`.
+// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count.
 #[test]
 fn a_boundary_carries_the_allocator_readings() {
     let buffer = Buffer::default();

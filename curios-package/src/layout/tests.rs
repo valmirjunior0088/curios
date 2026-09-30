@@ -95,7 +95,7 @@ fn a_stem_claimed_twice_is_refused() {
 
 /// The stem space is the package root's, not the library's: a package of nothing but programs has one too.
 ///
-/// **The regression for the rule having been enforced from inside the library's own branch.** `package_source` returned early for a package with no `lib.crs` and only then checked stems, so a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — was refused in a package with a library and accepted in one without. Adding or deleting a header turned the rule on and off for a manifest that had not changed, and `curios new` scaffolds a header, so the check was present exactly while a project stayed conventional.
+/// Checked only inside the library's own branch, a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — would be refused in a package with a library and accepted in one without, so adding or deleting a header would turn the rule on and off for a manifest that had not changed.
 #[test]
 fn a_stem_claimed_twice_is_refused_without_a_library() {
     let directory = package(
@@ -145,8 +145,7 @@ fn an_executable_outside_the_root_claims_no_stem_in_it() {
     package_at(&directory).expect("an executable outside the package root");
 }
 
-/// An umbrella compiles nothing of its own, and saying so beats an absent-library refusal about a file it never wanted.
-/// A row may point below the root, into a module's namespace directory, and a `mod` there may reach the same file. The refusal names the row and the module, where the module loader used to report a parse error at the program's first token.
+/// A row may point below the root, into a module's namespace directory, and a `mod` there may reach the same file. The refusal names the row and the module, where the module loader alone would report a parse error at the program's first token.
 #[test]
 fn an_executable_the_library_declares_as_a_module_is_refused() {
     let directory = package(
@@ -169,6 +168,7 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
     );
 }
 
+/// An umbrella compiles nothing of its own, and saying so beats an absent-library refusal about a file it never wanted.
 #[test]
 fn an_umbrella_is_not_a_unit() {
     let directory = package("layout-umbrella", "members = [\"json\"]\n", &[]);

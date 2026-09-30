@@ -8,7 +8,7 @@ use {
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.
 ///
-/// The two travel together because every store consults both — the local to write, and the name to know whether that local holds a register or a reference. Passing them separately is what pushed the checked-overflow helpers past seven parameters, and pairing them says more than the parameter count it saves.
+/// The two travel together because every store consults both — the local to write, and the name to know whether that local holds a register or a reference.
 struct Dest<'a> {
     value_name: &'a EmissionValueName,
     local: curios_wasm::LocalName,
@@ -959,7 +959,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// A suffix: the same helper as a window, with the count the *rope* decides rather than one an operand supplied.
     ///
-    /// **This is the only place a compiler-emitted window's extent is derived, and it derives it from the value.** Every window the compiler emits is a suffix — `into_cont`'s peel is the sole producer — and before this each lowering computed `len - start` for itself, which is an agreement between two crates rather than a fact about the rope. A start past the end underflows the subtraction to a count no run could hold, which the slice helper's own bounds test refuses exactly as it refuses the overshoot it is written for.
+    /// **This is the only place a compiler-emitted window's extent is derived, and it derives it from the value.** Every window the compiler emits is a suffix — `into_cont`'s peel is the sole producer — and deriving `len - start` in each lowering would be an agreement between two crates rather than a fact about the rope. A start past the end underflows the subtraction to a count no run could hold, which the slice helper's own bounds test refuses exactly as it refuses the overshoot it is written for.
     fn emit_rope_rest(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -1222,7 +1222,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a packed append with the immediate split. A base inside its grain's envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
     /// Force both operands and hand their payloads, with the run's own length, to the shared combiner.
     ///
     /// **The forcing is here rather than inside the helper**, which is what lets one grain-free helper serve both grains: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. The length comes off the left operand because a payload's extent is not the run's at the bit grain, where `ceil(len/8)` bytes hold `len` bits.
@@ -1263,6 +1262,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
     }
 
+    /// Lower a packed append with the immediate split. A base inside its grain's envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
     fn emit_bin_append(
         &mut self,
         grain: Grain,
@@ -1509,7 +1509,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Read field `index` through the object's *exact* tuple type, trying `arities` in order and casting on the last.
     ///
-    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through any more — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its constructor's, which `cps/fields.rs` makes false whenever a narrow constructor materialises at its region's width. The order is a preference only.
+    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its construction's, which `curios-cont`'s field split makes false whenever a narrow tuple materialises at its region's width. The order is a preference only.
     fn tuple_get_cascade(
         &self,
         operand: &'a EmissionValueName,
@@ -1517,7 +1517,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         arities: &[usize],
     ) -> Vec<curios_wasm::Instr> {
         match arities {
-            // No arity at all: a value read through a cascade nothing constructed, which the door's padding makes impossible; reaching it is a compiler bug.
+            // No arity at all: a read the roster was not sized for, which the table's sizing from every projection makes impossible; reaching it is a compiler bug.
             [] => self
                 .context
                 .table()
@@ -1764,7 +1764,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::NatEqz | curios_cont::Intrinsic::IntEqz => {
                 self.emit_eqz(dest, &args[0])
             }
-            // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so the reversed range the `(start, end)` window also had to reject cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided. The words are narrowed, so a count no sequence holds saturates and fails the guard; what passes is handed on as the `Nat` it arrived as.
+            // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so a reversed range cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided. The words are narrowed, so a count no sequence holds saturates and fails the guard; what passes is handed on as the `Nat` it arrived as.
             curios_cont::Intrinsic::WindowExtent => {
                 let (start, count, len) = (&args[0], &args[1], &args[2]);
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
@@ -1914,7 +1914,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::FltToLeBytes => {
                 let operand = &args[0];
-                // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped, rather than shifted in i32 as binary32's was. Every pattern is written as it is, a NaN's sign and payload included: the check after each arithmetic operation is what makes those the model's.
+                // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped. Every pattern is written as it is, a NaN's sign and payload included: the check after each arithmetic operation is what makes those the model's.
                 let bits_local = self.context.push_local(
                     "flt_bits",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I64),
@@ -2361,10 +2361,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             curios_cont::Intrinsic::TupleGet(index) => {
-                // Widest first: widening only ever widens, and in every row measured the wide
-                // constructor is the hot one — `fork` over `leaf`, `cons` over `nil`, `some` over
-                // `none` — so the first test usually hits. The roster is module-global and small
-                // (2 to 5 across the whole corpus), so the chain is short whatever the order.
+                // Widest first, a preference only: the roster is module-global and small, so the chain is short whatever the order.
                 let mut arities: Vec<usize> = self
                     .context
                     .table()

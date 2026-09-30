@@ -9,7 +9,7 @@ use super::test_support::*;
 
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
-    // A `Str` literal, because a numeral no longer serves: `0` realizes at an expected `Bool` since numerals became the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
+    // A `Str` literal, because a numeral does not serve: `0` realizes at an expected `Bool`, numerals being the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
     let entrypoint =
         r#""zero""#.parse::<Entrypoint>().unwrap().with_type("/std/Bool".parse().unwrap());
 
@@ -27,7 +27,7 @@ fn entrypoint_type_is_used_as_expected_type() {
 
 #[test]
 fn an_entrypoint_type_may_apply_a_type_former() {
-    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::ListType`, and the mismatch was reported between two spellings of one type — `List Nat` against `List(Nat)`.
+    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it would reach conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::ListType`, and the mismatch would be reported between two spellings of one type — `List Nat` against `List(Nat)`.
     let source = r#"
         use /std/{List, Nat};
         [1]
@@ -38,7 +38,7 @@ fn an_entrypoint_type_may_apply_a_type_former() {
 
 #[test]
 fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
-    // `f`'s implicit domain meets `(Nat) -> Option(?X)` with `?X` never pinned — and minted under the lambda's own binder, so the embedded-metavariable guard's containment exemption cannot commit the candidate and it postpones. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched. (A bare `f(Option/none())` no longer serves: `?X` is then contained in the implicit's own scope, the forced solution commits, and the honest residue is the uninferred implicit itself.)
+    // `f`'s implicit domain meets `(Nat) -> Option(?X)` with `?X` never pinned — and minted under the lambda's own binder, so the embedded-metavariable guard's containment exemption cannot commit the candidate and it postpones. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched. (A bare `f(Option/none())` does not serve: `?X` is then contained in the implicit's own scope, the forced solution commits, and the honest residue is the uninferred implicit itself.)
     let source = r#"
         use /std/{Nat, Option, Io};
 
@@ -90,7 +90,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 
 #[test]
 fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
-    // The Item 2 acceptance shape: the proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
+    // The proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
         use /std/Str/{Valid};
         use /std/{Nat, Byte, Bytes, Bool, Io};
@@ -267,7 +267,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 
     assert!(typecheck(source, Some("/std/Nat")).is_ok());
 
-    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is a typeless local `let`'s body, which is where a region's type is still inferred: the entrypoint tail is always checked now.
+    // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is a typeless local `let`'s body, which is where a region's type is still inferred: the entrypoint tail is always checked.
     let unpinned = r#"
         use /std/{Parse};
         let bad =
@@ -281,7 +281,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 
 #[test]
 fn closure_returning_a_bare_projection_lowers() {
-    // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to a higher-order function over an empty array, never constructs a tuple anywhere in the module — yet lowering must still emit the arity-1 tuple type the projection reads through. The wasm `Table` sizes its tuple types from the max arity it sees; scanning only tuple *constructions* missed this projection-only arity and panicked "`Table` lacks tuple type for arity `1`". Guards folding projection (`index + 1`) and prealloc arities into that scan.
+    // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to a higher-order function over an empty array, never constructs a tuple anywhere in the module — yet lowering must still emit the arity-1 tuple type the projection reads through. The wasm `Table` sizes its tuple types from the max arity it sees; scanning only tuple *constructions* would miss this projection-only arity and panic "`Table` lacks tuple type for arity `1`". Guards folding projection (`index + 1`) and prealloc arities into that scan.
     let source = r#"
         use /std/{List};
         use /std/{Nat};

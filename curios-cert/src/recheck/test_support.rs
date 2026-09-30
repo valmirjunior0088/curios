@@ -1,6 +1,6 @@
 //! The hand-built adversarial modules the recheck suites forge, and the declarations they forge them from.
 //!
-//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
+//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Verdict::NotAsked` in `curios/src/tests/perimeter/test_support.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
@@ -345,7 +345,7 @@ pub(super) fn indexed_module(target: Term) -> Module {
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        // The family states one index, because its constructor aims at one. Declaring none while a constructor targets one is a malformed declaration in its own right, which the terminal clause now reports as an arity.
+        // The family states one index, because its constructor aims at one. Declaring none while a constructor targets one is a malformed declaration in its own right, which the terminal clause reports as an arity.
         arity: Telescope::done(Telescope::build(
             [(
                 Free::local(902, Some("i")),
@@ -1598,7 +1598,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     }
 }
 
-/// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's plicity vector either honest or empty.
+/// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's plicity vector either honest or lying.
 pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());

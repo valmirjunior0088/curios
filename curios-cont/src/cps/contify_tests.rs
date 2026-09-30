@@ -209,7 +209,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
 
 #[test]
 fn does_not_contify_a_multi_site_function() {
-    // Two return contexts: single-site placement cannot cover both, so this is left for common-dominator contification in the machine CFG.
+    // Two return contexts: single-site placement cannot cover both, so the helper stays a function.
     let (mut module, helper) = helper_called(true);
     assert!(
         !contify_calls(&mut module),

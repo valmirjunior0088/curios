@@ -55,7 +55,7 @@ pub let max(a: Nat, b: Nat) -> Nat =
 
 --- `base` to the power `exp`.
 ---
---- By squaring, so the cost is the exponent's bit width rather than the exponent: the spine this replaced multiplied `exp` times.
+--- By squaring, so the cost is the exponent's bit width rather than the exponent, where a spine would multiply `exp` times.
 pub let pow(base: Nat, exp: Nat) -> Nat =
     match exp == 0
     | true => 1
@@ -79,7 +79,7 @@ pub let log2(n: Nat) -> Nat =
 
 --- The floor of the square root. General recursion, so a type may not mention it.
 ---
---- Newton's iteration from a power of two above the root, so the cost is the root's bit width rather than the root: counting up to it, as this once did, takes `2⁶⁴` steps for a 128-bit `n`, which the machine word used to make unreachable and an unbounded `Nat` does not.
+--- Newton's iteration from a power of two above the root, so the cost is the root's bit width rather than the root: counting up to it would take `2⁶⁴` steps for a 128-bit `n`, an input an unbounded `Nat` holds.
 pub let sqrt(n: Nat) -> Nat =
     let go(x: Nat) -> Nat =
         match x

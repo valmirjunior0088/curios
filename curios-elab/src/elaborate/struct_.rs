@@ -121,7 +121,7 @@ pub(super) fn check_dependent_fields(
     elaborated: &mut Vec<Term>,
 ) -> Result<(), Error> {
     curios_profile::profile!("struct::check_dependent_fields");
-    // One walk, each field type opened once at every field before it: reopening the rest after each field rewrote every later type, whose metavariable spines name every earlier field, which made a long literal cubic.
+    // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
         FieldSource::Written(field) => check(context, field, ty),
         FieldSource::Resolve { func, edge } => {
@@ -239,7 +239,7 @@ pub(super) fn elaborate_struct(
         ));
     }
 
-    // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a former superclass is just an unknown field, caught by the positional validation below.
+    // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a superclass is just an unknown field, caught by the positional validation below.
     let labels = field_telescope.labels();
     let plain_labels: Vec<&str> = labels
         .iter()
@@ -281,7 +281,7 @@ pub(super) fn elaborate_struct(
         if let Some((_, edge)) = use_positions.iter().find(|(index, _)| *index == position) {
             sources.push(match fill_values.next() {
                 Some(fill) => FieldSource::Written(fill),
-                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
+                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and a placeholder label would read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
                     func: CalleeId::Function(Free::Global(*name)),
                     edge: edge

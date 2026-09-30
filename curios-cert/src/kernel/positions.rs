@@ -2,7 +2,7 @@
 //!
 //! This is the kernel's *output*, not an input: nothing here is consulted to decide whether a term is well-typed. It is collected during the typing walk because that is the only place the answer is available, and drained per item by `Kernel::take_checked`.
 //!
-//! **Classified when recorded, never afterwards.** A position's type routinely mentions the binders the item opened, and those are retracted the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and failing quietly is how positions across a tenth of the fixed prelude came to be silently unconstrained.
+//! **Classified when recorded, never afterwards.** A position's type routinely mentions the binders the item opened, and those are retracted the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and a quiet failure would leave positions silently unconstrained.
 //!
 //! Three things make that workable and all three are this component's rather than a caller's: sort-hood is memoized per *distinct type*, so classifying at every record site costs one question per type rather than one per position; a classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn.
 

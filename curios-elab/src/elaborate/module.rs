@@ -104,7 +104,7 @@ fn add_arity_sizing(
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 ///
-/// **`plicity` says what each position binds as, and every caller states it.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope has always done for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it. A caller whose telescope has no witness entry says so by answering `Explicit` everywhere, rather than inheriting it from a default nobody restates.
+/// **`plicity` says what each position binds as, and every caller states it.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it. A caller whose telescope has no witness entry says so by answering `Explicit` everywhere, rather than inheriting it from a default nobody restates.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
@@ -344,7 +344,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         return Ok(());
     };
 
-    // Obligation (T)'s early net, on the one written type position that rides on no definition's type. Every other declaration position reaches it through some `Definition`: a parameter through the type former's own type, an `induct` payload through its constructor wrapper's, a `concept` method through the method wrapper's. A field is projected rather than constructed, so no wrapper names it, and until this ran the field type below was elaborated with nothing having looked at it — a productive `Shape(inf)` then unfolded until the stack died.
+    // Obligation (T)'s early net, on the one written type position that rides on no definition's type. Every other declaration position reaches it through some `Definition`: a parameter through the type former's own type, an `induct` payload through its constructor wrapper's, a `concept` method through the method wrapper's. A field is projected rather than constructed, so no wrapper names it, so without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
     //
     // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
     let mut written = &struct_decl.arity;
@@ -451,7 +451,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
 ///
 /// A level occurring in both a binder domain and the result sort stays in the interface — the caller chooses it, and the result merely mentions it.
 ///
-/// Only a terminal that *is* a sort states a result sort. A terminal applying a name carries that occurrence's instance, which `UniverseSolver::finalize` settles by the occurrence's bounds; read as a result sort, a witness goal's levels went to zero whether a caller could choose them or not.
+/// Only a terminal that *is* a sort states a result sort. A terminal applying a name carries that occurrence's instance, which `UniverseSolver::finalize` settles by the occurrence's bounds; read as a result sort, a witness goal's levels would go to zero whether a caller could choose them or not.
 fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
     fn peel<'a>(term: &'a Term, domains: &mut Vec<&'a Term>) -> &'a Term {
         match &**term {
@@ -671,7 +671,7 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
         return;
     }
 
-    // Both invariants below belong to the lowerer, and both are stated rather than tolerated because `elaborate_struct` now *opens* this telescope instead of re-checking it: a silent return would leave the raw arity in place with nothing downstream left to notice.
+    // Both invariants below belong to the lowerer, and both are stated rather than tolerated because `elaborate_struct` *opens* this telescope instead of re-checking it: a silent return would leave the raw arity in place with nothing downstream left to notice.
     let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
         unreachable!("a parameterized struct's type-former is declared at a function type");
     };
@@ -736,7 +736,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
 
-    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity. Pre-insertion the two were interchangeable; no longer.
+    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity.
     context.define_assuming(&name, &type_, &body, Some(&def.kind));
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
@@ -1093,7 +1093,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             );
         }
     }
-    // The solutions committed while the group elaborated are terms it produced too, and a later zonk substitutes them long after this rewrite — the proof-totality check fills in every type elaboration recorded, and a goal's report its scope — so they are stamped as a registry entry is, being stored outside the group. `Eq()(a, a)` in a constructor's payload solved `Eq`'s `@A` to the member's reduct from before its generalization, with no instance, and `Eq()`'s recorded type carried it into that check.
+    // The solutions committed while the group elaborated are terms it produced too, and a later zonk substitutes them long after this rewrite — the proof-totality check fills in every type elaboration recorded, and a goal's report its scope — so they are stamped as a registry entry is, being stored outside the group. `Eq()(a, a)` in a constructor's payload solves `Eq`'s `@A` to the member's reduct from before its generalization, with no instance, and `Eq()`'s recorded type carries it into that check.
     let restamped = context
         .solutions_since(solved_from)
         .into_iter()
@@ -1123,7 +1123,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         })
         .collect();
     let rec = RecItem::try_new(definitions)?;
-    // Before the members are defined into the context, because the shape this rejects makes reducing a *use* of one of them overflow the stack.
+    // Before the members are defined into the context, because the shape this rejects makes reducing a *use* of one of them unfold without end.
     check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
@@ -1169,7 +1169,7 @@ fn elaborate_module_item(
 
     let item_names = item.describe();
     let owner = item.declared_names().first().copied();
-    // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is 1079 declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
+    // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is over a thousand declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
     curios_profile::profile!("declaration", group = %item_names);
 
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
@@ -1245,7 +1245,7 @@ struct ElaboratedSuffix {
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
 ///
-/// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the cached prelude for a replay; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement. There used to be: the replay path transcribed this function's thirteen steps inline and threaded the prelude through them, and the two copies agreeing was maintained by reading. That is the shape every configuration-dependent defect in this subsystem has had — a rule correct in the configuration its author was looking at and wrong in the other one.
+/// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
 /// The scope diverges at exactly one point: after [`check_concept_registry`], its definitions are *replayed* into the context rather than elaborated.
 fn elaborate_module_suffix(
@@ -1450,9 +1450,9 @@ fn elaborate_module_suffix(
 
 /// Elaborate the entry at the type it states — first the type, then the body against it — or, where it states none, infer the body's; either way the rebuilt entry states the type its body was judged at.
 ///
-/// A stated type is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it stayed exactly as lowered, so `List(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
+/// A stated type is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it would stay exactly as lowered, so `List(Nat)` would reach conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
 ///
-/// The rebuilt entry carries the type it was judged at whether it was stated or inferred, because every stage after this one reads it there: the kernel rechecks the body against it, `zonk` walks it, and erasure seals the entry at it. Keeping only a written annotation left the program contract a compile supplies nowhere in the module, so the kernel inferred the body's type rather than checking it, and erasure took the type from a second channel.
+/// The rebuilt entry carries the type it was judged at whether it was stated or inferred, because every stage after this one reads it there: the kernel rechecks the body against it, `zonk` walks it, and erasure seals the entry at it. Keeping only a written annotation would leave the program contract a compile supplies nowhere in the module, so the kernel would infer the body's type rather than check it, and erasure would take the type from a second channel.
 fn elaborate_entry(
     context: &mut Context,
     entry: Option<&Entrypoint>,
@@ -1493,7 +1493,7 @@ pub struct FinalizedProgram {
 
 /// Finalize an elaborated module, and a program's entry beside it, and run the **soundness perimeter** over them.
 ///
-/// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: the checks were previously written out at each entry point, so "what does soundness depend on?" was answered by diffing two call sites, and a check added to one and not the other would have degraded the claim silently for every real compilation.
+/// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: written out at each entry point, "what does soundness depend on?" would be answered by diffing call sites, and a check added to one and not the other would degrade the claim silently for every real compilation.
 ///
 /// The order is load-bearing, in three places:
 ///
@@ -1501,7 +1501,7 @@ pub struct FinalizedProgram {
 /// - [`Context::restore_budget`] precedes the passes because they reduce, and each has to spend on the same footing as an item rather than on whatever the last item left.
 /// - [`record_totality`] precedes both gates, which read the flags it stamps.
 ///
-/// `check_positivity` is independent of the rest and could sit anywhere after the zonk. `inherited` carries the classifications of a replayed prefix, whose own verdicts were settled when its archive was built; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
+/// `check_positivity` is independent of the rest and could sit anywhere after the zonk. `inherited` carries the classifications of the units in scope, whose own verdicts were settled when each was elaborated; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
 fn finalize_and_check(
     context: &mut Context,
     module: Module,
@@ -1536,7 +1536,7 @@ fn finalize_and_check(
         .transpose()?;
     context.restore_budget();
 
-    // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
+    // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. The module in hand is this unit's own, which is what this must see — a predecessor's entries carry the vectors computed when it was elaborated, and since a predecessor cannot mention a successor they are sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
     record_totality(context, &mut module, inherited)?;
 
@@ -1681,14 +1681,14 @@ fn elaborate_and_zonk(
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
         let elaborated = elaborate_module_suffix(context, established, module, minted, tail)?;
-        // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
+        // The scope's own stamps come out of their units already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
         let inherited = established.recorded_totality();
         let finalized =
             finalize_and_check(context, elaborated.module, elaborated.entry, &inherited);
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
-        // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
+        // Nothing is merged back in. The unit's items, the unit's declarations: what a predecessor contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
         let Finalized {
             module,
             entry,
@@ -1714,7 +1714,7 @@ pub struct Recompile<'a> {
 
 /// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
 ///
-/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one and both cost well under a second. The witness-cycle check stays the closure's: a cycle through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
+/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one. The witness-cycle check stays the closure's: a cycle through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
 /// **A run that refused nothing may still have kept fewer items than it was handed**, so the reassembly is told what was dropped rather than left to read it off an absence. An item withheld for reaching a broken name records no refusal — that is `recovery`'s decision and the whole-unit path's behaviour — and the early return below therefore does not catch it. Such a run never becomes a unit: poison exists only where something was refused or the lowering reported an item broken, and `with_broken` turns the second into a failure before anything is judged, erased or filed.
 pub fn elaborate_and_zonk_unit_over(

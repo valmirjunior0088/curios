@@ -10,7 +10,7 @@ fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// The `Async/join_all` idiom: a recursive group function called by the computed member's eager initializer. The first run's verifier over-rejected this shape; it is a supported program.
+/// The `Async/join_all` idiom: a recursive group function called by the computed member's eager initializer — a supported program.
 #[test]
 fn a_join_all_shaped_knot_verifies() {
     let mut builder = ErsdBuilder::new();
@@ -107,7 +107,7 @@ fn a_backward_computed_reference_verifies() {
         .expect("backward evaluation is supported");
 }
 
-/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size`. Forced by need, that is legal — reading `size` runs its initializer first — where it once read an unfilled cell (`1` where the language says `43`, on the `curios` probe that found it) and was then refused for a while.
+/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size`. Forced by need, that is legal — reading `size` runs its initializer first.
 #[test]
 fn a_forward_reference_through_a_called_function_is_forced_first() {
     let mut builder = ErsdBuilder::new();
@@ -447,7 +447,7 @@ fn an_unused_direct_self_knot_is_admitted() {
 
 #[test]
 fn a_used_direct_self_knot_is_rejected() {
-    // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. It was admitted with the unused shape and trapped as a black hole at runtime; a self-read is an edge like any other once something forces the member.
+    // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. A self-read is an edge like any other once something forces the member, so this is refused here rather than admitted with the unused shape to trap as a black hole at runtime.
     let mut builder = ErsdBuilder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
@@ -573,7 +573,7 @@ fn an_unsaturated_direct_application_is_rejected() {
     );
 }
 
-/// The mapper is `ListMap`'s second operand — the list comes first, like every sequence operation. The rule once read the first operand, whose list value never looks like a function atom, and so checked nothing.
+/// The mapper is `ListMap`'s second operand — the list comes first, like every sequence operation. A rule reading the first operand would check nothing, since a list value never looks like a function atom.
 #[test]
 fn a_two_parameter_mapper_is_rejected() {
     let mut builder = ErsdBuilder::new();
@@ -805,7 +805,7 @@ fn a_projection_out_of_range_is_rejected() {
     );
 }
 
-/// A deeply nested module verifies (and a malformed one diagnoses) on the default test-thread stack: the walk is iterative, so nesting depth costs heap, not native stack.
+/// A deeply nested module verifies (and a malformed one diagnoses) on the default test-thread stack: the walk recurses inside `recurse`, which continues on a fresh stack segment rather than overflowing the thread's.
 #[test]
 fn a_deep_module_verifies_without_native_stack() {
     let builder = deep_switch_chain(50_000, false);

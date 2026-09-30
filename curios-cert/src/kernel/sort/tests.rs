@@ -139,7 +139,6 @@ fn a_list_of_proofs_is_not_a_proposition() {
     assert_eq!(Sort::of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
 }
 
-/// The type of a hypothesis is read off the binder it was opened at, which is how a `Prop`-typed variable is recognized as a proof.
 /// A recursive group's claim about its own member is not what decides that member's sort.
 ///
 /// [`Sort::of`] reduces before it classifies, and forcing unfolds a projection to the member's body — so the sort reported is the body's, read honestly, rather than the `member_type` the group asserts. That matters because the projection arm answers through [`synth_neutral`](super::synth_neutral), which is a *lookup*: it reads the group's claim and checks nothing, and it has to stay that way, since certifying there would re-enter the very group whose member types are being sorted.
@@ -165,6 +164,7 @@ fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
     );
 }
 
+/// The type of a hypothesis is read off the binder it was opened at, which is how a `Prop`-typed variable is recognized as a proof.
 #[test]
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut kernel = kernel();
@@ -207,7 +207,7 @@ fn binder(index: u32, hint: &str) -> Free {
 
 // === The `Instance` arm, which drops its levels ==========================
 //
-// `Sort::of`'s `Instance` arm classifies the head and drops the instance — the clause `documentation/soundness/per-term-rules/universe-instance-discharge.md` left standing on a reachability argument, attacked 2026-08-17. The audit enumerated what reaches it: `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it, and a rec-projection head steps to an instantiated projection. The three fixtures below hold one leg each, and together they are why the dropped levels cannot move a verdict.
+// `Sort::of`'s `Instance` arm classifies the head and drops the instance — the clause `documentation/design/soundness/formation/universe-instances-and-constraints.md` leaves standing on a reachability argument: `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it, and a rec-projection head steps to an instantiated projection. The three fixtures below hold one leg each, and together they are why the dropped levels cannot move a verdict.
 
 /// The one production-reachable head: a local. A local is monomorphic — it was opened at one type, so there is no scheme to instantiate — and its sort is its binder's, whatever levels the wrapper states and however many. The width-2 vector is deliberate: even an instance no typing rule would admit cannot move the lookup, because the arm never reads it.
 #[test]
@@ -258,7 +258,7 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
     );
 }
 
-/// The one route that does bring a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — is refused, not captured: the arm drops the levels and classifies the bare head, which [`Kernel::type_of`]'s bare-occurrence rule refuses. That is the safe direction, and it is also an over-refusal this fixture pins as *latent*: the occurrence states its instance, so the correct answer is the instantiated scheme's sort, exactly what [`synth_neutral`](super::synth_neutral)'s own `Instance` arm computes for the same head inside a spine. It stays latent because nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and `Globals::of` records bodies for every `Let` and `Rec` — so only [`Kernel::declare`], a public API with no production caller, can build this state. Verified while attacked: the refusal below, against the acceptance the fixture above shows for the same scheme with a body.
+/// The one route that does bring a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — is refused, not captured: the arm drops the levels and classifies the bare head, which [`Kernel::type_of`]'s bare-occurrence rule refuses. That is the safe direction, and it is also an over-refusal this fixture pins as *latent*: the occurrence states its instance, so the correct answer is the instantiated scheme's sort, exactly what [`synth_neutral`](super::synth_neutral)'s own `Instance` arm computes for the same head inside a spine. It stays latent because nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and `Globals::of` records bodies for every `Let` and `Rec` — so only [`Kernel::declare`], a public API with no production caller, can build this state. The refusal below stands against the acceptance the fixture above shows for the same scheme with a body.
 #[test]
 fn a_universe_instance_over_a_bodiless_scheme_is_refused_rather_than_captured() {
     let mut kernel = kernel();

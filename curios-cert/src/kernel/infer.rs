@@ -10,7 +10,7 @@
 //!
 //! Three term forms are elaboration-only — a metavariable, an unresolved infix operator, and a polymorphic numeric literal — and reaching one means a term arrived here before elaboration finished with it. Refusing them is what makes "the kernel checks finished terms" a checked statement rather than a convention.
 //!
-//! Beyond those, the kernel refuses whatever it cannot determine. A type whose sort is unclear, a nominal name with no declaration, a list literal with no element to read a type from: each is a refusal, never a default. The reason is in the [`kernel`](super) module documentation — a guessed answer from a second opinion is worse than no second opinion.
+//! Beyond those, the kernel refuses whatever it cannot determine. A type whose sort is unclear, a nominal name with no declaration: each is a refusal, never a default. The reason is in the [`kernel`](super) module documentation — a guessed answer from a second opinion is worse than no second opinion.
 
 mod eliminate;
 use eliminate::check_induct_arms;
@@ -49,11 +49,11 @@ use {
 
 /// The type of `term`.
 ///
-/// A child position is checked by descending into it. `check` is `infer` followed by `subsumes`, so `infer → check → infer` costs two native frames per link of a right-nested chain, and a `Str` literal's UTF-8 derivation is one such link per byte — depth as a function of the *data* rather than of what anyone wrote, measured at 21.5KiB per level in a debug build. [`recurse`] is what makes that affordable; a budget cannot, since a budget bounds steps and depth is not steps.
+/// A child position is checked by descending into it. `check` is `infer` followed by `subsumes`, so `infer → check → infer` costs two native frames per link of a right-nested chain, and a `Str` literal's UTF-8 derivation is one such link per byte — depth as a function of the *data* rather than of what anyone wrote. [`recurse`] is what makes that affordable; a budget cannot, since a budget bounds steps and depth is not steps.
 ///
-/// This once drove an explicit worklist instead, and the worklist quietly changed the *rule*: a deferred child was inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction. Since the deferred positions are exactly arguments, constructor payloads and record fields, that made a lambda or a dependent tuple in argument position take the inferred route and manufacture the non-dependent type those rules exist to avoid. Nothing in the prelude or corpus reached the shape, so it never surfaced. See `documentation/soundness/per-term-rules/checked-rules-at-deferred-child-positions.md`.
+/// Deferring children onto an explicit worklist instead would change the *rule*: a deferred child is inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction — and the deferred positions are exactly arguments, constructor payloads and record fields, so a lambda or a dependent tuple in argument position would take the inferred route and manufacture the non-dependent type those rules exist to avoid. See `documentation/design/soundness/typing/checked-rules-at-deferred-child-positions.md`.
 ///
-/// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path made a three-character claim in a type cost 677,246 inferences. Typing a type as written rather than its reduct left that standing: without the memo, `Str/split_once` and `Str/trim` claims in a type do not finish in 300 s, where they take half a minute with it. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
+/// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path is exponential in the claim's length. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     recurse(|| {
         // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a local-free term names no member.
@@ -76,7 +76,7 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 inferred
             }
         };
-        // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
+        // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions would leave a diverging proof in a scrutinee unseeded, and the elimination would conjure a relevant value from it.
         let position = kernel.record_checked(term, &inferred);
         if kernel.partial_groups() > before {
             kernel.enclose_partial(position);
@@ -244,7 +244,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
         // A fully applied nominal family has the sort its declaration states, and its arguments have the types the declaration states *them* at.
         //
-        // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and were checked there; the shapes are typing's, and reading one unestablished is what admitted `Eq(@True)(0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` discharges both by irrelevance and `refl` inhabits the forgery, whose elimination then transports between two instances of a relevant family.
+        // Every rule that consults a declaration reads those arguments — `Sort::of` for the sort, the arm rule for a constructor's signature, inversion for its index targets, `induct_type_args` for a comparison — and each reads them at the declared domain. Nothing established they inhabit it. Counts are the boundary's job and are checked there; the shapes are typing's, and reading one unestablished would admit `Eq(@True)(0, 1)` as a type: `0` and `1` are `Nat`s claiming a `Prop`-sorted domain, so `induct_type_args` would discharge both by irrelevance and `refl` would inhabit the forgery, whose elimination then transports between two instances of a relevant family.
         Subterm::InductType(family) => {
             let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
@@ -271,7 +271,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
         // A constructor application: its signature, instantiated at the declaration's parameters, ends in the type it constructs — including the index targets this particular case aims at.
         //
-        // The parameters are typed first, as an occurrence's are, and for the same reason: the signature is read at them and the constructed type carries them, so every rule that meets the value reads them at the declared domains. Only counted, a value handed its family's arguments on its own word — `false` where the declaration says `Nat` — and nothing downstream looked again.
+        // The parameters are typed first, as an occurrence's are, and for the same reason: the signature is read at them and the constructed type carries them, so every rule that meets the value reads them at the declared domains. Only counted, a value would hand over its family's arguments on its own word — `false` where the declaration says `Nat` — and nothing downstream would look again.
         Subterm::Variant(Variant {
             name,
             universes,
@@ -428,11 +428,11 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
 /// Establish that `type_` is a type by **typing** it, and hand back the sort it lands in.
 ///
-/// The kernel had two ways to accept a type: this judgment, and `Sort::of`, which classifies a term structurally without typing it. Only one of them is a judgment, and the classifier was the one every caller used — so a declared type reached reduction, conversion and erasure having been *read* rather than *checked*, and every function downstream trusted a shape nothing had established. That is the root the motive clause, the β step, the elimination arm and the recursive twin all came through.
+/// `Sort::of` classifies a term structurally without typing it, and only this is a judgment: a declared type accepted by the classifier would reach reduction, conversion and erasure having been *read* rather than *checked*, and every function downstream would trust a shape nothing established.
 ///
-/// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate now.
+/// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate.
 ///
-/// **The type is typed as written.** It was once reduced first and its reduct typed: an application of a former types at the former's promised codomain, and while the elaborator let an occurrence's level float above its argument's, `List.{u}(Waker)` sat at a parameter where its reduct `ListType(Waker)` sat at the `Type 0` the constructor size condition needs — typing the written spelling cost the standard library 46 declarations. Reading the reduct also accepted what a redex dropped, an argument or an arm, with nothing having typed it. The elaborator now settles an occurrence at its recorded floor, its argument's level (`curios-elab`'s `UniverseSolver::finalize`), so a written type lands in the sort its reduct does and the size condition loses nothing to reading it.
+/// **The type is typed as written**, never its reduct, which would accept what a redex dropped — an argument or an arm — with nothing having typed it. The elaborator settles an occurrence at its recorded floor, its argument's level (`curios-elab`'s `UniverseSolver::finalize`), so a written type lands in the sort its reduct does and the constructor size condition loses nothing to reading it.
 pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
     let inferred = infer(kernel, type_)?;
 
@@ -441,13 +441,13 @@ pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Kern
 
 /// A motive is a claim the term makes about its own result, and two rules downstream read it: `infer` takes the elimination's type from it, and `Sort::of` classifies a type-valued `match` by it. Nothing established that the claim is true — the arms are checked *against* the motive, which a lie survives, because a motive reduces honestly at each arm's concrete case while reading as whatever it states at the abstract binders. So the motive is checked here, generically, and required to land in a sort.
 ///
-/// Coq's `type_of_case` is this clause: compute the predicate's type, reduce it, `destSort` it, and refuse with a dedicated `error_elim_arity` otherwise. Without it a motive may state `Prop` while its arms inhabit `Type`, and `guard_large_elimination` — which returns immediately when the result is not relevant, because a proposition eliminated into a proposition needs no condition — never runs. That was a two-constructor proposition eliminated into `Nat`, certified with zero refusals.
+/// Coq's `type_of_case` is this clause: compute the predicate's type, reduce it, `destSort` it, and refuse with a dedicated `error_elim_arity` otherwise. Without it a motive may state `Prop` while its arms inhabit `Type`, and `guard_large_elimination` — which returns immediately when the result is not relevant, because a proposition eliminated into a proposition needs no condition — never runs, which would certify a two-constructor proposition eliminated into `Nat`.
 ///
 /// The binders are the motive's real ones: the family's own index domains, then the scrutinee at the family instantiated *at those binders* rather than at the elimination's actual indices. Opening at the actuals instead would check the motive at one instance and miss exactly the lie, since a motive scrutinising its own index binder reduces once that index is concrete.
 ///
 /// Placed before the dispatch in [`check_cases`], so it covers every `Cases` form with one clause and does not inherit `check_induct_arms`'s skip for a vacuous elimination: an elimination that cannot run still hands its caller a type read off this motive. No exploit through that path was demonstrated; what makes it unconditional is that the type propagates whether or not the elimination runs.
 ///
-/// The sort it derives is handed to the guard, which used to re-ask `Sort::of` under binders it assumed at `Type` — a second reading of the same question, and the one that was wrong.
+/// The sort it derives is handed to the guard, so the question is asked once, under the real binders.
 fn check_motive(
     kernel: &mut Kernel,
     family: Option<&InductType>,
@@ -549,7 +549,7 @@ fn check_cases(
             };
             let at = kernel.induct_at(family)?;
 
-            // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this whole clause exists to remove.
+            // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this clause exists to avoid.
             if !(cases.is_empty() && default.is_none()) {
                 eliminate::guard_large_elimination(kernel, &at, family, motive_sort)?;
             }
@@ -1054,7 +1054,7 @@ fn infer_lambda(kernel: &mut Kernel, func: &Func, arguments: &[Term]) -> Result<
 
 /// Check that every domain of a λ's telescope is a type, then its body under those binders, rebuilding the telescope as the Π the λ inhabits.
 ///
-/// One walk under one retraction bracket, each domain opened once at the binders before it and the Π built in one pass at the end — where recursing into the reopened rest and re-closing each level rewrote the whole inner telescope once per binder.
+/// One walk under one retraction bracket, each domain opened once at the binders before it and the Π built in one pass at the end — where recursing into the reopened rest and re-closing each level would rewrite the whole inner telescope once per binder.
 ///
 /// A binder with an argument in `arguments` stands for it within the bracket, to the call recorder alone — a size fact, never an equation the typing sees, so the Π built is the λ's own.
 fn infer_telescope(

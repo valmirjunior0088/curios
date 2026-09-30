@@ -1,8 +1,8 @@
 //! The certifying half of the fixed prelude's build.
 //!
-//! `curios-prelude-archive` produced an image. This restores it, walks every item with the independent kernel, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
+//! `curios-prelude-archive` produced one image per root. This restores them, walks every item with the independent kernel, each root against the roots before it, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 //!
-//! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. What it does file is the one thing a later walk reads of it: the certifier's record of each root's definitions — their totality, closed over what each mentions — at `certification.rkyv` under `OUT_DIR`, with which the crate certifies the units it restores.
+//! The compiled crate is the verdict. What the script files is the one thing a later walk reads of it: the certifier's record of each root's definitions — each one's totality and what judging it read — at `certification.rkyv` under `OUT_DIR`, with which the crate certifies the units it restores.
 
 use {
     curios_cert::{Globals, Rechecked, certify_module},

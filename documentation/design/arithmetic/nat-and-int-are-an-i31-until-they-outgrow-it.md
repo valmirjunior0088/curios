@@ -1,0 +1,27 @@
+# Nat and Int are an i31 until they outgrow it
+
+**Decision.** `Nat` and `Int` are unbounded at every layer, the running program included. At run time both share one form: a reference that is an `i31ref` read signed while the value lies in `[-2³⁰, 2³⁰)`, and otherwise a `$big`, a sign and a trimmed little-endian array of 32-bit limbs that never holds a value inside that range, so every value has one spelling and an i31 is never equal to a `$big`. Each arithmetic operation has an inline fast path on two i31s and otherwise calls the `big/` helper library `curios-emit` emits beside the program; none refuses a result for its size. `ENVELOPE_BITS`, in `curios-cont`, bounds the fast path and nothing else.
+
+- **An operation whose meaning needs a width belongs to a carrier with a width.** `/std/Byte`'s bitwise operations, shifts and rotations are ordinary definitions over `to_nat` and `Nat/to_byte`, restating the eight bits; an arbitrary-width word is `/std/Bits`, whose width is its length.
+- **A narrowing refuses or saturates, and never hands a consumer a changed value.** The host wire refuses: a `Nat` crosses below `2⁶⁴` and an `Int` inside `[-2⁶³, 2⁶³)`, as the `i64` both hosts read, and a larger one stops the program with the `nat_wire` or `int_wire` sentence ([A refusal is a panic the emitter renders](../lowering/a-refusal-is-a-panic-the-emitter-renders.md)); a result crosses back as the raw `i64` and the guest boxes it. A position, a count and a switch key saturate at `2³² - 1` where nothing can reach that index or count, so the saturation changes no answer; a shift's count, which a result can reach, is taken exactly, and a result past what the runtime can hold is refused, and `curios-ersd` decides a dispatch key at or past `2³⁰` by equality. A `Flt` narrowing carries its domain as evidence, `NonNeg` or `Finite`.
+- **A register holds a word only when every value it can be handed is one.** A `Bool`, a byte, a bit and a tag are words below `2³⁰`; a `Nat` or `Int` is read at `Repr::Number`, held as a word only where it is a small literal, a result its literal operands bound (`x % k`, `x & k`, `k - x`, `k / x`, `k >> x`), or a continuation parameter every argument to which is one. A length is a `Nat`.
+- **A field holding a `Nat` or `Int` is a reference**, and a family whose one unary constructor carries one rides it bare, since the final `$big` is disjoint from every row ([A variant collapses when nothing needs to distinguish it](../lowering/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)).
+- **Folding below Core declines past its allowance.** `curios-ersd` folds under `MAX_FOLD_BITS` and `curios-cont` under the same allowance, and a declined fold means what a fired one does; `curios-num`'s `scalar` takes the allowance as a parameter and states no width. A folded constant past the i31 is built once from a passive data segment of its limbs.
+
+**Rationale.**
+
+- **A proof over Core's `Nat` has to be true of the compiled program**, and an unbounded carrier makes it so without asking the program to leave the theory's types. The i31 fast path keeps the common case cheap: a value that stays small never allocates and never calls, behind one tag check on the reference the engine already holds.
+- **Core is the oracle.** An erased stage, a folder and the running program each produce Core's value or decline, never a third value; `curios/src/tests/numeric` folds and executes each operation from one expression and runs a differential grid across limb boundaries and signs against `curios-num`.
+- **Nothing partial makes reordering free.** `curios-ersd`'s monoid rebase registers every commutative monoid with a single identity on associativity alone, since no order of combination can refuse where another computes.
+- **The helper library is below the perimeter**, emitted code like every lowering: the kernel trusts `Intrinsic::signature` and the fold laws, which unboundedness leaves unchanged.
+- **What it costs at run time** is a tag test per operand on the fast path, and a reference rather than a word wherever a large value could arrive — a field, and a register some flow hands one.
+
+**Rejected.**
+
+- **Refusing past the i31**, which keeps every theorem true by stopping the program, and sends a program needing `2³⁰` to a bit-level big-number library.
+- **A 31-bit wrapping `Nat`**, as OCaml's `int` and Rocq's `Uint63`: a backend's width in a theory built unbounded, and `n + 1 > n` false of the type theorems are stated over.
+- **Big numbers on the host**, through an `externref` to GMP: every slow operation a host call, and the browser answering with `BigInt`, a second implementation both hosts must agree with bit for bit.
+- **An `i32` wire**, which splits every 64-bit host quantity — a file's size, a time, a count — into base-10⁹ limbs and refuses a count past `2³¹`.
+- **A 64-bit middle tier**, a third form in every test for a range the limbs cover; **64-bit limbs**, which WebAssembly cannot multiply exactly.
+- **`Byte` as a refinement struct**, `{ code: Nat, ok: Bool/Holds(code < 256) }`: reduction is untyped, so a binder's `.code` stops `(256·q + r.code) / 256` reducing, and the free-monoid peel manufactures `Byte(u8)` values out of packed runs where `/sys` cannot name a `/std` struct.
+- **A width-indexed `Word` family**, which would unify `Bool` and `Byte` while sharing no behaviour, destabilizing `Bool`, which every comparison returns and every bound is stated through.

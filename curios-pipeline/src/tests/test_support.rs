@@ -89,7 +89,7 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
 
 /// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the program's own items erased onto it and its entry sealed — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
-/// It used to erase *fresh*, passing the whole module to an erasure entry of its own, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
+/// Replayed rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
     let (program, _foreigns, _records) = with_prelude(|prelude| {
@@ -119,7 +119,7 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
 
 // --- The unit boundary ----------------------------------------------------
 //
-// These are the tests the specification insists come in a pair. A unit boundary is not packaging: it is where coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the second because the rule never ran.
+// These tests come in a pair. A unit boundary is not packaging: it is where coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the second because the rule never ran.
 
 /// Compile `sources` as units in order, then `entrypoint` as the entry against all of them.
 pub(crate) fn compile_with_units(

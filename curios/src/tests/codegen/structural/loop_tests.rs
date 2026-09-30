@@ -1,16 +1,12 @@
 //! Hot loops and recursion: single-entry continuations, natural loops, scalars in registers, and no irreducible fallback.
 
-//! Structural acceptance fixtures. Each test compiles a small `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural property of the emitted code — a clean natural loop for a hot kernel, direct recursion, the closure ABI only where a call is genuinely unknown — and that the raw module validates and executes without Binaryen repairing control flow.
-//!
-//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
-
 use crate::tests::{cont_optm_module, emits, reads_nat};
 
 use super::test_support::*;
 
 // -- LCG --------------------------------------------------------------------
 
-/// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
+/// The LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
     let module = cont_optm_module(LCG);
@@ -31,7 +27,7 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
     }
 }
 
-/// L2/L3: the hot kernel is exactly one natural loop with a clean backedge — no nested loop, and no `$dispatch/` selector driving the iteration.
+/// The hot kernel is exactly one natural loop with a clean backedge — no nested loop, and no `$dispatch/` selector driving the iteration.
 #[test]
 fn lcg_hot_kernel_is_one_natural_loop() {
     let wat = wat(LCG);
@@ -48,7 +44,7 @@ fn lcg_hot_kernel_is_one_natural_loop() {
     );
 }
 
-/// L4: the loop body is direct scalar arithmetic — Nat multiply (`i64.mul`, widened for its overflow check) and unsigned remainder (`i32.rem_u`) — with no closure allocation and no indirect (`call_ref`) dispatch.
+/// The loop body is direct scalar arithmetic — Nat multiply (`i64.mul`, widened for its overflow check) and unsigned remainder (`i32.rem_u`) — with no closure allocation and no indirect (`call_indirect`) dispatch.
 #[test]
 fn lcg_loop_is_scalar_no_closure_no_indirect() {
     let wat = wat(LCG);
@@ -76,9 +72,9 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
     );
 }
 
-/// L5: the loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: every edge argument used to be loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision the `cps::represent` fixpoint exists to produce, and it is the one count that went to zero.
+/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision the `cps::represent` fixpoint exists to produce.
 ///
-/// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 envelope must trap and `i32.mul` wraps rather than trapping, which no storage decision changes.
+/// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 has to be detected and grown into a boxed magnitude, and `i32.mul` wraps silently, which no storage decision changes.
 #[test]
 fn lcg_loop_carries_its_scalars_in_registers() {
     let wat = wat(LCG);
@@ -92,7 +88,7 @@ fn lcg_loop_carries_its_scalars_in_registers() {
 
 // -- trees ------------------------------------------------------------------
 
-/// T1: build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since the whole module emits no `call_ref` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
+/// Build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since no user function emits a `call_indirect` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
 #[test]
 fn trees_build_and_sum_stay_direct_recursive() {
     let wat = wat(TREES);
@@ -112,7 +108,7 @@ fn trees_build_and_sum_stay_direct_recursive() {
     );
 }
 
-/// T2: the recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_ref` witness projection left behind. The SCC known-argument propagation that enables this is owned by `curios-cont`'s specialization tests; this pins its emitted consequence.
+/// The recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_indirect` witness dispatch left behind. The SCC known-argument propagation that enables this is owned by `curios-cont`'s specialization tests; this pins its emitted consequence.
 #[test]
 fn trees_invariant_arithmetic_propagates_through_scc() {
     let wat = wat(TREES);
@@ -133,9 +129,9 @@ fn trees_invariant_arithmetic_propagates_through_scc() {
     );
 }
 
-/// T3: the hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
+/// The hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
 ///
-/// Stated as "the module contains no indirect dispatch" this held only while programs were direct-style; a program is a description now, so two forces are structural. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
+/// A program is a description, so two forces are structural and "the module contains no indirect dispatch" would be false. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
 #[test]
 fn trees_hot_arithmetic_has_no_indirect_calls() {
     let wat = wat(TREES);
@@ -158,7 +154,7 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
     );
 }
 
-/// T4: ordinary recursive functions allocate no closures. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs.
+/// Ordinary recursive functions allocate no closures. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs.
 #[test]
 fn trees_ordinary_recursion_allocates_no_closures() {
     let wat = wat(TREES);
@@ -170,11 +166,11 @@ fn trees_ordinary_recursion_allocates_no_closures() {
 
 /// A string walk allocates nothing per character.
 ///
-/// `/std/Str/fold` used to be an induction over the bytes whose motive was a *function* of the scan state and the accumulator, because a right fold cannot carry a value leftwards any other way. Every step therefore returned a closure: the walk built `step₀ ∘ … ∘ base` and applied it once, so N characters cost N environment allocations and N indirect calls before any of the user's own work ran. It is now a `rec` whose parameters carry the scan state and the accumulator, and whose tail call advances them.
+/// `/std/Str/fold` is a `rec` whose parameters carry the scan state and the accumulator, and whose tail call advances them. An induction over the bytes would need a motive that is a *function* of the scan state and the accumulator, since a right fold cannot carry a value leftwards any other way: every step would return a closure, the walk would build `step₀ ∘ … ∘ base` and apply it once, and N characters would cost N environment allocations and N indirect calls before any of the user's own work ran.
 ///
 /// **What this asserts is the property, not the spelling.** Any encoding that captures per character reintroduces an environment allocation here, whatever it is named — which is what makes this survive the next person to reach for the induction form.
 ///
-/// Measured when it landed, at N = 1 000 000 on `programs/parse_digits.crs` and `programs/parse_bindless.crs`: 2.31 s to 1.07 s and 2.23 s to 1.01 s, with the emitted `$envr/…$/std/Str/fold/…` sites going from two to none. The figures live beside the probe that reproduces them, in [`super::ladder`].
+/// The walk's timings live beside the probe that retakes them, in `ladder`.
 #[test]
 fn a_string_walk_allocates_no_closure_per_character() {
     let wat = wat(STRING_WALK);
@@ -185,11 +181,11 @@ fn a_string_walk_allocates_no_closure_per_character() {
     );
 }
 
-/// G3: function-only recursion allocates no closure. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) or environment (`$envr/`) for it.
+/// Function-only recursion allocates no closure. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) or environment (`$envr/`) for it.
 #[test]
 fn function_only_recursion_allocates_no_closures() {
     let wat = wat(FUNCTION_ONLY);
-    // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_ref`. What `down` must not do is allocate one.
+    // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_indirect`. What `down` must not do is allocate one.
     let closures = user_allocations(&wat, "struct.new $clsr/");
     assert!(
         closures.is_empty(),
@@ -202,7 +198,7 @@ fn function_only_recursion_allocates_no_closures() {
     );
 }
 
-/// G4: ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary data switches — a `br_table` over `$case$N` labels where the family is wide enough to want one, an `if` where it is not — and neither is a dispatcher.
+/// Ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary data switches — a `br_table` over `$case$N` labels where the family is wide enough to want one, an `if` where it is not — and neither is a dispatcher.
 #[test]
 fn ordinary_corpus_uses_no_irreducible_fallback() {
     for (label, source) in [
@@ -219,7 +215,7 @@ fn ordinary_corpus_uses_no_irreducible_fallback() {
     }
 }
 
-/// G5: the one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-emit`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `into_wasm::module_tests`; this test pins the surface-level fact that motivates that ownership boundary.
+/// The one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-emit`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `into_wasm::module_tests`; this test pins the surface-level fact that motivates that ownership boundary.
 #[test]
 fn mutual_recursion_stays_reducible() {
     assert!(

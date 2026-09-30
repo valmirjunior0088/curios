@@ -28,7 +28,7 @@ fn rendered(inferred: Term, expected: Term) -> String {
     Displayed(&error, spelling).to_string()
 }
 
-/// One family at two instances. Erasing the instances erases the whole of the disagreement, so the report has to put them back — the shape a struct's parameter telescope produced while its registry entry went unelaborated.
+/// One family at two instances. Erasing the instances erases the whole of the disagreement, so the report has to put them back — the shape a struct's parameter telescope produces when its registry entry goes unelaborated.
 #[test]
 fn a_disagreement_only_in_universe_instances_shows_them() {
     let shown = rendered(
@@ -45,7 +45,7 @@ fn a_disagreement_only_in_universe_instances_shows_them() {
     );
 }
 
-/// One run grouped two ways. The splice that quotes a program rather than its lowering renders both as `[..a, ..b, ..c]`, so the report has to keep the nesting — the shape a proof about a structural fold meets on its first inductive step, and the one this report used to state in identical words.
+/// One run grouped two ways. The splice that quotes a program rather than its lowering renders both as `[..a, ..b, ..c]`, so the report has to keep the nesting — the shape a proof about a structural fold meets on its first inductive step.
 #[test]
 fn a_disagreement_only_in_grouping_shows_it() {
     let list = |index: u32, name: &'static str| Term::free_var(&Free::local(index, Some(name)));

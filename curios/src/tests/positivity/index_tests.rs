@@ -45,7 +45,7 @@ fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() 
     assert_eq!(run(source), b"equated");
 }
 
-// The skip above is a *reachability* claim, and this is the half of it that was only ever asserted. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is kinding rather than positivity: `x : Foo` needs `Foo` to be a type, and `Foo` is a family until it is applied to the very index this declaration is introducing. The elaborator refuses it before the positivity pass runs at all, which is what makes skipping the position safe rather than lucky.
+// The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is kinding rather than positivity: `x : Foo` needs `Foo` to be a type, and `Foo` is a family until it is applied to the very index this declaration is introducing. The elaborator refuses it before the positivity pass runs at all, which is what makes skipping the position safe rather than lucky.
 #[test]
 fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
     rejected_by(
@@ -63,7 +63,7 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
 //
 // Nothing follows, because an index domain must be *inhabited* to be used. Every constructor of `B` has to state a target of type `(A) -> False`, and the only way to have one is to bind it — at which point it is a payload, and the payload walk is exactly what sees it. The rejection below names `mk(f)`, a stored binder, not the index domain that motivated it.
 //
-// Probed rather than closed: the analysis already refused this when it was written. What the fixture pins is that the two skipped index positions cannot be reached around, so a future relaxation that made `B`'s payload readable — or that dropped `@f` from `mk` — would have to answer this test rather than silently inherit the skip.
+// Probed rather than closed: the analysis refuses this as it stands. What the fixture pins is that the two skipped index positions cannot be reached around, so a future relaxation that made `B`'s payload readable — or that dropped `@f` from `mk` — would have to answer this test rather than silently inherit the skip.
 #[test]
 fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness() {
     rejected_by(

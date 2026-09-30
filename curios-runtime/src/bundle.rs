@@ -2,13 +2,13 @@
 //!
 //! **One archive, not a frame of counted segments.** The tail is a single [`Bundle`], so the payloads, the wire signatures and the export mapping are one value behind one length rather than an arithmetic both sides would have to agree on separately. rkyv is built `unaligned` for this workspace, so the archive is read where it lands: a bundled executable's tail begins wherever the launcher image happens to end, and nothing pads to move it.
 //!
-//! **The store travels because a `.cwasm` cannot answer for it.** The rows a program's `ffi` imports are typed by live in the compilation, not in the artifact: `Nat`, `Int` and `Bool` all cross as an `i32`, so re-deriving a signature from the module's import types would lose the signedness a result is boxed by. `curios-verdicts` files the store beside a payload for exactly that reason, and this carries the same value the rest of the way — to a machine that has no store, no manifest and no sources.
+//! **The store travels because a `.cwasm` cannot answer for it.** The rows a program's `ffi` imports are typed by live in the compilation, not in the artifact: `Nat` and `Int` both cross as an `i64`, so re-deriving a signature from the module's import types would lose the signedness a result is boxed by. `curios-verdicts` files the store beside a payload for exactly that reason, and this carries the same value the rest of the way — to a machine that has no store, no manifest and no sources.
 
 use {curios_abi::ForeignStore, std::collections::BTreeMap};
 
 /// Magic trailing the footer, marking an image as a bundled Curios executable.
 ///
-/// Bumped from `CRSEXEC1` when the tail became a bundle rather than a bare payload. This is a format move rather than a compatibility surface: `curios` embeds the launcher with `include_bytes!`, so the launcher that reads a tail is always the one appended to it, and no build ever meets the other's layout.
+/// The trailing digit names the tail's format, not a compatibility surface: `curios` embeds the launcher with `include_bytes!`, so the launcher that reads a tail is always the one appended to it, and no build ever meets another's layout.
 const MAGIC: &[u8; 8] = b"CRSEXEC2";
 
 /// Footer length: the 8-byte little-endian archive length plus [`MAGIC`].

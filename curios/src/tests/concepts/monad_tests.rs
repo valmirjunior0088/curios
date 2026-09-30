@@ -48,7 +48,7 @@ fn bang_works_in_monad_generic_code() {
     assert_eq!(run(source), b"422");
 }
 
-// The use side of the partial family: a `!` inside a `Box(Str, Nat)` region pins the bind's monad by right-biased partial imitation (`?M := (A) => Box(Str, A)`), which the parametric witness then answers. This is the spec's own reproduction for the rule, flipped to acceptance.
+// The use side of the partial family: a `!` inside a `Box(Str, Nat)` region pins the bind's monad by right-biased partial imitation (`?M := (A) => Box(Str, A)`), which the parametric witness then answers.
 #[test]
 fn a_bang_sequences_in_a_two_parameter_monad_region() {
     let source = r#"
@@ -76,7 +76,7 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
     assert_eq!(run(source), b"6");
 }
 
-/// Three ways to sequence a `Result(Str, Type)`, whose payload is a type and so sits a level above the types it names: `walk` with `!` in an arm, `flat` with `!` in a flat body, and `spelled` through `Monad/bind` itself. All three go through `Result`'s `Monad` witness, which pinned the method levels at zero — `bind` took `A, B : Type 0` only — so each was refused, the arm as "this Type would need to be strictly below itself". A concept's method level is now its family's domain (`UniverseSolver::identify_bounded_choices`), which `Result`'s witness leaves to the caller. `tag` reads each outcome back, so the three are run rather than only checked.
+/// Three ways to sequence a `Result(Str, Type)`, whose payload is a type and so sits a level above the types it names: `walk` with `!` in an arm, `flat` with `!` in a flat body, and `spelled` through `Monad/bind` itself. All three go through `Result`'s `Monad` witness, and a witness pinning the method levels at zero — `bind` taking `A, B : Type 0` only — would refuse each, the arm as "this Type would need to be strictly below itself". A concept's method level is its family's domain (`UniverseSolver::identify_bounded_choices`), which `Result`'s witness leaves to the caller. `tag` reads each outcome back, so the three are run rather than only checked.
 const LARGE_PAYLOAD: &str = r#"
     use /std/{Str, Nat, List, Result, Monad};
     pub let walk(x: Result(Str, Type), n: List(Str)) -> Result(Str, Type) =
@@ -113,7 +113,7 @@ fn a_bang_sequences_a_large_payload() {
     assert_eq!(run(&source), b"ssf");
 }
 
-// The control: `Result/bind` names no witness, so it sequenced the same payload before the witness's method levels were its domain, and still does.
+// The control: `Result/bind` names no witness, so it sequences the same payload whatever the witness's method levels are.
 #[test]
 fn a_large_payload_binds_without_the_witness() {
     let source = format!(
@@ -126,7 +126,7 @@ fn a_large_payload_binds_without_the_witness() {
     assert_eq!(run(&source), b"sf");
 }
 
-// `!` holds its region at the level of the action it binds. A region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality, so `small`'s `Result(Str, Nat)`, at zero, pins the region below the `Type` it answers with. `Result/bind` names no witness and instantiates each side apart, so it accepts the same program. `Result`'s levels only type its parameters, and comparing them by variance — Rocq infers such a level irrelevant — would accept both; until then `/std/Cli`'s `fill` binds through `Result/bind`, and this refusal is the fixture that flips.
+// `!` holds its region at the level of the action it binds. A region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality, so `small`'s `Result(Str, Nat)`, at zero, pins the region below the `Type` it answers with. `Result/bind` names no witness and instantiates each side apart, so it accepts the same program. `Result`'s levels only type its parameters, and comparing them by variance — Rocq infers such a level irrelevant — would accept both and flip this refusal, which is why `/std/Cli`'s `fill` binds through `Result/bind`.
 #[test]
 fn a_bang_holds_its_region_at_a_lower_nominal_actions_level() {
     let bang = r#"

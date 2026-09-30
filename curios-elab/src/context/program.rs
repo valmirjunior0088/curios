@@ -154,9 +154,9 @@ impl Program {
 
     /// The mount owning one witness key's rigid head, or `None` for an intrinsic head, which is never user-declarable, and for a tuple shape, which no module declares. Consulted by the orphan-rule check in `register_witness`.
     ///
-    /// A tuple key therefore contributes nothing to ownership, and the orphan rule reads, for one: such a witness is declared where its concept is declared. That is the standing an intrinsic former already has, and it is what makes the standard library's arity ceiling a promise — two independent packages each declaring `Show({Nat, Nat})` would collide at link with neither in the wrong. A function type is not keyed at all, so it never reaches this question ([A tuple type is keyed by the part of its identity conversion keeps](../../../documentation/design/language/a-tuple-type-is-keyed-by-the-part-of-its-identity-conversion-keeps.md) records why that half was retired).
+    /// A tuple key therefore contributes nothing to ownership, and the orphan rule reads, for one: such a witness is declared where its concept is declared. That is the standing an intrinsic former already has, and it is what makes the standard library's arity ceiling a promise — two independent packages each declaring `Show({Nat, Nat})` would collide at link with neither in the wrong. A function type is not keyed at all, so it never reaches this question ([Concepts resolve with global coherence](../../../documentation/design/surface/concepts-resolve-with-global-coherence.md) records why).
     ///
-    /// `None` is not "unknown" — it is "claimed by no authored mount", which no declaring mount can equal. That is exactly what the previous `RootId::Sys` answer achieved: an ordinary consumer never *matched* it, it only ever failed to, so the verdict is unchanged and the answer no longer names a root it was standing in for.
+    /// `None` is not "unknown" — it is "claimed by no authored mount", which no declaring mount can equal: an ordinary consumer never *matches* it, it only ever fails to.
     pub(crate) fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
         match head {
             HeadKey::Nominal(name) => self.mount_of(name),

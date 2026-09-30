@@ -1,7 +1,5 @@
 //! Tuples, list and packed literals, cells and variants — built and read at their own carriers.
 
-//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
-
 use curios_num::{Binary, Grain, Rounding};
 
 use super::test_support::*;
@@ -86,7 +84,7 @@ fn taking_a_channel_item_clears_the_slot_without_a_host_call() {
 ///
 /// The positive control for `Context::refuse_raw_aggregate`, and the reason that guard is an assertion in the emitter rather than a remark in the door. A continuation parameter offers `Offer::Open`, so a raw demand from *any* of its uses settles it raw whatever flows in — the aggregate's own `Offer::Never` never enters the question, because the coercion happens on the edge rather than at the aggregate's definition. The edge then loads its argument at that carrier, and an aggregate argument becomes `ref.cast (ref i31)` over a `struct.new`: a module that verifies, emits, and traps.
 ///
-/// This is that shape stated directly — a continuation whose parameter feeds `FltAdd`, entered with a tuple. The float is the carrier that can still reach it: a parameter a word would hold is offered one only when every argument reaching it is a word already, which a construction never is, so the analysis refuses the word before the emitter could. `curios-ersd`'s door no longer produces it (an immediate arm's binder was aliased to its scrutinee and now gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet`), but the IR still permits it, so the guard is what keeps the class from returning silently. Observed against the pre-fix door on 2026-08-20: `` `m869` is a `Tuple`/`List` construction loaded at the raw carrier Nat`` — the same value the emitted wasm had been casting.
+/// This is that shape stated directly — a continuation whose parameter feeds `FltAdd`, entered with a tuple. The float is the carrier that can still reach it: a parameter a word would hold is offered one only when every argument reaching it is a word already, which a construction never is, so the analysis refuses the word before the emitter could. `curios-ersd`'s door does not produce it — an immediate arm's binder gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet` — but the IR permits it, so the guard is what keeps the class from returning silently.
 ///
 /// The tuple here is closed, so `hoist` lifts it to a module const: this covers the const half of the population. [`a_region_aggregate_reaching_a_raw_parameter_is_refused`] covers the other.
 #[test]
@@ -145,7 +143,7 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
 
 /// The region half of [`an_aggregate_reaching_a_raw_parameter_is_refused`].
 ///
-/// Same shape, but one element of the tuple is a cell handle — a call-shaped result, so the tuple is not closed and stays a binding in the region instead of being hoisted to a global. This is the half the immediate-arm bug actually took: the aggregate was a cons cell built inside a loop.
+/// Same shape, but one element of the tuple is a cell handle — a call-shaped result, so the tuple is not closed and stays a binding in the region instead of being hoisted to a global. This is the half an aliased immediate arm reaches: a cons cell built inside a loop.
 #[test]
 #[should_panic = "loaded at the raw carrier"]
 fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {

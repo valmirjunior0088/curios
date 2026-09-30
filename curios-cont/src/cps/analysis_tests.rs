@@ -404,7 +404,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
     ));
 }
 
-/// A join that is an operation's `return_to` as well as a jump's target learns nothing from the jump, whichever of the two the arena lists first. The call comes first here, which is the order that once left the parameter `Unknown` for the jump to decide.
+/// A join that is an operation's `return_to` as well as a jump's target learns nothing from the jump, whichever of the two the arena lists first. The call comes first here: the order in which a merge leaving `Unknown` standing would let the jump decide.
 #[test]
 fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     let mut module = Module::new();

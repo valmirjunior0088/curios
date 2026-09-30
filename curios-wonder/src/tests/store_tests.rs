@@ -11,7 +11,7 @@ use {
 
 /// A unit whose record still agrees comes from the store, however many units before it missed.
 ///
-/// **The regression for placing and filing having been one decision.** [`ReadOnly`] drops the write, and used to drop the placement with it — but a slot is addressed after the units placed before it, so the first miss shifted every later address by one and one miss became a miss for the whole tail. Two mounted units are the smallest shape that can show it: the second is what the first's absence from the chain moves.
+/// **Placing and filing are two decisions.** [`ReadOnly`] drops the write and keeps the placement: a slot is addressed after the units placed before it, so dropping a placement would shift every later address by one and make one miss a miss for the whole tail. Two mounted units are the smallest shape that can show it: the second is what the first's absence from the chain moves.
 ///
 /// The miss is a slot taken out of the store rather than a document edited in the overlay. An edited predecessor recompiles into different bytes, and the successor's record — which vouches for the bytes every predecessor contained, since its arena is the whole prefix's — then disagrees on its own account, which reads exactly as a dropped placement would; a missing slot recompiles the same text into the same bytes, so the successor is reused precisely when it was placed after them. Which slot is the first unit's is not spelled here, so each is taken out in turn and the two outcomes are read together.
 ///
@@ -88,7 +88,7 @@ fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
     );
 }
 
-/// A hit is verified against the text the compilation would read, so an open document refuses it only when its text differs from what the unit was compiled from — and a document the unit never read, wherever it lies, refuses nothing. The containment rule this replaced refused a package's library whenever any document under its directory was open, which is where every executable of the package lives.
+/// A hit is verified against the text the compilation would read, so an open document refuses it only when its text differs from what the unit was compiled from — and a document the unit never read, wherever it lies, refuses nothing. A containment rule would refuse a package's library whenever any document under its directory is open, which is where every executable of the package lives.
 #[test]
 fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
     let root = mounted_project("read-only-overlay");
@@ -113,7 +113,7 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
 
 /// A package nothing was filed for recompiles over what the session compiled last, rather than compiling whole every time: the store has no slot, so the unit a check produced is the only baseline there is.
 ///
-/// **The regression for the baseline never advancing.** A fresh checkout, and every package after a compiler upgrade, has no slot — the key carries the compiler's digest — and a question never files, so an editing session on one compiled its whole unit on every keystroke, measured at 2.2 s against 0.6 s once built.
+/// **The baseline advances without the store.** A fresh checkout, and every package after a compiler upgrade, has no slot — the key carries the compiler's digest — and a question never files, so without the session an editing session on one would compile its whole unit on every keystroke.
 #[test]
 fn a_session_recompiles_what_nothing_was_filed_for() {
     let root = mounted_project("session-unfiled");
@@ -188,7 +188,7 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
 
 /// A kept unit is refused once a unit before it holds something else, and what it would have hidden is reported.
 ///
-/// **The regression for the guard a slot cannot provide.** A slot addresses a unit's predecessors by where they are, not by what they hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit was offered after `/alpha` changed its declared type, the diff was empty, every item was reused, and the mismatch this asserts was never reported.
+/// **The guard a slot cannot provide.** A slot addresses a unit's predecessors by where they are, not by what they hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit would be offered after `/alpha` changed its declared type, the diff would be empty, every item reused, and the mismatch this asserts never reported.
 #[test]
 fn a_kept_unit_after_a_changed_predecessor_is_refused() {
     let root = mounted_project("session-guard");
@@ -222,7 +222,7 @@ fn a_kept_unit_after_a_changed_predecessor_is_refused() {
 
 /// A declaration the parser cannot read answers with its own record, over a baseline as with none.
 ///
-/// **The regression for recovery and the item-level recompile never having crossed.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so the recompile reassembled the lowered order looking for items its own elaboration had deliberately not produced, and every keystroke that left a half-written declaration with a dependent in it killed the analyst instead of answering.
+/// **Recovery and the item-level recompile meet here.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that reassembled the lowered order expecting every item would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
 ///
 /// Two declarations are the smallest shape that shows it: one broken, and one naming it, which is the one that goes missing.
 #[test]

@@ -1,6 +1,6 @@
 //! The audit of the theory conversion decides, generated from the law table's rows: the conditions a theory kept in conversion must meet — Coq Modulo Theory's, whose metatheory with strong elimination is Jouannaud and Strub's (2017) — put to both checkers at every declared law.
 //!
-//! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and each later part of the algebra campaign extends it with the laws it adds.
+//! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
 
 use {
     super::{

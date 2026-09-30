@@ -379,9 +379,9 @@ fn test_records(scheduled: &[curios_elab::ScheduledTest]) -> Vec<TestRecord> {
         .collect()
 }
 
-/// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
+/// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its solution store); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
-/// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
+/// The `/sys`/`/std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
 #[cfg(test)]
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
@@ -480,7 +480,7 @@ where
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry that states no type of its own states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An embedder that states its own type keeps it; that is how the typecheck-only fixtures reach both checkers with deliberately odd tails. A test program's tail replaces the written entry, annotation included, and the elaborator that synthesizes it states its type.
     //
-    // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
+    // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
     if let EntryTail::Authored = tail {
         lowered
             .entry
@@ -521,7 +521,7 @@ where
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
 ///
-/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel made `wonder diagnostics` report a clean program that `run` then refused, which is the one thing that query may not do. Below here nothing decides: `lower_from_ersd` — private, so named here rather than linked — returns no `Result` at all.
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder diagnostics` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_ersd` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
@@ -750,9 +750,9 @@ pub fn compile_unit(
 
 /// Where a judged unit is kept between compilations.
 ///
-/// Declared here and implemented in `curios-package`, because the fold is what consults one and this crate must never learn what a project is. What crosses the boundary is a unit — never a path, never a manifest, and never a key this crate would have to know how to build.
+/// Declared here and implemented in `curios-verdicts`, because the fold is what consults one and this crate must never learn what a project is. What crosses the boundary is a unit — never a path, never a manifest, and never a key this crate would have to know how to build.
 ///
-/// **A unit handed back is one that was judged when it was recorded, and taking it is taking that on trust.** That is a change to what the compiler believes rather than an optimization of what it does, which is why the argument for it lives in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md) rather than here: the implementation chooses the key, and the key is the whole of what the argument rests on.
+/// **A unit handed back is one that was judged when it was recorded, and taking it is taking that on trust.** That is a change to what the compiler believes rather than an optimization of what it does, which is why the argument for it lives in [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md) rather than here: the implementation chooses the key, and the key is the whole of what the argument rests on.
 pub trait Cache {
     /// The unit already recorded for `source`, if one is.
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit>;
@@ -761,7 +761,7 @@ pub trait Cache {
     ///
     /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, so a question takes the archived unit while a build compiles the package whole and files it as any unit — and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
-    /// **A cache that answers is one whose `put` places without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate argues and has not yet earned. The store's own cache keeps the default; the `wonder` engine's read-only cache answers.
+    /// **A cache that answers is one whose `put` places without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate checks on fixtures and has not earned for a filed unit. The store's own cache keeps the default; the `wonder` engine's read-only cache answers.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         let _ = (source, offered);
         None
@@ -852,7 +852,7 @@ pub enum Progress<'a> {
     Compiled,
 }
 
-/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every unit in its scope — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
 /// Production erases onto the archived erased prelude: it is restored and replayed, only the entry's own items erase, the Ersd optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 ///

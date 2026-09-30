@@ -1,4 +1,4 @@
-//! `Qualifier` is a canonical, resolved identity: a sequence of module segments rooted at the module root. It is what the resolution tables key on, and what `curios-elab`'s `Structure`/`Context`/`Definition` use to track a binding's declaring/use-site module without re-deriving structure from a flattened string. Lives here (not `curios-elab`, where it originated) as a foundational value type with no dependency of its own on the rest of the core calculus — `curios-utilities` is the shared leaf every pipeline crate already depends on.
+//! `Qualifier` is a canonical, resolved identity: a sequence of module segments rooted at the module root. It is what the resolution tables key on, and what the elaborator tracks a binding's declaring and use-site module by, without re-deriving structure from a flattened string. It lives in the shared leaf every pipeline crate depends on because it depends on nothing of the core calculus.
 //!
 //! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude-archive`'s `stored_prelude_measurements`, which is where a figure for it belongs.
 //!
@@ -45,11 +45,11 @@ pub fn is_keyword(word: &str) -> bool {
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
 ///
-/// **A reference to the one allocation of its path**, interned once per process. A qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone put the cost on the kernel's hottest structure, and a shared `Rc` kept every term on one thread. Interning makes a copy a pointer copy and equality a pointer comparison — exact rather than a fast path, since two equal paths are one allocation.
+/// **A reference to the one allocation of its path**, interned once per process. A qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone would put the cost on the kernel's hottest structure, and a shared `Rc` would keep every term on one thread. Interning makes a copy a pointer copy and equality a pointer comparison — exact rather than a fast path, since two equal paths are one allocation.
 #[derive(Clone, Copy)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct Qualifier {
-    /// Archived as the bare segment sequence, exactly as it always was, so its derived comparisons agree with the live ones by construction; read back through the process table — see [`Interned`].
+    /// Archived as the bare segment sequence, so its derived comparisons agree with the live ones by construction; read back through the process table — see [`Interned`].
     #[archived_with(Interned)]
     segments: &'static Vec<String>,
 }
@@ -228,7 +228,7 @@ where
 
 /// Reads an archived qualifier back into the process table every other occurrence of the same path already uses, instead of giving each occurrence its own allocation.
 ///
-/// The archived bytes are the bare segment sequence, as they always were, so the live representation changing is not an archive format change. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table is what keeps that a couple of thousand allocations.
+/// The archived bytes are the bare segment sequence, so the live representation is no part of the archive format. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table is what keeps that a couple of thousand allocations.
 #[cfg(feature = "archive")]
 pub struct Interning;
 
@@ -245,7 +245,7 @@ impl curios_archive::Proxy<&'static Vec<String>> for Interning {
         *path
     }
 
-    /// The interning happens here, on the way in — which is the direction that matters, since this is where a hundred thousand occurrences become a couple of thousand allocations.
+    /// The interning happens here, on the way in — the direction [`Interning`] is for.
     fn from_archivable(segments: Vec<String>) -> Result<&'static Vec<String>, String> {
         Ok(interned(&segments))
     }

@@ -119,7 +119,7 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
 
 /// Two stuck comparisons spelled across the family, aligned: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — first becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`; then two `Nat` or `Int` comparisons are read through their linear views, [`LinearViews::align`], and are one proposition where those agree and otherwise both respelled in the spelling the views give. `None` when nothing moved.
 ///
-/// Asked for by name in the conversion chain both checkers run, and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
+/// Asked for by name in the conversion chain both checkers run, and **probe-side only**, on the record `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against a NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
 pub fn align_comparisons(
     reducer: &mut impl Reducer,
     this: &Intrinsic,
@@ -404,7 +404,7 @@ pub fn reduce_intrinsic(
                 _ => Intrinsic::ByteToNat(inner),
             }))
         }
-        // A closed operand past the carrier is *refused* rather than masked. Masking made this total by changing a value, which is the one thing a narrowing may not do, and it was the only such row on a numeric carrier; the `below` field is what replaces it, so a program that cannot prove its operand small no longer compiles rather than silently computing a different byte.
+        // A closed operand past the carrier is *refused* rather than masked. Masking would make this total by changing a value, which is the one thing a narrowing may not do; the `below` field states the domain instead, so a program that cannot prove its operand small does not compile rather than silently computing a different byte.
         Intrinsic::NatToByte { nat, below } => {
             let nat = reducer.reduce_forced(nat.clone())?;
             if let Some(operand) = intrinsic.undone(&nat) {
@@ -492,7 +492,7 @@ pub fn reduce_intrinsic(
         Intrinsic::NatMul(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
-            // **A product of two symbolic sums is its own weak-head form.** Distribution is the one quadratic step in the `Nat` normal form — every summand of one operand against every summand of the other — and a web of definitions each naming the one before it twice made it build 1 222 222 monomials to keep 25 412, to answer a comparison a head clash settles. A product with a literal or a single symbolic summand on either side distributes here as it always did, in O(summands); only sum × sum stays stuck, and `Nat::normalize` distributes it where a value is asked for by name — see `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md`.
+            // **A product of two symbolic sums is its own weak-head form.** Distribution is the one quadratic step in the `Nat` normal form — every summand of one operand against every summand of the other — and a web of definitions each naming the one before it twice made it build 1 222 222 monomials to keep 25 412, to answer a comparison a head clash settles. A product with a literal or a single symbolic summand on either side distributes here as it always did, in O(summands); only sum × sum stays stuck, and `Nat::normalize` distributes it where a value is asked for by name — see `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
             let symbolic_summands = |term: &Term| Nat::summands(&Nat::decompose(term).1).len();
             if symbolic_summands(&left) > 1 && symbolic_summands(&right) > 1 {
                 return Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)));
@@ -956,7 +956,7 @@ pub fn reduce_intrinsic(
             },
             |inner| Intrinsic::NatToFlt(*rounding, inner),
         ),
-        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation now states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
+        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
         Intrinsic::IntToNat { int, non_neg } => {
             let span = int.span();
             let int = reducer.reduce_forced(int.clone())?;
@@ -1031,7 +1031,7 @@ pub fn reduce_intrinsic(
         Intrinsic::BinLen(grain, bin) => {
             let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
-            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer — which is what made a length over a deep concatenation cost a re-walk of every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, so every other value reduces exactly as it did.
+            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer, which would make a length over a deep concatenation re-walk every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, which the homomorphism reduces.
             if let Some(total) = FreeMonoid::Bin(grain).measure(&bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
@@ -1149,7 +1149,6 @@ pub fn reduce_intrinsic(
             {
                 return reducer.reduce(element.clone()).map(Term::unwrap_or_clone);
             }
-            // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The concrete one narrows the operand holding it down to that single generator; the symbolic one takes a whole operand that already carries exactly one, which is the seam case `get([..p, k], len(p)) = k`.
             match FreeMonoid::Bin(grain).window(
                 reducer,
@@ -1186,6 +1185,7 @@ pub fn reduce_intrinsic(
                 }
                 None => {}
             }
+            // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h` and `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_atom(grain, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -1304,7 +1304,7 @@ pub fn reduce_intrinsic(
             }
             // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `x[c, ..t]` cons `/std/Str/Valid`'s proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
-            // Advancing the start no longer touches the length, which is the reparameterisation paying for itself: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
+            // Advancing the start leaves the length alone: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
             if let Some((head, tail)) = peel_first_atom(grain, &bin) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
@@ -1867,7 +1867,7 @@ pub fn reduce_intrinsic(
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `List` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
+            // The `List` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_list`'s `[]`-handling (`spine`); see `normalize_concat`.
             // A run past `FUSION_CAP` declines to lend itself, exactly as on the `Bin` side, so a growing accumulation stops flattening its element vector into a longer one every step.
             fn literal(operand: &Term) -> Option<&Vec<Term>> {
                 match &**operand {
@@ -2018,7 +2018,7 @@ pub fn reduce_intrinsic(
         Intrinsic::Handle(token) => Ok(Subterm::Intrinsic(Intrinsic::Handle(*token))),
         // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
         //
-        // These arms used to refuse instead, and the refusal was the type-level half of the effect discipline: a spelling that does not fix a value must not reach a type. It is now the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
+        // These arms do not refuse: a spelling that does not fix a value must not reach a type, and it is the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
         Intrinsic::CellType(element) => Ok(Subterm::Intrinsic(Intrinsic::CellType(
             reducer.reduce(element.clone())?,
         ))),

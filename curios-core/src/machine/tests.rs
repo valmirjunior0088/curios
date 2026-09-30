@@ -87,12 +87,12 @@ fn motive() -> Scope<Many> {
     Scope::close(Many(1), &[&m], nat_type())
 }
 
-/// The induction-hypothesis form: a structural fold whose cons arm combines the recursive result, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the hypothesis nesting — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 /// A stand-in for a discharged bound; reduction never inspects one.
 fn qed() -> Term {
     nat(0)
 }
 
+/// The induction-hypothesis form: a structural fold whose cons arm combines the recursive result, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the hypothesis nesting — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 #[test]
 fn an_ih_fold_costs_transitions_rather_than_frames() {
     let n = 2_000usize;
@@ -158,7 +158,7 @@ fn a_tail_accumulator_fold_carries_values_not_chains() {
     );
 }
 
-/// The same fold with a combining operation nothing folds — `Nat/and(acc + 1, h)` at the byte head, which no rule reads: the left is never the absorbing `0` and never identical to the right, and a successor floor over a stuck `and` is neutral — so the accumulator becomes a genuinely neutral chain one link longer per element, exactly as it would under the hosts. The machine's run-scoped value memo is what keeps re-encountering that chain linear; without it this fold is quadratic in transitions and prices *worse* than the strategy it replaces. (`acc + h` no longer builds a chain: the sum normal form merges like terms, so two thousand `h`s become `2000 · h`.)
+/// The same fold with a combining operation nothing folds — `Nat/and(acc + 1, h)` at the byte head, which no rule reads: the left is never the absorbing `0` and never identical to the right, and a successor floor over a stuck `and` is neutral — so the accumulator becomes a genuinely neutral chain one link longer per element, exactly as it would under the hosts. The machine's run-scoped value memo is what keeps re-encountering that chain linear; without it this fold is quadratic in transitions and prices *worse* than the recursive strategy. (`acc + h` builds no chain: the sum normal form merges like terms, so two thousand `h`s become `2000 · h`.)
 #[test]
 fn a_closed_neutral_accumulator_stays_linear() {
     let n = 2_000usize;
@@ -261,9 +261,9 @@ fn whnf_keeps_a_recursive_application_folded() {
 ///
 /// The two probes are in one run because the memo is run-scoped. The `let` value is an intrinsic operand, which the machine evaluates at [`Demand::Forced`], so the bare selection takes the member-body path that records; the tail is an ordinary application at the run's plain demand, which must come back folded.
 ///
-/// While the hole was open this returned `0` — the machine took the recorded member body for the projection's plain value, beta-reduced the recursive call and ran the whole fold — where the recursive strategy returns `go(x[0x01, 0x02, 0x03])` unopened. That was confirmed against the strategy itself, not against a reading of it: `curios-cert`'s `the_closed_machine_agrees_with_the_strategy` carries the same term and disagreed at the plain demand, which is also why that fixture now asks both demands rather than the forced one alone.
+/// Served, it would return `0` — the machine taking the recorded member body for the projection's plain value, beta-reducing the recursive call and running the whole fold — where the recursive strategy returns `go(x[0x01, 0x02, 0x03])` unopened. `curios-cert`'s `the_closed_machine_agrees_with_the_strategy` carries the same term and asks both demands of the strategy itself.
 ///
-/// The forced probe on the same term is the control, and it is what stops the fix from being a brick: answering a projection from its shape at *every* demand, or declining the machine for `rec` altogether, shuts the hole above and fails here, because the member's body still has to be stepped into when a value is what was asked for.
+/// The forced probe on the same term is the control: answering a projection from its shape at *every* demand, or declining the machine for `rec` altogether, would pass the probe above and fail here, because the member's body still has to be stepped into when a value is what was asked for.
 #[test]
 fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
     let mut host = Host::new(1_000_000);
@@ -305,13 +305,13 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
         "a plain probe was served a forced value: {folded}"
     );
 
-    // The same term at a demand for its value still computes one: the fix withholds the member's body from a plain probe, not from the eliminator.
+    // The same term at a demand for its value still computes one: the machine withholds the member's body from a plain probe, not from the eliminator.
     assert_eq!(
         reduce_closed(&mut host, unfold_rec(rec), Demand::Forced),
         Ok(nat(0))
     );
 
-    // The control, on the branch the fix touches rather than on a call that reaches the member through an application: a *bare* selection is the folded spelling at a plain demand and the member's value at a forced one. Answering a projection from its shape at every demand shuts the hole above and fails the second of these.
+    // The control, on the branch the memo guard touches rather than on a call that reaches the member through an application: a *bare* selection is the folded spelling at a plain demand and the member's value at a forced one. Answering a projection from its shape at every demand would pass the probe above and fail the second of these.
     let v = binder(7, "v");
     let Subterm::Rec(value_rec) =
         Term::unwrap_or_clone(Term::rec([(v, nat_type(), nat(5))], Term::free_var(&v)))

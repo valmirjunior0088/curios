@@ -179,7 +179,7 @@ fn nat_radix_round_trips_through_the_printer() {
 
 /// A numeral's written *width* round-trips with its base, so a padded literal prints back as written.
 ///
-/// The width used to be dropped, and every literal printed at its natural one: `0x00` came back as `0x0`. What that costs is a table — `x[0x00, 0x48, 0x69]` is bytes in columns, and `curios format` silently narrowed it to `x[0x0, 0x48, 0x69]`.
+/// The width is kept: printed at its natural one, `0x00` would come back as `0x0`. What that would cost is a table — `x[0x00, 0x48, 0x69]` is bytes in columns, and `curios format` would silently narrow it to `x[0x0, 0x48, 0x69]`.
 #[test]
 fn a_padded_numeral_keeps_the_width_it_was_written_at() {
     for source in [
@@ -451,7 +451,7 @@ fn bin_literal_spread_segments() {
     };
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
-    // Commas delimit, so an operand that the tight grammar could only take parenthesized — an infix chain — is now written bare.
+    // Commas delimit, so an operand that a tight grammar could only take parenthesized — an infix chain — is written bare.
     let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
@@ -597,7 +597,7 @@ fn bin_literal_atom_segments() {
         matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
 
-    // `\` spells nothing anymore — in an atom position or anywhere else.
+    // `\` spells nothing — in an atom position or anywhere else.
     for malformed in [
         r"x[\]", r"x[\0]", r"x[\000]", r"b[\2]", r"b[\00]", r"x[\48]", r"b[\1]",
     ] {

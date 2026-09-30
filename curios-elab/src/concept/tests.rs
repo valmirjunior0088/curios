@@ -29,7 +29,7 @@ fn func_type(marks: &[Plicity], name: &str) -> Term {
     )
 }
 
-// Arity one displays bare, so single-parameter diagnostics keep today's spelling ("for head 'Nat'", never "for head '(Nat)'").
+// Arity one displays bare, so a single-parameter diagnostic spells a bare head ("for head 'Nat'", never "for head '(Nat)'").
 #[test]
 fn witness_key_displays_bare_for_arity_one() {
     let key = WitnessKey(vec![HeadKey::Nat]);
@@ -87,7 +87,7 @@ fn the_unit_type_keys_on_the_empty_shape() {
     );
 }
 
-// A function type is not keyable at all, whatever its marks: its key space was nearly one point, so a concept's owner claiming a shape claimed it program-wide, and the one consumer that wanted it is gone.
+// A function type is not keyable at all, whatever its marks: its key space is nearly one point, so a concept's owner claiming a shape would claim it program-wide.
 #[test]
 fn a_function_type_is_not_a_key() {
     for marks in [

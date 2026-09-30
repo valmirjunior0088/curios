@@ -16,7 +16,7 @@ use std::{
     rc::Rc,
 };
 
-/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept as a thin shim so the many existing call sites (this module, `erase*.rs`, tests) read unchanged while erase is migrated to downstream lowering.
+/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type.
 pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
@@ -64,7 +64,7 @@ pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error
 
 /// [`is_prop`] under the binders a surrounding walk has opened.
 ///
-/// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches — see `convert::Opened`. A seeding walk that assumed instead would invalidate them at every binder it descended through.
+/// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches. A seeding walk that assumed instead would invalidate them at every binder it descended through.
 pub(crate) fn is_prop_in(
     context: &mut Context,
     opened: &mut Vec<(Free, Term)>,
@@ -95,7 +95,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     }
 }
 
-/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` used here refused the whole term on the first open hole, so one unsolved `f` rendered `?(?)` where `?(double(p))` was known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
+/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` would refuse the whole term on the first open hole, so one unsolved `f` would render `?(?)` where `?(double(p))` is known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
 ///
 /// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
@@ -151,7 +151,7 @@ fn is_sequencing(context: &Context, term: &Term) -> bool {
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
 ///
-/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io Str` against `Io Nat` disagrees about the result, while `Io _` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
+/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io(Str)` against `Io(Nat)` disagrees about the result, while `Io(_)` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
 fn wraps_a_result(type_: &Term) -> bool {
     match &**type_ {
         Subterm::Apply(_) | Subterm::Intrinsic(Intrinsic::IoType(_)) => true,
@@ -185,7 +185,7 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
 
 /// Whether `inferred` is admissible where `expected` is wanted: the subsumption relation `A ≤ B`, decided structurally as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, and `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'` — falling through to conversion otherwise.
 ///
-/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion that refused `(b: Bool) -> Prop` where `(Bool) -> Type` was wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never named. See `documentation/design/language/subsumption-is-a-relation-not-a-traversal-order.md`.
+/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion, `(b: Bool) -> Prop` would be refused where `(Bool) -> Type` is wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never names. See `documentation/design/types/subsumption-is-a-relation-not-a-traversal-order.md`.
 ///
 /// Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
 fn subsume(
@@ -247,7 +247,7 @@ fn subsume(
 ///
 /// Opening both sides at the *same* occurrence is what makes the codomain comparison meaningful — the domains have just been compared, so a single binder stands for both.
 ///
-/// **A blocked rung abandons the walk rather than surrendering its goals.** Both of the things that would have to be true to park one are false here: `Context::park` freezes the *live* frame, so a goal naming a binder this walk minted would be retried under a frame that no longer assumes it; and a parked conversion is discharged by `retry_conversion` through `convert_outcome`, which decides a codomain by equality — the very rule this relation exists to widen. Conversion's own goals have neither problem, so the fallback is to let it park the pair. The cost is that a subsumption blocked on a metavariable is decided by conversion, refusing some programs the relation admits; those are exactly the programs refused before the relation was stated, so nothing regresses, and lifting it wants a `ParkedWork` that carries the relation.
+/// **A blocked rung abandons the walk rather than surrendering its goals.** Both of the things that would have to be true to park one are false here: `Context::park` freezes the *live* frame, so a goal naming a binder this walk minted would be retried under a frame that no longer assumes it; and a parked conversion is discharged by `retry_one` through `convert_outcome`, which decides a codomain by equality — the very rule this relation exists to widen. Conversion's own goals have neither problem, so the fallback is to let it park the pair. The cost is that a subsumption blocked on a metavariable is decided by conversion, refusing some programs the relation admits; lifting it wants a `ParkedWork` that carries the relation.
 fn subsume_telescope(
     context: &mut Context,
     term: &Term,
@@ -906,7 +906,7 @@ fn retry_checking(
     }
 
     let rebuilt = context.with_retry_frame(&frame, |context| {
-        // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly, matching the retired settle's behavior.
+        // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly.
         if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
             return Ok(None);
         }
@@ -937,15 +937,13 @@ fn retry_checking(
 /// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
 ///
-/// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. This once drove that too, keying a non-variable index — a constructor, a stuck application — as an equation on the index itself, the reverse of what the inverter pins or a fact the kernel does not have.
+/// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the kernel does not have.
 ///
 /// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the kernel records none either — judged on the scrutinee as the kernel spells it, its local definitions substituted, and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
 ///
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
-/// That is a typing fact now, not an analysis. This used to be guarded by a walk over the scrutinee and everything it reaches, asking whether its spelling fixes a value: `Cell/get(c)` denotes differently before and after a `Cell/set`, and registering an equation for it read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False`. The walk could never close the case it documented, either: `f(b)` for a *binder* `f` had to be assumed effectful, because the function space admitted `Cell/get` and no property of `(Bool) -> Bool` distinguished an effectful inhabitant from a pure one.
-///
-/// Retyping every host operation to return `Io` made both questions vacuous. `Cell/get(c)` has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all; and no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding. The refinement the walk had to withhold from a pure opaque head is therefore restored — this is a change that *admits* more, not merely one that deletes an analysis.
+/// That is a typing fact, not an analysis, because every host operation returns `Io`. `Cell/get(c)` denotes differently before and after a `Cell/set`, and an equation for it would read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False` — but it has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all. And no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding, a binder `f` included.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     if !records_case_equation(&Unfolding::everything(&*context).term(head)) {
         return Ok(());
@@ -973,7 +971,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 .map(|(key, original)| (key, original, false))
                 .collect::<Vec<_>>();
 
-            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it. That leaves a probe unanswered: settlement asks only an entry whose spelling names every local the probe does, and a probe reached by reduction names the locals the definitions' values mention, where the written spelling names the definitions — so under `let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F)`, `Byte/to_nat(c) <= 0x7F` is not answered. Algebra part 5's canonical refinement keys hold it.
+            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
             let unfolded = Unfolding::everything(&*context).term(head);
             if unfolded != *head {
                 for (key, original) in scrutinee_spellings(context, &unfolded)? {
@@ -1008,7 +1006,7 @@ pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) 
 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
 fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, Term)>, Error> {
-    // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here is what used to make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
+    // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here would make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
     let canonical = super::shallow_scrutinee(context, head);
 
     // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
@@ -1047,7 +1045,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 
 /// One application layer of `term` opened: its head reduced to a function and the body instantiated at the arguments as written, or `None` where `term` is no application or its head reduces to no function of its arity. No argument is reduced.
 ///
-/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong reached `Telescope::open`'s assertion as a panic.
+/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong would reach `Telescope::open`'s assertion as a panic.
 pub(crate) fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let Subterm::Apply(apply) = &**term else {
         return Ok(None);
@@ -1270,7 +1268,7 @@ fn check_written_motive(
     })
 }
 
-/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_intrinsic_head` and `elaborate`'s `elaborate_intrinsic_head` — one source of truth for the `IntrinsicHead` → type-former / error mapping.
+/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_intrinsic_head` and the match elaborator's `Scrutinee::of_intrinsic` — one source of truth for the `IntrinsicHead` → type-former / error mapping.
 pub(crate) fn check_intrinsic_head(
     expected: IntrinsicHead,
     head_type: Term,

@@ -1,6 +1,6 @@
 //! The record stream: [`trace`] runs a closure under a subscriber that writes one tab-separated row per span and event as it happens, so a run that never returns, or dies, still leaves everything it did on disk.
 //!
-//! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic the old collector computed is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
+//! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
 //!
 //! **The row shapes.** The first column is the kind, so `awk '$1 == "V"'` is a whole analysis:
 //!
@@ -15,7 +15,7 @@
 //! V  cs       ns      [k=v …]                               an event
 //! ```
 //!
-//! **A span carries no state.** The callsite index is packed into the span id, so `enter` recovers a span's identity from the id alone and this subscriber keeps nothing per span — no registry, no extensions, no map. That is what makes a record cheaper than the aggregate row it replaced, and it is why `D` rows exist: the name is stated once and referred to by index thereafter.
+//! **A span carries no state.** The callsite index is packed into the span id, so `enter` recovers a span's identity from the id alone and this subscriber keeps nothing per span — no registry, no extensions, no map. That is why `D` rows exist: the name is stated once and referred to by index thereafter.
 //!
 //! **Every file stands alone.** A rotation re-emits the header and every `D` row seen so far, so the surviving file is readable without the one that was discarded — which is the point of rotating rather than capping, since a hang's tail is what names the loop it is stuck in.
 
@@ -71,7 +71,7 @@ pub enum Destination {
 
 /// The file a rotation moved the previous rows to: `path` with `.prev` appended.
 ///
-/// Spelled here because rotation is this module's decision, and read back through [`fold_at`](crate::fold_at) so nothing derives it a second time. A reader that opened the set itself would be restating a convention it does not own — and because [`fold`](crate::fold) is deliberately tolerant of a truncated stream, a restatement that drifted would not fail. It would quietly report half a run as a whole one.
+/// Spelled here because rotation is this module's decision, and read back through [`fold_at`](crate::fold_at) so nothing derives it a second time; `fold_at` says what a restatement would cost.
 pub(crate) fn predecessor(path: &Path) -> PathBuf {
     let mut previous = path.to_path_buf().into_os_string();
     previous.push(".prev");
@@ -137,7 +137,7 @@ type Callsite = u32;
 
 /// A span id carries its callsite in its high bits, so [`Subscriber::enter`] — which is handed an id and nothing else — can name the span without this subscriber storing anything per span.
 ///
-/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the whole standard library's elaboration emits about 350 thousand.
+/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude build emits about a million (count the `S` rows of `curios-prelude-archive/.artifacts/profile.tsv`).
 fn pack(callsite: Callsite, sequence: u64) -> u64 {
     ((callsite as u64) << SEQUENCE_BITS) | (sequence & SEQUENCE_MASK).max(1)
 }
@@ -298,7 +298,7 @@ impl Sink {
         let (writer, rotate): (Box<dyn Write + Send>, _) = match destination {
             Destination::Stream(writer) => (writer, None),
             Destination::Rotating { path, cap } => {
-                // The directory is made here rather than by each caller, because the path is derived by `stream_path!` rather than chosen: a caller that cannot spell the path should not have to know which of its components exist.
+                // The directory is made here rather than by each caller, so a caller naming a path — `trace_build_script`'s, or `--profile`'s — need not know which of its components exist.
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent)?;
                 }
@@ -325,7 +325,7 @@ impl Sink {
         Ok(sink)
     }
 
-    /// Bytes handed to the writer, which is what a rotation is measured in. A failed write is counted as nothing and dropped; the module documentation says why it is not raised.
+    /// Bytes handed to the writer, which is what a rotation is measured in. A failed write is counted as nothing and dropped; [`trace`] says why it is not raised.
     ///
     /// Every row is flushed as it is written. A buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last rows are worth the most, so a row reaches the file before the step after it runs.
     fn put(&mut self, row: &str) {
@@ -432,7 +432,7 @@ impl Drop for Sink {
 
 /// Every field a span or an event carries, rendered as tab-separated `name=value` pairs.
 ///
-/// **Generic on purpose.** The collector this replaced kept a span's metadata and dropped its attribute values, visiting exactly one field of one event — so a field added at a call site was written and silently discarded, which is what `profile_group!` was invented to work around. Writing whatever arrives ends that class: a field is either in the file or it is not, and a reader can see which.
+/// **Generic on purpose.** A visitor that kept only the fields it knew would silently discard one added at a call site; writing whatever arrives means a field is either in the file or it is not, and a reader can see which.
 #[derive(Default)]
 struct Fields(String);
 
@@ -467,7 +467,7 @@ impl Visit for Fields {
     }
 }
 
-/// The four characters a tab-separated row cannot hold bare. A value reaches here through `Debug`, so this is about what a field *can* contain rather than what today's fields do contain.
+/// The four characters a tab-separated row cannot hold bare. A value reaches here through `Debug`, so this is about what a field *can* contain rather than what the workspace's fields do.
 pub(crate) fn escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {

@@ -280,7 +280,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_let_values(&mut self, values: &'a [(EmissionValueName, EmissionValue)]) {
         for (value_name, value) in values {
-            // No aggregate has a back-edge — a recursive knot ties through a cell, and cyclic tuples and lists are rejected in `into_cont` — so every field is already bound and each construction is a single `struct.new` / `array.new_fixed` (via `emit_data`).
+            // No aggregate has a back-edge — a recursive knot ties through a cell, and `curios-ersd`'s recursion rules refuse a tuple or list that evaluates itself — so every field is already bound and each construction is a single `struct.new` / `array.new_fixed` (via `emit_data`).
             match value {
                 EmissionValue::Pure(value) => {
                     self.declare_local(value_name);
@@ -296,7 +296,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     /// Emit one region: its bindings, then its blocks laid out as a structured nesting of `loop`, forward `block`, and localized-dispatcher scopes derived from the region's control-flow analysis ([`region_layout`]). Enters a frame the caller is responsible for leaving.
     ///
-    /// Guarded at the entry, as every data-shaped walk is: regions nest once per layout block, and a debug frame of this walk runs to tens of kilobytes, which is what put a mutually recursive dictionary group's knot past a test thread's stack at eight levels.
+    /// Guarded at the entry, as every data-shaped walk is: regions nest once per layout block, and a debug frame of this walk runs to tens of kilobytes, which would put a mutually recursive dictionary group's knot past a test thread's stack at eight levels.
     fn emit_region(
         &mut self,
         params: HashMap<&'a EmissionValueName, LocalData>,

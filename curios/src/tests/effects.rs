@@ -46,7 +46,7 @@ fn bind_passes_the_action_result_to_its_continuation() {
 
 /// The whole of what makes an `Io` a *description*: it erases to a thunk, so binding one to a name and forcing it twice performs it twice.
 ///
-/// `let a = …` names a description without performing it, so the two forces below are what produce the two writes. Calling `print` is not one of them: post-retype it builds an `Io({})` and performs nothing, which is why the name can be reused at all.
+/// `let a = …` names a description without performing it, so the two forces below are what produce the two writes. Calling `print` is not one of them: it builds an `Io({})` and performs nothing, which is why the name can be reused at all.
 #[test]
 fn a_description_bound_once_and_forced_twice_performs_twice() {
     let source = r#"
@@ -59,7 +59,7 @@ fn a_description_bound_once_and_forced_twice_performs_twice() {
     assert_eq!(run(source), b"xx");
 }
 
-/// The program tail is where the retype is load-bearing: a tail of non-`Io` type describes nothing to perform, so the pipeline refuses it rather than emitting a program that runs and does nothing.
+/// The program tail is where `Io` being a description is load-bearing: a tail of non-`Io` type describes nothing to perform, so the pipeline refuses it rather than emitting a program that runs and does nothing.
 #[test]
 fn a_non_io_tail_is_refused() {
     let error = typecheck(
@@ -353,7 +353,7 @@ fn a_result_value_sequences_in_a_result_region() {
 
 // === The `Lift` embedding vocabulary and auto-lift at `!`. =======================
 
-/// The acceptance flip: an `Io` action sequenced bare inside an `Async` region, lifted through the `/std/Async` edge with nothing spelled at the call site.
+/// An `Io` action sequenced bare inside an `Async` region, lifted through the `/std/Async` edge with nothing spelled at the call site.
 #[test]
 fn an_io_action_lifts_into_an_async_region() {
     let source = r#"
@@ -552,7 +552,7 @@ fn a_non_monad_action_is_called_out() {
     );
 }
 
-/// A monad-polymorphic action (`Monad/pure`) has no rigid monad of its own: the oracle abstains, the region pins the flex hole exactly as before auto-lift existed, and nothing is wrapped.
+/// A monad-polymorphic action (`Monad/pure`) has no rigid monad of its own: the oracle abstains, the region pins the flex hole as it would with no lift at all, and nothing is wrapped.
 #[test]
 fn a_flex_action_still_sequences_without_lifting() {
     let source = r#"
@@ -616,7 +616,7 @@ fn a_bang_in_an_inference_position_region_is_refused() {
 
 /// A region whose type is known and is no monad names that type, rather than reporting the wrapper's unsolved hole.
 ///
-/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — the wrapper's own inference then reported `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type was already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
+/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — left to the wrapper's own inference it would report `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type is already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
 #[test]
 fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     for (source, region) in [
@@ -666,7 +666,7 @@ fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {
 
 #[test]
 fn a_long_sequencing_chain_compiles_and_runs() {
-    // Regression: `inline_known_calls` used to leave each inlined callee's dead body standing between sweeps, so its call sites kept counting, callees turned multi-site, and a `!` chain's continuations duplicated exponentially — 16 sequenced actions did not finish compiling. Pruning once per sweep (the shape its sibling pass always had) makes the chain linear.
+    // `inline_known_calls` prunes each inlined callee's dead body between sweeps; left standing, its call sites would keep counting, callees would turn multi-site, and a `!` chain's continuations would duplicate exponentially — 16 sequenced actions would not finish compiling.
     let mut source = String::from("use /std/{Str, Io, print};\n");
     for _ in 0..24 {
         source.push_str("let _ = print(\"x\")!;\n");
@@ -677,7 +677,7 @@ fn a_long_sequencing_chain_compiles_and_runs() {
 
 /// A `!` reads its region's monad from a type whose *value slot* is still open, which is what a lambda checked against a caller's signature always has.
 ///
-/// The region here is `Try(Io, Io/Error, ?)`: rigid head, rigid context arguments, and only the slot the `!` itself solves left open. It was refused as `which is no monad` — a message that was wrong twice, since the type is one whose monad is plainly `(X) => Try(Io, Io/Error, X)` and it was the reading, not the monad, that was missing. Annotating the enclosing result type, which changes nothing about the monad, made the identical program compile. `/std/File/with` and `/std/tcp/Socket/with` are spelled exactly this way, so no bracket body could sequence without an annotation.
+/// The region here is `Try(Io, Io/Error, ?)`: rigid head, rigid context arguments, and only the slot the `!` itself solves left open. Refusing it as `which is no monad` would be wrong twice — the type is one whose monad is plainly `(X) => Try(Io, Io/Error, X)`, and what would be missing is the reading, not the monad — and annotating the enclosing result type, which changes nothing about the monad, would make the identical program compile. `/std/File/with` and `/std/tcp/Socket/with` are spelled exactly this way.
 #[test]
 fn a_bang_reads_its_monad_where_only_the_value_slot_is_open() {
     let source = r#"

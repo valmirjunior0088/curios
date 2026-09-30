@@ -9,7 +9,7 @@ use {
 
 #[test]
 fn the_description_schedules_every_rung() {
-    // The end-to-end scheduler probed on 2026-08-31, now through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the kernel checks and never reaches a runner.
+    // The end-to-end scheduler, through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the kernel checks and never reaches a runner.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
@@ -154,9 +154,9 @@ fn numerals_and_booleans_spell_as_their_literals() {
     );
 }
 
-/// Every one of the four cases, because the witness decides them and only one of them used to be asserted.
+/// Every one of the four cases, because the witness decides them.
 ///
-/// The three non-finites were told apart by string-matching `Flt/to_str`'s output, so a rendering change would have silently sent one down the numeral path and produced text that is no `Flt` literal — with `nan` the only branch a test looked at. They are decided from the value now; both infinities are here so neither can drift alone. The last row is an overflowing multiply, which is how a non-finite reaches a report without anyone spelling one.
+/// The three non-finites are decided from the value rather than by string-matching `Flt/to_str`'s output, where a rendering change could silently send one down the numeral path and produce text that is no `Flt` literal; both infinities are here so neither can drift alone. The last row is an overflowing multiply, which is how a non-finite reaches a report without anyone spelling one.
 #[test]
 fn floats_and_their_non_finite_values_spell_as_literals() {
     assert_eq!(
@@ -213,7 +213,7 @@ fn sequences_spell_as_their_bracketed_literals() {
 
 #[test]
 fn structural_values_spell_as_type_qualified_constructor_paths() {
-    // The declaration now lives at `/sys/Option`, while its derived spelling remains `Option/some` through the public facade.
+    // The declaration lives at `/sys/Option`, while its derived spelling is `Option/some`, through the public facade.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Option, Result, Ordering, Io, Spell, print};
@@ -230,7 +230,7 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
 
 #[test]
 fn a_structural_fixture_compares_and_spells() {
-    // The `/std` gap closed: `Option`, `Result` and `Ordering` carry `Eql` and `Spell`, so `Test/equal` works on them out of the box.
+    // `Option`, `Result` and `Ordering` carry `Eql` and `Spell`, so `Test/equal` works on them out of the box.
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Option, Test};
@@ -242,7 +242,7 @@ fn a_structural_fixture_compares_and_spells() {
 
 #[test]
 fn a_test_declaration_compiles_beside_the_entry() {
-    // Step 3's acceptance: a `test` declaration is an ordinary definition of kind `Test` — the program's authored entry still runs, and the unreferenced test rides through elaboration, certification and erasure without disturbing it.
+    // A `test` declaration is an ordinary definition of kind `Test` — the program's authored entry still runs, and the unreferenced test rides through elaboration, certification and erasure without disturbing it.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Test};
@@ -279,7 +279,7 @@ fn a_bare_bang_in_a_test_body_is_refused() {
         /std/print("ran\n")
         "#,
     );
-    // By the fault it names — the region's type, and that the type is no monad — rather than by the concept's spelling: the diagnostic says "no monad" in prose, and pinning the capitalized name made a reworded sentence read as a missing refusal.
+    // By the fault it names — the region's type, and that the type is no monad — rather than by the concept's spelling: the diagnostic says "no monad" in prose, and pinning the capitalized name would make a reworded sentence read as a missing refusal.
     assert!(
         error.contains("Test") && error.contains("no monad"),
         "unexpected error: {error}"
@@ -298,7 +298,7 @@ fn survives(module: &curios_ersd::Module, needle: &str) -> bool {
 
 #[test]
 fn declared_tests_schedule_through_the_synthesized_tail() {
-    // Step 4's acceptance: the unit compiled as its own test program runs every declared test in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
+    // The unit compiled as its own test program runs every declared test in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
     assert_eq!(
         run_tests_program(
             r#"
@@ -335,7 +335,7 @@ fn the_ordinary_program_prunes_what_the_test_program_keeps() {
 
 #[test]
 fn a_body_written_as_a_whole_term_form_is_recorded() {
-    // The runner slices a test's body from the span its lowered lambda carries, and `Lowerer::region` used to stamp that span on its spine arm alone: a body rooted at `match`, `let`, `choose` or a lambda rebuilt its node and reached Core unspanned, so `curios test` reported those failures with no body under them — the three forms below all printed an empty line where the source belongs. The same gap left an elaboration error at such a root unlocated.
+    // The runner slices a test's body from the span its lowered lambda carries, so `Lowerer::region` stamps that span on every root it rebuilds: a body rooted at `match`, `let`, `choose` or a lambda that reached Core unspanned would be reported with an empty line where the source belongs, and an elaboration error at such a root would be unlocated.
     let entrypoint = r#"
         use /std/{Nat, Str, Bool, Io, Test};
         test application =

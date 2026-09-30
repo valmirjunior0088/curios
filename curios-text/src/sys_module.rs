@@ -1,4 +1,4 @@
-//! The roster of `/sys`: every intrinsic type and operation the language provides, built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding.
+//! The roster of `/sys`: every intrinsic type and operation the language provides, built directly as `text` AST and compiled as the prelude's `/sys` unit, so intrinsics participate in the module system like any other binding.
 //!
 //! Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //!
@@ -253,7 +253,7 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             &["Whether `a` is below `b`."],
             binary("lt", nat(), bool_(), Intrinsic::NatLt),
         ),
-        // **`gt` and `ge` are built as their `lt`/`le` mirrors, on every carrier.** A comparison is spelled one way from the moment it enters Core, so a case equation recorded on a guard as written and the same guard met reduced inside a proposition are one term — the reducer's own mirror covers an intrinsic built by hand, but a spelling that never exists cannot be keyed on. See `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`.
+        // **`gt` and `ge` are built as their `lt`/`le` mirrors, on every carrier.** A comparison is spelled one way from the moment it enters Core, so a case equation recorded on a guard as written and the same guard met reduced inside a proposition are one term — the reducer's own mirror covers an intrinsic built by hand, but a spelling that never exists cannot be keyed on. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
         documented(
             &["Whether `a` is above `b`."],
             binary("gt", nat(), bool_(), |a, b| Intrinsic::NatLt(b, a)),
@@ -744,7 +744,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 }),
             ),
         ),
-        // A window is a start and a *count*, so a reversed one cannot be spelled and the ordering half of the old bound has no proposition left to state. What survives is that the window ends inside the value.
+        // A window is a start and a *count*, so a reversed one cannot be spelled and an ordering bound has no proposition to state. What survives is that the window ends inside the value.
         documented(
             &[
                 "The run from `from` up to but not including `to`, under the evidence that both are within the length and in order.",

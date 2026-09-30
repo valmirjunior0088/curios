@@ -45,7 +45,7 @@ pub struct InductDecl {
     pub arity: Telescope<Telescope<()>>,
     /// Per-constructor signatures **in declaration order** — each the constructor's signature telescope (see [`InductParam`]).
     ///
-    /// A sequence rather than a map, because the order is load-bearing: a constructor's position here *is* its runtime tag (`Self::constructor_index`). A `BTreeMap<Atom, _>` made that position the collation order over constructor spellings, so renaming a case silently renumbered the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
+    /// A sequence rather than a map, because the order is load-bearing: a constructor's position here *is* its runtime tag (`Self::constructor_index`). A `BTreeMap<Atom, _>` would make that position the collation order over constructor spellings, so renaming a case would silently renumber the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
     pub constructors: Vec<(Atom, InductParam)>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the type-constructor's kind. A fully-applied `InductType { name, .. }` has this sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
@@ -116,7 +116,7 @@ impl InductDecl {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }
 
-    /// `tag`'s signature entry, or `None` if it is not a case of this inductive. Constructor counts are small, so the scan is cheaper than the tree the collation-ordered map needed.
+    /// `tag`'s signature entry, or `None` if it is not a case of this inductive. Constructor counts are small, so the scan is cheaper than a tree.
     pub fn constructor(&self, tag: &Atom) -> Option<&InductParam> {
         self.constructors
             .iter()

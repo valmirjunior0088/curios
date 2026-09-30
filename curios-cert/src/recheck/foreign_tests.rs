@@ -13,7 +13,7 @@ use super::test_support::*;
 
 /// A forged ABI row cannot hand the guest an inhabitant of a proposition, because a wire signature cannot name one.
 ///
-/// The foreign wire contract is the one perimeter row `curios/src/tests/perimeter.rs` records as enforced by the *grammar*: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and `both_checkers` returns `NotAsked` for both columns — which that file summarizes as "the rule is the parser's and neither checker backs it up". As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the kernel with the rule already broken?
+/// The foreign wire contract is the perimeter row `curios/src/tests/perimeter` records as enforced by the *grammar*: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and neither checker is asked — the rule is the parser's. As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the kernel with the rule already broken?
 ///
 /// It cannot be broken, and the reason is representational rather than a check. `Subterm::Foreign` carries a `ForeignFunction`: a builtin is an identity whose row is the roster's and cannot be written on the term at all, and a declared row's `signature` is a `WireSignature` over `WireType`, a closed enum of wire carriers. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result through `foreign_signature` over that enum and checks each operand against its own wire type, so what a declared row claims about its name — the part a forgery controls — never reaches the type at all.
 ///
@@ -40,7 +40,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     );
 }
 
-/// The control for the fixture above: the same forged row at the type its own signature names, wrapped in the description every host call now returns. `wire_term` still reads `Nat` off the signature; `infer` wraps it, because a foreign call is an effect and an effect is an `Io`. Stating the control at the bare `Nat` would fail for a reason that has nothing to do with forgery.
+/// The control for the fixture above: the same forged row at the type its own signature names, wrapped in the description every host call returns. `wire_term` still reads `Nat` off the signature; `infer` wraps it, because a foreign call is an effect and an effect is an `Io`. Stating the control at the bare `Nat` would fail for a reason that has nothing to do with forgery.
 #[test]
 fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     let false_name = Global::Authored(Qualifier::from(["False"]));

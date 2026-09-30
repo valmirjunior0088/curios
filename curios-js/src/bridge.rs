@@ -94,7 +94,7 @@ pub(crate) fn bridge_module() -> Module {
 
     let i32_val = ValType::Num(NumType::I32);
 
-    // The list-of-references payload: `(mut (ref null any))` elements, matching the codegen's `list_type` and the native adapter's `anyref_array_type`.
+    // The list-of-references payload: `(mut (ref null any))` elements, matching the codegen's `$elems` and the native adapter's `anyref_array_type`.
     let any_ref = ValType::Ref(RefType {
         is_nullable: true,
         heap_type: HeapType::Abstract(AbsHeapType::Any),

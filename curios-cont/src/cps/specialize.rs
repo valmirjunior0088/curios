@@ -16,7 +16,7 @@ pub(super) enum Knowledge {
     Conflict,
 }
 impl Knowledge {
-    /// Fold one transfer in: `None` is a transfer whose arguments cannot be seen — an escaping reference, an operation delivering its result — and it is a conflict from whatever state, not only from `Known`. It once left `Unknown` standing, so a join that was first an operation's `return_to` and then a jump's target learned the jump's literal as if it were the only way in, and the order the arena happened to list the two decided what the program computed.
+    /// Fold one transfer in: `None` is a transfer whose arguments cannot be seen — an escaping reference, an operation delivering its result — and it is a conflict from whatever state, not only from `Known`. Leaving `Unknown` standing would let a join that is first an operation's `return_to` and then a jump's target learn the jump's literal as if it were the only way in, so the order the arena happens to list the two would decide what the program computes.
     fn merge(&mut self, incoming: Option<&Atom>) {
         match (&*self, incoming) {
             (Self::Conflict, _) => {}
@@ -85,7 +85,7 @@ pub(super) fn scc_invariant_knowns(
 
     let class = invariant_fixpoint(&params_of, &constraints, known_literals);
 
-    // A function reference is forwarded into a member only where the member's body may name it. `rewrite_atoms` turns the member's closure call on the parameter into a known call, and a recursive callee is exactly the one the inliner then declines to bring into scope — so a reference from outside the member's lexical scope stood as an out-of-scope call at the round's close. Out of scope, the closure call stays a closure call.
+    // A function reference is forwarded into a member only where the member's body may name it. `rewrite_atoms` turns the member's closure call on the parameter into a known call, and a recursive callee is exactly the one the inliner then declines to bring into scope — so a reference from outside the member's lexical scope would stand as an out-of-scope call at the round's close. Out of scope, the closure call stays a closure call.
     let owner_of_param: BTreeMap<ValueId, FunctionId> = params_of
         .iter()
         .flat_map(|(function, params)| params.iter().map(move |param| (*param, *function)))
@@ -391,7 +391,7 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
     *budget -= 1;
     true
 }
-/// The `LetValue`-bound tagged tuples: values whose defining expression is a tuple whose first field is a `Nat` literal tag. These are the constructor call patterns branch specialization can bake into a callee.
+/// The `LetValue`-bound tagged constructions: values whose defining expression is a tuple or a row construction whose first field is a `Nat` literal, read as the tag. These are the constructor call patterns branch specialization can bake into a callee.
 pub(super) fn tagged_tuple_values(
     module: &Module,
 ) -> BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)> {

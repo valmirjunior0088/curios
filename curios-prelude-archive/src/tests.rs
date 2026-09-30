@@ -36,7 +36,7 @@ pub(crate) fn authored() -> Vec<PathBuf> {
 
 /// **The standard library is written in the canonical form `curios format` produces.**
 ///
-/// The formatter is only worth having if it can be run on the corpus that motivated it, and `curios format --check` is only a guarantee where something checks it. Nothing did: 23 of these files drifted from canonical form, so anyone running the formatter over the tree got a diff of a few hundred lines and learned nothing about their own change. That is also how a formatter defect survives — the one that placed a comment on the wrong arm went unnoticed because nobody could format the corpus to see it.
+/// `curios format --check` is only a guarantee where something checks it. A corpus drifted from canonical form hands anyone formatting the tree a diff that says nothing about their own change, and hides a formatter defect — a comment placed on the wrong arm — from the one corpus large enough to show it.
 ///
 /// Formatting is syntax-only — no prelude, no elaboration, no compiler — so this belongs in the ordinary suite rather than behind `--ignored`, and it is this crate's rather than `curios-text`'s because these are the sources this crate authors. A failure names the file, and `curios format <file>` is the fix.
 #[test]

@@ -69,7 +69,7 @@ fn a_constant_is_not_bounded_by_a_bare_parameter() {
 
 /// **A hypothesis is what puts a floor under a parameter**, and the rule above is the no-hypothesis case rather than the whole relation.
 ///
-/// A recursive group states exactly this constraint about its own levels: a member calling itself at `Type` — `pick(@Type, …)` for `pick(@A: Type, …)` — needs the group's `u` strictly above zero, and the elaborator records `1 ≤ u` in the scheme it generalizes. The kernel refused such a declaration under its own context until this held, because the constant part was decided structurally *before* the hypotheses were reached: the premise was sitting in `assumed` and nothing consulted it. The elaborator accepted the same program, its solver having the constraint, so the pair was a two-checker disagreement on a program with nothing adversarial in it.
+/// A recursive group states exactly this constraint about its own levels: a member calling itself at `Type` — `pick(@Type, …)` for `pick(@A: Type, …)` — needs the group's `u` strictly above zero, and the elaborator records `1 ≤ u` in the scheme it generalizes. Deciding the constant part structurally, *before* the hypotheses are reached, would leave the premise sitting in `assumed` with nothing consulting it, and the kernel would refuse a declaration the elaborator's solver accepts — a two-checker disagreement on a program with nothing adversarial in it.
 #[test]
 fn a_hypothesis_bounds_a_constant_where_a_bare_parameter_does_not() {
     let u = param(0);
@@ -89,7 +89,7 @@ fn a_constant_floor_chains_through_the_hypotheses() {
     assert!(!entails(&[leq(&one, &u)], &one, &v));
 }
 
-/// A premise is read at its own floor, so one carrying atoms bounds a constant: `u + 1 ≤ v` says `v` is at least one, `u` being a natural whose offset is carried whatever it is assigned. The premise's *constant* is zero there, and reading that instead of its floor was an incompleteness this rule was written with and then lost.
+/// A premise is read at its own floor, so one carrying atoms bounds a constant: `u + 1 ≤ v` says `v` is at least one, `u` being a natural whose offset is carried whatever it is assigned. The premise's *constant* is zero there, and reading that instead of its floor would be an incompleteness.
 #[test]
 fn a_premise_carrying_atoms_bounds_a_constant_at_its_floor() {
     let (u, v) = (param(0), param(1));
@@ -236,7 +236,7 @@ fn try_lift_hypotheses() -> Vec<UniverseConstraint> {
     assumed
 }
 
-/// The four questions that cost the backward search nine of its ten seconds on this witness, each a bound one hypothesis states verbatim: forward, that hypothesis fires in the first pass. The model is driven here pass by pass, and the work is the figure held, because a regression to a search would show as work long before it showed as a wrong answer.
+/// The four questions a backward search spends seconds on for this witness, each a bound one hypothesis states verbatim: forward, that hypothesis fires in the first pass. The model is driven here pass by pass, and the work is the figure held, because a regression to a search would show as work long before it showed as a wrong answer.
 #[test]
 fn the_try_lift_s_questions_are_answered_in_one_pass() {
     let assumed = try_lift_hypotheses();

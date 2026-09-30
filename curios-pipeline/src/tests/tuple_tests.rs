@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn let_bound_tuple_with_an_effectful_field_lowers() {
-    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`. Head-only purity classification used to route the whole `let` through `lower_pure_name` and panic the compiler on the field's host intrinsic. End-to-end guard for `is_pure_term`. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`; a purity classification reading the head alone would lower the whole `let` as pure and panic the compiler on the field's host intrinsic. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
     let source = r#"
         foreign frobnicate : (Nat) -> Nat;
         let t = (frobnicate(5), 2);
@@ -15,7 +15,7 @@ fn let_bound_tuple_with_an_effectful_field_lowers() {
     assert!(compile(source, None).is_ok());
 }
 
-// --- B2: named tuple fields ----------------------------------------------
+// --- Named tuple fields --------------------------------------------------
 
 #[test]
 fn proj_by_label_resolves_to_its_position() {

@@ -59,7 +59,7 @@ fn a_motive_binder_annotation_may_name_earlier_index_binders() {
     assert_eq!(run(source), b"6");
 }
 
-// Plicity is expressible because the annotation is a real application: `Eq` hides its type parameter, so `Eq()(s, t)` is how it is written here, and the old flat slot list that spelled it `Eq(A, s, t)` has no counterpart.
+// Plicity is expressible because the annotation is a real application: `Eq` hides its type parameter, so `Eq()(s, t)` is how it is written here.
 #[test]
 fn a_motive_binder_annotation_obeys_the_families_plicity() {
     let source = r#"
@@ -75,7 +75,7 @@ fn a_motive_binder_annotation_obeys_the_families_plicity() {
     assert_eq!(run(source), b"7");
 }
 
-// A `| _ =>` catch-all on an indexed family. Every motive binds its indices whether or not the body uses them, so a default no longer collides with a "pattern motive": the enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones.
+// A `| _ =>` catch-all on an indexed family. Every motive binds its indices whether or not the body uses them, so the enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones.
 #[test]
 fn a_default_arm_is_allowed_on_an_indexed_family() {
     let source = r#"
@@ -122,7 +122,7 @@ fn an_under_bound_motive_reports_its_binder_count() {
 
 // === The ambient result ======================================================
 //
-// An omitted motive over a variable scrutinee, in a position with an expected type, takes that type as the elimination's result and checks each arm against it with the scrutinee and its variable indices standing for the arm's case. A hypothesis whose type mentions the scrutinee — `d : Utf8(s, b)` under `match s`, over the state-indexed validity family `/std/Str` once declared — therefore needs no convoy: no family is closed over `s`, so nothing has to be typed under a binder that `d`'s type does not name. This is the shape the elaborator used to synthesize a convoy for, and the one that convoy hid from the size-change walk.
+// An omitted motive over a variable scrutinee, in a position with an expected type, takes that type as the elimination's result and checks each arm against it with the scrutinee and its variable indices standing for the arm's case. A hypothesis whose type mentions the scrutinee — `d : Utf8(s, b)` under `match s`, over a state-indexed validity family — therefore needs no convoy: no family is closed over `s`, so nothing has to be typed under a binder that `d`'s type does not name, and nothing hides the shape from the size-change walk as a synthesized convoy would.
 #[test]
 fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
     let source = r#"
@@ -149,7 +149,7 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
 
 // === The ambient result over an expression ===================================
 //
-// An omitted motive over an expression scrutinee takes the ambient form as a variable's does: the goal as written, its syntactic occurrences of the expression replaced by the case, and the arm's refinement reducing every occurrence the goal reaches only by unfolding. A family solved by occurrence abstraction saw the goal reduced at its root instead, where an occurrence spelled through a `let` escaped the abstraction while the application the refinement is keyed on had been unfolded away — so `classify`'s shape, a defined guard behind a `let` after an earlier guard, was refused although the written constant motive checked it.
+// An omitted motive over an expression scrutinee takes the ambient form as a variable's does: the goal as written, its syntactic occurrences of the expression replaced by the case, and the arm's refinement reducing every occurrence the goal reaches only by unfolding. A family solved by occurrence abstraction would see the goal reduced at its root instead, where an occurrence spelled through a `let` escapes the abstraction while the application the refinement is keyed on has been unfolded away — refusing `classify`'s shape, a defined guard behind a `let` after an earlier guard, which the written constant motive checks.
 #[test]
 fn an_elided_motive_over_an_expression_reaches_a_guard_behind_a_let() {
     let source = r#"

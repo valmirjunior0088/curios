@@ -1,14 +1,10 @@
 //! The closure ABI: table indices, interned capture-free closures, the escaping uses that coexist with direct ones, and the convoys that need none.
 
-//! Structural acceptance fixtures. Each test compiles a small `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural property of the emitted code — a clean natural loop for a hot kernel, direct recursion, the closure ABI only where a call is genuinely unknown — and that the raw module validates and executes without Binaryen repairing control flow.
-//!
-//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
-
 use super::test_support::*;
 
 // -- general corpus ---------------------------------------------------------
 
-/// G1: a genuinely unknown higher-order call retains the closure ABI and dispatches through its arity's typed table. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches as environments carrying their body's `i32` table index, and dispatches through `call_indirect`.
+/// A genuinely unknown higher-order call retains the closure ABI and dispatches through its arity's typed table. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches as environments carrying their body's `i32` table index, and dispatches through `call_indirect`.
 #[test]
 fn unknown_higher_order_call_uses_closure_abi_and_call_indirect() {
     let wat = wat(HIGHER_ORDER);
@@ -61,7 +57,7 @@ fn closures_carry_their_code_as_a_table_index() {
     );
 }
 
-/// A capture-free closure constructed in a loop pins as a module const: the constant hoister interns it like any constant aggregate — the swap made its code field an `i32`, dissolving the exclusion that kept closures inline to keep `ref.func` out of the start function — so the loop's arms reference globals and no per-iteration environment construction survives in function code. The environments are built exactly once, in `$start`.
+/// A capture-free closure constructed in a loop pins as a module const: the constant hoister interns it like any constant aggregate, its code field being an `i32` rather than a `ref.func` the start function would have to build — so the loop's arms reference globals and no per-iteration environment construction survives in function code. The environments are built exactly once, in `$start`.
 #[test]
 fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
     let wat = wat(LOOPED_PICK);
@@ -89,7 +85,7 @@ fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
     );
 }
 
-/// G2: direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of allocated `$envr/<N>` environments overlap — the environment carries its wrapper's index, and its allocation is what materializing the closure is now.
+/// Direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of allocated `$envr/<N>` environments overlap — the environment carries its wrapper's index, and its allocation is what materializing the closure is.
 #[test]
 fn direct_and_escaping_uses_coexist() {
     let wat = wat(DIRECT_ESCAPING);
@@ -103,14 +99,7 @@ fn direct_and_escaping_uses_coexist() {
     );
 }
 
-/// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
-///
-/// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
-///
-/// The `call_indirect` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description now, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the table and the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
-///
-/// **The environment goes with the closure, and that is lowering's doing rather than this transform's.** A free value reaches a directly-called function as a lifted parameter and an escaping one as an environment field — one decision, taken in `machine::lower` — so absorbing the application moves `walk`'s captured `n` from the second case to the first for free. The emitted pair takes it as a parameter and allocates nothing.
-/// A returned closure the caller also captures keeps being a closure. Absorbing the application handed the capturing lambda the applied answer in the closure's place: this program trapped inside the lambda with no argument and inside `mk` with three, until the admission walk entered the lambda.
+/// A returned closure the caller also captures keeps being a closure: absorbing the application would hand the capturing lambda the applied answer in the closure's place, and this program would trap inside the lambda with no argument and inside `mk` with three. The admission walk enters the lambda to see it.
 #[test]
 fn a_returned_closure_the_caller_also_captures_is_not_absorbed() {
     for args in [&[][..], &["a", "b", "c"][..]] {
@@ -123,6 +112,13 @@ fn a_returned_closure_the_caller_also_captures_is_not_absorbed() {
     }
 }
 
+/// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
+///
+/// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
+///
+/// The `call_indirect` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the table and the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
+///
+/// **The environment goes with the closure, and that is lowering's doing rather than this transform's.** A free value reaches a directly-called function as a lifted parameter and an escaping one as an environment field — one decision, taken in `machine::lower` — so absorbing the application moves `walk`'s captured `n` from the second case to the first for free. The emitted pair takes it as a parameter and allocates nothing.
 #[test]
 fn a_returned_closure_every_caller_applies_is_absorbed() {
     let wat = wat(UNCURRY);

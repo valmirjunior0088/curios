@@ -4,7 +4,7 @@ use {
     std::sync::Arc,
 };
 
-/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate the error is opaque except for [`ParserError::format`].
+/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate its fields are private: a report is read through [`ParserError::report`] or [`ParserError::format`], and a recovering caller reads its offset, commitment and tag.
 #[derive(Debug, Clone)]
 pub struct ParserError {
     fatal: bool,

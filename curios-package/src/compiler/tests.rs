@@ -11,7 +11,7 @@ fn store(name: &str) -> (Temporary, Store) {
     (root, store)
 }
 
-/// One compiler, one identity — and asking twice costs a `stat` the second time, because the digest is memoized against the binary's size and modification time.
+/// One compiler, one identity — and asking twice costs a `stat` the second time, because the digest is memoized against the binary's stamp.
 #[test]
 fn a_compiler_identifies_itself_the_same_way_twice() {
     let (_root, store) = store("compiler-stable");
@@ -30,7 +30,6 @@ fn a_compiler_identifies_itself_the_same_way_twice() {
     assert!(recorded.ends_with(&first), "{recorded}");
 }
 
-/// A stale record is not believed. Its stamp is what says which binary it describes, so a record naming a different one is recomputed rather than trusted — which is the whole reason the stamp is stored beside the digest.
 /// The memo is staged beside its place and renamed over it, so what the store holds afterwards is the memo and nothing else: no staging file outlives the write, and a reader never opens a half-written one.
 #[test]
 fn the_memo_is_the_only_file_left_beside_it() {
@@ -45,6 +44,7 @@ fn the_memo_is_the_only_file_left_beside_it() {
     assert_eq!(beside, vec!["compiler".to_string()]);
 }
 
+/// A stale record is not believed. Its stamp is what says which binary it describes, so a record naming a different one is recomputed rather than trusted — which is the whole reason the stamp is stored beside the digest.
 #[test]
 fn a_record_describing_another_binary_is_recomputed() {
     let (_root, store) = store("compiler-stale");

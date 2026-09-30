@@ -15,7 +15,7 @@ pub let WellFounded(@A: Type, R: (A, A) -> Prop) -> Prop =
 ---
 --- `P` is a `Type`, so the recursion computes as readily as it proves: a `Prop` motive rides it by cumulativity, and erasure deletes the accessibility proof it descends on, leaving the step alone to run. Over [`lt`] it is course-of-values induction on `Nat`.
 ---
---- The loop is local to a wrapper that does not recurse, so inlining the wrapper at a call fuses `step` into the loop. A `recurse` that passed `step` to itself kept an indirect call at every level, and ran out of stack at about two thirds of the depth.
+--- The loop is local to a wrapper that does not recurse, so inlining the wrapper at a call fuses `step` into the loop. A `recurse` that passed `step` to itself would keep an indirect call at every level, and run out of stack sooner.
 pub let recurse(
     @A: Type,
     @R: (A, A) -> Prop,

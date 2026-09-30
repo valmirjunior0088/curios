@@ -2,7 +2,7 @@
 
 The complete command-line and package reference. The [README](../README.md) covers the happy path; this covers the rest.
 
-- [What governs](#what-governs)
+- [Which manifest governs](#which-manifest-governs)
 - [What a package is made of](#what-a-package-is-made-of)
 - [Targets](#targets)
 - [The surface](#the-surface)
@@ -14,9 +14,9 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [Where things go](#where-things-go)
 - [Reusing what was already built](#reusing-what-was-already-built)
 
-## What governs
+## Which manifest governs
 
-The governing package is the one whose `curios.toml` is nearest: in the working directory, or the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a build names the manifest on its `Processing` line whenever it is not in the working directory: `Processing serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
+The governing package is the one whose `curios.toml` is nearest to the target — a file's own directory, the working directory for a name or no argument — found there or in the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a build names the manifest on its `Processing` line whenever it is not in the working directory: `Processing serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
 
 Above the package, only the umbrella is looked for, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where the store goes, and it is shared with your sibling members.
 
@@ -81,16 +81,16 @@ Ten commands, and `wonder`'s five queries — eleven where the compiler was buil
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
 | [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
-| [`lint`](#lint) | anything | — | nothing | reads only |
+| [`lint`](#lint) | anything | — | nothing | reads; files the `compiler` memo |
 | [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
-| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads only |
-| [`wonder tests`](#wonder) | anything | — | nothing | reads only |
-| [`wonder cost`](#wonder) | a program | — | nothing | reads only |
-| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads only |
-| [`wonder server`](#wonder) | — | — | nothing | reads only |
+| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads; files the `compiler` memo |
+| [`wonder tests`](#wonder) | anything | — | nothing | reads; files the `compiler` memo |
+| [`wonder cost`](#wonder) | a program | — | nothing | reads; files the `compiler` memo |
+| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads; files the `compiler` memo |
+| [`wonder server`](#wonder) | — | — | nothing | reads; files the `compiler` memo |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
-`--manifest` is taken by every command but `new`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin` and `format`. Both are stated under [Flags](#flags).
+`--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
 
 ## `run`
 
@@ -102,7 +102,7 @@ curios run scratch.crs           # a file
 
 Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`. It is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why `run`'s own flags go before the target.
 
-A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument past what a host function's wire carries, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
+A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument past what a host function's wire carries, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running, a host's reply outside its call's contract — followed by the wasm frames where the build kept their names.
 
 A running program's own exit code passes through untouched.
 
@@ -130,7 +130,7 @@ curios document --std site   # the standard library
 
 `--std <DIR>` documents the standard library the compiler was built with instead, writing its pages under `DIR`: the record is read off the prelude every compilation starts from, so nothing is compiled and no sources are read. It takes no target, and since the standard library has no store to file pages under, the flag itself names where they go and `--output` does not apply.
 
-The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
+The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer. A reference into a dependency or the standard library renders as its qualified name in plain text: the pages document one library and link nothing outside it. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
 
 What is written is `index.html`, one page per other module at its source path with the suffix `.crs.html` — `/json/parse/lexer` is `parse/lexer.crs.html`, so a module named `index` never lands on the landing page — and, under `static/`, the stylesheet, the three brand fonts with their licenses, the mark, the search index as one script, and the script that runs the rail and the field. Files are overwritten by name and nothing else in the directory is touched. How the pages themselves are built, and why the search index is a script rather than a file to fetch, is [`curios-document`'s](../curios-document/README.md).
 
@@ -160,7 +160,7 @@ The test *verdicts* are never cached — every invocation runs every selected te
 curios curate
 ```
 
-`curate` materializes what the manifests reference, and it is the only part of the toolchain that reaches the network — the compiler itself never fetches. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
+`curate` materializes what the manifests reference. It and [`pin`](#pin), whose `--url` and `--refresh` fetch through the same delivery, are the only commands that reach the network — the compiler itself never fetches. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
 **It reaches the network through programs already on the machine**, for the reason acceptance is by hash: any transport may deliver the bytes, so the one already installed is the right one rather than a client vendored into the compiler. A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
@@ -261,7 +261,7 @@ There is one canonical style and no options to configure it. Formatting is verif
 
 | Query | Answers |
 | --- | --- |
-| `diagnostics [TARGET]` | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — a blank line between; nothing when the target compiles clean. A unit that declares tests is also checked as its test program, so a parameterized test whose parameter nothing draws is reported here as `test` would report it |
+| `diagnostics [TARGET]` | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — a blank line between; nothing when the target compiles clean. A unit is asked under its written tail, never the test program `test` synthesizes, since that tail raises nothing a test's own check did not |
 | `tests [TARGET]` | every test the target declares, one path per line, in declaration order — the library's, then each executable's, for the package entire; nothing when it declares none, and nothing executes |
 | `cost [TARGET]` | what became of each declaration by the time the optimizer settled — `<name>`, a tab, then `survived`, `specialized <n>` or `absorbed` — one row per line, ordered by name. Nothing is judged: a row states the fate and stops |
 | `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 2 when written goals alone stopped it and 1 otherwise |
@@ -269,7 +269,7 @@ There is one canonical style and no options to configure it. Formatting is verif
 
 No target at all is the governing package entire for `diagnostics` and `tests`, and the sole or `default` executable for `stage` and `cost`, which both need a program and so refuse a file written as a module.
 
-A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming the `mod` line that would declare it, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and the package named `std` is compiled over the archived unit as a baseline — reusing every declaration the edit did not reach — standing where the archived unit stood rather than beside it, so a question about `curios-prelude-archive/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
+A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming the `mod` line that would declare it, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-prelude-archive/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 
 `cost` answers *which cliff am I on*: whether an optimization fired. A declaration is `absorbed` when nothing in the compiled program bears its name — it was inlined into its callers, or pruned once something else was — which is the row saying it costs nothing of its own; `specialized <n>` when a pass cloned it, so `n` functions stand where one was written. The two counts are read off the continuation graph before and after optimization, so no pass is instrumented and the program measured is the program that ships. Ordering is by name because the report is meant to be committed and diffed: a regression is then something to read rather than something to judge.
 
@@ -387,7 +387,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | `1` | a hard error, alone or beside written goals; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
 | `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder stage`, `cost` and `tests` too, when goals alone kept them from answering |
 
-A running program's own exit code passes through untouched, so `0` never hides a failure.
+A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder diagnostics`](#wonder), or runs the executable [`compile`](#compile) wrote.
 
 The tri-state describes a command line that parsed. One that did not — an unknown command, an unknown flag, no command at all — also exits 2, with the usage message on stderr rather than a compiler report; `--help` and `--version` exit 0.
 
@@ -397,8 +397,8 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 
 | Flag | Taken by | Effect |
 | --- | --- | --- |
-| `--manifest <PATH>` | every command but `new` | use this `curios.toml` as the governing package's, instead of the nearest one |
-| `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin` and `format` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
+| `--manifest <PATH>` | every command but `new` and `profile` | use this `curios.toml` as the governing package's, instead of the nearest one |
+| `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
 | `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
@@ -457,7 +457,7 @@ Neither `run` nor `compile` recompiles a declared executable nothing has changed
 
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
-A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and never writes it, so asking costs nothing on disk and a server asking on every keystroke files nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in.
+A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files nothing in it, the `compiler` memo aside, so a server asking on every keystroke files nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

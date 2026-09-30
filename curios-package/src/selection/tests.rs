@@ -610,7 +610,7 @@ fn a_members_module_is_placed_in_its_library_under_the_umbrella_root() {
     assert_eq!(library.units.len(), 1);
 }
 
-/// Naming an umbrella outright with `--manifest` is the refusal it always was: nothing can be asked of a manifest that compiles nothing.
+/// Naming an umbrella outright with `--manifest` is refused: nothing can be asked of a manifest that compiles nothing.
 #[test]
 fn an_umbrella_named_outright_is_still_refused() {
     let root = umbrella("umbrella-named");

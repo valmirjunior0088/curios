@@ -12,7 +12,7 @@
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
 //! - An empty proposition the facts refute: how `Bool/False/refuted` reaches the procedure, and `proved` wherever its proposition is one.
 //!
-//! **What failure is.** Today's refusal, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
+//! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
 //! **What it is not.** The fill stays what its documentation says it is, a unique answer and no search. This procedure is a separate, fallible step after it.
 
@@ -260,7 +260,7 @@ fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option
     verdict
 }
 
-/// Whether every name in `names` is assumed in the context: a proof form writes only names in scope, which is how an item of `/std` compiled before its vocabulary keeps the behavior it had without it. It is the lookup a reference itself makes.
+/// Whether every name in `names` is assumed in the context: a proof form writes only names in scope, which is how an item of `/std` compiled before its vocabulary behaves as it would with no procedure. It is the lookup a reference itself makes.
 fn in_scope(context: &Context, names: &[SyntaxName]) -> bool {
     names.iter().all(|name| {
         context

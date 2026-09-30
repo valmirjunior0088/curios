@@ -113,7 +113,7 @@ struct ResolvedModule {
 ///
 /// **Nothing is read for a program that declares no `foreign`**, which is very nearly all of them: an empty store short-circuits before any manifest is walked or any module opened, so the common case pays one check.
 ///
-/// A loose program is refused rather than left to fail at link: it has no manifest, so there is nowhere for it to say what implements what. The refusal says that, where `no host implementation registered for ffi./x` said only that nobody had.
+/// A loose program is refused rather than left to fail at link: it has no manifest, so there is nowhere for it to say what implements what. The refusal says that, where a failure to link would say only that nobody had.
 ///
 /// Shared by the two consumers that want these for different ends, so what a bundled executable ships and what `curios run` links cannot differ by having read the manifest twice.
 fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<ResolvedModule>, String> {
@@ -145,7 +145,7 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
 
 /// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
 ///
-/// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. The one refusal of its own is a dependency fetched with no revision to pin, which `requires` already catches for `--url` and which this states for the reader who reached it another way.
+/// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. A dependency fetched with no revision to pin, which `requires` already refuses for `--url`, is `curios_package::pin`'s to refuse for a caller that reaches it another way.
 fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
     let repoint = |path: Option<PathBuf>,
                    url: Option<String>,
@@ -210,7 +210,7 @@ fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBin
 fn dispatch() -> Result<(), Failure> {
     let cli = Cli::parse();
 
-    // Before anything is measured or resolved: a flag written where it no longer goes is refused with the spelling that works, rather than read as though nothing had moved.
+    // Before anything is measured or resolved: a flag written before the command that reads it is refused with the spelling that works.
     if let Some(refusal) = cli.misplaced() {
         return Err(Failure::Error(refusal));
     }

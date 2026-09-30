@@ -43,7 +43,7 @@ fn optimizes_to_a_smaller_valid_module() {
         bytes.len()
     );
 
-    // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which is what made every runtime profile of a Curios program unreadable until this was threaded through.
+    // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which leaves a runtime profile unreadable.
     let named = optimize(bytes, true);
 
     assert!(named.starts_with(b"\0asm"));
@@ -57,7 +57,7 @@ fn optimizes_to_a_smaller_valid_module() {
 
 /// `wasm_optm` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, captured in the session that optimized. The `(module` head pins that the payload is the folded text form; the export string pins that it renders *this* module, since exports survive optimization and print verbatim.
 ///
-/// [`crate::to_cwasm`] is asserted beside it rather than through it: rendering and precompiling are two things the Binaryen path does, and one function doing both is what made every `wonder stage wasm-optm` pay for a payload it discarded. The double optimization is this test's alone.
+/// [`crate::to_cwasm`] is asserted beside it rather than through it: rendering and precompiling are two things the Binaryen path does, and one function doing both would make every `wonder stage wasm-optm` pay for a payload it discards. The double optimization is this test's alone.
 #[test]
 fn dumping_emits_the_optimized_module_as_text() {
     let source = r#"
@@ -118,7 +118,7 @@ fn dumping_emits_the_optimized_module_as_text() {
     );
 }
 
-/// The feature mask is what keeps the emitter and the optimizer agreeing on the envelope, and `optimize` aborts the process on a module it cannot read rather than returning an error — so a mask missing a feature `curios-wasm` can now emit fails hard here rather than surprising a caller later. Each module reaches one construct the mask had to grow for, or one the grown mask must still accept beside it.
+/// The feature mask is what keeps the emitter and the optimizer agreeing on the envelope, and `optimize` aborts the process on a module it cannot read rather than returning an error — so a mask missing a feature `curios-wasm` can emit fails hard here rather than surprising a caller later. Each module reaches one construct the mask had to grow for, or one the grown mask must still accept beside it.
 #[test]
 fn passes_the_full_memory_and_table_surface_through() {
     let sources = [

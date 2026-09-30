@@ -44,7 +44,7 @@ fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, O
 ///
 /// Spelled here because `/sys` is this crate's own root — `sys_module` builds it — so the word for what it holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
 fn chip(prefix: &Qualifier) -> Option<String> {
-    // Compared as a qualifier, not as text: `join` writes a canonical identity, which is absolute, so `"sys"` matched nothing it was ever handed.
+    // Compared as a qualifier, not as text: `join` writes a canonical identity, which is absolute, so the text `"sys"` would match nothing it is handed.
     match *prefix == Qualifier::from(["sys"]) {
         true => Some("intrinsic".to_string()),
         false => None,
@@ -99,7 +99,7 @@ struct Reader<'a> {
     adopted: &'a [(Qualifier, Option<String>)],
     /// The records the units already compiled carry, which is where an adopted declaration is read from.
     ///
-    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations were rendered while it was being lowered and its items were in hand; by the time this unit is lowered they exist only in the record it carried away. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach — which is what stopped working the day the prelude became two units, silently, because every check of the adopted half asserts the absence of a path rather than the presence of a card.
+    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations were rendered while it was being lowered and its items were in hand; by the time this unit is lowered they exist only in the record it carried away. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
     records: &'a [&'a Documentation],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
@@ -847,7 +847,7 @@ impl Reader<'_> {
 
     /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's declarations of the scopes the lowering recorded for them. `use` is point-of-use, so two declarations may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.
     ///
-    /// **The union is over every declaration, which is what makes a concept-only module resolve at all.** The lowering once recorded a scope for a `let` and a `test` and nothing else, so a module whose declarations are a concept, an inductive or a structure had none to union, and every name in its signatures rendered as plain text — `/std/Show`'s `show(A) -> Str` did while `/std/Spell`'s identical method linked, because `Spell` happens to declare `let`s that import the same name.
+    /// **The union is over every declaration, which is what makes a concept-only module resolve at all.** A union over `let`s and `test`s alone would leave a module whose declarations are a concept, an inductive or a structure nothing to union, and every name in its signatures would render as plain text — `/std/Show`'s `show(A) -> Str` beside `/std/Spell`'s identical method, which links only because `Spell` declares `let`s importing the same name.
     fn imports_of(&self, module: &Qualifier) -> HashMap<String, Qualifier> {
         let mut spellings = HashMap::new();
         for (owner, indices) in &self.imports.by_item {

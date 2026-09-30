@@ -3,9 +3,7 @@ use {
     crate::{Atom, Constant, ErsdBuilder, Terminator},
 };
 
-/// A computed member's `init` is inline control and the walk must reach it.
-///
-/// It did not once, and nothing here noticed: the consumer that cared was [`deep_copy_function`](crate::optimize), which decides what a copied region *owns* by this walk. A block the walk never yields reads as outward and is kept verbatim, so the copy went on pointing at the original's init block and the two came to own it jointly — which the verifier reports as a block with more than one owner, aborting compilation of any program whose recursive group has a value member.
+/// A computed member's `init` is inline control and the walk must reach it — [`control_blocks`] states what a deep copy makes of an init block it misses: a block the original and the copy own jointly, which the verifier reports as a block with more than one owner, aborting compilation of any program whose recursive group has a value member.
 #[test]
 fn a_recursive_value_members_init_block_is_control() {
     let mut builder = ErsdBuilder::new();

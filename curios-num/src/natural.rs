@@ -191,7 +191,7 @@ impl AddAssign<&Natural> for Natural {
     }
 }
 
-/// Declares one binary operator over all four owned/borrowed operand pairings, forwarding to the pairing `num-bigint` already provides. Written once because a call site that holds a borrow — the reducer's `floor + nat_bound(inner)?`, the canceller's `floor_left - &shared` — must not have to clone merely to satisfy a signature.
+/// Declares one binary operator over all four owned/borrowed operand pairings, forwarding to the pairing `num-bigint` already provides. Written once because a call site that holds a borrow must not have to clone merely to satisfy a signature.
 macro_rules! binary_op {
     ($trait:ident, $method:ident) => {
         impl $trait for Natural {
@@ -239,7 +239,7 @@ macro_rules! binary_op {
 binary_op!(Add, add);
 binary_op!(Mul, mul);
 
-// Subtraction is `num-bigint`'s: it **panics** on underflow rather than truncating, so every call site must already know the difference is a natural. The language-level monus that saturates at zero is `nat_sub` — a different operation at a different layer, and deliberately not spelled `-`.
+// Subtraction is `num-bigint`'s: it **panics** on underflow rather than truncating, so every call site must already know the difference is a natural. The language-level monus that saturates at zero is [`Natural::monus`] — a different operation, and deliberately not spelled `-`.
 binary_op!(Sub, sub);
 
 // `/` and `%` **panic** on a zero divisor, like `num-bigint`'s, and are for call sites that have already established the divisor is nonzero — the euclidean split, where the divisor came from a checked fold. A fold that must not trust its operands uses [`Natural::div`]/[`Natural::rem`] instead, which answer a zero divisor with its trap, which is why both spellings exist.
@@ -251,7 +251,7 @@ binary_op!(BitAnd, bitand);
 binary_op!(BitOr, bitor);
 binary_op!(BitXor, bitxor);
 
-/// `⌊self / 2^amount⌋`, total: a count at or past the magnitude's own width answers zero, which is the arithmetic rather than a decline. The count is consulted before it is narrowed — a count no word holds is past every width there is — which is what keeps the answer the theory's and not the host's: read through `usize` first, `2³²` folded natively and stayed a neutral term on wasm32, a definitional equation that depended on the target.
+/// `⌊self / 2^amount⌋`, total: a count at or past the magnitude's own width answers zero, which is the arithmetic rather than a decline. The count is consulted before it is narrowed — a count no word holds is past every width there is — which is what keeps the answer the theory's and not the host's: read through `usize` first, `2³²` would fold natively and stay a neutral term on wasm32, a definitional equation that depended on the target.
 impl Shr<&Natural> for &Natural {
     type Output = Natural;
 
@@ -295,7 +295,7 @@ macro_rules! radix_format {
 
 radix_format!(Display, Binary, UpperHex);
 
-/// The number, not the wrapper around the bignum holding it. Written rather than derived because the erased stages render their IR with `{:?}` — `curios-cont` prints its `Literal` that way, and `wonder stage cont` is read by people — so a derived `Natural { value: 4 }` would put the representation in every dump where the carrier used to print `4`.
+/// The number, not the wrapper around the bignum holding it. Written rather than derived because the erased stages render their IR with `{:?}` — `curios-cont` prints its `Literal` that way, and `wonder stage cont` is read by people — so a derived `Natural { value: 4 }` would put the representation in every dump where `4` belongs.
 impl fmt::Debug for Natural {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)

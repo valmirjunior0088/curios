@@ -250,7 +250,7 @@ fn core_elab(source: &str) -> String {
 
 /// Compile through production and capture the optimized Cont module.
 ///
-/// The module rather than its printout is what a shape assertion should ask, and the suites below that once asked the text have the scars: `codegen::parity`'s operation scraper silently matched nothing for a stretch after one printer change, and a second change broke eleven fixtures at once. A spelling belongs to the printer; a program's shape is in its graph.
+/// The module rather than its printout is what a shape assertion should ask: a spelling belongs to the printer, and a scraper over the text can silently match nothing after a printer change, where a program's shape is in its graph.
 fn cont_optm_module(source: &str) -> curios_cont::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 

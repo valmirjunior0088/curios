@@ -1,6 +1,6 @@
 //! Construction conveniences for the representation: the constructors the surface lowering and the elaborator build terms with, and that no judgment ever calls.
 //!
-//! They live beside the representation because both of those stages build terms and neither owns what a term is. Kept in the elaborator, they made `curios-text` depend on all of it for a handful of constructors. They admit nothing, so they are here on the terms `print` is: compiled with the representation, never run by a judgment.
+//! They live beside the representation because both of those stages build terms and neither owns what a term is. Kept in the elaborator, they would make `curios-text` depend on all of it for a handful of constructors. They admit nothing, so they are here on the terms `print` is: compiled with the representation, never run by a judgment.
 
 use {
     super::{

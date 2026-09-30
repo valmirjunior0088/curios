@@ -274,7 +274,7 @@ module.exports = grammar({
 
     // ---- Telescopes ----
 
-    // A `let`/`rec`/`satisfy` telescope: every parameter annotated, `use` ones anonymous.
+    // A `let`/`satisfy` telescope: every parameter annotated, `use` ones anonymous.
     parameters: ($) => seq("(", commaList($.parameter), ")"),
 
     parameter: ($) =>

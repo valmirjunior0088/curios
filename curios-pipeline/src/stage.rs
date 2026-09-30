@@ -62,7 +62,7 @@ impl fmt::Display for Stage<'_> {
             Stage::ErsdOptm(module) => write!(f, "{module}"),
             Stage::Cont(module) => write!(f, "{module}"),
             Stage::ContOptm(module) => write!(f, "{module}"),
-            // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps keep the unbounded layout until their printers grow break points worth fitting.
+            // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
             Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
             // Already laid out by Binaryen's writer; only its trailing newline is trimmed, so this dump ends like every house-rendered one.
             Stage::WasmOptm(text) => write!(f, "{}", text.trim_end()),

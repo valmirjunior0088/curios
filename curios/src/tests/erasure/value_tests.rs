@@ -4,7 +4,7 @@ use crate::tests::run;
 
 /// Every row states its value twice — as a proof both checkers must accept, and as the printed result of the same expression — so a row fails exactly when the compiled program disagrees with a theorem the compiler certified.
 ///
-/// Erasure is the one stage below Core with no semantic check, so this is the ledger for it: a deletion site that drops the wrong thing leaves the proof standing and changes the print. The first three rows are pinned payloads of a `Prop` family, whose constructor is itself deleted, so the value survives only as the scrutinee's index; binding those payloads to the unit constant printed `1`, `1` and `0` while the checkers proved `42`, `42` and `21`. The remaining rows are the other deletion sites `documentation/design/language/totality-of-the-erased-program.md` names: an erased parameter, an erased field beside a kept one, and a proof-valued callee applied and dropped.
+/// Erasure is the one stage below Core with no semantic check, so this is the ledger for it: a deletion site that drops the wrong thing leaves the proof standing and changes the print. The first three rows are pinned payloads of a `Prop` family, whose constructor is itself deleted, so the value survives only as the scrutinee's index; binding those payloads to the unit constant would print `1`, `1` and `0` where the checkers prove `42`, `42` and `21`. The remaining rows are the other deletion sites `documentation/design/soundness/totality-of-the-erased-program.md` names: an erased parameter, an erased field beside a kept one, and a proof-valued callee applied and dropped.
 #[test]
 fn every_printed_value_is_the_one_its_proof_states() {
     let source = r#"

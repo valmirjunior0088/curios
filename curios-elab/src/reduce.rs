@@ -59,7 +59,7 @@ impl Reducer for Context {
 
 /// The elaborator's side of the shared-analysis seam.
 ///
-/// Both methods are the wrappers `typing` already had: they exist so a failure reaches the user as a spanned diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
+/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a spanned diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
 impl curios_analysis::Env for Context {
     type Error = crate::Error;
 
@@ -147,7 +147,7 @@ pub(crate) fn unfold_rec_apply(
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
 
-    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and taking only the first left the other spelling folded with its answer in hand — an `induct`'s type constructor lowers into a `rec` whatever its arity, so a caller that reached the unfolded spelling saw a nominal type and one that reached the folded spelling saw a stuck application, and a checker reading the two disagreed about the same declaration.
+    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and taking only the first would leave the other spelling folded with its answer in hand — an `induct`'s type constructor lowers into a `rec` whatever its arity, so a caller reaching the unfolded spelling would see a nominal type and one reaching the folded spelling a stuck application, and a checker reading the two would disagree about the same declaration.
     let body = match head.as_rec_proj() {
         Some((group, index)) => {
             let body = reduce(context, group.member_body(index))?;
@@ -158,7 +158,7 @@ pub(crate) fn unfold_rec_apply(
     };
     let telescope = match Term::unwrap_or_clone(body) {
         Subterm::Func(Func { telescope, .. }) => telescope,
-        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, which is what lets a demand reach through `f(a)(b)` to `f(a)` — read one level deep, the outer application was a neutral nothing unfolded.
+        // The head is itself a folded call: a member whose result is a function, applied past its own parameters. Unfolding that call one step and applying what it becomes to what is left is this application's one step, which is what lets a demand reach through `f(a)(b)` to `f(a)` — read one level deep, the outer application would be a neutral nothing unfolds.
         Subterm::Apply(inner) => {
             return Ok(unfold_rec_apply(context, inner)?.map(|unfolded| {
                 Subterm::Apply(Apply {
@@ -182,22 +182,22 @@ pub(crate) fn unfold_rec_apply(
     Ok(Some(telescope.open(&param_refs)))
 }
 
-/// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a normal form, so an eliminator that demands its value unfolds it here and re-reduces, repeating if the opened tail is itself a `rec`. A non-productive group spins until the step budget runs out — exactly as a top-level `rec` does.
-///
-/// The force either reaches a value some eliminator can absorb or returns the input unchanged. What it keeps is decided by whether the unfolding got anywhere, and there are two ways for it to have done so: a **head constructor** is progress by productivity, and a reduct **free of the group** is progress by termination. Only a reduct that is still neutral *and* still mentions the group is an unfolding that achieved nothing — the restuck case — and there the folded spelling stays the canonical normal form.
-///
-/// Testing the head alone, as this once did, conflates *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc` and a bare `Var` was thrown away, which made the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`. Counted once, by an `eprintln!` per arm here and one `cargo build -p curios-prelude`: of 613,610 decisions over the fixed prelude, 6,472 reach this arm head-exposed and 16,919 reach it as a bare `Var`, so each half of the rule is load-bearing at scale rather than in principle.
-///
-/// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 /// A folded recursive spelling: a `rec` projection, a `rec` block, or an application spine headed by a projection — the one weak-head value a forced demand must not be served.
 fn is_folded(term: &Term) -> bool {
     term.spine_rec_proj().is_some() || matches!(&**term, Subterm::Rec(_))
 }
 
+/// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a normal form, so an eliminator that demands its value unfolds it here and re-reduces, repeating if the opened tail is itself a `rec`. A non-productive group spins until the step budget runs out — exactly as a top-level `rec` does.
+///
+/// The force either reaches a value some eliminator can absorb or returns the input unchanged. What it keeps is decided by whether the unfolding got anywhere, and there are two ways for it to have done so: a **head constructor** is progress by productivity, and a reduct **free of the group** is progress by termination. Only a reduct that is still neutral *and* still mentions the group is an unfolding that achieved nothing — the restuck case — and there the folded spelling stays the canonical normal form.
+///
+/// Testing the head alone would conflate *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc`, and throwing that bare `Var` away would make the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`. Each half is load-bearing over the fixed prelude, where thousands of decisions reach each arm.
+///
+/// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
-    // The forced value is stored in the declaration's reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator re-ran the machine for every position that demanded the same closed value — checking, conversion, and re-validation each paid a `Str` literal's full scan while the kernel replayed its memo — and the two checkers' costs for one literal drifted to a multiple.
+    // The forced value is stored in the declaration's reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator would re-run the machine for every position that demands the same closed value — checking, conversion and re-validation each paying a `Str` literal's full scan while the kernel replays its memo.
     if machine_admissible(context, &term) {
         // The store below is what a later demand for the same value hits, and this is where it hits: a probe that finds an unfolded value answers without a run, while one that finds the folded spelling — a plain reduct stored under itself — has nothing to serve and runs.
         if let Some(cached) = context.cached_reduced(&term)
@@ -286,11 +286,11 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 
 /// The *cheap* refinement key: metavariable solutions materialized and universe instances erased, with every argument left exactly as written.
 ///
-/// [`canonical_scrutinee`] additionally reduces each argument, which is what collapses occurrences differing only in argument spelling — and what makes *recording* a refinement cost whatever its operands cost to evaluate. A guard over an expensive operand then pays for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` forces `built` to register a fact about it. Both sites therefore key on this form first and escalate to the canonical one only on a miss, which is a strict superset: every occurrence that matched before still matches, and the ones that used to spend the declaration's whole budget on the way in now match without reducing anything.
+/// [`canonical_scrutinee`] additionally reduces each argument, which is what collapses occurrences differing only in argument spelling — and what makes *recording* a refinement cost whatever its operands cost to evaluate. A guard over an expensive operand then pays for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` forces `built` to register a fact about it. Both sites therefore key on this form first and escalate to the canonical one only on a miss, which is a strict superset: every occurrence the canonical key matches still matches, and one spelled as the guard was matches without reducing anything.
 ///
 /// Zonking and universe erasure stay eager because they are cheap by construction — the walk returns at a cached `has_metavar` bit — and because the key is wrong without them for the reason each states.
 ///
-/// **The universe erasure is deliberate, and the exactness it gives up is recovered at the read rather than here.** `Type u` embeds a level in a term, so two instances of one applied definition can reduce to different values and erasing identifies them — which is why `curios-cert`'s copy of this key was deleted outright (`Scope::refine`, with `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance` as the regression). Deleting it *here* is not the repair, and that was measured rather than supposed: every polymorphic occurrence mints fresh universe metavariables (`UniverseSolver::instantiate`) and this walk materializes *term* metas only, so a verbatim key splits two occurrences of one scrutinee and the prelude stops elaborating at `/std/List.crs`'s `match i < len(a)`, whose `true` arm supplies `/sys/List/at`'s implicit `ok` by exactly this refinement.
+/// **The universe erasure is deliberate, and the exactness it gives up is recovered at the read rather than here.** `Type u` embeds a level in a term, so two instances of one applied definition can reduce to different values and erasing identifies them — which is why `curios-cert`'s key keeps its universes (`Scope::refine`, with `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance` as the fixture). Keeping them *here* would not be the repair: every polymorphic occurrence mints fresh universe metavariables (`UniverseSolver::instantiate`) and this walk materializes *term* metas only, so a verbatim key would split two occurrences of one scrutinee and the prelude would stop elaborating at `/std/List.crs`'s `match i < len(a)`, whose `true` arm supplies `/sys/List/get`'s implicit `ok` by exactly this refinement.
 ///
 /// The asymmetry with the kernel is *when*, not what. The rule is not in dispute — identify only terms already definitionally equal — and the kernel states it exactly because it judges a module whose levels are settled. This key is computed while they are still being solved: an arm records it on entry and it is then probed for as long as the arm stands, with metavariables solved in between. So "concrete levels kept apart, undecided ones collapsed" cannot be a property of a key at all; it is a property of a *comparison*, and the only step that happens after solving is the read. `Context::scrutinee_reduct` and `Context::proj_reduct` make it there, by declining a hit whose two unerased spellings disagree on an instance both sides have decided — the refusing direction, so a coarse key costs reductions and never admits one.
 pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
@@ -301,7 +301,7 @@ pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
 ///
 /// Reached from the escalation path alone, never from a store: [`shallow_scrutinee`] is what a key is recorded under, and this is what decides a probe the recorded spelling missed.
 ///
-/// Argument reduction is a [`Probe`]: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches.
+/// Argument reduction is a [`Probe`]: an argument that cannot reduce at the type level (a runtime-only IO intrinsic's result, such as `/sys/Handle/poll`'s, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
         Subterm::Apply(Apply { head, arguments }) => {
@@ -331,9 +331,9 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
         Subterm::Intrinsic(intrinsic) => canonical_operands(context, intrinsic),
         _ => Ok(term.clone()),
     }?;
-    // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — then stores a key no probe can match. The refinement silently did not fire, while the identical term with the implicit supplied explicitly did. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
+    // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — would then store a key no probe can match, and the refinement would silently not fire where the identical term with the implicit supplied explicitly does. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
     let canonical = zonk_solved_term_metas(context, &canonical);
-    // Erased for the same reason, and unsound for the same reason, as in [`shallow_scrutinee`] — which carries the account and the measurement that says deleting it is not the repair.
+    // Erased for the same reason, and unsound for the same reason, as in [`shallow_scrutinee`] — which carries the account and why keeping the levels is not the repair.
     Ok(project_erased_universes(&canonical))
 }
 
@@ -407,7 +407,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
                 .nth(index)
                 .expect("Proj: index out of bounds"),
         )),
-        // The untyped reducer's flat view of a constructor value, mirroring the runtime layout `(tag, payload...)`: field i + 1 is the i-th payload component. Field 0 (the tag) is never projected at the term level — dispatch inspects the `Variant` directly. Nothing in this module builds such a projection any more (see [`reduce_match`]'s rejected alternative); the view stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
+        // The untyped reducer's flat view of a constructor value, mirroring the runtime layout `(tag, payload...)`: field i + 1 is the i-th payload component. Field 0 (the tag) is never projected at the term level — dispatch inspects the `Variant` directly. Nothing in this module builds such a projection (see [`reduce_match`]'s rejected alternative); the view stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
         Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
             Ok(Reduce::Continue(
                 ctor.payload
@@ -462,7 +462,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
 ///
-/// **Rejected — binding an arm to projections of the original scrutinee.** This took the unreduced scrutinee alongside `forced` and opened the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], so that a reduced payload could not carry evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It buys that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value is rejected. Binding the payload directly is also what the kernel does, so the two strategies no longer differ here.
+/// **Rejected — binding an arm to projections of the original scrutinee.** Taking the unreduced scrutinee alongside `forced` and opening the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], would keep a reduced payload from carrying evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It would buy that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value would be rejected. Binding the payload directly is also what the kernel does, so the two checkers agree here.
 fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
@@ -577,7 +577,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
 
 /// Zeta: substitute a `let`'s bindings into its tail, as the kernel's `step_let` does.
 ///
-/// This once bound each value as a fresh context definition and opened the tail over those names, which copies no value into its uses. The names it minted then stood in reducts where the kernel's copy of the same reduction has the values: two unfoldings of one definition named its `let`s differently, so every comparison by spelling — a sum's cancellation, a position's peel through a concatenation, a guard's refinement key — missed terms conversion identifies, and the metavariable solver had to reify minted names back out of its candidates. Substituting is the kernel's rule, so a reduct is spelled as the kernel spells it. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
+/// Binding each value as a fresh context definition and opening the tail over those names would copy no value into its uses, but the minted names would stand in reducts where the kernel's copy of the same reduction has the values: two unfoldings of one definition would name its `let`s differently, so every comparison by spelling — a sum's cancellation, a position's peel through a concatenation, a guard's refinement key — would miss terms conversion identifies, and the metavariable solver would have to reify minted names back out of its candidates. Substituting is the kernel's rule, so a reduct is spelled as the kernel spells it. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
     // One values vector, and a fresh ref vector at every binding — triangular in the run's length, and charged as the kernel charges it.
     let bindings = let_.bindings.len() as u64;
@@ -654,9 +654,9 @@ const CANONICAL_KEY_ALLOWANCE: u64 = 100_000;
 
 /// [`canonical_scrutinee`] of a *registered key*, capped and memoized.
 ///
-/// Both halves are load-bearing and neither works alone. The escalation runs per probe while this answer is per key, so without the memo one guard's subject is re-derived at every node of that operation in the declaration. And the first attempt can be the expensive one, so without the cap there is no first success to memoize — a guard over a subject a hundred thousand iterations built consumes the declaration's whole budget on that attempt, which is measured rather than supposed (`tests::numeric::byte_of_nat_inverts_to_nat_and_refuses_the_bound` is where it showed).
+/// Both halves are load-bearing and neither works alone. The escalation runs per probe while this answer is per key, so without the memo one guard's subject is re-derived at every node of that operation in the declaration. And the first attempt can be the expensive one, so without the cap there is no first success to memoize — a guard over a subject a hundred thousand iterations built consumes the declaration's whole budget on that attempt.
 ///
-/// A key the allowance stopped short is memoized as *itself*, so the bail is paid once and the key keeps its written spelling — the behaviour that held before any of this existed.
+/// A key the allowance stopped short is memoized as *itself*, so the bail is paid once and the key keeps its written spelling.
 fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<Term, ReduceError> {
     if let Some(cached) = context.cached_canonical_key(key) {
         return Ok(cached);
@@ -736,7 +736,7 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
 ///
 /// Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
 ///
-/// The escalation brings both sides to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side used to be taken as canonical already, on the premise that `reduce_intrinsic` left every operand in weak-head normal form, and a `&&` behind a stuck left leaves its right as written now. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
+/// The escalation brings both sides to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side cannot be taken as canonical already, because `reduce_intrinsic` does not leave every operand in weak-head normal form: a `&&` behind a stuck left leaves its right as written. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
 fn refined_by_spelling(
     context: &mut Context,
     probe: &Term,
@@ -769,7 +769,7 @@ fn refined_by_spelling(
 
 /// The refinement probe at a stuck reduct: an entry's *reduced* spelling, where the written one and its canonical form both missed.
 ///
-/// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here keeps a key's head as written — the shallow key verbatim, the escalation with only its arguments reduced — so a stuck form reduction reached *through* the guard's definition never met it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answered it `true`, and the elaborator refused it. A field checked before its struct's parameter was inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
+/// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here keeps a key's head as written — the shallow key verbatim, the escalation with only its arguments reduced — so without this a stuck form reduction reached *through* the guard's definition would never meet it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answers it `true`, and the elaborator would refuse it. A field checked before its struct's parameter is inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
 ///
 /// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — and the dual and successor spellings with it, exactly as the kernel settles and compares. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
 ///
@@ -936,9 +936,7 @@ fn could_reduce_to(key: &Term, candidate: &Term) -> bool {
 ///
 /// Reduction re-enters itself once per operand of a nested intrinsic, once per link of a spine peel, and once per level of a match tower, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
 ///
-/// What that changed, measured: a runaway type-level computation used to meet the native stack at a couple of hundred levels and abort, and instead ran until the budget stopped it, allocating as it went — a deep accumulator reached 233 MiB where it previously died. The budget bounded *steps*, so nothing bounded that memory.
-///
-/// **It does now.** A transition still costs one unit, a construction costs what it builds, and the [`Cost::FRAME`] charged at this bracket prices the native frame a level takes — so the stack this walk grows into is bounded by the same number that bounds how far it reduces, and both are facts about the program rather than about the host. `documentation/design/toolchain/a-reduction-step-costs-what-it-builds.md` carries the decision.
+/// A budget that bounded *steps* alone would leave the memory such a walk allocates unbounded: a runaway type-level computation would run until the budget stopped it, allocating as it went. A transition costs one unit, a construction costs what it builds, and the [`Cost::FRAME`] charged at this bracket prices the native frame a level takes — so the stack this walk grows into is bounded by the same number that bounds how far it reduces, and both are facts about the program rather than about the host. `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` carries the decision.
 pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // The level itself, charged when it is a new peak — the kernel's `whnf` charges the same row the same way. See [`Context::enter_level`] and [`Cost::FRAME`].
     context.enter_level()?;
@@ -970,7 +968,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
         context.spend(Cost::STEP)?;
 
         let step = 'step: {
-            // Rung B for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.
+            // Index refinement for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.
             if context.has_scrutinee_refinements()
                 && let Some(head) = term.head_key()
                 && context.scrutinee_head_refined(head)
@@ -981,12 +979,12 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                     // A key a suppressed frame withholds answers `None` here, so this serves only what is live — the caller's own arm outside a re-validation, and the validated term's own arms within one.
                     break 'step Reduce::Continue(value.clone());
                 } else if context.refinements_suppressed() && context.is_scrutinee_key(&shallow) {
-                    // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_at_birth`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it held a bare occurrence of a universe scheme, which the kernel refuses.
+                    // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_at_birth`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it would hold a bare occurrence of a universe scheme, which the kernel refuses.
                     break 'step Reduce::Break(term.clone());
                 } else {
                     // Escalate: the candidate and the registered key are spelled differently, so decide it by *convertible* arguments rather than written ones. Only here is anything reduced, and only against entries sharing this head — canonicalizing one under another head would spend the declaration's budget to learn nothing.
                     //
-                    // Under suppression too, since `scrutinee_entries` reads only the frames suppression does not withhold: a re-validated term's own arms answer a respelled occurrence as they answer one spelled like their guard, and the arm the caller sits in answers neither. This once sat on the unsuppressed branch alone, so a candidate whose arm met its guard through a `let` in another definition's unfolding — `Str/step`'s `n` — was rejected where elaborating the same term accepted it.
+                    // Under suppression too, since `scrutinee_entries` reads only the frames suppression does not withhold: a re-validated term's own arms answer a respelled occurrence as they answer one spelled like their guard, and the arm the caller sits in answers neither. On the unsuppressed branch alone, a candidate whose arm meets its guard through a `let` in another definition's unfolding — `Str/step`'s `n` — would be rejected where elaborating the same term accepts it.
                     let candidates = context.scrutinee_entries(head);
 
                     if !candidates.is_empty() {
@@ -1026,7 +1024,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                         None => Reduce::Break(folded),
                     }
                 }
-                // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, which is what a warm-scrutinee special case here used to do by hand.
+                // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, so a warm scrutinee needs no special case here.
                 Subterm::Match(m) => {
                     let value = reduce(context, m.head)?;
 
@@ -1048,7 +1046,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             Reduce::Continue(next) => term = next,
             // A stuck form standing under an arm's equation *is* that case's value, and the written spellings have all been asked by now: the one probe left is the entries' reduced spellings, the kernel's second point.
             //
-            // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, and a frozen frame restored for a retry re-registers an arm's equation in a frame inside its own, whose spelling then settles to the very value it assumes. Asked again, such a value answered itself, which the loop took for progress until the budget ran out — a hundred thousand times a settlement in `/std/Toml/build`'s `walk` — and two entries spelled as each other's values traded it back and forth the same way.
+            // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, and a frozen frame restored for a retry re-registers an arm's equation in a frame inside its own, whose spelling then settles to the very value it assumes. Asked again, such a value would answer itself, which the loop would take for progress until the budget ran out, and two entries spelled as each other's values would trade it back and forth the same way.
             Reduce::Break(result) => match answered {
                 true => {
                     context.reduce(entry, &result);
@@ -1075,9 +1073,9 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
 ///
-/// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime.rs` and `curios-pipeline/src/tests.rs` hold.
+/// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime/diagnostic_tests.rs` and `curios-pipeline/src/tests/diagnostic_tests.rs` hold.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
-    // Charged and guarded as `zonk_term` is: a level is a peak of depth the budget prices ([`Cost::FRAME`]), and the walk runs inside [`recurse`] so a deep term buys depth with heap rather than overflowing the native stack. Display-only or not, this walk is a route into unbounded computation like substitution was — a term ten thousand applications deep, or a solution that reaches itself, sent it down the main thread's stack until the process aborted with no diagnostic at all, which is the one outcome a *diagnostic* walk must not have. Charged, the declaration's budget refuses the walk and the caller falls back to the un-normalized spelling, as its contract already allows.
+    // Charged and guarded as `zonk_term` is: a level is a peak of depth the budget prices ([`Cost::FRAME`]), and the walk runs inside [`recurse`] so a deep term buys depth with heap rather than overflowing the native stack. Display-only or not, this walk is a route into unbounded computation — a term ten thousand applications deep, or a solution that reaches itself, would otherwise send it down the main thread's stack until the process aborted with no diagnostic at all, which is the one outcome a *diagnostic* walk must not have. Charged, the declaration's budget refuses the walk and the caller falls back to the un-normalized spelling, as its contract already allows.
     context.enter_level()?;
     let normalized = recurse(|| normalize_level(context, term));
     context.leave_level();

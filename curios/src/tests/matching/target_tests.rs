@@ -79,7 +79,7 @@ fn struct_match_target_projects_fields() {
     assert_eq!(run(source), b"7");
 }
 
-// A struct match-arm pattern desugars to the same `proj`/`proj_label` calls an ordinary projection uses, so representation privacy is inherited automatically and unmodified — matching `struct_private_projection_rejected` in `structs.rs`, but reached through a match arm instead of `.0`.
+// A struct match-arm pattern desugars to the same `proj`/`proj_label` calls an ordinary projection uses, so representation privacy is inherited automatically and unmodified — matching `struct_private_projection_rejected` in `structs/visibility_tests.rs`, but reached through a match arm instead of `.0`.
 #[test]
 fn struct_arm_privacy_is_enforced() {
     let source = r#"
@@ -118,7 +118,7 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
-// `choose_evaluates_conditions_lazily` stood here. It observed the nested `Bool` lowering by giving a condition a side effect — `probe` printed its tag — so a ladder that evaluated every condition printed every tag. A condition is a `Bool`, and post-`Io` a `(Str, Bool) -> Bool` cannot perform an effect at all, so the fixture is not merely broken but unwritable. Nor is there a replacement at this layer: evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers, which is the retype working rather than coverage lost. What remains observable is the emitted shape, and that is `tests::codegen`'s to state.
+// Whether a `choose` evaluates its conditions lazily has no test at this layer: a condition is a `Bool`, no function returning one performs an effect, and evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers. What is observable is the emitted shape, and that is `tests::codegen`'s to state.
 
 // A headed inductive match with a `| _ =>` catch-all: enumerated constructors take their arm, everything else the default. rand-tainted so it runs as wasm.
 #[test]

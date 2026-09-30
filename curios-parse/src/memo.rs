@@ -14,7 +14,7 @@ thread_local! {
 
 /// Wraps a parser so its result at each start offset is computed once and reused. This is what makes the term grammar linear instead of exponential: the same position is probed by several overlapping alternatives (a `(` is tried as a dependent function type, then a non-dependent one, then a lambda, then parens), and without memoization each retry re-parses the whole nested subterm.
 ///
-/// Sound as straight packrat because the wrapped parsers (`parse_term`, `parse_atomic_term`) are pure functions of the offset — parsing carries no symbol table or other context that could make the same input parse differently. `key` distinguishes the grammar nonterminals that share the table. The wrapped parser must never re-enter itself at the *same* offset without consuming input (no left recursion), which the term grammar satisfies.
+/// Sound as straight packrat because the wrapped parsers (`curios-text`'s term, atomic-term and two pattern nonterminals) are pure functions of the offset — parsing carries no symbol table or other context that could make the same input parse differently. `key` distinguishes the grammar nonterminals that share the table. The wrapped parser must never re-enter itself at the *same* offset without consuming input (no left recursion), which the term grammar satisfies.
 pub fn memoize<'a, A>(key: u32, parser: Parser<'a, A>) -> Parser<'a, A>
 where
     A: Clone + 'static,
@@ -56,8 +56,7 @@ where
 {
     MEMO.with(|memo| memo.borrow_mut().clear());
 
-    // One span per parse, named by what is being parsed: a test that parses several sources
-    // otherwise reads as one undifferentiated stream of choices.
+    // One span per parse, named by what is being parsed: a test that parses several sources otherwise reads as one undifferentiated stream of choices.
     curios_profile::profile!("run_parser", group = %source.path.as_deref().unwrap_or(std::path::Path::new("<text>")).display());
 
     let result = parser.parse(ParserState::new(source)).map(|(item, _)| item);

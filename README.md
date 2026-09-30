@@ -146,8 +146,8 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 
 - [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
 - [Usage](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
-- [Design decisions](documentation/design) — one file per decision, `language/` for what Curios is and `toolchain/` for how it is built and run, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
-- [Soundness perimeter](documentation/soundness) — every rule that can admit a term, what it assumes, and how far it has actually been checked; [the claim it stands for](documentation/design/language/the-soundness-perimeter.md), and how to read a grade
+- [Design decisions](documentation/design) — one file per decision, in a directory per subject, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
+- [Soundness perimeter](documentation/design/soundness) — every rule that can admit a term, what it assumes, and how far it has actually been checked, in a directory per part of the judgment; [the claim it stands for](documentation/design/soundness/the-soundness-perimeter.md), and how to read a grade
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
 - [Benchmark methodology and results](benchmarks/README.md)
 

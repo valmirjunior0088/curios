@@ -98,7 +98,7 @@ fn spells_index_arithmetic_infix() {
     );
 }
 
-// Reduction stores `k + 1` as a successor over `k`, which prints infix without being an operator, so a report once spelled `n - (k + 1)` as `n - k + 1` — a different term — once the index had normalized.
+// Reduction stores `k + 1` as a successor over `k`, which prints infix without being an operator, so the printer parenthesizes it as an operand: spelled bare, a normalized `n - (k + 1)` would read `n - k + 1`, a different term.
 #[test]
 fn parenthesizes_a_reduced_successor_operand() {
     let source = r#"

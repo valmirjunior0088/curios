@@ -13,12 +13,12 @@ pub(crate) enum Sort {
 }
 
 impl Sort {
-    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting read it as an ordinary implicit nothing retried.
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries.
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Vec::new(), type_)
     }
 
-    /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`] — see [`Opened`] for why that distinction is load-bearing.
+    /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`], because assuming a binder bumps the mutation stamp that validates the memoization caches, and a walk that assumed at every binder would invalidate them.
     pub(crate) fn of_in(
         context: &mut Context,
         opened: &mut Vec<(Free, Term)>,
@@ -57,7 +57,7 @@ impl Sort {
             },
             // A *non-empty* record of propositions is a proposition. The empty tuple `{}` is unit, not a prop: it is the result type of effects (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
-                // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong. Each field is opened once, at every binder before it: opening binder by binder rewrote every later field, whose metavariable spines name every earlier one.
+                // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong. Each field is opened once, at every binder before it: opening binder by binder would rewrite every later field, whose metavariable spines name every earlier one.
                 let mut levels = Vec::new();
                 let mark = opened.len();
                 telescope.walk_producing(|_, hint, ty| {
@@ -214,7 +214,7 @@ impl Sort {
             }
             // Π into a proposition is a proposition.
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                // Each opened binder must carry its domain type, not merely be substituted in. Opening with a free variable nothing can type leaves `synth_neutral` returning `None` for every occurrence of it in the codomain, and that `None` is read as level 0 — so the sort of every dependent codomain collapsed to `Type 0` regardless of the binder's real level. That silently under-generalized exactly the declarations whose codomain mentions a binder: every concept wrapper, and every higher-order polymorphic function.
+                // Each opened binder must carry its domain type, not merely be substituted in. Opening with a free variable nothing can type leaves `synth_neutral` returning `None` for every occurrence of it in the codomain, and that `None` is read as level 0 — so the sort of every dependent codomain would collapse to `Type 0` regardless of the binder's real level, silently under-generalizing exactly the declarations whose codomain mentions a binder: every concept wrapper, and every higher-order polymorphic function.
                 let mut domains = Vec::new();
                 let mark = opened.len();
                 let (_, output) = telescope.walk_producing(|_, hint, domain| {

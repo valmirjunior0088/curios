@@ -1,14 +1,14 @@
-//! Re-folding a finished [`Program`] into the nested term it replaced, for suites written against the older shape.
+//! Re-folding a finished [`Program`] into one nested term, for the suites that assert against that shape.
 //!
 //! A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_core::test_support::into_nested_term(module)` says at its use site that the caller reached for scaffolding rather than product API, which a `Module::into_nested_term` method sitting beside `nominal_plicities` would not. The path is the warning label.
 //!
-//! **Behind `test-support`, not `#[cfg(test)]`.** The caller is `curios-text`'s lowering suite, a different crate, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to it. The gate is also what keeps a shape no compiler stage produces any more out of every build that ships.
+//! **Behind `test-support`, not `#[cfg(test)]`.** The caller is `curios-text`'s lowering suite, a different crate, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to it. The gate is also what keeps a shape no compiler stage produces out of every build that ships.
 
 use crate::{Free, Item, Program, Term};
 
-/// Re-fold the program's flat module into the legacy nested `Let`/`Rec` [`Term`] it replaced, around the entry's body (items are already in binding order).
+/// Re-fold the program's flat module into a nested `Let`/`Rec` [`Term`] around the entry's body (items are already in binding order).
 ///
-/// Lets the `into_core` suite keep asserting against the historical shape — and keep feeding a single [`Term`] to `erase` — without rewriting every expectation. Drops the entry's type, because the old `run` helper only returned the term.
+/// Lets the `into_core` suite assert against a single term. Drops the entry's type, which that suite's `run` helper does not return.
 pub fn into_nested_term(program: Program) -> Term {
     program
         .module

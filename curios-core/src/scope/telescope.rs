@@ -214,7 +214,7 @@ impl<B: Bound> Telescope<B> {
 
     /// The type of field `index` as seen from `value`: every preceding field is opened at its own projection off `value`, so a field type that names an earlier field names *that value's* earlier field rather than a loose binder.
     ///
-    /// This is the one answer to "what type does `value.index` have", and every site that asks — inference, sorting, conversion, witness resolution, operator dispatch, and the method wrappers `into_core` generates — reaches it through here. Re-deriving it anywhere else is how the two readings drift: the wrappers once restated a field's written type in a scope binding no sibling, which was well-formed only while no concept had a dependent field telescope.
+    /// This is the one answer to "what type does `value.index` have", and every site that asks — inference, sorting, conversion, witness resolution, operator dispatch, and the method wrappers `into_core` generates — reaches it through here. Re-deriving it anywhere else is how two readings drift: a wrapper restating a field's written type in a scope binding no sibling is well-formed only while no concept has a dependent field telescope.
     pub fn field_type_from(self, value: &Term, index: usize) -> Option<Term> {
         self.nth(index, |j| Term::proj(value.clone(), j))
     }
@@ -507,13 +507,13 @@ impl<B: Bound> Hash for Telescope<B> {
 
 /// All three derivations walk the spine in a loop rather than one native frame per parameter.
 ///
-/// A telescope's length is its written arity, and "written depth is a bound the default stack tolerates" is the assumption this file already retired for `Let`/`Rec` spines — `Visit::enter_scope`/`Visit::leave_scope` exist for exactly this shape. The spine is the sibling that kept the recursion, which is invisible in authored signatures and unbounded in generated ones.
+/// A telescope's length is its written arity, and "written depth is a bound the default stack tolerates" is an assumption this crate does not make for `Let`/`Rec` spines either — `Visit::enter_scope`/`Visit::leave_scope` exist for exactly this shape. Recursion here would be invisible in authored signatures and unbounded in generated ones.
 impl<B: Bound> Bound for Telescope<B> {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        // Each entry type is visited under the binders declared *before* it, so a link's own binders are entered after its type and retracted in the reverse order on the way back up — which is the bracket `visit_scope` used to keep on the native stack.
+        // Each entry type is visited under the binders declared *before* it, so a link's own binders are entered after its type and retracted in the reverse order on the way back up — which is the bracket `visit_scope` keeps, without its native frame.
         let mut entries = Vec::new();
         let mut current = self;
         let body = loop {

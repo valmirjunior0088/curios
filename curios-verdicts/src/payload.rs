@@ -2,7 +2,7 @@
 //!
 //! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, after this chain, for this engine — and carries no file contents, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
 //!
-//! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../documentation/soundness/admission-without-judgment/reused-payloads.md), which extends [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md) rather than restating it.
+//! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../documentation/design/soundness/admission/reused-payloads.md), which extends [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md) rather than restating it.
 //!
 //! **Two things the unit family has no counterpart for.** The entry's own header is never read through a loader — the caller parsed it before any resolution happened — so it is recorded separately, and from the text that was parsed rather than from a re-read of the path: re-reading races an edit landing between the parse and the digest, which records newer text against an older artifact, the one direction that admits stale. And the payload is machine code, so the engine that will run it joins the address — handed in by the caller, since the crate that can describe an engine is the one that links it; see [`Verdicts::payload_get`].
 
@@ -39,7 +39,7 @@ pub struct Program<'a> {
 ///
 /// **Two kinds of field, and [`agrees`] reads only the first.** Every field but `foreigns` is a fact the compilation depended on and the address deliberately does not carry; verification is all of them or nothing, and a record that cannot be read or disagrees anywhere is a miss.
 ///
-/// `foreigns` is the other kind: an *output* of the compilation rather than an input it rested on, so nothing verifies it — the payload's digest already answers for the bytes it was derived alongside. It is here because a reused payload still has to be linked, and the rows a program's `ffi` imports are typed by cannot be recovered from the module: `Nat`, `Int` and `Bool` all cross as an i31 ref, so a re-derivation from the wasm import types would lose the signedness a result is boxed by. Filing what the compilation already computed is the only reading that cannot disagree with itself.
+/// `foreigns` is the other kind: an *output* of the compilation rather than an input it rested on, so nothing verifies it — the payload's digest already answers for the bytes it was derived alongside. It is here because a reused payload still has to be linked, and the rows a program's `ffi` imports are typed by cannot be recovered from the module: `Nat` and `Int` both cross as an `i64`, and `Bytes`, `Bits` and `Handle` share one reference type, so a re-derivation from the wasm import types would lose what a result is boxed as. Filing what the compilation already computed is the only reading that cannot disagree with itself.
 // `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
 #[curios_archive::archived(always)]
 struct Record {
@@ -62,9 +62,9 @@ impl Verdicts {
     ///
     /// **Decidable without deserializing anything.** The units are verified through `Verdicts::chain` — the same slot and record checks the fold makes, minus the decode a payload hit has no use for — and the payload itself is bytes to hand on, not a structure to read. A stale unit is a miss by construction, since it is about to recompile into bytes no record could match.
     ///
-    /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units as it always did.
+    /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units.
     ///
-    /// `engine` is what decides whether a payload compiled on this machine runs on another, as a key part: the payload is the store's first machine-dependent artifact. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
+    /// `engine` is what decides whether a payload compiled on this machine runs on another, as a key part: a payload, unlike a unit, is machine-dependent. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
     pub fn payload_get(
         &self,
         program: &Program<'_>,
@@ -88,7 +88,7 @@ impl Verdicts {
     ///
     /// Called after the fold, which is what makes `Verdicts::placed` the right chain to record: it holds what every unit of *this* compilation was filed as, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
     ///
-    /// **`units` is taken so this can refuse a chain with a gap in it, and it is the same slice [`Verdicts::payload_get`] probes with.** The two halves derived their chain by different rules until they were made to take one input: the probe builds it with `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, while this read whatever the fold happened to place — and a unit the fold could not place is simply absent from that. Filing under the shorter chain writes a slot addressed by a prefix no probe will ever compute: not a stale answer, but a directory the store grows and nothing reads, forever. Withholding the record is free, since the compilation it came from is correct either way.
+    /// **`units` is taken so this can refuse a chain with a gap in it, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe builds its chain with `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, while the chain the fold placed simply lacks a unit the fold could not place. Filing under that shorter chain would write a slot addressed by a prefix no probe will ever compute: not a stale answer, but a directory the store grows and nothing reads, forever. Withholding the record is free, since the compilation it came from is correct either way.
     pub fn payload_put(
         &self,
         program: &Program<'_>,

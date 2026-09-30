@@ -22,7 +22,7 @@ fn match_rejects_inconsistent_tuple_arity() {
     );
 }
 
-// Two rows are identical in every column, several levels deep — an overlapping arm Path A's full-enumeration model has no priority order to resolve.
+// Two rows are identical in every column, several levels deep — an overlapping arm the full-enumeration matrix has no priority order to resolve.
 #[test]
 fn match_rejects_duplicate_row() {
     let source = r#"
@@ -45,7 +45,7 @@ fn match_rejects_duplicate_row() {
     );
 }
 
-// A literal repeated constructor tag in a flat, single-column match — the pre-existing bug this work also fixed (it used to silently collapse to whichever arm's tag survived `BTreeMap` collection, dropping the other).
+// A literal repeated constructor tag in a flat, single-column match, refused rather than collapsed to whichever arm's tag survives collection, dropping the other.
 #[test]
 fn match_rejects_duplicate_flat_tag() {
     let source = r#"
@@ -66,7 +66,7 @@ fn match_rejects_duplicate_flat_tag() {
     );
 }
 
-// A plain binder row (Path A's forbidden catch-all) mixed with a concrete constructor row in the same column.
+// A plain binder row (a named catch-all, which the full-enumeration matrix refuses) mixed with a concrete constructor row in the same column.
 #[test]
 fn match_rejects_mixed_binder_and_ctor_column() {
     let source = r#"
@@ -125,7 +125,7 @@ fn match_rejects_incomplete_nat_pattern() {
     );
 }
 
-// A dependent motive is legal on a top-level `Nat` head too, not just a `Ctor` head — `BoolMatch`/`NatMatch::Induction`/`ListMatch`/`BinMatch` all already support the full motive ladder flat today. The arms are written succ-case-first: written zero-then-succ (in that literal order) is valid input to the pre-existing flat `parse_nat_match` grammar too, which would swallow the source before it ever reached the matrix compiler — Path A gives rows no priority order, so reordering doesn't change the meaning, only which parser accepts it.
+// A dependent motive is legal on a top-level `Nat` head too, not just a constructor head. The arms are written succ-case-first, which changes nothing: the full-enumeration matrix gives rows no priority order.
 #[test]
 fn match_allows_dependent_motive_on_nat_head() {
     let source = r#"

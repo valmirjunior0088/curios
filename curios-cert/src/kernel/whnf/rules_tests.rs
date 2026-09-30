@@ -307,7 +307,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     assert_eq!(kernel.reduce_forced(concrete), Ok(nat(0)));
 }
 
-/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application was a neutral the force handed back folded.
+/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application would be a neutral the force hands back folded.
 #[test]
 fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let mut kernel = kernel();
@@ -350,7 +350,7 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     assert_eq!(kernel.reduce_forced(term), Ok(Term::free_var(&y)));
 }
 
-/// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice was `2^n` under every demand — see `reduce_bool_binary`.
+/// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice would be `2^n` under every demand — see `reduce_bool_binary`.
 #[test]
 fn a_stuck_left_operand_leaves_the_right_as_written() {
     let mut kernel = kernel();
@@ -399,10 +399,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let value = binder(2, "value");
     let identity = Term::func([(n, nat_type())], Term::free_var(&n));
 
-    // The elaborator's twin, put to the kernel: a group whose member never mentions itself has no
-    // fixed point to keep, so opening its tail reduces past the projection and leaves the member's
-    // own `Func`. Declining every head that is not still a projection kept the folded spelling with
-    // that `Func` in hand, and the two checkers then read one declaration two ways.
+    // The elaborator's twin, put to the kernel: a group whose member never mentions itself has no fixed point to keep, so opening its tail reduces past the projection and leaves the member's own `Func`. Declining every head that is not still a projection would keep the folded spelling with that `Func` in hand, and the two checkers would read one declaration two ways.
     let term: Term = Term::apply(
         Term::rec(
             [(

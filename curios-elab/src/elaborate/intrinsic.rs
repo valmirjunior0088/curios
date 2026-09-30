@@ -23,7 +23,6 @@ fn check_list_elems(
     Ok(elaborated)
 }
 
-/// Synthesize an intrinsic's type, checking *and rebuilding* its operands. Mirrors the old `infer_intrinsic`, but every operand obligation goes through `elaborate(Check)` and the elaborated operand is kept, so the returned `Intrinsic` is the authoritative (rebuilt) one that flows on to `zonk`/`erase`.
 /// Rebuild `intrinsic` with its first `done.len()` traversed operands replaced, leaving the rest as written.
 ///
 /// The partial rebuild is what makes the walk below streaming rather than one pass: an operand's declared type may mention an operand before it — `List/get`'s list is at `List(element)`, a division's bound at `0 < divisor` — and elaboration *changes* what it touches, so a type read off the un-elaborated node would be checked against a spelling that no longer exists.

@@ -169,7 +169,7 @@ fn check_binary(left: f64, right: f64) {
     assert_eq!(a.neq(b), left != right, "neq on {}", case());
     assert_eq!(a.lt(b), left < right, "lt on {}", case());
     assert_eq!(a.le(b), left <= right, "le on {}", case());
-    // The model has no `gt`/`ge`: `a > b` is spelled `b < a` from the `/sys` row on (`documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`), so what the grid closes is the mirror itself, at every instantiation the NaN rows included.
+    // The model has no `gt`/`ge`: `a > b` is spelled `b < a` from the `/sys` row on (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`), so what the grid closes is the mirror itself, at every instantiation the NaN rows included.
     assert_eq!(b.lt(a), left > right, "gt as the lt mirror on {}", case());
     assert_eq!(b.le(a), left >= right, "ge as the le mirror on {}", case());
 }
@@ -387,7 +387,7 @@ fn a_literal_narrows_the_way_the_host_parses_it() {
         ("1", 309),
         ("1", -309),
         ("31415926535897932", -16),
-        // The exponent ceiling and floor the lexer admits: the overflow clamp decides both, and used to overflow itself at the ceiling.
+        // The exponent ceiling and floor the lexer admits: the overflow clamp decides both, and must not overflow itself at the ceiling.
         ("1", i32::MAX),
         ("123456789", i32::MAX - 7),
         ("1", i32::MIN),
@@ -433,7 +433,7 @@ const MANTISSA_CORNERS: [u64; 14] = [
 
 /// Every unary operation at **every one of the 2048 exponent fields**, over both signs and a fixed set of mantissa corners.
 ///
-/// This is what replaces binary32's exhaustive sweep, and it is deliberately a weaker claim honestly stated. 2⁶⁴ inputs cannot be enumerated, so completeness moves to the axis that decides an answer's *shape*: the exponent field selects zero, subnormal, normal, infinity or NaN, and picks the subnormal grid a result is rounded on. Sweeping it whole covers every one of those cases at every scale, including all 2046 normal exponents and the two special fields, where a sample would visit a handful. The mantissa is then covered by corners rather than exhaustively — the ends, the carry boundary at `2^51`, and the low bits `round` actually reads — with [`an_exhaustive_low_mantissa_sweep_agrees_with_the_host`] taking the low sixteen bits whole.
+/// Deliberately a weaker claim than an exhaustive sweep, honestly stated: 2⁶⁴ inputs cannot be enumerated, so completeness moves to the axis that decides an answer's *shape*: the exponent field selects zero, subnormal, normal, infinity or NaN, and picks the subnormal grid a result is rounded on. Sweeping it whole covers every one of those cases at every scale, including all 2046 normal exponents and the two special fields, where a sample would visit a handful. The mantissa is then covered by corners rather than exhaustively — the ends, the carry boundary at `2^51`, and the low bits `round` actually reads — with [`an_exhaustive_low_mantissa_sweep_agrees_with_the_host`] taking the low sixteen bits whole.
 ///
 /// Cheap enough for the ordinary suite: 2048 × 14 × 2 inputs.
 #[test]
@@ -450,7 +450,7 @@ fn every_exponent_agrees_with_the_host_at_the_mantissa_corners() {
 
 /// Every unary operation at every exponent field, over **all 2¹⁶ low mantissa bits** at each, with the high bits taken from the same corners.
 ///
-/// The low bits are where rounding is decided — the guard, the sticky residue and the tie — so taking them whole at every exponent is the strongest completeness claim available once 2⁶⁴ is off the table. Ignored because it is minutes rather than seconds, and split across threads for the same reason binary32's sweep was.
+/// The low bits are where rounding is decided — the guard, the sticky residue and the tie — so taking them whole at every exponent is the strongest completeness claim available once 2⁶⁴ is off the table. Ignored because it is minutes rather than seconds, and split across threads for the same reason.
 ///
 /// Reproduce with
 ///

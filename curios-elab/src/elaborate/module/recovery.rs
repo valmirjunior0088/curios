@@ -82,7 +82,7 @@ impl Poison {
 
 /// Take a withheld item out: its witness keys poisoned where it declares one, and everything else [`withdraw`] takes.
 ///
-/// **A withheld witness declaration is the one place the silence leaked.** A *refused* witness had registered before its body failed — `elaborate_module_let` registers on the signature, so a witness can recurse through its own entry — so undoing it poisoned its key in place and a consumer met the poison and said nothing. A withheld one never elaborates at all, so there is no entry under its name to remove and no key to poison, and every consumer reported `no witness of C(T) found`: a second record for one mistake, at a declaration with nothing wrong with it.
+/// **A withheld witness declaration has its key poisoned here, by hand.** A *refused* witness registered before its body failed — `elaborate_module_let` registers on the signature, so a witness can recurse through its own entry — so undoing it poisons its key in place, and a consumer meets the poison and says nothing. A withheld one never elaborates at all, so there is no entry under its name to remove and no key to poison, and every consumer would report `no witness of C(T) found`: a second record for one mistake, at a declaration with nothing wrong with it.
 ///
 /// A key is a fact about the *elaborated* signature — reduction leaves a lowered concept application an `Apply`, and only elaboration produces the `StructType` the key reads its heads off — so the signature is elaborated here, under the mark that undoes a refused item, and the mark taken straight back. What survives it is the poison, which is the point. A signature that does not elaborate poisons nothing, and needs to poison nothing: it is the signature itself that reaches the poison then, so every consumer that could have formed the goal is withheld on its own account.
 pub(super) fn withhold(context: &mut Context, stamp: ItemStamp, item: &Item) {
@@ -195,7 +195,7 @@ impl Survivors {
 
     /// Record that no item was produced for what `item` declares — it was withheld before elaborating, refused, or retracted after the fact.
     ///
-    /// Kept beside the refusals because the two answer different questions and only one of them was ever asked. A refusal says something reported; this says the module no longer mirrors the lowering, which is what a caller reassembling the lowered order needs and cannot read off an absence.
+    /// Kept beside the refusals because the two answer different questions. A refusal says something reported; this says the module no longer mirrors the lowering, which is what a caller reassembling the lowered order needs and cannot read off an absence.
     pub(super) fn drop_item(&mut self, item: &Item) {
         self.dropped
             .extend(item.declared_names().into_iter().cloned());

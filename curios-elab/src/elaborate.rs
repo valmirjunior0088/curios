@@ -73,7 +73,7 @@ pub(crate) fn elaborate(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // Guarded by [`recurse`]: a child position is elaborated by descending into it, so the cycle `elaborate → elaborate_apply → check → elaborate` costs native frames per link of a right-nested argument spine. Nothing in the corpus produces one today — a string literal's proof became constant-size — but depth is a function of the input rather than of anything anyone wrote, and this is what makes that affordable rather than fatal.
+    // Guarded by [`recurse`]: a child position is elaborated by descending into it, so the cycle `elaborate → elaborate_apply → check → elaborate` costs native frames per link of a right-nested argument spine. Nothing in the corpus produces a deep one — a string literal's proof is constant-size — but depth is a function of the input rather than of anything anyone wrote, and this is what makes that affordable rather than fatal.
     recurse(|| {
         // Route through the elaboration cache: ground, local-free subterms — which the lowerer emits as `Rc`-shared DAGs — elaborate once per distinct node instead of once per occurrence. Span stamping stays outside it, since spans are excluded from `Term` equality: occurrences differing only in span share one un-stamped entry and restamp per occurrence.
         let expected = mode.expected();
@@ -90,7 +90,7 @@ pub(crate) fn elaborate(
             None => rebuilt,
         };
 
-        // Obligation (V)'s seed. Every settled node passes here with the type it settled at, which is the judgment `reach.rs` used to re-derive from the finished term. Taken after the restamp so the recorded term is the one that reaches the module, outside the cache so a hit records too, and independent of `Mode` because `type_` is the term's type whether it was checked or inferred.
+        // Obligation (V)'s seed. Every settled node passes here with the type it settled at, which a walk over the finished term could only re-derive. Taken after the restamp so the recorded term is the one that reaches the module, outside the cache so a hit records too, and independent of `Mode` because `type_` is the term's type whether it was checked or inferred.
         context.record_checked(&rebuilt, &type_);
 
         Ok((rebuilt, type_))

@@ -13,7 +13,7 @@
 //!
 //! **A step's line is built by unterminated writes.** The prefix reaches the reader *before* the work it announces rather than after, which is the whole point — and a compiler that dies mid-operation leaves the line unterminated, so the last thing on screen is exactly how far it got. Rust's stderr is unbuffered, so this needs no flushing of its own. It also needs no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal.
 //!
-//! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the target around it. A header carries no outcome of its own: what became of the target is what its steps say.
+//! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is the innermost one, so an interrupted compile names the step it died in rather than the target around it. A header carries no outcome of its own: what became of the target is what its steps say.
 
 #[cfg(test)]
 mod tests;
@@ -62,7 +62,7 @@ impl fmt::Display for Subject {
     }
 }
 
-/// Declare every heading once — the variant, its documentation, and the word it prints — so the enum and the list the column is measured from cannot drift apart. The list used to be kept by hand beside the enum, where the compiler could not check it and a missing entry only made the column too narrow.
+/// Declare every heading once — the variant, its documentation, and the word it prints — so the enum and the list the column is measured from cannot drift apart: a list kept by hand beside the enum would go unchecked, and a missing entry would only make the column too narrow.
 macro_rules! headings {
     ($($(#[$note:meta])* $variant:ident => $word:literal,)+) => {
         /// Every word that can head a status line. The tense is the contract: a present participle opens a line before its work and may accrue what it came to, a past participle states a settled fact after it, and the imperative addresses the reader.

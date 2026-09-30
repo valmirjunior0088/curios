@@ -49,7 +49,7 @@ let spread_is_trimmed(
 
 --- `a` times two to the `k`.
 ---
---- One run of `k` zero bits ahead of the word rather than `k` doublings of it. The spine this replaced allocated a word per place, which over `Flt`'s exponent range is a thousand of them for one conversion; the laws below still induct on `k`, and each step names [`pow2_succ`] where it used to reduce to a `dbl` by definition.
+--- One run of `k` zero bits ahead of the word rather than `k` doublings of it: a doubling spine allocates a word per place, which over `Flt`'s exponent range is a thousand of them for one conversion. The laws below still induct on `k`, each step naming [`pow2_succ`], since a step does not reduce to a `dbl` by definition.
 pub let pow2(a: BigNat, k: Nat) -> BigNat =
     of_trimmed_bits(
         spread(k, a.bits),

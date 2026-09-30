@@ -41,7 +41,7 @@ impl Totality {
 
 /// What the certifier concluded about the definitions one of its walks judged: each one's totality, closed over everything it mentions, and what judging it read of other items.
 ///
-/// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, where it used to read the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
+/// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Certification {
@@ -152,11 +152,11 @@ pub struct Definition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub universe_context: UniverseContext,
-    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `Structure::module` carries for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
+    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `InductDecl::module` and `StructDecl::module` carry for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
-    /// Whether this definition terminates on every input, together with everything it reaches. Written back by `crate::record_totality` after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
+    /// Whether this definition terminates on every input, together with everything it reaches. Written back by `curios-elab`'s `record_totality` after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
-    /// This is the cross-module summary the erasure gates read. A user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure".
+    /// This is the cross-module summary elaboration's own gates read: a user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure". The certifier reads it only as a claim to contradict, and nothing below erasure reads it: an erased function's termination flag is marked from the certifier's record.
     pub totality: Totality,
     pub type_: Term,
     pub body: Term,
@@ -347,7 +347,7 @@ impl Item {
 
     /// The definitions this top-level item declares, in the same order as [`Item::declared_names`] — one for a `let`, one per member for a `rec`.
     ///
-    /// The fan-out this replaces was written out at eight sites across three crates, which is eight places a new `Item` variant could be missed. It belongs here beside `declared_names` for the same reason that one does: what an item declares is the item's own question.
+    /// Written out at each caller, the fan-out would be one more place a new `Item` variant could be missed. It belongs here beside `declared_names` for the same reason that one does: what an item declares is the item's own question.
     ///
     /// Owned rather than borrowed, because a `rec` member's [`Definition`] is *materialized* from the group rather than stored — there is nothing to hand a reference to.
     pub fn definitions(&self) -> Vec<Definition> {
@@ -368,7 +368,7 @@ pub struct Entrypoint {
 
 /// A program: the unit it is compiled from, and the term it closes with.
 ///
-/// The one compilation that has an entrypoint is the one that holds a `Program`; every other unit — a library, a prelude root, a recompile's reused items — is a [`Module`] alone. The entry used to be an optional field of every module, `None` for all of them but one, and each stage reading a module then had a case for the entry it almost never had. Carried beside the module instead, the entry exists exactly where a program is compiled, and a stored unit cannot hold one.
+/// The one compilation that has an entrypoint is the one that holds a `Program`; every other unit — a library, a prelude root, a recompile's reused items — is a [`Module`] alone. An optional entry on every module would be `None` for all of them but one, and each stage reading a module would carry a case for the entry it almost never has. Carried beside the module instead, the entry exists exactly where a program is compiled, and a stored unit cannot hold one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub module: Module,
@@ -377,16 +377,16 @@ pub struct Program {
 
 /// The whole of one unit as a *flat* list of top-level `items`, with the registries they are checked against.
 ///
-/// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that `text::into_core` used to fold the entire prelude into — the construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine were both O(N) in stack and overflowed at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
+/// Flat rather than one N-deep nested `Subterm::Let`/`Rec` term: folding a unit into one would make its construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine O(N) in stack, overflowing at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct Module {
     pub items: Vec<Item>,
-    /// The prefixes this module's compilation unit claims, and the privilege tier each carries.
+    /// The prefixes this module's compilation unit claims, each with whether it is a root only the compiler supplies.
     ///
-    /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name only ever restated the name's leading segment — and being archived, it meant something solely in the compilation that wrote it. A later stage that needs a privilege tier reads it out of this list; nothing derives one from a string.
+    /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name would only restate the name's leading segment — and, archived, mean something solely in the compilation that wrote it. A later stage that needs a mount's kind reads it out of this list; nothing derives one from a string.
     pub mounts: Vec<Mount>,
-    /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context` (see `run::compile`); both seed their context's flat inductive store from here on entry.
+    /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context`; both seed their context's flat inductive store from here on entry.
     pub induct_decls: BTreeMap<Global, InductDecl>,
     /// Struct declarations' registry entries, keyed by the type's qualified name. Carried on the module like `induct_decls` (and for the same reason): elaboration and erasure each seed their own `Context` from here on entry.
     pub struct_decls: BTreeMap<Global, StructDecl>,
@@ -401,7 +401,7 @@ pub struct Module {
 impl Module {
     /// This module with every term hash-consed against `sharing` — one shared allocation per distinct structure.
     ///
-    /// Built for the archived prelude. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Measured over the prelude, 389,264 nodes covered 19,908 distinct structures — a 19.6x expansion that the archive stores in full and every restored traversal then walks in full.
+    /// Built for the archived prelude. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures many times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
     ///
     /// Pass the same [`Sharing`] to every snapshot archived together so equal structures collapse across them as well as within each.
     pub fn shared(&self, sharing: &Sharing) -> Module {
@@ -658,7 +658,7 @@ impl Module {
         )
     }
 
-    /// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
+    /// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
     fn print_items(
         &self,
         formatter: &mut fmt::Formatter<'_>,

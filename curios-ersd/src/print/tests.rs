@@ -201,7 +201,7 @@ fn a_deep_module_prints_without_native_stack() {
     assert!(printed.ends_with(";\n"));
 }
 
-/// The defect the rewrite exists to fix: a lifted function used to print at top level with an empty parameter list and a body naming its enclosing function's parameter, which is an open term. Nesting at the binding site is what closes it.
+/// A lifted function printed at top level would show an empty parameter list and a body naming its enclosing function's parameter, which is an open term. Nesting at the binding site is what closes it.
 #[test]
 fn a_closure_nests_inside_the_function_that_binds_its_captures() {
     let mut builder = ErsdBuilder::new();

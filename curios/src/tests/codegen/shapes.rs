@@ -1,4 +1,4 @@
-//! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument; the figures live here, in the `stored_prelude_measurements` pattern — the command, the date, and what each probe last printed, beside the code that retakes it.
+//! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument; the figures live here, in the `stored_prelude_measurements` pattern — the command and what each probe last printed, beside the code that retakes it.
 
 use {
     super::map_wall::{cwasm_of, run, timed},
@@ -140,7 +140,7 @@ fn optimized_wat(source: &str) -> String {
     printed
 }
 
-/// The census the typed-fields specification gates its third mechanism on: the recorded-shape population, the per-program static populations of the box/unbox and cast classes shaping would delete, and the type-count growth family keying would mint.
+/// The typed-fields census: the recorded-shape population, the per-program static populations of the box/unbox and cast classes shaping deletes, and the type count nominal rows mint.
 ///
 /// # How to run it
 ///
@@ -152,7 +152,7 @@ fn optimized_wat(source: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// Taken 2026-09-12, release, x86-64 Linux, over a prelude twice the size of the one the recorder landed on (2026-08-20: 28 products, 30 families, 149 recorded fields):
+/// Release, x86-64 Linux:
 ///
 /// ```text
 /// schema roster: 55 products, 59 families, 213 constructors
@@ -166,7 +166,7 @@ fn optimized_wat(source: &str) -> String {
 /// parse_digits: i31-cast 74, box 203, unbox 219, rope-cast 100, envr-cast 30, tuple-cast 10, tuple-test 6, tuple-types 3
 /// ```
 ///
-/// What the figures decided, and the larger prelude only sharpened it. **290 of 361 recorded fields — 80% — are monomorphic at erasure** (116 of 149, 78%, at the recorder's landing), so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 100–121 sites, and family keying replaced the arity-keyed tuple types with the roster's nominal types — 114 of them now, against 3 tuple types per program — a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs — the cast step's own history says a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
+/// **290 of 361 recorded fields — 80% — are monomorphic at erasure**, so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 100–121 sites, and the roster's nominal row types — 114 of them, against 3 tuple types per program — are a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
 #[ignore = "measurement: reports the census rather than asserting"]
 fn field_shape_census() {
@@ -293,14 +293,14 @@ end
 ///
 /// # What it last printed
 ///
-/// Taken 2026-09-12, release, x86-64 Linux:
+/// Release, x86-64 Linux:
 ///
 /// ```text
 /// outputs at 300 rounds: bare "491113", payload "161671"
 /// bare 13.60 ns/element, payload 17.18 ns/element, boxed-field read 3.58 ns (21%)
 /// ```
 ///
-/// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. The history of the same pair is the argument: a native whole-process take before the typed-table landing read 7.7 ns (18%), the take right after it 4.13 ns (17%), and today's 3.58 ns (21%) — the absolute keeps falling as the fold's per-dispatch cost is cut out from under it, while the *relative* share holds or grows — the class scales with the loop around it, which is exactly what makes it worth deleting at the representation rather than the site.
+/// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the absolute price fell while the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
 #[test]
 #[ignore = "measurement: reports timings rather than asserting"]
 fn boxed_field_read_measurements() {
@@ -337,7 +337,7 @@ fn boxed_field_read_measurements() {
 
 /// The family-slot probe: what typing a *tagged* family's reference fields would cost, family by family.
 ///
-/// Every other recorded shape is typed by the door already, and each was strictly additive — the same width, fewer instructions, and for a list or a closure a deleted `is_subtype` libcall. A tagged family's reference fields are the exception on both counts. Slots are grouped by carrier, so a family-typed slot cannot share the uniform range; a family whose constructors disagree therefore *widens* to gain one. And what the widening buys is the cheap kind of cast — an exact compare against a final type — not a libcall.
+/// Every other recorded shape is typed by the door, and each is strictly additive — the same width, fewer instructions, and for a list or a closure a deleted `is_subtype` libcall. A tagged family's reference fields are the exception on both counts. Slots are grouped by carrier, so a family-typed slot cannot share the uniform range; a family whose constructors disagree therefore *widens* to gain one. And what the widening buys is the cheap kind of cast — an exact compare against a final type — not a libcall.
 ///
 /// So the question is not whether to type them but *where*, and the criterion is exact rather than a heuristic: a family widens or it does not. This reports the split, so a rule admitting only the free ones can be written against a number instead of an intuition.
 ///
@@ -349,7 +349,7 @@ fn boxed_field_read_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken 2026-09-12, release, x86-64 Linux (the 2026-08-20 take, over a prelude half this size, split 5 free to 3 paid, with `/std/Map/Node` already the widest row; `/std/Vec` has since become a product and left the table):
+/// Release, x86-64 Linux:
 ///
 /// ```text
 /// families holding a family-typed field: 16
@@ -373,7 +373,7 @@ fn boxed_field_read_measurements() {
 ///   /std/Toml/decode/Stmt        3 slots -> 3 slots, 1 typed -> 2 typed   FREE
 /// ```
 ///
-/// **What the figures decided, and it is the opposite of what the specification predicted.** The campaign was written around making a fork's children `(ref null $node)`, and `/std/Map/Node` is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Set against this campaign's own `trees` finding — that live bytes convert to time under an all-live collector — that is a trade to decline, and the door declines it.
+/// **What the figures decide.** `/std/Map/Node` — the family a typed fork's children `(ref null $node)` would serve — is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it.
 ///
 /// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Eight slots qualify here, on the command-line, formatting, scheduler, layout and TOML families rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]

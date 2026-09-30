@@ -1,4 +1,4 @@
-//! What a fold recomputes from rows: the aggregates the old collector kept, the distributions beside them, the two things only a stream can say — what a truncated file still yields, and what a killed run was inside — and which files one rotated stream is.
+//! What a fold recomputes from rows: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a truncated file still yields, and what a killed run was inside — and which files one rotated stream is.
 
 use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
@@ -25,7 +25,7 @@ fn names(report: &ProfileReport) -> Vec<&str> {
         .collect()
 }
 
-// The round trip the whole design rests on: a stream written by `trace` folds back into the summaries the collector used to return, with the same nesting semantics — an outer span's extent covers the inner spans within it.
+// The round trip the whole design rests on: a stream written by `trace` folds back into per-span summaries, an outer span's extent covering the inner spans within it.
 #[test]
 fn a_written_stream_folds_back_into_its_summaries() {
     let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));

@@ -107,7 +107,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     assert_eq!(run(source), b"error / error / ok:3");
 }
 
-/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/Lt/try` passes over an empty piece, so `read_until` reads on to the delimiter — where an empty chunk once read as the delimiter and ended the read early.
+/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/Lt/try` passes over an empty piece, so `read_until` reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
 #[test]
 fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {

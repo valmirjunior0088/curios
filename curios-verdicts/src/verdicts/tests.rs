@@ -204,7 +204,7 @@ fn an_unchanged_unit_is_reused() {
     assert!(reused(&root), "and the second finds what the first filed");
 }
 
-/// The regression for what the tree-hashed scheme got wrong. Filing a unit writes into `.curios/`, which sits inside the very directory that scheme hashed into the unit's address — so a package's own library missed forever and the store grew a directory per compile. What a unit was compiled from is now recorded and verified rather than addressed, and a generated file is not something it was compiled from.
+/// Filing a unit writes into `.curios/`, which sits inside the directory a package's library reads from, so an address hashed over that tree would miss forever and grow the store a directory per compile. What a unit was compiled from is recorded and verified rather than addressed, and a generated file is not something it was compiled from.
 #[test]
 fn writing_into_the_store_does_not_invalidate_it() {
     let root = project("store-writes");
@@ -216,7 +216,7 @@ fn writing_into_the_store_does_not_invalidate_it() {
     assert!(reused(&root), "and neither is anything else under it");
 }
 
-/// A compilation reading through an overlay is verified against the text it would read: a file the unit was compiled from hits while the editor's text is the disk's and misses once it differs, and an open file the unit never read — the executable beside a package's library, in the directory the library reads from — is no reason to compile the library again. That last case used to cost the language server the whole library on every keystroke in a program file, since the hit was refused whenever any open document lay under the unit's directory.
+/// A compilation reading through an overlay is verified against the text it would read: a file the unit was compiled from hits while the editor's text is the disk's and misses once it differs, and an open file the unit never read — the executable beside a package's library, in the directory the library reads from — is no reason to compile the library again. A containment guess, refusing the hit whenever any open document lies under the unit's directory, would cost the language server the whole library on every keystroke in a program file.
 #[test]
 fn an_overlaid_compilation_is_verified_by_the_text_it_would_read() {
     let root = project("overlaid");
@@ -323,7 +323,7 @@ fn a_damaged_unit_is_not_reused() {
     assert!(reused(&root), "and the recompile repairs the slot");
 }
 
-/// The store holds one slot per unit rather than one per compile — the property the address exists to have, and the one the previous scheme lost.
+/// The store holds one slot per unit rather than one per compile — the property the address exists to have.
 #[test]
 fn compiling_repeatedly_files_one_slot() {
     let root = project("bounded");

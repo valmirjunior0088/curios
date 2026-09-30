@@ -135,7 +135,7 @@ impl<'a> Emitter<'a> {
 
     /// Emit a peel: the element at `at`, and — where the arm reads it — the suffix beginning at `after`.
     ///
-    /// **The one place the compiler says how a sequence is taken apart.** Both eliminations reach it, `FoldSequence`'s step and `UnconsSequence`'s cons arm, where each used to open-code the pair for itself; the convention the two independently encoded is what a window's operands changing under them found. `at` and `after` name one offset a step apart, and both callers already hold both — the fold as its loop's two indices, the peel as the literals `0` and `1`.
+    /// **The one place the compiler says how a sequence is taken apart.** Both eliminations reach it, `FoldSequence`'s step and `UnconsSequence`'s cons arm, so the convention is encoded once rather than by each, where a change to a window's operands could leave the two disagreeing. `at` and `after` name one offset a step apart, and both callers already hold both — the fold as its loop's two indices, the peel as the literals `0` and `1`.
     ///
     /// Neither read names an extent. `sequence_rest_op` takes a start and lets the value decide how much follows, so there is no count for a caller to derive and none for two of them to derive differently.
     pub(super) fn emit_peel(

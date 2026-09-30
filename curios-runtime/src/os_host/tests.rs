@@ -9,7 +9,7 @@ use {
     std::{num::NonZeroU32, thread, time::Duration},
 };
 
-/// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. Boxing the two TLS variants took that from 1176 bytes to 16, measured 2026-08-23 by the `size_of` calls below — a `rustls` connection carries its record buffers inline, and unboxed it set the size of every other kind.
+/// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. The two TLS variants are boxed because a `rustls` connection carries its record buffers inline, and unboxed it would set the size of every other kind.
 ///
 /// The bound is the guard rather than the figure: unboxing either variant, or adding a third large one inline, puts a kilobyte back on every handle and fails here.
 #[test]
@@ -152,7 +152,7 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
 
 /// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_resolve` would mint for it.
 ///
-/// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so the earlier probe-and-release helper had the second test bind the port the first was about to — measured 2026-09-03 at three failures in fifteen runs of this module.
+/// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so a probe-and-release helper would have the second test bind the port the first is about to.
 fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
     let any = b"127.0.0.1:0".to_vec();
     let listener = host.socket_open(any.clone()).unwrap();
@@ -522,7 +522,7 @@ fn ended(host: &OsHost, child: &Handle) {
     assert_ne!(ready[0].bits() & event::READ, 0, "the child ended");
 }
 
-/// Once the reaper has recorded an exit it has also reaped the pid, which the OS may hand to another process, so a kill answers `ok` without signaling anything — and the exit still reads back. A kill that signaled the freed pid answered `ESRCH` here, or ended whatever process had inherited it.
+/// Once the reaper has recorded an exit it has also reaped the pid, which the OS may hand to another process, so a kill answers `ok` without signaling anything — and the exit still reads back. A kill that signaled the freed pid would answer `ESRCH` here, or end whatever process had inherited it.
 #[test]
 fn killing_a_child_that_has_ended_signals_nothing() {
     let host = OsHost::with_args(vec![]);

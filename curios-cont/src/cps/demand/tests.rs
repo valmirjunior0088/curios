@@ -145,7 +145,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     assert_eq!(demand_of(&demands, received), Demand::Unused);
 }
 
-/// A value threaded along two jumps into a parameter nobody reads is dead however many edges carry it — the reach a use count does not have, and the reason the strengthening moves emitted code.
+/// A value threaded along two jumps into a parameter nobody reads is dead however many edges carry it — the reach a use count does not have.
 #[test]
 fn deferral_reaches_unused_through_a_chain() {
     let mut module = Module::default();

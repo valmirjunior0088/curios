@@ -105,7 +105,7 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     ]);
     context.birth_metavar(MetavarId(0), Vec::new(), pair_type);
 
-    // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple` is Check-only), so synthesize-then-convert re-validation rejected it; checking it against the frozen tuple result type admits it.
+    // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple` is Check-only), so synthesize-then-convert re-validation would reject it; checking it against the frozen tuple result type admits it.
     let pair = Term::tuple([nat(1), nat(2)]);
     assert_eq!(conv(&mut context, &Term::hole(0), &pair), Ok(true));
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&pair));
@@ -453,7 +453,7 @@ fn revalidation_withholds_an_arm_a_metavariable_was_not_born_in() {
 
 #[test]
 fn revalidation_keeps_the_arm_a_metavariable_was_born_in() {
-    // The mirror: `?0 : t` born *after* the refinement `t := Nat` — inside the arm, where all of its occurrences are. Re-validation stands under the arm's refinement, `5 : t` holds there, and the solution commits; withholding it, as re-validation once did, refused a solution resting on the arm's own guard.
+    // The mirror: `?0 : t` born *after* the refinement `t := Nat` — inside the arm, where all of its occurrences are. Re-validation stands under the arm's refinement, `5 : t` holds there, and the solution commits; withholding it would refuse a solution resting on the arm's own guard.
     let mut context = context();
     let t_binder = context.fresh(Some("t"));
     context.assume(&t_binder, &Term::type_ground());
@@ -535,7 +535,7 @@ fn solve_through_an_identity_spine_matches_legacy() {
     context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
 
-    // The identity spine behaves exactly like the empty (legacy bare-hole) spine: the candidate is stored unchanged.
+    // The identity spine behaves exactly like the empty (bare-hole) spine: the candidate is stored unchanged.
     assert_eq!(conv(&mut context, &occurrence, &nat(1)), Ok(true));
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat(1)));
 }
@@ -803,7 +803,7 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
 
 #[test]
 fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
-    // The intersection wontfix's witness, pinned: two *distinct* unsolved metavariables over compatible telescopes, met through the same live name. Flex–flex assignment (`?0 := ?1` through the renaming) would discharge this; v1 does no intersection, so the pair parks and — with nothing else to pin either head — stays undecided. When intersection is built, this test should flip to `Converts` with `?0` solved to an occurrence of `?1` (and this comment retired).
+    // Pinned: two *distinct* unsolved metavariables over compatible telescopes, met through the same live name. Flex–flex assignment (`?0 := ?1` through the renaming) would discharge this; flex–flex does no intersection, so the pair parks and — with nothing else to pin either head — stays undecided.
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
@@ -900,7 +900,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
 fn eta_at_unit_trusts_the_goal_type_label() {
     let mut context = context();
 
-    // Pinned wart, internal to the conversion API: when one side is the unit tuple literal `()`, `eta_expand_tuple` enqueues one goal per field — zero — and succeeds *without ever confirming the goal's type reduces to `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`. Elaboration never produces a heterotyped goal (both sides of every `expect`/index comparison were checked at the same type), so this is not reachable from the surface language — but the conversion entry point is only sound under that caller invariant. If η-at-unit ever gates on the type actually being a 0-ary tuple type, flip this to `Ok(false)`.
+    // Pinned wart, internal to the conversion API: when one side is the unit tuple literal `()`, `eta_expand_tuple` enqueues one goal per field — zero — and succeeds *without ever confirming the goal's type reduces to `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`. Elaboration never produces a heterotyped goal (both sides of every `expect`/index comparison were checked at the same type), so this is not reachable from the surface language — but the conversion entry point is only sound under that caller invariant. An η-at-unit gated on the type actually being a 0-ary tuple type would answer `Ok(false)` here.
     assert_eq!(
         convert(
             &mut context,
@@ -912,9 +912,9 @@ fn eta_at_unit_trusts_the_goal_type_label() {
     );
 }
 
-/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/soundness/per-term-rules/conversion-recurrence.md`.
+/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/design/soundness/conversion/conversion-recurrence.md`.
 ///
-/// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and while the hole was open to attack, the collision was confirmed to fire inside a real drain too: instrumenting the drain's history hit showed `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
+/// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and the collision fires inside a real drain too: `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal is skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
 ///
 /// What keeps the assumption from admitting anything is not the key but the openings' uniformity, which the fixture below holds in both directions.
 #[test]
@@ -967,7 +967,7 @@ fn two_goals_distinct_under_their_binder_types_share_one_history_key() {
 
 /// A goal assumed through a cross-branch key collision cannot move the verdict, and the reason is the openings' uniformity rather than the key: `Context::fresh` mints a bare label, no rule assumes a type for it, and `synth_neutral` and `apply_param_types` answer `None` for one, so every rule behind the history guard treats two openings alike. A collided goal is therefore its twin under an injective relabeling of openings, and whatever finite disagreement it hides is also the twin's, whose own children surface it — the refusing half below. That uniformity is an inventory of the same kind `ground_scope`'s is in `curios-cert`: a rule taught to read an opening's type would invalidate it in silence, and this fixture is what would notice.
 ///
-/// Both halves run the collision the fixture above demonstrates at the key level, inside a real drain: the tuple type's two function-type fields put the `Nat`-bound body goal in history first, and the `Bool`-bound twin arrives at the same fingerprint and is assumed (confirmed by instrumentation while this probe was written — see the fixture above).
+/// Both halves run the collision the fixture above demonstrates at the key level, inside a real drain: the tuple type's two function-type fields put the `Nat`-bound body goal in history first, and the `Bool`-bound twin arrives at the same fingerprint and is assumed (see the fixture above).
 #[test]
 fn a_goal_assumed_by_key_collision_cannot_move_the_verdict() {
     let mut context = context();

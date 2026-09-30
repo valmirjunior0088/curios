@@ -6,7 +6,7 @@ use crate::tests::typecheck;
 
 #[test]
 fn a_goal_in_a_local_let_annotation_is_reported() {
-    // `let y : ? = e` inside a body lowers to the same bare metavariable the typeless `let y = e` does, marked as a goal. `elaborate_let` used to take the typeless let's inference path for both, which discarded the goal unelaborated — nothing was left for zonk to report, and a program with a `?` in it compiled. The goal must take the annotation path, where the check solves it and the report carries the solution, exactly as a top-level `let y : ? = e` is reported.
+    // `let y : ? = e` inside a body lowers to the same bare metavariable the typeless `let y = e` does, marked as a goal. The goal takes the annotation path, where the check solves it and the report carries the solution, exactly as a top-level `let y : ? = e` is reported; the typeless let's inference path would discard it unelaborated, leaving nothing for zonk to report and a program with a `?` in it compiling.
     let source = r#"
         use /std/{Nat};
 
@@ -23,7 +23,7 @@ fn a_goal_in_a_local_let_annotation_is_reported() {
 
 #[test]
 fn a_goal_as_a_lambda_domain_is_reported() {
-    // `elaborate_func_infer` refuses a lambda whose domain nothing pins, and used to refuse a written `?` domain the same way — "cannot infer" where the author had asked a question. Only a silent hole is refused; the goal rides on, is solved by the application, and is reported with its solution.
+    // `elaborate_func_infer` refuses a lambda whose domain nothing pins only where that domain is a silent hole: a written `?` domain is a question rather than a failure to infer, so the goal rides on, is solved by the application, and is reported with its solution.
     let source = r#"
         use /std/{Nat};
 
@@ -39,7 +39,7 @@ fn a_goal_as_a_lambda_domain_is_reported() {
 
 #[test]
 fn a_goal_as_a_match_motive_is_reported() {
-    // An elided motive is synthesized from the arms, and a written `?` motive used to count as elided — synthesized over, never elaborated, never reported, and the program compiled. It is a user-written motive the author is asking about: checked against the eliminator's motive type and reported.
+    // An elided motive is synthesized from the arms, but a written `?` motive does not count as elided, which would synthesize over it and leave it unreported. It is a user-written motive the author is asking about: checked against the eliminator's motive type and reported.
     let source = r#"
         use /std/{Nat, Bool};
 

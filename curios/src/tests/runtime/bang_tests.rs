@@ -8,7 +8,7 @@ use {
 
 #[test]
 fn dispatches_through_a_user_monad_witness() {
-    // A user-declared Identity monad: `Box(A)` wraps a value, its witness's `bind` just applies the continuation. Each `!` desugars to `/std/Monad/bind(action, cont)`; the action's `Box(Nat)` type pins `M := Box` (flex-apply imitation) and resolves `monad_box` — the same path a std monad takes, exercised end-to-end on a user type.
+    // A user-declared Identity monad: `Box(A)` wraps a value, its witness's `bind` just applies the continuation. Each `!` desugars to `/std/Monad/bind(action, cont)`; the action's `Box(Nat)` type pins `M := Box` (flex-apply imitation) and resolves the `Monad(Box)` witness — the same path a std monad takes, exercised end-to-end on a user type.
     let source = r#"
         use /std/{Nat, Str, Monad};
         pub struct Box(A : Type) : pub Type { unbox : A }
@@ -27,7 +27,7 @@ fn dispatches_through_a_user_monad_witness() {
 
 #[test]
 fn std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad, sequenced with bare `!` — each site resolves the `Monad(Parse)` witness from the action's type. Two `any_byte!`s read consecutive bytes; reflecting through `Byte/to_nat` and using a *non-commutative* `Nat/sub` pins the evaluation order: on "BA" the first byte is 'B' (66) and the second 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
+    // The real `/std/Parse` monad, sequenced with bare `!` — each site resolves the `Monad(Parse)` witness from the action's type. Two `Parse/bytes/byte!`s read consecutive bytes; reflecting through `Byte/to_nat` and using a *non-commutative* `Nat/sub` pins the evaluation order: on "BA" the first byte is 'B' (66) and the second 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
     let source = r#"
         use /std/{Parse, Byte, Bytes, Nat, Result};
 
@@ -53,7 +53,7 @@ fn std_parse_threads_bangs_left_to_right() {
 
 #[test]
 fn region_mixes_action_types() {
-    // A single region sequences two actions of *different* payload types: a `Parse(Bytes, Bytes)` (`take_while`) and a `Parse(Bytes, Byte)` (`byte`). Each `!` site elaborates its own `/std/Monad/bind` application with fresh implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while the shared continuation typing forces one monad for the region. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); splicing the byte onto the run gives "AB".
+    // A single region sequences two actions of *different* payload types: a `Parse(Bytes, Bytes)` (`take_while`) and a `Parse(Bytes, Byte)` (`byte`). Each `!` site elaborates its own `/std/Monad/bind` application with fresh implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while the shared continuation typing forces one monad for the region. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `byte` reads 'B' (66); splicing the byte onto the run gives "AB".
     let source = r#"
         use /std/{Parse, Byte, Bytes, Bool, Result, Str};
 

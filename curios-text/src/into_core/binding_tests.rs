@@ -197,7 +197,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
 
 #[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
-    // A test takes no parameters, but it is still a `() -> Test` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value. The empty telescope is what the parentheses used to spell, kept in the lowering after they left the surface.
+    // A test takes no parameters, but it is still a `() -> Test` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
     let module = lowered_module("test t = Type;\n()");
     let definition = module
         .items

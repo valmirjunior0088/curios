@@ -8,7 +8,7 @@
 //!
 //! A row whose reply is a [`Termination`] diverges: its call never returns, which is distinct from a row returning nothing, and it crosses no result. `proc_exit` is the one such row. No host implementation can return into the guest, since nothing but the adapter's guest-exit trap is made of a termination, and the guest refuses a host that returns anyway.
 //!
-//! Each row also states where the guest surfaces it, as `as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket_open`, `clock`).
+//! Each row also states where the guest surfaces it, as `as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket`, `clock`).
 
 use {
     super::{

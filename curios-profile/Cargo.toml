@@ -3,7 +3,7 @@ name = "curios-profile"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Programmatic profiling for the Curios workspace: span macros and the aggregate capture subscriber"
+description = "Programmatic profiling for the Curios workspace: span macros, the subscriber that streams one row per span and event, and the fold that reads a stream back"
 
 [lints]
 workspace = true

@@ -87,7 +87,7 @@ fn partial_projection_tuple_at_narrow_type() {
     let this: Term = Term::tuple([Term::proj(Term::free_var(&p), 0)]);
     let that: Term = Term::tuple([Term::proj(Term::free_var(&q), 0)]);
 
-    // Even though eta_reduce_tuple widens each 1-tuple to its bare base (`Var p`, `Var q`), the convert loop then routes the neutral pair through `eta_expand_neutral`, which re-projects according to the TRUE type telescope (1 field). Each `proj(_, 0)` then reduces to `1`, so the comparison succeeds — the bug is masked here.
+    // Reduction does not eta-reduce a tuple (`reduce`'s `does_not_eta_reduce_tuple`), so each side stays a 1-tuple and its field is compared at the 1-field telescope: each `proj(_, 0)` reduces to `1`, and the two convert.
     assert_eq!(convert(&mut context, &type_, &this, &that), Ok(true));
 }
 
@@ -374,9 +374,9 @@ fn variant_unit_payload_is_irrelevant() {
 
 /// Proof irrelevance at a *computed* proposition — a stuck `match` whose motive is `Prop`.
 ///
-/// The rule is measured, and the measurement is why this fixture exists. Across the prelude's elaboration it fires 37 times in 84,826 conversion goals, and **every one of the 37 is at a computed proposition rather than a nominal `Prop` family**: validity predicates over `Bits` and `Nat`, the shape a decision procedure takes. Not one is at a bare `Prop`-sorted declaration. So the tests that name irrelevance — `curios-cert`'s `any_two_inhabitants_of_a_proposition_convert` and its control — cover a shape the corpus never actually presents, and they cover the *kernel's* copy, which the same measurement found inert at 0 firings in 86,547 goals. This crate's copy is the one that does the work and had no direct test; its only exercise was the prelude happening to be written with those predicates, which is coverage by accident rather than by assertion.
+/// Across the prelude's elaboration **every firing is at a computed proposition rather than a nominal `Prop` family**: validity predicates over `Bits` and `Nat`, the shape a decision procedure takes. So the tests that name irrelevance at a nominal family — `curios-cert`'s `any_two_inhabitants_of_a_proposition_convert` and its control — cover a shape the corpus never presents, and cover the *kernel's* copy, which no program reaches. This crate's copy is the one that does the work, and this fixture asserts it rather than leaving it to the prelude happening to be written with those predicates.
 ///
-/// What the fixture pins is the mechanism those 37 firings rest on. `Sort::of` classifies a stuck `Match` by reading its **motive**, not its arms — "a type-valued match: its sort is the motive" — so a match that cannot reduce is nonetheless a proposition when its motive says `Prop`, and irrelevance may then discharge a goal at it without examining either side. Two distinct neutrals convert there.
+/// What the fixture pins is the mechanism those firings rest on. `Sort::of` classifies a stuck `Match` by reading its **motive**, not its arms — "a type-valued match: its sort is the motive" — so a match that cannot reduce is nonetheless a proposition when its motive says `Prop`, and irrelevance may then discharge a goal at it without examining either side. Two distinct neutrals convert there.
 ///
 /// The control is the identical term with the motive at `Type`. It must not convert, and it is what makes this a test of the *motive* rather than of matches in general: read the arms instead, or default to `Prop` for anything unclassifiable, and the two fixtures stop disagreeing.
 #[test]
@@ -430,7 +430,7 @@ fn computed_type(context: &mut Context, motive: Term) -> Term {
 
 /// An intrinsic with no hand-written congruence arm is still compared operand by operand.
 ///
-/// `ListMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Intrinsic::traverse`, so the table cannot be short an operation.
+/// A hand-written table short an operation would answer a *hard* mismatch rather than a postponement, refusing a metavariable standing in one of that operation's operands instead of solving it — and `convert`'s syntactic-identity short circuit would hide that for every spelling that happens to be identical. The rule reads the operands off `Intrinsic::traverse`, so the table cannot be short an operation; `ListMap` is the one put to it here.
 #[test]
 fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand() {
     let mut context = context();
@@ -465,7 +465,7 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
     assert_eq!(conv(&mut context, &flexible, &rigid), Ok(true));
 }
 
-/// Reading the family an indexed match eliminates at its scrutinee is a probe: a scrutinee whose type the budget cannot afford to read propagates the refusal, where it used to answer that the two sides do not convert and let conversion go ahead on that answer.
+/// Reading the family an indexed match eliminates at its scrutinee is a probe: a scrutinee whose type the budget cannot afford to read propagates the refusal, rather than answering that the two sides do not convert and letting conversion go ahead on that answer.
 #[test]
 fn a_family_the_budget_cannot_read_at_its_scrutinee_propagates_the_refusal() {
     let mut context = context();

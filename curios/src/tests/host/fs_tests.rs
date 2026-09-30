@@ -99,7 +99,7 @@ fn create_dir_all_keeps_an_existing_prefix_and_is_idempotent() {
     assert_eq!(io.output(), b"ok true true");
 }
 
-// The three status codes this campaign named, each told apart by `Show(Io/Error)` at its own `run`: a file operation on a directory, a directory operation on a file, and a listing of nothing.
+// Three status codes, each told apart by `Show(Io/Error)` at its own `run`: a file operation on a directory, a directory operation on a file, and a listing of nothing.
 #[test]
 fn the_named_filesystem_failures_show_by_name() {
     let source = program(

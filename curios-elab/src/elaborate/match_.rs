@@ -47,7 +47,7 @@ fn seed_motive(
 
 /// Resolve the (arity-one) motive of an intrinsic eliminator that keeps a family: a fold whose arm reads its hypothesis, or any intrinsic elimination whose motive is written or inferred — an elided one checked against an expected type is otherwise ambient (`resolve_intrinsic_result`). An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
 ///
-/// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job exactly as before.
+/// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job.
 fn resolve_intrinsic_motive(
     context: &mut Context,
     head_type: &Term,
@@ -428,7 +428,7 @@ fn elaborate_bin_match(
 
 /// The result of an elimination whose arms read no induction hypothesis — `Bool`, `Switch`, and a fold's case split (`resolve_fold_result`): an elided motive checked against an expected type takes that type as its ambient result, whatever the scrutinee, and anything else resolves as an intrinsic motive. A fold whose arm reads its hypothesis keeps the family — the hypothesis is typed at the motive opened at the tail.
 ///
-/// An expression scrutinee takes the ambient form as a variable does: each arm checks against the goal with the scrutinee's syntactic occurrences standing for the case (`MatchResult::at`), and the arm's refinement reduces any occurrence the goal reaches only by unfolding. A family solved by `solve`'s occurrence abstraction instead sees the goal as it arrives reduced at its root, and an occurrence spelled through a `let` there escapes the abstraction while the application the refinement is keyed on has been unfolded away, which left an arm less than the unabstracted goal would have given it.
+/// An expression scrutinee takes the ambient form as a variable does: each arm checks against the goal with the scrutinee's syntactic occurrences standing for the case (`MatchResult::at`), and the arm's refinement reduces any occurrence the goal reaches only by unfolding. A family solved by `solve`'s occurrence abstraction instead sees the goal as it arrives reduced at its root, and an occurrence spelled through a `let` there escapes the abstraction while the application the refinement is keyed on has been unfolded away, which would leave an arm less than the unabstracted goal gives it.
 fn resolve_intrinsic_result(
     context: &mut Context,
     head_type: &Term,
@@ -832,7 +832,7 @@ fn elaborate_induct_match(
         other => return Err(Error::not_a_induct_type(other.clone())),
     };
 
-    // Reducing the scrutinee type to weak-head normal form leaves its index *arguments* untouched, so an index that is an outer-arm key (`s` refined to `Scan/bad()` by an enclosing match) still reads as the bare variable. Reduce each index in the current (refined) context so inversion sees the forced value and pins arm binders against it, rather than refusing it as Rung B's key-shaped territory.
+    // Reducing the scrutinee type to weak-head normal form leaves its index *arguments* untouched, so an index that is an outer-arm key (`s` refined to `Scan/bad()` by an enclosing match) still reads as the bare variable. Reduce each index in the current (refined) context so inversion sees the forced value and pins arm binders against it, rather than refusing it as a key-shaped index, which refinement handles.
     let actual_indices = indices
         .iter()
         .map(|index| reduce_with(context, index))
@@ -860,7 +860,7 @@ fn elaborate_induct_match(
         indices: induct_decl.indices_at(&params),
     };
 
-    // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy used to arrange, and what the elaborator used to synthesize one for; the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved as before.
+    // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy arranges, with no convoy: the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved.
     let result = match &mode {
         Mode::Check(expected) if is_elided_motive(motive) => MatchResult::Ambient(expected.clone()),
         _ => MatchResult::Family(check_motive(context, &shape, motive)?),
@@ -891,7 +891,7 @@ fn elaborate_induct_match(
         }
     }
 
-    // Every written arm must name a constructor; coverage is decided per constructor below — a missing arm is legal iff inversion proves it impossible (Rung C).
+    // Every written arm must name a constructor; coverage is decided per constructor below — a missing arm is legal iff inversion proves it impossible.
     if let Some(tag) = cases
         .iter()
         .map(|(tag, _)| tag)
@@ -907,7 +907,7 @@ fn elaborate_induct_match(
     let mut cases_elaborated = Vec::new();
     for tag in induct_decl.constructor_order() {
         let Some((_, scope)) = cases.iter().find(|(candidate, _)| candidate == tag) else {
-            // A catch-all default covers every un-enumerated constructor, so a missing arm needs neither the unindexed-completeness check nor Rung-C inversion — the default is checked once, below.
+            // A catch-all default covers every un-enumerated constructor, so a missing arm needs neither the unindexed-completeness check nor index inversion — the default is checked once, below.
             if default.is_some() {
                 continue;
             }
@@ -917,7 +917,7 @@ fn elaborate_induct_match(
                 return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
             }
 
-            // Rung C — checker-verified omission: a missing arm is accepted iff first-order inversion of the scrutinee's actual indices against this case's targets finds a *definite* clash. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
+            // Inversion — checker-verified omission: a missing arm is accepted iff first-order inversion of the scrutinee's actual indices against this case's targets finds a *definite* clash. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
             let telescope = induct_decl
                 .instantiate(tag, &params)
                 .expect("constructor instantiates at its inductive's parameters");

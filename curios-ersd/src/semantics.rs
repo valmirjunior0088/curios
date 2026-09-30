@@ -44,7 +44,7 @@ pub struct ObservableBehavior {
     pub may_trap: bool,
     /// May fail to terminate. No intrinsic diverges; this is acquired through the call graph (a recursive component) by the effect summary.
     pub may_diverge: bool,
-    /// May terminate the process (an `Exit` terminator).
+    /// May terminate the process (a `Halt` terminator).
     pub may_exit: bool,
     /// May interact with the host (a foreign call).
     pub host_effect: bool,
@@ -231,7 +231,7 @@ impl Semantics {
 
     /// The behavior of a scalar operation. The float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly eight bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm must cover every operation whose fold reports a *language-partial* trap. No size is refused among them: `Nat` and `Int` grow past the i31 fast path into a boxed magnitude, so add, multiply and left shift are total here, as `curios-cont`'s `Intrinsic::effect` states them from the other side. Every other scalar operation is total and allocation-free.
     ///
-    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` kept the classification longest, for signed overflow — `i32::MIN / -1`, a *range* fact the precondition says nothing about — and lost it with the carrier: a quotient past the i31 grows into a boxed magnitude. What the classification decides is only whether an unused binding may be deleted, which is safe for a division whatever its divisor; a guard keeps its proof by position, and nothing here moves an operation above one.
+    /// The divisions do not trap either: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one, and `IntDiv`'s signed overflow — a *range* fact the precondition says nothing about — is a quotient past the i31, which grows into a boxed magnitude. What the classification decides is only whether an unused binding may be deleted, which is safe for a division whatever its divisor; a guard keeps its proof by position, and nothing here moves an operation above one.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
@@ -455,7 +455,7 @@ impl Semantics {
                     ));
                 }
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
-                // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
+                // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction rather than by both truncating.
                 NatToByte => Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?),
                 FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
                 FltOfLeBytes => {

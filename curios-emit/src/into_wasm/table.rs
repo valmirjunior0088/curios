@@ -326,6 +326,7 @@ pub(crate) struct Table<'a> {
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
     func_types: BTreeMap<(usize, usize), curios_wasm::TypeName>,
+    // No accessor iterates `consts`, `clsrs` or `funcs`: they are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. A consumer walks `EmissionModule`'s own ordered sequence and resolves each name through these indices instead, which is what `curios-utilities`'s `name!` means by carrying an explicit sequence where the order matters.
     consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
     /// The module consts that are `Tuple`/`List` constructions — the hoisted half of the population `Context::refuse_raw_aggregate` refuses to hand to a register. A closed aggregate is lifted out of its region by `hoist`, so a guard reading region values alone would miss exactly the constant ones.
     const_aggregates: HashSet<&'a EmissionValueName>,
@@ -831,7 +832,7 @@ impl<'a> Table<'a> {
         self.bits_embed.get().is_some()
     }
 
-    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays instead of the `ref.cast` that predates the immediate form.
+    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays where a bare `ref.cast` would reject the immediate form.
     pub(crate) fn bytes_box_func(&self) -> curios_wasm::FuncName {
         self.bytes_box
             .get_or_init(|| curios_wasm::FuncName::from("bytes/box"))
@@ -1234,7 +1235,7 @@ impl<'a> Table<'a> {
 
     /// The emitted name of the function type with this `(parameters, results)` shape.
     ///
-    /// A single-result shape keeps the bare `func/{parameters}` spelling it has always had, which is what made keying on the pair a change of the key alone and of no emitted module when it landed. What produces the wider shapes is `cps::protocol`, which hands a class of functions back the leading fields of the construction they used to allocate; that class is a per-tail-call-component decision, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay single-result — which is why the decision excludes any function that escapes.
+    /// A single-result shape keeps the bare `func/{parameters}` spelling, so keying on the pair changes no single-result module. What produces the wider shapes is `curios-cont`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate; that class is a per-tail-call-component decision, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay single-result — which is why the decision excludes any function that escapes.
     fn func_type_name(shape: (usize, usize)) -> curios_wasm::TypeName {
         let (parameters, results) = shape;
 
@@ -1276,7 +1277,6 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-utilities`'s `name!` means by carrying an explicit sequence where the order matters.
     /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
     pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cont::Repr> {
         self.raw.get(value_name).copied()

@@ -11,7 +11,7 @@ use {
 
 pub(super) fn inline_known_calls(module: &mut Module) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline is what made this quadratic on a large unoptimized module. Per-callee facts (the body's shape and extent) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
+    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Per-callee facts (the body's shape and extent) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
@@ -33,7 +33,7 @@ pub(super) fn inline_known_calls(module: &mut Module) -> bool {
             if !analysis.node_owners.contains_key(&node_id) {
                 continue;
             }
-            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, which cost nothing while such a body was refused outright and understates the duplication now that one is admitted — and a multi-site inline copies those members once per site.
+            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, so it understates the duplication of a body that nests definitions — and a multi-site inline copies those members once per site.
             let (nodes, _) = copied_extent(module, function_nodes(module, callee));
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
             let duplicated = sites > 1 || analysis.escaping.contains(&callee);
@@ -53,7 +53,7 @@ pub(super) fn inline_known_calls(module: &mut Module) -> bool {
         if !inlined_any {
             break;
         }
-        // Prune once per sweep, as `inline_single_use_continuations` below always has: an inlined callee's original body is dead but still carries call sites, and a site in dead code is what turned the next sweep's single-site callee into a duplicated one — the compounding that made a sequencing chain's continuations exponential in its length.
+        // Prune once per sweep, as `inline_single_use_continuations` below does: an inlined callee's original body is dead but still carries call sites, and a site in dead code would turn the next sweep's single-site callee into a duplicated one — the compounding that makes a sequencing chain's continuations exponential in its length.
         prune_unreachable(module);
     }
     changed

@@ -65,7 +65,7 @@ fn a_lambda_body_rides_the_arrow_and_breaks_when_it_overflows() {
 
 #[test]
 fn a_match_arm_body_rides_its_arrow() {
-    // An arm ladder that fits shares one line — the spelling the corpus writes for a two-arm decision. It used to break unconditionally, which made every such decision five lines.
+    // An arm ladder that fits shares one line — the spelling the corpus writes for a two-arm decision, which breaking unconditionally would stretch to five lines.
     assert_eq!(
         render("match b | true => 1 | false => 0 end", 80),
         "match b | true => 1 | false => 0 end"

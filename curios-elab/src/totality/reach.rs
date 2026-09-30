@@ -8,7 +8,7 @@
 //!
 //! The closure follows a definition into its **body**, not only its type. That is easy to overlook and load-bearing, for the same `Canonical` reason.
 //!
-//! At the replay site the module in hand is the user suffix alone, so a prelude definition is a sink of this relation. That is sound for the same reason it is sound for positivity — prelude items cannot mention user code — and it is why partiality persists on the definition rather than being recomputed.
+//! The module in hand is one unit's own, so a predecessor unit's definition is a sink of this relation. That is sound for the same reason it is sound for positivity — a predecessor cannot mention a successor — and it is why partiality persists on the definition rather than being recomputed.
 
 use {
     curios_core::{
@@ -135,7 +135,7 @@ fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
 
 /// Record every definition this term names.
 fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
-    // Borrowed, not owned: this runs once per position, and (T) seeds 68,947 of them over the prelude. Taking the owned set would deep-copy every `Free` — each global carrying its qualifier's segments — to read it once and drop it.
+    // Borrowed, not owned: this runs once per position, and (T) seeds one for every type position the program writes. Taking the owned set would deep-copy every `Free` — each global carrying its qualifier's segments — to read it once and drop it.
     seeds.extend(
         term.free_vars_shared()
             .iter()
@@ -176,7 +176,7 @@ fn ends_in_sort(type_: &Term) -> bool {
 
 /// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and intrinsic type formers.
 fn annotations(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) {
-    // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack overflow above 16KiB.
+    // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link.
     //
     // Deduplicating is site-preserving because `site` is fixed for the whole walk: every position this pushes carries the site it was called with, so a node reached twice would only ever push the same position twice.
     let mut state = (HashSet::<Term>::new(), positions);

@@ -1,6 +1,6 @@
 //! The lowering driver: the entry point, the expression walk, and the binding forms.
 //!
-//! The walk mirrors the legacy recursive erasure's control structure (its stack behavior is the no-regression baseline) but produces operands under the operand law instead of terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
+//! The walk produces operands under the operand law rather than terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
 
 use {
     super::Resumed,
@@ -63,7 +63,7 @@ impl UniverseErased<Zonked<Module>> {
 impl UniverseErased<Module> {
     /// Project a module whose universes were already validated by the boundary that produced it, skipping the check rather than repeating it.
     ///
-    /// The archived prelude is the case this exists for: `curios-prelude` validates it as it restores, which is the point where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating at every use walked the whole standard library a second time per compilation — inside the erasure context's step budget, at that — to re-derive an answer the restore already had.
+    /// The archived prelude is the case this exists for: `curios-prelude` validates it as it restores, which is the point where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating at every use would walk the whole standard library a second time per compilation — inside the erasure context's step budget, at that — to re-derive an answer the restore already has.
     pub(super) fn project_validated(module: &Module) -> Self {
         Self(project_module(module))
     }
@@ -207,7 +207,7 @@ fn seal_entry(
 
 /// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
 ///
-/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail still erases as it always did — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
+/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail erases unforced — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
 fn force_entry(
     lowering: &mut Lowering,
     context: &mut Context,
@@ -246,7 +246,7 @@ impl Lowering {
 
     /// A name for a function nothing else names.
     ///
-    /// A lambda in argument position binds no statement, so `walk` has no hint to pass and the function it lifts to would print as a bare `~fN` — and its closure as a bare `$clsr/N`. `naming-scheme-law` spells an emitted name `kind/{uniquifier}$hint`, so an absent hint is a hole in it, and one a reader of a module dump or a profile pays for. The owner's own name qualified by which anonymous function this is fills it: `/sys/Handle/write/1`, and `/sys/Handle/write/1/1` one level in. The separator is `/` because `$` is reserved for the hint boundary itself.
+    /// A lambda in argument position binds no statement, so `walk` has no hint to pass and the function it lifts to would print as a bare `~fN` — and its closure as a bare `$clsr/N`. The shared naming scheme (`documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`) spells an emitted name `kind/{uniquifier}$hint`, so an absent hint is a hole in it, and one a reader of a module dump or a profile pays for. The owner's own name qualified by which anonymous function this is fills it: `/sys/Handle/write/1`, and `/sys/Handle/write/1/1` one level in. The separator is `/` because `$` is reserved for the hint boundary itself.
     pub(super) fn derived_hint(&mut self) -> Option<String> {
         let (owner, minted) = self.owners.last_mut()?;
         *minted += 1;
@@ -307,7 +307,7 @@ impl Lowering {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        // Attach this term's span to any error from erasing it, exactly like the legacy wrapper.
+        // Attach this term's span to any error from erasing it.
         let result = self.walk_subterm(context, term, expected, hint);
         match term.span() {
             Some(span) => result.map_err(|error| error.at(span)),
@@ -484,9 +484,9 @@ impl ErasedArena {
 ///
 /// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every reference into the scope is already bound.
 ///
-/// **A unit and a program are erased by one walk, and only a program's is sealed.** One function used to erase the fixed prelude's item chain with no entry to seal and another erased a program and sealed one — two copies of one walk. The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk and seals the entry at the type it states, which [`Zonked`] holds.
+/// **A unit and a program are erased by one walk, and only a program's is sealed.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk and seals the entry at the type it states, which [`Zonked`] holds.
 ///
-/// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the scope's Core and its erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
+/// Nothing here is the caller's to guarantee, which is the point: the unit carries its own items alone, and [`Resumed`] pairs the scope's Core with its erased arena, so the two describe one program by construction. What remains is a property of the archive rather than of a caller — its universes are validated at the restore boundary, where untrusted bytes become a `Module`.
 pub fn erase_unit(
     context: &mut Context,
     resumed: Resumed<'_>,

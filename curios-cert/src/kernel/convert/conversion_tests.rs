@@ -37,7 +37,7 @@ fn distinct_literals_do_not_convert() {
     );
 }
 
-/// Like terms convert and a sum against a literal clashes — decided in the fold, which merges eagerly; this pins that the product-only deferral left both untouched, in the trusted checker.
+/// Like terms convert and a sum against a literal clashes — decided in the fold, which merges eagerly; this pins that deferring products leaves both untouched, in the trusted checker.
 #[test]
 fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
     let mut kernel = kernel();
@@ -119,7 +119,7 @@ fn eta_makes_a_pair_converge_with_its_projections() {
 
 /// A struct literal with fewer fields than its declaration must not convert with a neutral inhabitant.
 ///
-/// The eta walk is driven by the literal's fields, so a short literal used to run out before the declaration's telescope did and the vacuous remainder passed — equating a malformed literal with *any* neutral at the type, in the accepting direction. The walk now answers with whether it consumed the whole telescope.
+/// The eta walk is driven by the literal's fields, so a short literal runs out before the declaration's telescope does, and a vacuous remainder that passed would equate a malformed literal with *any* neutral at the type, in the accepting direction. The walk answers with whether it consumed the whole telescope.
 #[test]
 fn a_short_struct_literal_does_not_convert_with_a_neutral() {
     let mut kernel = kernel();
@@ -198,7 +198,7 @@ fn a_shared_successor_floor_is_peeled_before_comparing() {
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &same), Ok(true));
 }
 
-/// The heads are one number spelled two ways, so the peel cannot strip them, and the nesting is what the peel used to hand back intact — leaving shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
+/// The heads are one number spelled two ways, so the peel cannot strip them, and a peel handing the nesting back intact would leave shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
 #[test]
 fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
     let mut kernel = kernel();

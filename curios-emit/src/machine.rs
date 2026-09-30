@@ -15,7 +15,7 @@ use {
 mod structurize;
 pub(crate) use structurize::{structurize, value_name};
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(MachineBlockId, "~b", mint);
 id!(MachineValueId, "~v", mint);
 
@@ -62,7 +62,7 @@ pub(crate) struct MachineEdge {
 
 #[derive(Debug, Clone)]
 pub(crate) enum MachineTerminator {
-    /// Hand every operand back to the caller. The vector is the return continuation's argument list, which the CPS verifier has never constrained to one — so a protocol delivering a constructor as its fields needs no widening here, only a producer that builds more than one.
+    /// Hand every operand back to the caller. The vector is the return continuation's argument list, which the CPS verifier does not constrain to one — so a protocol delivering a constructor as its fields needs no widening here, only a producer that builds more than one.
     Return(Vec<MachineOperand>),
     Jump(MachineEdge),
     Switch {

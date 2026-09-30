@@ -74,7 +74,7 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
 
 /// A refusal from *below* the kernel is still a diagnostic: this query answers what `run` would say, and erasure is the last stage that says anything.
 ///
-/// The check path used to stop at the kernel, on the claim that the stages under it only build the program. Erasure does more than build: it narrows a dispatch key into the branch table `curios-ersd` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. Both programs below were reported clean here and refused by `run`.
+/// The stages under the kernel do more than build the program: erasure narrows a dispatch key into the branch table `curios-ersd` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. A check path that stopped at the kernel would report both programs below clean where `run` refuses them.
 #[test]
 fn a_refusal_below_the_kernel_is_still_reported() {
     let overflowing = of(
@@ -271,7 +271,7 @@ fn a_goal_beside_a_refusal_keeps_its_goal_severity() {
 
 /// A withheld witness declaration reports nothing of its own, and neither do its consumers: the miss they would report is the withholding's consequence, and the withholding's cause is already in the answer.
 ///
-/// **The regression for a witness registering when its signature elaborates.** A *refused* witness registered before its body failed, so undoing it poisoned its key in place and a consumer meeting the poison stayed silent. A withheld one never registered, so there was no key to poison, and one unreadable declaration answered with two records — the second at a declaration with nothing wrong with it, pointing away from the one that has.
+/// **A withheld witness's key is poisoned as a refused one's is.** A *refused* witness registers before its body fails, so undoing it poisons its key in place and a consumer meeting the poison stays silent. A withheld one never registers, so unless its key is read and poisoned, one unreadable declaration answers with two records — the second at a declaration with nothing wrong with it, pointing away from the one that has.
 #[test]
 fn a_withheld_witness_leaves_its_consumers_silent() {
     let reports = of(concat!(

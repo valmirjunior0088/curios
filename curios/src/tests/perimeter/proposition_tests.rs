@@ -1,13 +1,5 @@
 //! What a proposition may carry and what it may be eliminated into.
 
-//! End-to-end coverage for the soundness perimeter entries that nothing else guards.
-//!
-//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
-//!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
-//!
-//! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
-
 use crate::tests::run;
 
 use super::test_support::*;
@@ -55,7 +47,7 @@ fn a_proposition_concept_may_not_carry_informative_methods() {
 
 // `Prop` non-informativeness at the same half, and the shorter route: a field whose type is a universe holds a type as data, and a projection reads it back out meeting no elimination guard at all, so two convertible propositions hand `.0` two different types.
 //
-// Both gates asked `carries_information`, so `check_struct_decl` returned `Ok(())` while the hole was open. Its control in `curios-cert` — `a_proposition_may_carry_a_proof`, which keeps a genuine proof field legal — was itself mis-specified, typing its field as the universe `Prop` rather than as a `Prop`-sorted family, so it asserted the admitted shape and passed for the wrong reason. That is why the discrimination this row names went untested on the kernel side for as long as it did.
+// Both gates ask `carries_information`. Its control in `curios-cert`, `a_proposition_may_carry_a_proof`, keeps a genuine proof field legal, and types that field as a `Prop`-sorted family rather than as the universe `Prop`: typed at the universe, it would assert the admitted shape and pass for the wrong reason.
 #[test]
 fn a_proposition_may_not_carry_a_type_field() {
     rejected_by(A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD, "is informative");
@@ -63,13 +55,11 @@ fn a_proposition_may_not_carry_a_type_field() {
 
 // Definitional proof irrelevance, at the premise the rule is stated over rather than at the rule: *which* types are propositions. `Prop` is the type of propositions, so anything admitted at `Prop` is one as far as every later rule is concerned, and irrelevance then identifies its inhabitants without looking at them.
 //
-// `List(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former was a second implementation of that one rule and reported the element's sort as the former's, so `List(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `ListType` node.
+// `List(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former follows that one rule rather than reporting the element's sort as the former's, which would infer `List(True)` at `Prop` on both sides — and nothing here needs the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `ListType` node.
 //
 // From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X)(x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `List(True)` yields `Eq()(one, none)` for a one-element list against the empty one; `Eq/cong` through `List/len` carries that to `Eq()(1, 0)`, and `Eq/subst` transports `()` into `False`.
 //
-// Verified against the compiler of the day, while the hole was open: this source elaborated and `recheck_module_suffix` on the compile path certified `let /bad : Eq(@List True)(/one, /none)` with zero refusals — the `wonder stage core-elab` rendering shows the solved `@X` as the `List` former applied to `True`. It never reached a runtime, and not because a checker stopped it: erasure refuses *any* call whose every argument erases, which is a defect of the erase boundary rather than of this rule, and which the control below trips identically at a genuine proposition.
-//
-// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix rather than by running, since it is the program the erase boundary cannot lower; what it has to establish is that both checkers still accept the lemma and its instantiation.
+// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix: what it has to establish is that both checkers still accept the lemma and its instantiation.
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     rejected_by(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION, "type mismatch");
@@ -80,7 +70,7 @@ fn a_list_of_proofs_is_still_a_list() {
     assert_eq!(run(A_LIST_OF_PROOFS_IS_STILL_A_LIST), b"1");
 }
 
-// Sort formation, the row that had an argument and no program. Both of its rules are *accepting* — a Π into a proposition is a proposition whatever it quantifies over, and a record of propositions is one — so they widen what counts as a proof, and everything irrelevance and erasure do downstream turns on that verdict.
+// What a proposition may carry. Both of its rules are *accepting* — a Π into a proposition is a proposition whatever it quantifies over, and a record of propositions is one — so they widen what counts as a proof, and everything irrelevance and erasure do downstream turns on that verdict.
 //
 // The pair below is `tuple_sort`. A record is `Prop`-sorted only where every component pushed no level, which is what makes an anonymous Σ non-informative *by formation* where a declared `struct` needs `check_non_informative` to make it so — and the two predicates are the same one, so the declaration gate is what these fixtures read the formation verdict through. The empty record is the carve-out and has to fall the other way: `{}` is the unit type an effect returns, so calling it a proposition would erase a value the runtime needs.
 #[test]

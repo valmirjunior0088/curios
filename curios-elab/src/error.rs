@@ -35,7 +35,7 @@ pub struct GoalReport {
 }
 
 impl GoalReport {
-    /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — renamed the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
+    /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — would rename the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
     fn rename_map(&self, spelling: &Spelling) -> Rc<Rename> {
         let mut names = DisplayNames::default();
         for (name, type_) in &self.scope {
@@ -80,7 +80,6 @@ pub struct ShapeDiagnosis {
     pub bare: WitnessKey,
 }
 
-/// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 /// Why a derivation declined a key. Each is a hard refusal at the `satisfy` span, decided from the declaration's shape before any body is written; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
 #[derive(Debug)]
 pub enum Underivable {
@@ -114,7 +113,7 @@ pub struct ArgumentSite {
 
 /// Who an inserted argument was inserted for, as a report names it.
 ///
-/// Provenance travels as a string — a function's spelling, an operator's symbol, or an anonymous witness's minted name — and is read back into one of these where a report is built (by `resolve`'s `callee`), so no report spells a name a program cannot write or advises a call a program cannot make.
+/// Provenance travels as a [`CalleeId`] — a function's identity, a constructor's declaration and tag, an operator, or an anonymous witness — and is read into one of these where a report is built (by `resolve`'s `callee`), so no report spells a name a program cannot write or advises a call a program cannot make.
 #[derive(Debug, Clone)]
 pub enum Callee {
     /// A function or constructor the program names, carried as its identity rather than its text so the report spells it under the names in scope — the shorten map and the unit's import spellings, exactly as every term in the same report is spelled.
@@ -129,6 +128,7 @@ pub enum Callee {
     Anonymous,
 }
 
+/// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
     ReduceExhausted {
@@ -284,7 +284,7 @@ pub enum Error {
         type_name: String,
         tag: String,
     },
-    /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it repeated that snippet in a vocabulary the surface language does not have.
+    /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it would repeat that snippet in a vocabulary the surface language does not have.
     MatchCaseMissing {
         type_name: String,
         tag: String,
@@ -429,16 +429,16 @@ pub enum Error {
     BangRegionUndetermined,
     /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
     ///
-    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/std/Monad/bind`'s own inference reported `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unchanged — that path always failed — and `region` is the type the reader must look at.
+    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/std/Monad/bind`'s own inference would report `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unaffected — that path can only fail — and `region` is the type the reader must look at.
     BangRegionNotAMonad {
         region: Box<Term>,
     },
-    /// An overloaded infix operator applied at an operand type with no matching scalar intrinsic — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
+    /// An infix operator whose concept has no registry entry, so there is nothing to dispatch through — an embedding that elaborates without the prelude (`infix_method`). With the prelude in scope, an operator at a type no witness covers reports [`Error::NoWitness`] instead. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
         type_: Box<Term>,
     },
-    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing named a fault the author cannot find.
+    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing would name a fault the author cannot find.
     UninferredImplicit {
         callee: Callee,
         binder: String,
@@ -471,7 +471,7 @@ pub enum Error {
         binder: String,
         /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
         embedding: Option<EmbeddingDiagnosis>,
-        /// Present when the goal keys on a labeled tuple shape or a marked function type whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
+        /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
         shape: Option<Box<ShapeDiagnosis>>,
     },
     /// Two witnesses that resolve each other. A witness may recurse through its *own* table entry — its declaration registers before its body elaborates for exactly that reason — but a cycle between two of them has no binding order: whichever is emitted first names one that does not exist yet, and the kernel refuses it as an unbound name. Caught here so the refusal is stated in the language's own terms, at a span, with the way out named.
@@ -537,7 +537,7 @@ pub enum Error {
         found: Box<Term>,
         proposition: bool,
     },
-    /// A `use` premise of a witness applies its concept to something other than the witness's own parameters — resolution through it would not be structurally decreasing.
+    /// A `use` premise of a witness that is not smaller than the witness's own concept application — a variable its telescope does not bind, a variable used more often than there, or no fewer nodes — so resolution through it would not be decreasing.
     NonRegularWitnessPremise {
         premise: Box<Term>,
     },
@@ -1713,10 +1713,9 @@ impl From<UniverseError> for Error {
     }
 }
 
-/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
 /// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
 ///
-/// Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
+/// Taking the scope as a `Module` rather than as one of its projections is deliberate: a name slice would repair the shortening and leave the plicities reading a module that does not hold the prelude, and a second projection is a second thing to forget.
 ///
 /// The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
 fn report_spelling(module: &Module, scope: &[&Module], syntax: &SyntaxRegistry) -> Spelling {
@@ -1741,6 +1740,7 @@ fn report_spelling(module: &Module, scope: &[&Module], syntax: &SyntaxRegistry) 
         .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
 }
 
+/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Displayed(self, Rc::new(Spelling::default())).fmt(f)

@@ -75,7 +75,7 @@ pub(crate) fn ordinal(index: usize) -> String {
 
 /// How a witness goal names the slot it fills: its position among the head's `use` slots.
 ///
-/// A position rather than a name, because a `use` parameter *has* no name — `let`, `rec` and `satisfy` sugar all declare one anonymously, so every premise of user-written code reported as `_`. Only the generated method wrappers write `use w`, and `w` is an implementation detail appearing in no program.
+/// A position rather than a name, because a `use` parameter *has* no name — `let`, `rec` and `satisfy` sugar all declare one anonymously, so a name would read `_` for every premise of user-written code. Only the generated method wrappers write `use w`, and `w` is an implementation detail appearing in no program.
 pub(crate) fn premise_label(index: usize) -> String {
     format!("its {} 'use' premise", ordinal(index))
 }
@@ -283,7 +283,7 @@ fn bound_exhausted(
 
 /// A binder's user-facing name: its minting hint, or `_` where it has none.
 ///
-/// The head's function type is the *rebuilt* one, whose binders were re-closed under freshly minted identities; a report should still name the binder as written, and the hint is what the mint carried forward. This used to cut the written name back out of a minted spelling.
+/// The head's function type is the *rebuilt* one, whose binders were re-closed under freshly minted identities; a report should still name the binder as written, and the hint is what the mint carried forward.
 pub(super) fn binder_name(hint: Option<&str>) -> String {
     hint.unwrap_or("_").to_string()
 }
@@ -299,7 +299,7 @@ pub(super) fn elaborate_apply(
 
     // Insertion provenance: name the applied function in the uninferred-implicit report.
     //
-    // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node reported `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
+    // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node would report `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
     fn innermost_reference(term: &Term) -> Option<Free> {
         match &**term {
             Subterm::Var(var) => Some(*var.unwrap()),
@@ -328,7 +328,7 @@ pub(super) fn elaborate_apply(
         }
     }
 
-    // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/language/a-call-fills-one-parameter-group.md.
+    // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/types/a-call-fills-one-parameter-group.md.
     let ft = match &*head_type {
         Subterm::FuncType(ft) => ft.clone(),
         other => return Err(Error::not_a_function(written_type.clone(), other.clone())),
@@ -374,7 +374,7 @@ pub(super) fn elaborate_apply(
         Mode::Infer => false,
     };
 
-    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands — which subsumes the retired clear loop, since a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus (fact F1) and merely safe.
+    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands, so a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus and merely safe.
     let original = ft.telescope.clone();
     let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities().len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
@@ -442,14 +442,14 @@ pub(super) fn elaborate_apply(
     let output = cursor.body().expect("plicities parallel the telescope");
 
     if let Mode::Check(expected) = &mode {
-        // The output carries any pending's placeholder, which *blocks* rather than manufacturing the raw-substitution false mismatches the retired design had to bracket against — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
+        // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
     }
 
     if !pendings.is_empty() {
-        // The force tier — the retired settle, kept: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. The retired design also ran a bracketed best-effort expect over the *raw* spellings before settling — measured across the corpus, that pin never discharged a pending the wake machinery and this tier did not, so it is gone rather than kept.
+        // The force tier: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. A bracketed best-effort expect over the *raw* spellings before this tier would add nothing: measured across the corpus, it discharges no pending the wake machinery and this tier do not.
         //
-        // The tier runs in both modes. In checking mode the turnaround above has consulted the expectation; in inference mode there is no expectation to consult, and a `let z = id((1, true))` left its tuple parked until the item's drain, where `z.0` had already met a bare metavariable. Either way no later slot opens through this one, so the tier's premise holds: nothing is left to give the expectation structure, and an inferred call commits to its argument's product exactly as a bare literal does.
+        // The tier runs in both modes. In checking mode the turnaround above has consulted the expectation; in inference mode there is no expectation to consult, and without the tier a `let z = id((1, true))` would leave its tuple parked until the item's drain, where `z.0` would already have met a bare metavariable. Either way no later slot opens through this one, so the tier's premise holds: nothing is left to give the expectation structure, and an inferred call commits to its argument's product exactly as a bare literal does.
         for (slot, placeholder, written) in &pendings {
             if context.metavar_solution(*placeholder).is_none() {
                 let slot_ty = original
@@ -480,9 +480,6 @@ pub(super) fn elaborate_apply(
     ))
 }
 
-/// Where the argument just checked sits: the parameter it filled, the mark it was written with and its position among the arguments written with that mark, and — for a plain argument — the next explicit parameter of function type, if any, the slot a lambda handed in here was likely meant for.
-///
-/// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
 /// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
 fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     match cursor.rest() {
@@ -491,6 +488,9 @@ fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     }
 }
 
+/// Where the argument just checked sits: the parameter it filled, the mark it was written with and its position among the arguments written with that mark, and — for a plain argument — the next explicit parameter of function type, if any, the slot a lambda handed in here was likely meant for.
+///
+/// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
 fn argument_site(
     function: &CalleeId,
     plicity: Plicity,

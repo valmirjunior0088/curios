@@ -73,7 +73,7 @@ pub(crate) enum ParkedWork {
     },
 }
 
-/// A projection parked because its head's type was stuck on an unsolved metavariable, so no field could be read off it yet: an unannotated `let p = match … | … => (a, b) end` whose tuple arms wait for the drain, destructured by `let (x, y) = p`. Refusing it refused one step before the settle that gives the head its type; the projection waits instead, as a checked-only form does for its expectation. `head` is elaborated already, since elaborating the written head again would mint its implicits a second time, and `placeholder` stands in the tree for the projection at the fresh type `result`. Woken when the head type's metavariables solve.
+/// A projection parked because its head's type was stuck on an unsolved metavariable, so no field could be read off it yet: an unannotated `let p = match … | … => (a, b) end` whose tuple arms wait for the drain, destructured by `let (x, y) = p`. Refusing it would refuse one step before the settle that gives the head its type; the projection waits instead, as a checked-only form does for its expectation. `head` is elaborated already, since elaborating the written head again would mint its implicits a second time, and `placeholder` stands in the tree for the projection at the fresh type `result`. Woken when the head type's metavariables solve.
 #[derive(Debug)]
 pub(crate) struct ParkedProjection {
     pub head: Term,
@@ -190,7 +190,7 @@ impl Solutions {
         if id.0 >= self.entries.len() {
             self.entries.resize_with(id.0 + 1, || None);
         }
-        // An id with a birth record is never minted again: minting it would birth a second metavariable over this one's record. Elaboration keeps this without help, since lowering's written ids sit below the floor `seed_floor` raised before any minting — but a birth at an id the counter has not reached yet, which is how a fixture states its metavariables, left the counter free to mint it, and re-validation minting one while checking a candidate replaced a test's solved hole with its own.
+        // An id with a birth record is never minted again: minting it would birth a second metavariable over this one's record. Elaboration keeps this without help, since lowering's written ids sit below the floor `seed_floor` raised before any minting — but a birth at an id the counter has not reached yet, which is how a fixture states its metavariables, would leave the counter free to mint it, and re-validation minting one while checking a candidate would replace a test's solved hole with its own.
         self.next_metavar.seed(id.0 + 1);
         self.entries[id.0] = Some(MetaEntry {
             telescope,

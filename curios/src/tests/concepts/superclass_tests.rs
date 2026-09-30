@@ -2,7 +2,7 @@
 
 use crate::tests::run;
 
-// A superclass edge resolved by projection: inside `same`, the goal `Eql(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
+// A superclass edge resolved by projection: inside `same`, the goal `Equal(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to the `Ordered(Nat)` witness, whose own omitted superclass field resolves to the `Equal(Nat)` witness — no field names a witness anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
@@ -42,7 +42,7 @@ fn prelude_ord_superclass_projects() {
     assert_eq!(run(source), b"true");
 }
 
-// A higher-kinded superclass: inside the generic function the goal `Monad(M)` (M a bound variable) resolves through step 2's superclass projection of the local `use MonadPlus(M)` binder. The witness's own omitted `monad` field resolves through the table to the std `Monad(Option)` witness — a higher-kinded auto-fill.
+// A higher-kinded superclass: inside the generic function the goal `Monad(M)` (M a bound variable) resolves by projecting the superclass field of the local `use MonadPlus(M)` binder. The witness's own omitted `monad` field resolves through the table to the std `Monad(Option)` witness — a higher-kinded auto-fill.
 #[test]
 fn higher_kinded_superclass_projects() {
     let source = r#"

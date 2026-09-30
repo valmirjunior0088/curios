@@ -148,7 +148,7 @@ let scalars(min: Nat, max: Nat) -> Bool =
 
 --- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
 ---
---- The range is stated per remaining count at literal weights — each continuation byte shifts what came before by six bits — because `Nat/pow` recurses, and a type may not mention a recursion. No count past three begins a character, so those are refused along with zero.
+--- The range is stated per remaining count at literal weights — each continuation byte shifts what came before by six bits. No count past three begins a character, so those are refused along with zero.
 let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
     match rem
     | 0 => false
@@ -337,7 +337,7 @@ pub let of_bytes(b: Bytes) -> Option(Str) =
 pub let of_char(c: Char) -> Str =
     Str { bytes = Char/to_utf8(c), valid = Valid/encoded(c) };
 
---- Eql bytes are equal strings.
+--- Equal bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq()(a, Str { bytes = bytes, valid = valid }),

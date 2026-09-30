@@ -4,7 +4,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! This was two rules, and they had drifted three ways. The kernel re-typed by its whole solution in every arm. The elaborator re-typed only by the variables that *were* an index or the scrutinee, only at an ambient goal, and even when the index equations clashed: it accepted an unreachable arm the kernel refused, and refused a written motive's arm, or an arm learning a variable from inside an index, that the kernel certified. Which locals a case re-types, and at what type, is a total function of the solution and the scope, so a second copy was never a second opinion.
+//! Which locals a case re-types, and at what type, is a total function of the solution and the scope, so a second copy would be a second transcription rather than a second opinion — and two copies that drift read one arm two ways, one checker accepting an arm the other refuses.
 //!
 //! # Through local definitions
 //!

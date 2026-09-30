@@ -1,8 +1,6 @@
 //! Archiving a type through a stand-in rkyv already understands.
 //!
-//! Every hand-written field adapter in this workspace was the same three-impl shape — `ArchiveWith`, `SerializeWith`, `DeserializeWith` — around one idea: *this value is not archivable, but it converts to one that is.* A namespace is a `u8`, a bignum is its little-endian bytes, a hash map is a sorted vector of pairs, a shared name is the vector behind the `Rc`.
-//!
-//! [`Proxy`] states just that conversion, and [`Via`] supplies the three impls; why the shape is written once, here, is `README.md`'s decision.
+//! A field adapter is one idea around rkyv's three-impl shape — `ArchiveWith`, `SerializeWith`, `DeserializeWith`: *this value is not archivable, but it converts to one that is.* A bignum is its little-endian bytes, a hash map a sorted vector of pairs, an interned path the segments the process table holds. [`Proxy`] states just that conversion, and [`Via`] supplies the three impls.
 
 use {
     crate::rkyv::{
@@ -22,12 +20,12 @@ pub trait Proxy<Value> {
 
     /// The value's stand-in. Infallible: a value that exists can always be described.
     ///
-    /// Returns anything that *borrows as* the stand-in, so an adapter whose archived form already sits inside the value hands back a reference and pays nothing. That is not a micro-optimization: the fixed prelude holds on the order of a hundred thousand qualifier occurrences over a couple of thousand distinct paths, and a by-value signature would clone the shared allocation once per occurrence on the way out.
+    /// Returns anything that *borrows as* the stand-in, so an adapter whose archived form already sits inside the value hands back a reference and pays nothing; `README.md` states why a by-value signature would cost.
     fn to_archivable(value: &Value) -> impl Borrow<Self::Archivable>;
 
     /// The value a stand-in describes, or why it describes none.
     ///
-    /// Fallible because the archive is bytes and bytes can be wrong — a namespace code outside the roster, a length that cannot be a count. The error is a `String` so an implementor needs no rkyv vocabulary to report one.
+    /// Fallible because the archive is bytes and a stand-in may describe no value. The error is a `String` so an implementor needs no rkyv vocabulary to report one.
     fn from_archivable(archivable: Self::Archivable) -> Result<Value, String>;
 }
 

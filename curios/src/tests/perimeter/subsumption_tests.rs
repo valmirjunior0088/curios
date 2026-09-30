@@ -1,6 +1,6 @@
 //! The subsumption relation as a surface program reaches it: cumulative codomains, invariant domains.
 //!
-//! The rule is `documentation/soundness/per-term-rules/subsumption-and-level-entailment.md`, and until the elaborator decided the relation structurally these were the fixtures it could not have: checking a λ against a Π pushes the comparison to the leaves, so a head-only rule sufficed and no program formed the Π being subsumed. Passing a *name* forms it, which is what these compile.
+//! The rule is `documentation/design/soundness/formation/subsumption-and-level-entailment.md`. Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices and no Π being subsumed is formed; passing a *name* forms it, which is what these compile.
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::sort_tests` puts the same two propositions to the kernel under these names. Rename both or neither.
 

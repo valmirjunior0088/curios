@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {
-    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. Before the constraint store, the argument's `expect` failed at quiescence, seconds before the result-type unification would have pinned everything. Now the pairs park, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs.
+    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. The pairs park in the constraint store, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs; judged at once, the argument's `expect` would fail before the result-type unification pins everything.
     let source = r#"
         use /std/{Nat, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
@@ -70,7 +70,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
 
 #[test]
 fn bare_tuple_continuation_tail_infers() {
-    // The recorded dead-end from the result-directed elaboration work: a bare tuple in a monadic continuation's tail, its expected type a metavariable pinned only by the *outer* apply's result unification. The in-apply postponement defers the tuple, the constraint store parks the flex–flex codomain pair across the inner apply, and the outer pin wakes both.
+    // A bare tuple in a monadic continuation's tail, its expected type a metavariable pinned only by the *outer* apply's result unification. The in-apply postponement defers the tuple, the constraint store parks the flex–flex codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
         use /std/{Parse, Byte, Nat, Bytes, Io};
         let pairer : Parse(Bytes, { Byte, Byte }) =
@@ -89,7 +89,7 @@ fn bare_tuple_continuation_tail_infers() {
 
 #[test]
 fn checking_problem_parks_until_an_outer_pin_lands() {
-    // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it now parks as a *checking problem* behind a placeholder metavariable, and the outer annotation's pin wakes it. Before ParkedWork::Checking this was a NotATupleType error.
+    // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it parks as a *checking problem* (`ParkedWork::Checking`) behind a placeholder metavariable rather than failing as no tuple type, and the outer annotation's pin wakes it.
     let source = r#"
         use /std/{Nat, List, Io};
         let mk(@A : Type, a : A) -> List(A) = [a];
@@ -104,7 +104,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     assert_eq!(run(source), b"2");
 }
 
-// A postponed argument keeps its *raw* surface spelling when `elaborate_apply` opens the rest of the telescope, and that spelling is load-bearing: reducing through it is what lets the result `expect` pin the metavariables the slot is waiting on. But `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type manufactures `head.label` where the settled spelling is `head.index` — a term `reduce_proj` once declared `unreachable!`. The result `expect` is now two-phase: best-effort through the raw spelling, then authoritative through the settled arguments.
+// A postponed argument keeps its *raw* surface spelling when `elaborate_apply` opens the rest of the telescope, and that spelling is load-bearing: reducing through it is what lets the result `expect` pin the metavariables the slot is waiting on. But `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type manufactures `head.label` where the settled spelling is `head.index`. The result `expect` is therefore two-phase: best-effort through the raw spelling, then authoritative through the settled arguments.
 #[test]
 fn postponed_lambda_projecting_by_label_elaborates() {
     let source = r#"
@@ -123,7 +123,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
     assert_eq!(run(source), b"7");
 }
 
-// A lambda whose expectation never gains structure settles by synthesizing its own type — annotations state what they state, and an unannotated domain stands as a metavariable for the body, or whatever the settled type later meets, to pin. `(x) => x` pins nothing anywhere, so the survivor is the domain itself, and it is reported as the parameter it is rather than as the internal expectation that once waited on it.
+// A lambda whose expectation never gains structure settles by synthesizing its own type — annotations state what they state, and an unannotated domain stands as a metavariable for the body, or whatever the settled type later meets, to pin. `(x) => x` pins nothing anywhere, so the survivor is the domain itself, and it is reported as the parameter it is rather than as an internal expectation.
 #[test]
 fn a_domain_nothing_pins_is_reported_as_its_parameter() {
     let source = r#"
@@ -165,7 +165,7 @@ fn a_lambda_body_pins_its_settled_domain() {
 
 #[test]
 fn a_typeless_local_let_still_infers_its_body() {
-    // The positive control for the fix above: an absent annotation is the origin-less hole, and keeps the inference path — a lambda body needs it, since checking a lambda against an unsolved hole would park and never resolve.
+    // The positive control for `goal_tests`' `let y : ? = e`: an absent annotation is the origin-less hole, and keeps the inference path — a lambda body needs it, since checking a lambda against an unsolved hole would park and never resolve.
     let source = r#"
         use /std/{Nat};
 
@@ -181,7 +181,7 @@ fn a_typeless_local_let_still_infers_its_body() {
     assert_eq!(run(source), b"ok\n");
 }
 
-// A postponement whose blocker is itself blocked. `List/slice` carries a `Nat/Le(start + length, len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain used to report the goal that merely waited — `cannot decide a postponed conversion ... never solved: the implicit argument 'n' of '/resize'` — naming an implicit the author never wrote, at the `resize` call rather than at the bound, and never mentioning `List/slice` at all. Following the recorded blocking edges to the end of the chain reports what nothing was ever going to solve.
+// A postponement whose blocker is itself blocked. `List/slice` carries a `Nat/Le(start + length, len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain follows the recorded blocking edges to the end of the chain and reports what nothing was ever going to solve, rather than the goal that merely waited — which would name an implicit the author never wrote (`the implicit argument 'n' of '/resize'`), at the `resize` call rather than at the bound, without mentioning `List/slice` at all.
 #[test]
 fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     let source = r#"
@@ -241,7 +241,7 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     );
 }
 
-// A projection waits for its head's type as a checked-only form waits for its expectation. `p`'s type is the unannotated match's, which only its tuple arms decide, and those park against it until the drain settles them to their product; destructuring `p` reads its fields before then. The projection was refused there as one from a non-tuple, one step before the settle that types its head. Mutation-checked: refusing a projection whose head's type is stuck refuses the program again.
+// A projection waits for its head's type as a checked-only form waits for its expectation. `p`'s type is the unannotated match's, which only its tuple arms decide, and those park against it until the drain settles them to their product; destructuring `p` reads its fields before then, and refusing the projection there as one from a non-tuple would refuse one step before the settle that types its head. Mutation-checked: refusing a projection whose head's type is stuck refuses the program.
 #[test]
 fn a_projection_waits_for_the_tuple_arms_that_type_its_head() {
     let source = r#"
@@ -256,7 +256,7 @@ fn a_projection_waits_for_the_tuple_arms_that_type_its_head() {
     assert_eq!(run(source), b"1|");
 }
 
-// A projection whose head's type nothing ever decides is refused at the drain, at the field it reads: a destructuring lowers each field to a projection located at the field's pattern, where it was once located at whatever enclosed it — the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p` again.
+// A projection whose head's type nothing ever decides is refused at the drain, at the field it reads: a destructuring lowers each field to a projection located at the field's pattern rather than at the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p`.
 #[test]
 fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
     let report = error(
@@ -275,7 +275,7 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
     );
 }
 
-// A match waits for its scrutinee's type as a projection waits for its head's. `xs` is read off `p` by a projection that waits for the drain to settle `p`'s tuple arms, so its type is still a metavariable when the match on it is met; the match was refused there as `expected List but got ?`, one step before the settle that types its scrutinee. Mutation-checked: refusing a match whose scrutinee's type is stuck refuses the program again.
+// A match waits for its scrutinee's type as a projection waits for its head's. `xs` is read off `p` by a projection that waits for the drain to settle `p`'s tuple arms, so its type is still a metavariable when the match on it is met, and refusing the match there as `expected List but got ?` would refuse one step before the settle that types its scrutinee. Mutation-checked: refusing a match whose scrutinee's type is stuck refuses the program.
 #[test]
 fn a_match_waits_for_the_type_of_its_scrutinee() {
     let source = r#"

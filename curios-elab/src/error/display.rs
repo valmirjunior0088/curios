@@ -119,8 +119,7 @@ fn renamed_level(level: &Level, names: &HashMap<UniverseMetaId, String>) -> Stri
     text
 }
 
-/// A name spelled under the names in scope: a global meets the shorten map and the unit's import spellings, a local binder is already the name the reader wrote, so neither can surface a path no program may write.
-/// What the procedure that proves a bound from the facts in scope says beside a bound it refused, one line per clause under the bound's own: the facts it read, those it could not, and what its search concluded. A refusal that read nothing and searched nothing says nothing, so a bound the procedure reads nothing in reports as it did before there was one.
+/// What the procedure that proves a bound from the facts in scope says beside a bound it refused, one line per clause under the bound's own: the facts it read, those it could not, and what its search concluded. A refusal that read nothing and searched nothing says nothing, so a bound the procedure reads nothing in reports as it would with no procedure.
 fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
     if refusal.is_silent() {
         return String::new();
@@ -902,7 +901,7 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "no witness of {goal} found")?;
                 if let Some(diagnosis) = shape {
                     let ShapeDiagnosis { wanted, bare } = &**diagnosis;
-                    // A tuple shape is the only identity a twin can drop, so the sentence names labels and nothing decides between two of them: `diagnose_shape` bares tuple labels alone and answers `None` when that leaves the key unchanged. It also carried a plicity-marks sentence, for the function keys that were keyed on their marks; a function type is not keyed at all now, so that arm could not fire and is gone with the key.
+                    // A tuple shape is the only identity a twin can drop, so the sentence names labels and nothing decides between two of them: `diagnose_shape` bares tuple labels alone and answers `None` when that leaves the key unchanged.
                     write!(
                         f,
                         "\n  labels are part of the type: the witness for {bare} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"

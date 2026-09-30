@@ -210,7 +210,7 @@ impl ChannelOperation {
 
 /// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence family — and runs the mapper once per element, in order.
 ///
-/// `ListMap` stays a compiler intrinsic because its runtime helper fills a flat output array in place — a construction the language cannot express (there are no mutable-array operations, by design). The library definition (fold + append) was measured two orders of magnitude slower with a shape-quadratic result rope; proofs about map need no intrinsic (list-fold reduction peels rope shapes symbolically).
+/// `ListMap` stays a compiler intrinsic because its runtime helper fills a flat output array in place — a construction the language cannot express (there are no mutable-array operations, by design). A library definition (fold + append) builds a shape-quadratic result rope; proofs about map need no intrinsic (list-fold reduction peels rope shapes symbolically).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Intrinsic {

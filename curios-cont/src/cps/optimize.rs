@@ -25,12 +25,12 @@ use super::{Demand, demand_of, demands};
 
 /// How many live nodes a callee with more than one call site may have and still be inlined into each of them.
 ///
-/// It was 8, and 8 bound something specific: `/std/State/bind` is a nine-node extent — two of its own and seven in the `bind/1` it nests — so a monadic step kept a shared generic `bind` that received both the action and the continuation as arguments and reached each through `call_ref`. `programs/rng_state.crs` spent 0.825 s there against its hand-threaded control's 0.025 s, and one node of budget was the whole of what stood between them.
+/// `/std/State/bind` is a nine-node extent — two of its own and seven in the `bind/1` it nests — so under a limit of eight a monadic step keeps a shared generic `bind` that receives both the action and the continuation as arguments and reaches each through a closure call, an indirect call per step that the hand-threaded control never pays.
 ///
-/// That argues for nine. The value is twice the old one instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
+/// That argues for nine. The value is sixteen instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
 pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 16;
 pub(super) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
-/// How many parameters a continuation may hold after a fields split. The M0 census's largest admitted aggregate is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
+/// How many parameters a continuation may hold after a fields split. The largest admitted aggregate `curios`'s corpus census finds is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub(super) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
@@ -41,7 +41,7 @@ pub(super) const JUMP_CLONE_LIMIT: usize = 64;
 ///
 /// A backstop against a pass pair that undoes each other's work, not a budget: what bounds the *real* work is the growth limits above, each of which refuses an individual rewrite. Reaching this limit therefore means the sequence did not converge, and the module is emitted in whatever half-optimized state the last round left it — silently, since nothing downstream can tell a fixpoint that finished from one that ran out.
 ///
-/// It was 32, and 32 bound: 33 programs in the corpus stopped there, and raising the limit showed them converging anywhere up to 191 rounds with every test still passing, so the truncation was pure loss rather than a tradeoff anything depended on. The value is set far above that measured maximum because a backstop that a real program can reach is indistinguishable from a budget nobody documented.
+/// A limit in the tens would truncate real programs for pure loss rather than a tradeoff anything depends on, so the value is set far above any round count the corpus reaches: a backstop that a real program can reach is indistinguishable from a budget nobody documented.
 pub(super) const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
@@ -128,7 +128,7 @@ pub fn optimize(module: &mut Module) {
             | pass!("cont::split_workers", split_workers(module))
             | pass!("cont::uncurry_returns", uncurry_returns(module))
             | pass!("cont::prune_unreachable", prune_unreachable(module));
-        // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` was the case: its walk's continuation was minted a round after the sub-region below it had been split, and the walk sliced a fresh rope per character from then on.
+        // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` is the case: its walk's continuation is minted a round after the sub-region below it would be split, which would leave the walk slicing a fresh rope per character.
         let changed = changed || pass!("cont::split_windows", split_windows(module));
         // Debug builds verify at each round boundary, so an invalid rewrite is named within one round of its pass instead of surfacing at the exit gate arbitrarily later. The boundary is the round and not the pass on purpose: mid-round states are transiently unscoped by design, and only the round's close, behind its prune, promises a structurally canonical module. The row-vocabulary clause is deliberately not part of that promise — `verify_structure` states why — so it is checked at the entry and exit gates alone.
         #[cfg(debug_assertions)]
@@ -153,17 +153,17 @@ pub fn optimize(module: &mut Module) {
         .expect("invalid high CPS after optimization");
 }
 
-/// How many calls stand where step four's rule would delete one: a known callee whose definition was proved total and performs nothing, with a result nothing reads.
+/// How many calls stand where a dead-call deletion would remove one — a rule no pass applies, so this sampler is the `droppable` flag's one reader: a known callee whose definition was proved total and performs nothing, with a result nothing reads.
 ///
 /// **A measurement, not a rule.** Whether such a call is ever *observed* here is the question the deletion rests on, and reading the pass list does not answer it: the result becomes unread only once [`eliminate_dead_parameters`] has stripped it, and inlining and contification consume the call in the same round — so the call may be gone before it is ever dead. Counting at the one point the rule would fire is what settles that for the price of a counter.
 ///
 /// The condition is the deletion's own, and it is read off [`super::demand`]'s lattice: the value the call returns into — its return continuation's parameter — is `Unused`, which is the state in which the call could be spliced to a jump. A tail call is never counted, because its `return_to` is the function's own bodyless sentinel and the result is what the caller resumes on, so there is no parameter to read a demand off and none is read.
 ///
-/// **The condition it replaces was unsatisfiable, so its zero meant nothing.** It asked whether the return continuation held *no parameter at all*, a state nothing in the pipeline produces: a non-tail resume is minted at arity one by the Ersd lowering, and of the three writers of a continuation's parameter list, [`eliminate_dead_parameters`] skips every continuation that is a return target, [`split_returns`] sets a width of two or more, and specialization copies a clone's list — so the count could only ever read zero, whether or not a call was dead. Asking the lattice asks the question the deletion actually rests on.
+/// **Not whether the return continuation holds no parameter at all**, a state nothing in the pipeline produces: a non-tail resume is minted at arity one by the Ersd lowering, and of the three writers of a continuation's parameter list, [`eliminate_dead_parameters`] skips every continuation that is a return target, [`split_returns`] sets a width of two or more, and specialization copies a clone's list — so a count on that condition could only ever read zero, whether or not a call was dead. Asking the lattice asks the question the deletion actually rests on.
 ///
 /// # What it last reported
 ///
-/// Nothing yet on this condition. The figures the previous condition recorded — `present` 7 and `dead` 0 over `total(Vec/of_list(List/replicate(List/len(args), 7)))` — are withdrawn rather than carried: the second number was fixed at zero by construction, so it was never evidence that the calls' results are read, and the propagation it was read as waiting for is not what the pipeline was waiting for. `present` stands, since its condition did not change.
+/// `present` 7 over `total(Vec/of_list(List/replicate(List/len(args), 7)))`; `dead` has not been taken under this condition.
 ///
 /// Retake it with `cargo x profile <source>` and read `cont::droppable_dead_calls` in the folded output, or `curios/.artifacts/profile.tsv` directly when the program exits non-zero, since the recipe folds nothing then. Perturb the source first: a cached unit skips the optimizer entirely and reports no sample at all.
 fn sample_droppable_dead_calls(module: &Module) {

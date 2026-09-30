@@ -12,13 +12,13 @@ use {
 
 use super::test_support::*;
 
-// Soundness gate for the peel's own verdicts over values, which nothing stated before this: `Nat::cancel_common` decides all three, and the perimeter grades the law behind them argued in code comments only.
+// Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the perimeter grades the law behind them argued in code comments only.
 //
 // Each verdict is believed by a different consumer, so each has its own obligation. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Deduction::Equivalent` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
 //
 // So each verdict is checked against ground truth at every closed instantiation of its symbols, which is the only thing that can distinguish a valid equation from a plausible one. The grid reaches what cancelling *summands* newly decides rather than the successor spine alone: a commuted sum, a summand carried at multiplicity two, a floor surviving over shared summands, and two spellings of one number that share no summand syntactically.
 //
-// It reaches the **floorless** pairs too, which is the coverage widening the peel's gate to a sum spine added. Those are the pairs no `Intrinsic::Nat` carrier can express — `(x + y) + z` reduces to a bare `NatAdd`, not to a successor floor — and the reassociation among them is the equation the window-fusion bound rests on. `Deduction::Undecided` is now *reachable* and carries its own case: a floorless pair sharing no summand comes back from `cancel_common` untouched, and returning it as `Equivalent` would re-enter the same congruence on the same terms forever.
+// It reaches the **floorless** pairs too, which the peel's gate admits because it accepts a sum spine. Those are the pairs no `Intrinsic::Nat` carrier can express — `(x + y) + z` reduces to a bare `NatAdd`, not to a successor floor — and the reassociation among them is the equation the window-fusion bound rests on. `Deduction::Undecided` is *reachable* and carries its own case: a floorless pair sharing no summand comes back from `cancel_common` untouched, and returning it as `Equivalent` would re-enter the same congruence on the same terms forever.
 #[test]
 fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     let (first, second, third) = (
@@ -78,7 +78,7 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
             fold(plus(scaled(2, x.clone()), lit(1))),
             fold(plus(plus(x.clone(), x.clone()), lit(1))),
         ),
-        // The floorless pairs. The first is the equation window fusion's bound rests on, and the one the carrier gate used to hide: both sides reduce to a bare `NatAdd`, so no `Intrinsic::Nat` ever carried them to the cancellation.
+        // The floorless pairs. The first is the equation window fusion's bound rests on, and the one a carrier gate would hide: both sides reduce to a bare `NatAdd`, so no `Intrinsic::Nat` ever carried them to the cancellation.
         (
             "x + y + z ~ x + (y + z)",
             fold(plus(plus(x.clone(), y.clone()), z.clone())),
@@ -144,7 +144,7 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     }
 
     // Every verdict above holds vacuously of a grid that reaches only one of them, and `Equivalent` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
-    // `2·x + 1 ~ x + x + 1` moved from `Equivalent` to `Equal` when the sum normal form began merging like terms: both sides now *reduce* to `2·x + 1`, so the peel has nothing left to carry.
+    // `2·x + 1 ~ x + x + 1` is `Equal`, not `Equivalent`: the sum normal form merges like terms, so both sides *reduce* to `2·x + 1`, so the peel has nothing left to carry.
     assert_eq!(
         (equal, clash, carried, stuck),
         (4, 4, 4, 1),
@@ -1189,7 +1189,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 vec![(&bin_base, run_bytes(&[9, 8, 7]))],
             ],
         ),
-        // Decided on the *length* alone now, where a `(start, end)` window had to compare two subjects — which is what a count buys.
+        // Decided on the *length* alone, where a `(start, end)` window would compare two subjects — which is what a count buys.
         (
             "slice(b, e, 0) = x[]",
             bin_slice(b.clone(), e.clone(), lit(0)),

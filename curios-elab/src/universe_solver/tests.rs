@@ -138,7 +138,7 @@ fn solver_rejects_inconsistent_constant_bounds_through_atoms() {
 #[test]
 fn consistency_checks_match_the_exact_solver() {
     for trial in 0..1_000_u64 {
-        // One independent generator per trial, indexed off the high bits: an LCG's low three bits cycle with period 8, and one generator threaded across trials at a step count divisible by 8 kept every trial at the same phase — the shape under which this test once compared four distinct constraints, all discharged before either solver, twelve thousand times.
+        // One independent generator per trial, indexed off the high bits: an LCG's low three bits cycle with period 8, and one generator threaded across trials at a step count divisible by 8 would keep every trial at the same phase.
         let mut state = 0x4d59_5df4_d0f3_3173_u64 ^ trial.wrapping_mul(0x9e37_79b9_7f4a_7c15);
         let mut draw = || {
             state = state
@@ -285,7 +285,7 @@ fn non_principal_flexible_bound_is_not_arbitrarily_defaulted() {
 
 /// The companion to [`non_principal_flexible_bound_is_not_arbitrarily_defaulted`].
 ///
-/// Mutual bounds force an equality and therefore *do* have a least solution, so leaving them open is not conservatism — it is a level that never gets solved. Witness dispatch emits exactly this shape, and every `%` slot in a module body failed to elaborate while propagation stalled on it: each level waits for the other, and neither is defaultable because both occur above.
+/// Mutual bounds force an equality and therefore *do* have a least solution, so leaving them open is not conservatism — it is a level that never gets solved. Witness dispatch emits exactly this shape, and every `%` slot in a module body would fail to elaborate while propagation stalled on it: each level waits for the other, and neither is defaultable because both occur above.
 #[test]
 fn mutually_bounded_flexible_levels_close_at_their_floor() {
     let mut solver = UniverseSolver::new(0);
@@ -305,7 +305,7 @@ fn mutually_bounded_flexible_levels_close_at_their_floor() {
     assert_eq!(solver.solution(right), Some(&Level::zero()));
 }
 
-/// The same cycle, but forced above zero by a direct bound. `left` solves to 2 from that bound, leaving `2 ≤ max(1, right)`. Its upper side is not a bare atom, so cancelling the offset alone does not answer it — but `max`'s own constant of 1 cannot supply 2, so `right ≥ 2` is determined rather than guessed. Before that was recognized the floor attempt tried `right := 0`, found `2 ≤ max(1, 0)` inconsistent, rolled back, and left `right` unsolved — surfacing as "level escapes its universe parameter context".
+/// The same cycle, but forced above zero by a direct bound. `left` solves to 2 from that bound, leaving `2 ≤ max(1, right)`. Its upper side is not a bare atom, so cancelling the offset alone does not answer it — but `max`'s own constant of 1 cannot supply 2, so `right ≥ 2` is determined rather than guessed. Without that, the floor attempt would try `right := 0`, find `2 ≤ max(1, 0)` inconsistent, roll back, and leave `right` unsolved — surfacing as "level escapes its universe parameter context".
 #[test]
 fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
     let mut solver = UniverseSolver::new(0);
@@ -532,7 +532,7 @@ fn a_lone_level_equal_to_another_is_that_level() {
     assert_eq!(solver.zonk(&Level::meta(x)).unwrap(), first.succ().unwrap());
 }
 
-/// Minimizing can determine what the merge before it could not: with `c` a body-only level, `a ≤ b` and `b ≤ max(a, c)` say nothing about `a` and `b` until `c` is solved at zero, and then they are mutual. The merge runs again once minimizing is done, so the scheme has one parameter rather than two bound to each other — the shape two of the prelude's contexts kept when it ran only before.
+/// Minimizing can determine what the merge before it could not: with `c` a body-only level, `a ≤ b` and `b ≤ max(a, c)` say nothing about `a` and `b` until `c` is solved at zero, and then they are mutual. The merge runs again once minimizing is done, so the scheme has one parameter rather than two bound to each other.
 #[test]
 fn a_level_determined_once_minimizing_settles_another_is_merged() {
     let mut solver = UniverseSolver::new(0);
@@ -755,7 +755,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
 ///
 /// The two sets [`UniverseSolver::finalize`] partitions are computed syntactically — the interface from the declaration's type, the internal levels from its body. Conversion aliases one meta onto another whenever two spellings of a level are forced equal, and the direction is not the signature's to choose, so the interface set can name metas that were solved away while the ones still carrying the level are reached by the body walk instead. Left on the internal side they are minimized, and the declaration comes back at a ground level rather than generalized over its own parameter — which every polymorphic caller is then refused for, by the kernel, for supplying a parameter where the callee demands a constant.
 ///
-/// Measured rather than supposed: elaborating a function over a struct carrying a `Type` field put the chain at three links, with the representative in the body's set and the declaration finalizing at zero parameters. One link of following is not enough, which is what this pins — the meta a link lands on may itself be solved.
+/// A function over a struct carrying a `Type` field leaves such a chain, with the representative in the body's set. One link of following is not enough, which is what this pins — the meta a link lands on may itself be solved.
 #[test]
 fn an_interface_level_is_generalized_through_a_chain_of_aliases() {
     let mut solver = UniverseSolver::new(0);

@@ -155,7 +155,7 @@ pub(super) fn type_() -> Term {
 
 // The propositions a decided bound is stated in. Built here like everything else this roster holds, and placed by the same rule: one stated over a carrier lives in that carrier's module, and one stated over none lives at the root.
 //
-// Authoring them in a `.crs` beside this file was tried and undone. It read better and placed worse: spliced at the root the `Flt` pair became `/sys/NonNeg`, saying nothing about which carrier, and the range constants collided with `/sys/Flt`'s `min` and `max` operations one segment away. Placement is what a generator is good at, so the generator keeps them.
+// Authoring them in a `.crs` beside this file would read better and place worse: spliced at the root the `Flt` pair would become `/sys/NonNeg`, saying nothing about which carrier, and the range constants would collide with `/sys/Flt`'s `min` and `max` operations one segment away. Placement is what a generator is good at, so the generator keeps them.
 pub(super) fn prop() -> Term {
     Subterm::Prop.into()
 }

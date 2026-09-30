@@ -18,11 +18,11 @@ enum ConstKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    /// The [`Binary`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
+    /// The [`Binary`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes would intern them into one constant, whose emitted length would be whichever literal arrived first.
     Bin(Grain, Binary),
     List(Vec<String>),
     Tuple(Vec<String>),
-    /// A nominal row is its identity, its load mode and its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant. The load mode rides the key so two rows that would emit different loads can never share one global, whether or not a tolerant one can reach here.
+    /// A nominal row is its identity and its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
     Row(usize, Vec<Option<String>>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),

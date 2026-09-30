@@ -27,7 +27,7 @@ fn vec_cons_with_nat_succ() {
 
 #[test]
 fn indexed_vec_append_executes() {
-    // Rung A of the indexed-inductive ladder, *executed*: `append`'s motive binds the length index (`(v : Vec(T)(k)) => Vec(T)(Nat/add(k, m))`), the `cons` arm meets it through the definitional successor-peeling of `Nat/add`, and the implicit index arguments of the recursive call are solved to the arm's *first* binder. Running (not just compiling) guards the zonk realignment of multi-binder arm scopes: with the in-group order flipped, the solved indices silently referenced the wrong binder and the program trapped at runtime.
+    // A motive binding an index, *executed*: `append`'s motive binds the length index (`(v : Vec(T)(k)) => Vec(T)(Nat/add(k, m))`), the `cons` arm meets it through the definitional successor-peeling of `Nat/add`, and the implicit index arguments of the recursive call are solved to the arm's *first* binder. Running (not just compiling) guards the zonk realignment of multi-binder arm scopes: with the in-group order flipped, the solved indices would silently reference the wrong binder and the program would trap at runtime.
     let source = r#"
         use /std/{Nat, Bytes, Io};
         induct Vec(T : Type) : (n : Nat) -> Type

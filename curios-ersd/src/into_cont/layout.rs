@@ -227,7 +227,7 @@ impl<'a> Layout<'a> {
 
     /// The Cont layout of `family`, computed on first use and memoized.
     ///
-    /// Slot zero is the tag; the payload slots are grouped by carrier, each group as wide as the constructor holding the most fields of that carrier. So two constructors agreeing on a carrier share its slots and only a disagreement costs width, which is what lets every slot name a carrier without the family widening: over the standard library this settles 22 slots against positional assignment's 11, for ten slots more across the whole roster and no growth at all in the families that allocate hot.
+    /// Slot zero is the tag; the payload slots are grouped by carrier, each group as wide as the constructor holding the most fields of that carrier. So two constructors agreeing on a carrier share its slots and only a disagreement costs width, which is what lets a slot name a carrier while the family widens only where its constructors disagree.
     ///
     /// A [`FamilyEncoding::Immediate`] family's bare constructor writes no slot — its value *is* its payload — so it contributes nothing to the widths.
     pub(super) fn row_layout(

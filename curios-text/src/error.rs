@@ -30,7 +30,7 @@ pub enum Error {
     OpaqueConstructorsCannotBeReExported {
         induct_decl: String,
     },
-    /// A root module reachable only from the standard library (e.g. `sys`) was referenced from user code. Such modules are the trusted intrinsic substrate; user code reaches them through their `/std` wrappers.
+    /// A root only the compiler supplies (`sys`) was referenced by a unit that did not declare it. Its roster is the compiler's own vocabulary, with no compatibility promise (`curios_utilities::RootKind::Internal` says why), so a program reaches it through its `/std` facade.
     InternalRootModule {
         segment: String,
     },
@@ -98,11 +98,11 @@ pub enum Error {
     },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
-    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/`List`/`Bits`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
+    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
-    /// Two match-arm rows write incompatible shapes for the same column — mixing a plain binder with a concrete constructor/tuple/struct shape (a "Path A" full-enumeration violation: no wildcard/catch-all is allowed alongside a concrete case), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
+    /// Two match-arm rows write incompatible shapes for the same column — a plain binder beside a concrete constructor/tuple/struct shape in one group, which the matrix cannot order since arms have no priority (a final top-level `_` is split off as the default before the matrix sees the rows), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
     MatrixInconsistentShape,
-    /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; "Path A" gives arms no priority order to break the tie with.
+    /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; arms have no priority order to break the tie with.
     MatrixDuplicateRow,
     /// A `Bool`/`Nat`/`List`/`Bits`/`Bytes` leaf-pattern column split without both of its required cases present and no `| _ =>` to stand in — `missing` is the spelling of the case the rows lack. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself. Raised for a column at any depth, so the report names neither.
     MatrixIncompleteCarrierMatch {

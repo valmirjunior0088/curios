@@ -167,7 +167,7 @@ fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
                 return fail("Expected float literal with dot and decimal");
             }
 
-            // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so no program changes; what changes is that the answer no longer depends on the machine the compiler runs on.
+            // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
             match decimal_parts(digits) {
                 Some((value, scale)) => pure(Floating::of_decimal(sign == "-", &value, scale)),
                 None => fail("Expected float literal"),
@@ -336,7 +336,7 @@ pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
                         "a block string literal opens with `\"\"\"` and a newline; its text begins on the next line",
                     ))
                 })))
-                // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it backtracked to the one-line form, failed there too, and left the enclosing term to complain at the opening quotes.
+                // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it would backtrack to the one-line form, fail there too, and leave the enclosing term to complain at the opening quotes.
                 .and_keep(commit(
                     many0(parse_block_piece)
                         .and(mark())
@@ -464,7 +464,7 @@ pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
 
 fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a, Term> {
     parse_literal(prefix)
-        // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry sent the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint then stood at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
+        // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
         .and_keep(commit(
             sep_by0_trailing(parse_bin_entry, || parse_literal(",")).and_drop(parse_literal("]")),
         ))
@@ -496,4 +496,4 @@ pub(super) fn parse_bool_intrinsic<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// Intrinsic types and operations are no longer surface syntax — they live in the `sys` module (see `prelude.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) remain here.
+// Intrinsic types and operations are not surface syntax — they live in `/sys` (see `sys_module.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) are here.

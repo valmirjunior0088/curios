@@ -264,7 +264,7 @@ fn widths(module: &Module, leader: FunctionId, forwarder: FunctionId) -> (usize,
 
 /// Two members joined by tail-forwarding are rewritten as one unit.
 ///
-/// This is what the class is for: tail-forwarding means the two return through one another, so uncurrying one without the other would leave a caller passing an argument its callee never grew a parameter for — which is exactly the arity mismatch an earlier attempt crashed on.
+/// This is what the class is for: tail-forwarding means the two return through one another, so uncurrying one without the other would leave a caller passing an argument its callee never grew a parameter for.
 #[test]
 fn a_tail_forwarded_chain_is_uncurried_together() {
     let (mut module, leader, forwarder) = chain(Use::Applied, Use::Applied);
@@ -287,9 +287,9 @@ fn a_tail_forwarded_chain_is_uncurried_together() {
 
 /// A member nothing calls from outside the class takes its width from the class, and is rewritten with it.
 ///
-/// This is what "propagate the decision across tail-forwarding" has to mean. Tail-forwarding makes the members return through one another, so the class shares one stream of returned closures; a member with no caller of its own contributes no reading of that stream and contradicts none, and requiring it to be observed independently would decline a chain for a reason that is not one. `state_monad`'s `{/loop, /loop/2}` only escaped that because each of the two happens to have a caller.
+/// This is what "propagate the decision across tail-forwarding" has to mean. Tail-forwarding makes the members return through one another, so the class shares one stream of returned closures; a member with no caller of its own contributes no reading of that stream and contradicts none, and requiring it to be observed independently would decline a chain for a reason that is not one. `state_monad`'s `{/loop, /loop/2}` escapes that only because each of the two happens to have a caller.
 ///
-/// What such a member is *not* excused is [`super::rewritable`], which its inherited width says nothing about — and which, before this propagated, no unobserved member was ever asked.
+/// What such a member is *not* excused is [`super::rewritable`], which its inherited width says nothing about.
 #[test]
 fn a_member_observed_only_through_forwarding_takes_the_class_width() {
     for (label, uses) in [
@@ -356,7 +356,7 @@ fn a_chain_declines_when_either_member_cannot() {
 
 /// A closure the caller applies once and also captures in a function defined below the application is a value that outlives the site, and the member is inadmissible — at either end of the chain, since the class path plans the declined member on its class-mate's width and has to see the hidden application too.
 ///
-/// It was admitted: the admission walk stopped at the `LetFun`, saw one application, and the nested function went on applying the absorbed answer.
+/// An admission walk that stopped at the `LetFun` would see one application and admit the site, and the nested function would go on applying the absorbed answer.
 #[test]
 fn a_closure_captured_by_a_nested_function_declines_uncurrying() {
     for (label, uses) in [
@@ -393,7 +393,7 @@ fn a_closure_captured_by_a_nested_function_declines_uncurrying() {
 
 /// A caller that applies the closure once and also keeps it is inadmissible, and its class-mate's observed width must not overrule that.
 ///
-/// It did: admission and planning were two walks with two lists of conditions, the member's refusal lived only in the first, and the second — asked to plan the class on the class-mate's width — counted one application site and rewrote the member, so the tuple that held the closure held the applied answer.
+/// Admission and planning consume one judgment, [`super::admit_site`], so the member's refusal reaches the plan: a plan with a list of its own, asked to plan the class on the class-mate's width, would count one application site and rewrite the member, and the tuple holding the closure would hold the applied answer.
 #[test]
 fn a_closure_applied_and_also_kept_declines_the_class() {
     for (label, uses) in [

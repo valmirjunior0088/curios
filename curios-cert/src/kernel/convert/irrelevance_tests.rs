@@ -28,9 +28,9 @@ fn any_two_inhabitants_of_a_proposition_convert() {
     );
 }
 
-/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair was refused where the elaborator — comparing the spines of one global first — accepted it. `tests::perimeter`'s row of the same name is the program.
+/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair would be refused where the elaborator — comparing the spines of one global first — accepts it. `tests::perimeter`'s row of the same name is the program.
 ///
-/// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds as before, and the two eliminations stay apart. Mutation-checked: removing the spine attempt before forcing fails the proposition's half, and reading no telescope off a `rec` projection leaves this passing — that half is `recursion_tests`'s `two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding`.
+/// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. Mutation-checked: removing the spine attempt before forcing fails the proposition's half, and reading no telescope off a `rec` projection leaves this passing — that half is `recursion_tests`'s `two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding`.
 #[test]
 fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     let applied_to_two = |sort: Term| {
@@ -89,7 +89,7 @@ fn does_not_leak_into_a_relevant_type() {
     );
 }
 
-/// A struct literal's fields compare at the declaration's field telescope, so a field at a proposition is discharged without being read: two literals differing only in a proof are one value. The elaborator's copy has always decided this; the kernel refused it, comparing every field at `Type`, which is how `Str/concat` associated for one checker and not the other.
+/// A struct literal's fields compare at the declaration's field telescope, so a field at a proposition is discharged without being read: two literals differing only in a proof are one value. Comparing every field at `Type` would refuse it, and `Str/concat` would associate for the elaborator and not for the kernel.
 #[test]
 fn a_struct_field_at_a_proposition_is_not_read() {
     let mut kernel = kernel();
@@ -198,9 +198,9 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     );
 }
 
-/// Definitional proof irrelevance at a *computed* proposition — the shape every real firing takes, and the one this crate's copy had never been tested at.
+/// Definitional proof irrelevance at a *computed* proposition — the shape every real firing takes.
 ///
-/// `any_two_inhabitants_of_a_proposition_convert` above uses a nominal `Prop`-sorted family, which is the easy rung: the registry says outright that the type is a proposition. Every one of the 37 firings measured in `curios-elab` across the whole prelude, taken while it held `/std/BigNat`, is at a type that only *computes* to one — a stuck `match` at motive `Prop`, which is how that module, now the corpus fixture `/big_nat`, states a validity predicate over a `Bool`. Here the rule is inert, 0 firings in 86,547 goals, because a proof reaching conversion in this crate does so in an untyped child position compared at `Type`; so nothing in any program brings the rule and the shape together, and only a fixture can.
+/// `any_two_inhabitants_of_a_proposition_convert` above uses a nominal `Prop`-sorted family, which is the easy rung: the registry says outright that the type is a proposition. The elaborator's firings are at types that only *compute* to one — a stuck `match` at motive `Prop`, which is how the corpus fixture `/big_nat` states a validity predicate over a `Bool`. Here the rule is inert over every program, because a proof reaching conversion in this crate does so in an untyped child position compared at `Type`; so nothing in any program brings the rule and the shape together, and only a fixture can.
 ///
 /// The shape is worth its own fixture because of what irrelevance trusts. It accepts *without inspecting either term*, and `Sort::of` classifies a stuck `match` by its **motive** rather than by its arms — a claim the term makes about itself, which is exactly why `check_motive` exists to type a motive under its real binders before any rule reads it. At a computed proposition the motive is therefore the whole of what this rule rests on.
 ///
@@ -268,13 +268,13 @@ fn does_not_fire_at_a_computed_relevant_type() {
 
 /// **The stand-in `ground_scope` opens its binders at, held against the types those binders really carry.**
 ///
-/// `ground_scope` opens both scopes at one shared set of binders and assumes every one of them at `Type`, whatever it really is. Its own comment licenses that by an inventory — "a binder's recorded type feeds only the conversion history's context key, identically on both sides" — and the inventory is false. [`synth_neutral`](super::super::sort::synth_neutral) reads the same recorded type through `Kernel::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
+/// `ground_scope` opens both scopes at one shared set of binders and assumes every one of them at `Type`, whatever it really is. The recorded type is not inert: [`synth_neutral`](super::super::sort::synth_neutral) reads the same recorded type through `Kernel::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
 ///
 /// What actually holds the stand-in up is narrower, and is about the value rather than about the readers: `Type` is the least informative answer `Sort::of` can return for a binder. Irrelevance fires on `Sort::Prop` and on nothing else, and eta dispatches on the goal type's own *shape* rather than on the binder's, so a binder recorded at `Type` can only lose the accepting rules, never gain one. This walks one goal at each type the binder could really carry and records what each decides.
 ///
 /// The grid is two side-pairs against four assumed types, because a single pair cannot separate the two things being asked. Distinct sides expose which types *discharge* the goal without comparing — only `Prop` does — and convertible-but-not-identical sides expose which types get as far as comparing at all. The stand-in's row matches the relevant-sort row in both, which is the null: it decides every goal the way a real relevant type decides it.
 ///
-/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in `ground_scope` fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction turned out to rest on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. That is written in neither place, and it is what this row exists to record.
+/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in `ground_scope` fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. That is written in neither place, and it is what this row exists to record.
 #[test]
 fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
     let distinct = || {
@@ -360,7 +360,7 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
 ///
 /// Two stuck `bool_match`es differing only inside their motive scopes. Each motive body is `Wit(<motive binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive binder — which `ground_scope` has opened at `Type`. The pair is refused, matching the grid's stand-in row above rather than its `Prop` row, which is what pins that the production path really does record the stand-in and not something the term carries.
 ///
-/// The counterfactual is the second half: assume that same binder at `Prop` and compare the two motive bodies directly, and the goal is discharged by irrelevance. So the verdict does move when the binder's real type differs from the stand-in, and it moves toward refusal — which is the direction this row's **Assumes** claims and the direction the two-checker matrix already records one instance of, in `curios`'s `a_grounded_argument_forfeits_irrelevance`.
+/// The counterfactual is the second half: assume that same binder at `Prop` and compare the two motive bodies directly, and the goal is discharged by irrelevance. So the verdict does move when the binder's real type differs from the stand-in, and it moves toward refusal — which is the direction this row's **Assumes** claims.
 ///
 /// The control between them is a motive pair that differs only by a beta redex. It must still converge through the same `ground_scope`, so the refusal above is `u ≠ v` decided at a relevant sort rather than the grounded scope declining to compare its bodies at all.
 #[test]
@@ -432,7 +432,7 @@ fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
 
 /// A struct's *parameters* compare at the declaration's outer telescope too, so a parameter at a proposition is discharged without being read.
 ///
-/// This is the gap `induct_type_args` named and left open — "no witness has forced it" — and it is the parameter-side twin of the field rule above: a family's indices were typed, a struct's and a constructor's parameters were not, so `Wrap(P, p)` and `Wrap(P, q)` were two types for one, where `Eq(@P)(p, q)` and `Eq(@P)(p, p)` were already one. Nothing in `/std` forces it either; it is taken because the rule is the same rule and the asymmetry was an accident of which shape someone needed first.
+/// It is the parameter-side twin of the field rule above: a family's indices, a struct's parameters and a constructor's are all compared at their declared types, so `Wrap(P, p)` and `Wrap(P, q)` are one type exactly as `Eq(@P)(p, q)` and `Eq(@P)(p, p)` are. Nothing in `/std` forces it; it holds because the rule is the same rule.
 #[test]
 fn a_struct_parameter_at_a_proposition_is_not_read() {
     let mut kernel = kernel();

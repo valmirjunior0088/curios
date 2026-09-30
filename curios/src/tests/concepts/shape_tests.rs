@@ -42,7 +42,7 @@ fn a_labeled_goal_does_not_reach_the_positional_witness() {
     ));
 }
 
-// A keyed goal with no entry defers to the end-of-module sweep instead of failing at the call, so a witness declared later in the module serves an earlier use — the standing a nominal goal has, which a tuple goal did not have while it was unkeyable.
+// A keyed goal with no entry defers to the end-of-module sweep instead of failing at the call, so a witness declared later in the module serves an earlier use — the standing a nominal goal has.
 #[test]
 fn a_later_declared_tuple_witness_serves_an_earlier_use() {
     let source = r#"
@@ -95,13 +95,7 @@ fn a_constructor_whose_body_is_a_tuple_type_is_keyed() {
     assert_eq!(run(source), b"Pair");
 }
 
-// The base case, function side: a function type has no name to be headed by either, so its plicity vector is the head. `Tag/tag` reduces the parameter to `(Nat) -> Nat`, keys it as `(_) -> _`, and finds the entry; the domains and result were never in the key and are checked by unification after the lookup.
-// A keyed function goal has the standing a nominal goal has: no entry defers to the end-of-module sweep instead of failing at the call.
-// Curios does not curry at the type level, so `() -> A` is a distinct type from `A` and the empty vector is its own table entry.
-// Plicity is part of a function type's identity — `(Nat) -> Nat` and `(@n: Nat) -> Nat` do not convert — so two vectors of one arity are two table entries, each reached by the goals of its own type.
-// Plicity is part of a function type's identity, so an all-explicit witness does not cover a goal with hidden slots. That is the surprise this key has, so the miss carries the rule — the plicity twin of the labeled-tuple hint above.
-// The higher-kinded position keys on the constructor's body, so a constructor whose body is a function type keys on that body's plicity vector — beside the tuple-bodied constructor above and `Monad(Option)`.
-// Every other rigid head still keys as it did, and a head that is none of them is still refused — with the roster the refusal names now listing function types. A witness over a bare variable is the shape that stays out: nothing rigid remains to key on.
+// A head that is none of the keyable kinds is refused: a witness over a bare variable has nothing rigid to key on.
 #[test]
 fn a_variable_head_is_still_not_a_key() {
     let source = r#"
@@ -120,7 +114,7 @@ fn a_variable_head_is_still_not_a_key() {
     ));
 }
 
-/// A function type is not a key. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and the one consumer the standard library ever had for it is gone. Tuple shapes are unaffected: their space is large and ownership partitions naturally.
+/// A function type is not a key. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and the standard library has no consumer for it. Tuple shapes are unaffected: their space is large and ownership partitions naturally.
 #[test]
 fn a_witness_keyed_on_a_function_type_cannot_be_keyed() {
     let error = error(

@@ -37,7 +37,7 @@ fn exposed_nominal(
 
 /// Every nominal declaration an alias chain can land on: the unit's own, over the ones its scope already made visible.
 ///
-/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
+/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream would answer it too, with a map whose correctness here depended on somebody else having concatenated the prelude into it and nothing saying so. See `documentation/design/architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
 #[derive(Clone, Copy)]
 pub(super) struct NominalScope<'a> {
     /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.

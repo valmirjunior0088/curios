@@ -51,9 +51,9 @@ fn restoring_the_budget_refills_it() {
     assert_eq!(whnf(&mut kernel, occurrence(2)), Ok(occurrence(2)));
 }
 
-/// Depth is refused by the counter, and the refusal says so. Before the frame row, a reduction driven deep took real stack and the budget observed none of it — `recurse` grows rather than aborting, so what bounded depth was the host's memory rather than anything the program could be told about.
+/// Depth is refused by the counter, and the refusal says so. Without the frame row, a reduction driven deep would take real stack the budget observes none of — `recurse` grows rather than aborting, so what bounded depth would be the host's memory rather than anything the program could be told about.
 ///
-/// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.
+/// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain does not trip the row at all, which is the machine's whole yield and is asserted by its own tests.
 #[test]
 fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
     let mut kernel = Kernel::new(Cost::FRAME.get() * 4, SYNTAX);

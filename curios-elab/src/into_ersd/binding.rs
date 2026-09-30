@@ -11,7 +11,7 @@ use {
 impl Lowering {
     /// Erase every top-level item, in dominance order among themselves (see [`dominance_order`]).
     ///
-    /// It took a `start` index until the prelude stopped being spliced into the module: an already-erased prefix used to sit at the front of `module.items`, and the count of it was what said where the entry's own began. A module now carries only its own items — what an earlier erasure established arrives as bindings the environment already holds — so there is no prefix here to start past.
+    /// A module carries only its own items: what an earlier erasure established arrives as bindings the environment already holds, so there is no prefix here to start past.
     pub(super) fn erase_items(
         &mut self,
         context: &mut Context,

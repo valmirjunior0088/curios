@@ -62,7 +62,7 @@ pub struct Span {
 }
 
 impl Span {
-    /// Public because the thing that mints spans from byte offsets is the parser, and that now lives outside this crate as `curios-parse`. It was `pub(crate)` only while the two shared one.
+    /// The span of `source` from byte `start` to byte `end`.
     pub fn new(source: Arc<Source>, start: usize, end: usize) -> Self {
         Self { source, start, end }
     }
@@ -105,7 +105,7 @@ impl Span {
 
         let width = source[start..end.min(line_end)].chars().count();
 
-        // One padding character per scalar, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space put the caret one column along where the text moved eight, and every tab-indented line reported a caret short of its span by the width of its indentation. A tab *inside* the span still takes one `^`, which is the same trade the scalar count already makes for a wide character.
+        // One padding character per scalar, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space would put the caret one column along where the text moves eight, and every tab-indented line would report a caret short of its span by the width of its indentation. A tab *inside* the span still takes one `^`, which is the same trade the scalar count already makes for a wide character.
         let indent: String = source[line_start..start]
             .chars()
             .map(|char| match char {
@@ -130,7 +130,7 @@ impl Span {
     }
 }
 
-/// A diagnostic as data: the message, and the span it is about when it is about one. Every stage's error renders through this — [`Report::render`] is the message followed by [`Span::render_snippet`], the one shape a Curios diagnostic has ever had — so a consumer that wants the location gets it as a span rather than by parsing the `-->` header back out of the text. The message is text rather than the stage's own error, deliberately: a report is what a stage *said*, and it survives the crate boundary that the error, with its terms and spellings, does not.
+/// A diagnostic as data: the message, and the span it is about when it is about one. Every stage's error renders through this — [`Report::render`] is the message followed by [`Span::render_snippet`], the one shape a Curios diagnostic has — so a consumer that wants the location gets it as a span rather than by parsing the `-->` header back out of the text. The message is text rather than the stage's own error, deliberately: a report is what a stage *said*, and it survives the crate boundary that the error, with its terms and spellings, does not.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct Report {
@@ -163,7 +163,7 @@ impl Report {
         }
     }
 
-    /// Several reports rendered in order, a blank line between each — how a goal batch has always read.
+    /// Several reports rendered in order, a blank line between each — how a goal batch reads.
     pub fn render_all(reports: &[Report]) -> String {
         reports
             .iter()

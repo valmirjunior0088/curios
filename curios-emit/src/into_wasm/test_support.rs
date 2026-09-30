@@ -1,8 +1,8 @@
 //! Emitting a fixture and reading the text back: the harness the Wasm emission suites assert through, and the programs they emit.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
-
-//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//!
+//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split whose semantic half runs end to end, in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use curios_num::{Integer, Natural};
 
@@ -64,7 +64,7 @@ pub(super) fn flt(value: f64) -> curios_cont::Atom {
     curios_cont::Atom::Literal(curios_cont::Literal::Flt(Floating::from(value)))
 }
 
-/// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.
+/// A nullary `main` that binds one intrinsic over `args` and exits with the result — compute one thing, exit with it. `into_wasm` does not fold, so the op lowers verbatim.
 pub(super) fn intrinsic_main(
     op: curios_cont::Intrinsic,
     args: Vec<curios_cont::Atom>,
@@ -178,7 +178,7 @@ pub(super) fn bin_len() -> curios_cont::Module {
     });
     let build = module.add_node(curios_cont::Node::LetValue {
         result: bin,
-        // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value now rides.
+        // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value rides.
         value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
             Grain::X,
             Binary::from_bytes(vec![1, 2, 3, 4]),
@@ -553,7 +553,7 @@ pub(super) fn list_map() -> curios_cont::Module {
     module
 }
 
-/// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, never widened), so the only assertion that matters is that `into_wasm` returns at all.
+/// A long left-leaning chain of appends, each over the previous result. Lowering must return on the default test-thread stack, so the only assertion that matters is that `into_wasm` returns at all.
 pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();

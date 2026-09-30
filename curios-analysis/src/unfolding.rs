@@ -4,7 +4,7 @@
 //!
 //! # Why one reading
 //!
-//! It was three. The re-typing inlined the definitions that reached a solved variable, the index solver collected the locals behind definitions, and the case's own solution followed a chain of variables, each with its own guard against a definition that mentions itself. A reading written once is one to test — and the elaborator's guard keys, which named their `let`s outright until a guard over one missed the same guard met through an unfolded definition, took it up as a fourth reader rather than a fourth reading.
+//! The re-typing inlines the definitions that reach a solved variable, the index solver collects the locals behind definitions, the case's own solution follows a chain of variables, and the elaborator's guard keys read what a guard is over — four readers, each of which would otherwise carry its own guard against a definition that mentions itself. A reading written once is one to test, and a guard key that named its `let` outright would miss the same guard met through an unfolded definition.
 
 #[cfg(test)]
 mod tests;

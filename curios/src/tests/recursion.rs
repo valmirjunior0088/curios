@@ -1,6 +1,6 @@
 //! Recursion is implicit and a group is declared: a definition may mention itself, at the top level and locally, and definitions that mention one another are declared as one `let … and …;` group.
 //!
-//! The refusals carry the rule's weight. A cycle the source did not declare is refused by name with the way out; a value that reads itself while it is being computed is refused where the erased program is verified, since only there can a read be told from a knot forced by need; and a local binding that names itself must be a plain, typed name — which is what turns the shadowing idiom `let n = n + 1;` into an error that says so, since the new binding is now in scope of its own value.
+//! The refusals carry the rule's weight. A cycle the source did not declare is refused by name with the way out; a value that reads itself while it is being computed is refused where the erased program is verified, since only there can a read be told from a knot forced by need; and a local binding that names itself must be a plain, typed name — which is what turns the shadowing idiom `let n = n + 1;` into an error that says so, since the new binding is in scope of its own value.
 
 use crate::tests::{error, run};
 
@@ -191,7 +191,7 @@ fn a_shadowing_rebinding_is_refused_as_a_self_reference() {
 
 // A `rec` group whose member is reached through a *dependent* index family, at both the top level and inside a function.
 //
-// A member's name is defined to its slot while the group is being checked, so reduction turns a recursive reference into that slot and a committed solution can carry one. `RecItem::try_new` captures member *names* into the group's binder, so a slot reaching that point is not something the capture can bind: substitution expanded it to the member's body instead, the body mentioned that same solution, and the walk never ended — `recurse` answers a deepening walk by asking the allocator for stack, so the compilation died by exhausting memory rather than refusing anything. Both substitution walks now spell a filled slot as its member's name, which is the capturable thing the group's binder is waiting for, and `elaborate_rec` materializes before it closes so the name lands where the capture still binds it.
+// A member's name is defined to its slot while the group is being checked, so reduction turns a recursive reference into that slot and a committed solution can carry one. `RecItem::try_new` captures member *names* into the group's binder, so a slot reaching that point is not something the capture can bind. Both substitution walks spell a filled slot as its member's name, which is the capturable thing the group's binder is waiting for, and `elaborate_rec` materializes before it closes so the name lands where the capture still binds it; expanded to the member's body instead, the slot would meet the same solution in that body and the walk would never end — `recurse` answers a deepening walk by asking the allocator for stack, so the compilation would die by exhausting memory rather than refusing anything.
 #[test]
 fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members() {
     let source = r#"

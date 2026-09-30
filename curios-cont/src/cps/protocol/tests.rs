@@ -402,9 +402,9 @@ fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> Continu
     resume
 }
 
-/// The shape a resume rebuilds in is the class's, not the callee's own. `forwarder` returns only by tail-calling `callee`, so it has no return edge of its own to read a vocabulary off — and its caller's resume reads the result as the row `callee` builds. Deriving the shape per function rebuilt a structural tuple here, which the `RowGet` below then cast to the row's final type; that was `/std/http/header_lookup`, and the only symptom was an HTTP client trapping on its first response header.
+/// The shape a resume rebuilds in is the class's, not the callee's own. `forwarder` returns only by tail-calling `callee`, so it has no return edge of its own to read a vocabulary off — and its caller's resume reads the result as the row `callee` builds. Deriving the shape per function would rebuild a structural tuple here, which the `RowGet` below would cast to the row's final type — a trap at run time and nowhere earlier.
 ///
-/// Mutation-checked by reverting the shape to the per-function derivation: the protocol alone still reads `Fields(2, …)`, and what fails is the verifier on the rebuilt `Tuple` — which is the other half of the fix, and why the fixture asserts both.
+/// Mutation-checked by deriving the shape per function: the protocol alone still reads `Fields(2, …)`, and what fails is the verifier on the rebuilt `Tuple` — the other half of the guard, and why the fixture asserts both.
 #[test]
 fn a_forwarder_rebuilds_in_its_class_vocabulary() {
     let mut module = Module::default();

@@ -1,6 +1,6 @@
 //! The size-change engine's own algebra: composition, join, idempotence, and the shape order.
 //!
-//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential (see `documentation/soundness/whole-module-passes/record_totality-t.md`) — live in `curios-analysis/tests/driven.rs`; see that file's header for why they are an integration test rather than a module here.
+//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential (see `documentation/design/soundness/totality/nothing-reachable-from-a-type-is-partial.md`) — live in `curios-analysis/tests/driven.rs`; see that file's header for why they are an integration test rather than a module here.
 
 use {
     super::*,
@@ -10,7 +10,7 @@ use {
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
 ///
-/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks without native recursion — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live in `tests/driven.rs`, driven by the actual kernel.
+/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live in `tests/driven.rs`, driven by the actual kernel.
 ///
 /// They cannot be integration tests: [`Walk`] is an internal whose fields they set directly, and making it constructible from outside would mean publishing every one of them.
 #[derive(Default)]
@@ -196,7 +196,7 @@ fn a_guard_excludes_zero_only_when_its_arm_does() {
     // ...but the true arm gives `n < 10`, which admits zero.
     assert!(!guard(Relation::Lt, 10).establishes_nonzero(true));
 
-    // `/big_nat/of_nat`, the corpus fixture that was `/std/BigNat`: the false arm of `n == 0` gives `n != 0`.
+    // `/big_nat/of_nat`, in `curios`'s corpus: the false arm of `n == 0` gives `n != 0`.
     assert!(guard(Relation::Eql, 0).establishes_nonzero(false));
     assert!(!guard(Relation::Eql, 0).establishes_nonzero(true));
 
@@ -327,7 +327,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
 
 /// Levels of written nesting in the deep body below.
 ///
-/// The native recursion this replaces overflowed the default test-thread stack between 800 and 1,400 levels, so a regression here aborts the process rather than merely running long.
+/// Far past the depth an unguarded recursion survives on the default test-thread stack, so a walk that stops growing its stack aborts the process rather than merely running long.
 const DEEP: usize = 100_000;
 
 #[test]

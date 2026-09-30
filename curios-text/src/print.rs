@@ -76,7 +76,7 @@ fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static
 
 /// Whether every element of a packed literal is an atom — a plain numeral or a name — so that printing one flat costs nothing.
 ///
-/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. `/std/BigNat`'s proofs — now the corpus fixture `/big_nat` — pack whole `Eq/trans(…)` chains into their literals and printed 545 columns that way. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
+/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. The corpus fixture `/big_nat`'s proofs pack whole `Eq/trans(…)` chains into their literals, which a fill would print hundreds of columns wide. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
 fn packs_atoms(segments: &[BinSegment]) -> bool {
     segments.iter().all(|segment| match segment {
         BinSegment::Atom(term) => {
@@ -128,7 +128,7 @@ fn telescope(items: Vec<Printer>) -> Printer {
 ///
 /// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name.
 ///
-/// No enclosing `group`, and that absence *is* the layout. A group asks whether the whole run fits on one line, which is the wrong question to put to content that would rather wrap: answering no broke a `soft_line` after the delimiter and spent a line on nothing but the delimiter itself. A fill needs no such permission, deciding each gap for itself, so the first name rides the delimiter and only the wraps are indented. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
+/// No enclosing `group`, and that absence *is* the layout. A group asks whether the whole run fits on one line, which is the wrong question to put to content that would rather wrap: answering no would break a `soft_line` after the delimiter and spend a line on nothing but the delimiter itself. A fill needs no such permission, deciding each gap for itself, so the first name rides the delimiter and only the wraps are indented. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
 fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printer {
     if items.is_empty() {
         return pure(format!("{open}{close}"));
@@ -171,7 +171,7 @@ fn carries_its_own_break(term: &Term) -> bool {
 
 /// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one — except that a call whose last argument carries a break of its own, with nothing but atoms before it, hands its break to that argument: `Str/flatten([` on the head's line, the elements one level in, and `])` riding the last; `List/map(names, (name) =>` on the head's line and the body one level in below it.
 ///
-/// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug was tried and removed: it made the layout depend on the *kind* of the final argument while a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — stranded the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
+/// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug would make the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — would strand the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
 ///
 /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
 fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
@@ -400,7 +400,7 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer {
     }
 }
 
-/// The optional `; ih` tail of a `Nat` fold's succ arm or an `List`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
+/// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
 fn print_cons_ih(ih: Option<Pattern>) -> Printer {
     match ih {
         Some(ih) => flat([pure("; "), print_pattern(ih)]),
@@ -454,7 +454,7 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer {
     }
 }
 
-/// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Ctor` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror `print_pattern`'s own field-printing exactly.
+/// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Variant` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror `print_pattern`'s own field-printing exactly.
 fn print_match_pattern(pattern: MatchPattern) -> Printer {
     match pattern {
         MatchPattern::Binder(name) => pure(name),
@@ -585,7 +585,6 @@ fn format_radix(n: &Natural, radix: Radix) -> String {
     }
 }
 
-/// An intrinsic operation as the surface calls it: its `/sys` path applied, `Nat/shl(a, b)`, with the type arguments it takes implicitly marked `@` as the application of that declaration marks them. A `/sys` body is the only place a text-stage intrinsic node exists, and its reading spells the operation the way the `/std` re-export a reader writes does.
 /// The `/sys` path of a float operation rounded in `rounding`: `Flt/add` in the default direction, `Flt/toward_zero/add` in another.
 fn flt_rounded(rounding: Rounding, operation: &str) -> String {
     match rounding {
@@ -611,6 +610,7 @@ fn print_intrinsic_call(
     flat([pure(name), listed("(", arguments, ")")])
 }
 
+/// An intrinsic operation as the surface calls it: its `/sys` path applied, `Nat/shl(a, b)`, with the type arguments it takes implicitly marked `@` as the application of that declaration marks them. A `/sys` body is the only place a text-stage intrinsic node exists, and its reading spells the operation the way the `/std` re-export a reader writes does.
 fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
     match intrinsic {
         Intrinsic::BoolType => pure("Bool"),
@@ -1112,7 +1112,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 pub(crate) fn print_term(term: Term) -> Printer {
     // The formatter's comment weave, and the whole of what the printer contributes to it: a term reports where its own text begins and how far into the source it reaches. Nothing here decides where a comment goes — that is a fact about the output line, which only the renderer knows.
     //
-    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: it is placed past the whitespace and comments after the term — where the parse stopped, which is where the span itself used to end before a caret had to stop underlining blanks — so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
+    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: it is placed past the whitespace and comments after the term — where the parse stopped, beyond the span's own end — so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
     let bounds = term.span().map(|span| (span.start, past_trailing(span)));
 
     marked(bounds.map(|(start, _)| start), || match bounds {
@@ -1123,7 +1123,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
 
 /// The offset past the whitespace and line comments that follow `span` — the extent `parse_whitespace` consumed after the term, recovered from the text — and past one `,` or `;` among them.
 ///
-/// **The separator is stepped over so a comment written after it is the term's to report.** The separator is emitted by the enclosing printer, and so is the break after it; a reach that stopped at the separator left a comment riding that line owed to no mark until the next element began, which is past the break — so every comment after a local `let`'s `;`, a list element's `,` or a call argument's `,` surfaced one line down, and one line further on every run. Reported here, it is paid onto the line the separator ends, wherever the enclosing printer breaks. One separator and no more: two in a row never follow one term, and what follows the separator is the next term's own.
+/// **The separator is stepped over so a comment written after it is the term's to report.** The separator is emitted by the enclosing printer, and so is the break after it; a reach that stopped at the separator would leave a comment riding that line owed to no mark until the next element began, which is past the break — so every comment after a local `let`'s `;`, a list element's `,` or a call argument's `,` would surface one line down, and one line further on every run. Reported here, it is paid onto the line the separator ends, wherever the enclosing printer breaks. One separator and no more: two in a row never follow one term, and what follows the separator is the next term's own.
 fn past_trailing(span: &Span) -> usize {
     let text = &span.source.text;
     let mut end = span.end;
@@ -1180,7 +1180,7 @@ fn print_doc(doc: Option<Doc>) -> Printer {
 
 /// Report the source consumed up to `offset` before a break, so a comment written on the line the break ends is paid onto that line rather than carried past it.
 ///
-/// **The law every member list obeys.** A break separating one source construct from the next comes *before* the next construct's own mark, so a comment written after the previous one — on the line the break is about to end — is not yet owed when the line closes, and is paid on the following line instead. Each run then finds it one construct deeper than the last, which is a formatter that never settles. Reporting the position first pays it where it was written; a comment on a line of its own is untouched, since only what *begins* something pays one of those.
+/// **The law every member list obeys.** Were a break separating one source construct from the next to come *before* the next construct's own mark, a comment written after the previous one — on the line the break is about to end — would not yet be owed when the line closes, and would be paid on the following line instead; each run would find it one construct deeper than the last, which is a formatter that never settles. Reporting the position first pays it where it was written; a comment on a line of its own is untouched, since only what *begins* something pays one of those.
 fn reached_before(offset: Option<usize>) -> Printer {
     match offset {
         Some(offset) => reaches(offset),
@@ -1202,7 +1202,7 @@ fn member_start<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> 
 
 /// Where a `let` binding or an `and` clause begins: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds it; taking the earliest keeps comments written inside the signature with the component they lead.
 ///
-/// A clause with no position of its own does not thereby keep its comment: the mark falls to the first *descendant* with a span, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge, and what `formatting_converges_from_every_comment_position` now checks.
+/// A clause with no position of its own does not thereby keep its comment: a mark falling to the first *descendant* with a span would let a comment above an `and` clause surface between a parameter and its type, reparse as a leading comment somewhere new, and move again on the next format run — the one way this formatter can fail to converge, which `formatting_converges_from_every_comment_position` checks.
 fn signature_start(signature: &LetSignature) -> Option<usize> {
     let earliest = match signature {
         LetSignature::Name {
@@ -1337,7 +1337,7 @@ fn print_term_inner(term: Term) -> Printer {
                 "}",
             ),
         ]),
-        // An arm ladder is width-adaptive: `match carry | true => b[\\1] | false => b[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines is what made a proof-heavy module half again as tall as it was written.
+        // An arm ladder is width-adaptive: `match carry | true => b[\\1] | false => b[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
         //
         // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
         Subterm::Choose(Choose { arms, default }) => {
@@ -1562,7 +1562,7 @@ fn print_top_use(item: TopUse) -> Printer {
         pure("use "),
         pure(item.name.join()),
         match item.group {
-            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line put every name on a line of its own — twenty-six for `/sys/Nat`. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
+            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
             UseGroup::Named(items) => {
                 filled("/{", items.iter().map(print_group_item).collect(), "}")
             }
@@ -1605,7 +1605,7 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
                         print_doc(item.doc),
                         marked(start, || {
                             flat([
-                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
+                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
                                 print_pub(item.vis_pub),
                                 pure("and "),
                                 pure(item.label),
@@ -1699,7 +1699,7 @@ fn print_top_mod(item: TopMod) -> Printer {
 
 /// How one module item is separated from the next, wherever a module is printed: a `use` following a `use` or a `mod` closes up against it, since an import block reads as one paragraph, and everything else takes a blank line.
 ///
-/// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like. They did: this function joined its items with a single line, so an inline `mod … end` lost every blank line written inside it on the first format run while a file kept its own.
+/// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like: an inline `mod … end` keeps every blank line written inside it, as a file does.
 pub(crate) fn between_items(previous: Option<&TopItem>, next: &TopItem) -> Printer {
     match previous {
         None => pure(""),
@@ -1951,7 +1951,7 @@ fn print_struct_field(field: StructField) -> (Option<usize>, Printer) {
 }
 
 fn print_concept_field(field: ConceptField) -> (Option<usize>, Printer) {
-    // Marked before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field used to return before marking, so its comment fell through to the type term and surfaced *inside* the field, between `use` and the type it leads.
+    // Marked before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field returning before marking would let its comment fall through to the type term and surface *inside* the field, between `use` and the type it leads.
     let start = member_start([&field.type_]);
     let begins_at = doc_start(&field.doc).or(start);
     let doc = print_doc(field.doc);
@@ -2108,7 +2108,6 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     flat([pure(keyword), params, pure(" "), app, body])
 }
 
-/// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
 /// Where an `and` witness clause begins: its earliest spanned component — a telescope parameter's type, a concept argument, or the first entry — since the keyword, the concept name and the braces record no span. [`signature_start`]'s rule for a `let` clause.
 fn witness_member_start(item: &TopWitness) -> Option<usize> {
     [
@@ -2128,6 +2127,7 @@ fn witness_member_start(item: &TopWitness) -> Option<usize> {
     .min()
 }
 
+/// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
 fn witness_entry_start(field: &WitnessField) -> Option<usize> {
     field.value.span().map(|span| span.start)
 }
@@ -2238,7 +2238,6 @@ pub(crate) fn print_case_head(case: &TopCase) -> Printer {
     flat([pure(case.label.clone()), listed("(", payload, ")"), target])
 }
 
-/// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
 /// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces — `success(A) -> Result(E, A)`, or `cons(@n: Nat, head: T, tail: Vec(T, n)) -> Vec(T, n + 1)` for an indexed family.
 ///
 /// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away.
@@ -2281,6 +2280,7 @@ pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printe
     ])
 }
 
+/// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
 pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),

@@ -9,13 +9,13 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
 
 --- The minimal encoding of `n`, least-significant byte first as the carrier reads: empty for zero, no trailing zero otherwise, so distinct numbers encode distinctly.
 ---
---- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back. The big-endian spelling this replaced was a snoc under the same plain name, which is why the carrier had no way to read a run back and why taking one apart needed a window at the far seam rather than the eliminator's own.
+--- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0 | true => x[] | false => x[Nat/to_byte(n % 256), ..of_nat(n / 256)] end;
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse.
 ---
---- One structural fold, because the least significant byte arrives first and carries a weight the fold already knows. Reading a big-endian run back needs the length before it can weigh its first byte, which is the whole reason this did not exist before.
+--- One structural fold, because the least significant byte arrives first and carries a weight the fold already knows. Reading a big-endian run back would need the length before it could weigh its first byte.
 pub let to_nat(b: Bytes) -> Nat =
     match b | x[] => 0 | x[h, .._]; ih => Byte/to_nat(h) + 256 * ih end;
 

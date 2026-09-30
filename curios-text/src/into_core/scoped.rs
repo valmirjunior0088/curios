@@ -1,10 +1,10 @@
 //! A resolution map the unit being lowered writes into, over the ones its scope already established.
 //!
-//! Name resolution reads across the boundary and writes only inside it. A `pub use` in the unit may select a name from anything in scope, so [`Scoped::get`] answers from every half; every insertion targets a module the unit declares, so [`Scoped::insert`] only ever touches its own. That asymmetry is what makes a layer sufficient where the lowerer used to copy the prelude's map per compilation and extend the copy.
+//! Name resolution reads across the boundary and writes only inside it. A `pub use` in the unit may select a name from anything in scope, so [`Scoped::get`] answers from every half; every insertion targets a module the unit declares, so [`Scoped::insert`] only ever touches its own. That asymmetry is what makes a layer sufficient, where otherwise each compilation would copy the prelude's map and extend the copy.
 //!
-//! The bases stay [`BTreeMap`]s because that is how a unit archives its resolution state — ordered, so the image is byte-reproducible — while the overlay is a [`HashMap`], which is what the resolution algorithm wants for its own churn. Borrowing them and allocating the other is the whole of the change: nothing is converted, and nothing is copied.
+//! The bases stay [`BTreeMap`]s because that is how a unit archives its resolution state — ordered, so the image is byte-reproducible — while the overlay is a [`HashMap`], which is what the resolution algorithm wants for its own churn. Borrowing them and allocating the other is all this does: nothing is converted, and nothing is copied.
 //!
-//! There is one base per unit in scope rather than one merged map, which is what keeps this a borrow: merging would copy every predecessor's table into every compilation, and copying the prelude per compilation is exactly what the environment types replaced.
+//! There is one base per unit in scope rather than one merged map, which is what keeps this a borrow: merging would copy every predecessor's table into every compilation, and copying the prelude per compilation is what the environment types avoid.
 
 use std::collections::{BTreeMap, HashMap};
 

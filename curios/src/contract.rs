@@ -341,7 +341,7 @@ impl Mode {
 }
 
 impl Cli {
-    /// The refusal a flag earns written before the command, where `--budget` and `--manifest` stood before they belonged to the commands that read them: the spelling that works, or why the command takes no such flag.
+    /// The refusal `--budget` or `--manifest` earns written before the command rather than after the one that reads it: the spelling that works, or why the command takes no such flag.
     pub(crate) fn misplaced(&self) -> Option<String> {
         let command = self.mode.contract().command;
 

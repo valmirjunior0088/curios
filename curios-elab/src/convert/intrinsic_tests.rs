@@ -234,7 +234,7 @@ fn intrinsic_bin_concat_recurses_into_operands() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-// The heads are one number spelled two ways, so the peel cannot strip them, and the nesting is what the peel used to hand back intact — leaving shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
+// The heads are one number spelled two ways, so the peel cannot strip them, and a peel handing the nesting back intact would leave shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
 #[test]
 fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
     let mut context = context();

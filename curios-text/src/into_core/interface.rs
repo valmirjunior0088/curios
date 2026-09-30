@@ -205,10 +205,9 @@ pub(crate) fn visible_binding(
     (within && declared).then(|| parent.with(label))
 }
 
-// Phase 2 + 3 entry point: seed direct public interfaces (including inductive constructor modules), then resolve every `pub use` to a fixed point. Also adds constructor modules to `table` (the direct-interface view) so phase 4 can classify private-vs-missing accesses through them. `seed` is a third parallel tree-walk (mirroring `discover`/`process_items`), so it needs the identical explicit-per-root treatment: it reads `table`'s already-correct root-level children (from `Resolved::resolve`'s explicit registration) but its own recursion only ever follows literal `TopItem::Mod` occurrences in the items it's handed — sys/std/std no longer appear there, so their own content must be seeded from an explicit call, or `public["sys"]` etc. would never exist at all (not even empty), breaking every absolute reference into them.
-/// Seed this unit's interfaces over its scope's, then resolve every `pub use` to a fixed point.
+/// Seed this unit's interfaces over its scope's — constructor modules included, which are also added to `table`, the direct-interface view, so lowering (`process_items`) can classify private-vs-missing accesses through them — then resolve every `pub use` to a fixed point. Runs after discovery has built `table` and before any item is lowered.
 ///
-/// **One resolution where there were three.** They differed in exactly which items were seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own.
+/// **One resolution for every unit.** What differs is which items are seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own. Each prefix takes an explicit `seed` call, since `seed`'s own recursion follows only the `TopItem::Mod` items it is handed.
 pub(super) fn resolve_unit<'a>(
     source: &super::UnitSource<'_>,
     own: &[Mount],
@@ -249,7 +248,7 @@ pub(super) fn resolve_unit<'a>(
     Ok(public)
 }
 
-// Phase 2. Walk the module tree (mirroring `discover`/`process_items`): for each module, seed its `PublicInterface` from the direct interface already in `table`; materialize each inductive's constructor module; and collect every `pub use`.
+// Walk the module tree (mirroring `discover`/`process_items`): for each module, seed its `PublicInterface` from the direct interface already in `table`; materialize each inductive's constructor module; and collect every `pub use`.
 fn seed(
     items: &[TopItem],
     prefix: &Qualifier,
@@ -363,7 +362,7 @@ fn seed(
                     let namespace = prefix.with(&concept.label);
 
                     let mut direct = ModuleInfo::new();
-                    // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
+                    // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here would make two superclasses collide as an empty-named duplicate declaration.
                     for field in concept.fields.iter().filter(|field| !field.is_super) {
                         direct.insert_binding(&field.label, true)?;
                     }
@@ -404,7 +403,7 @@ fn seed(
     Ok(())
 }
 
-// Phase 3. Repeatedly resolve every `pub use` against the current interface graph, inserting whatever is resolvable, until a full round adds nothing.
+// Repeatedly resolve every `pub use` against the current interface graph, inserting whatever is resolvable, until a full round adds nothing.
 fn fixed_point(
     public: &mut Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
@@ -538,7 +537,7 @@ fn insert(
     }
 }
 
-// Phase 3 post-pass. After convergence any selector still resolving to nothing is an error, classified by following its re-export chain: a chain that returns to a slot already seen is a cyclic re-export, otherwise the target is missing.
+// After the fixed point converges, any selector still resolving to nothing is an error, classified by following its re-export chain: a chain that returns to a slot already seen is a cyclic re-export, otherwise the target is missing.
 fn classify_dead(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
@@ -652,7 +651,7 @@ fn producer(
     None
 }
 
-// Walk a `use` source path to its provider module, following re-export targets. A relative path's first segment may be the current module's own child of any visibility (you are inside it, so its privacy does not apply to itself); every later segment, and every segment of an absolute path, must be a public child. Each resolved hop is guarded so a non-privileged consumer cannot follow a re-export into an internal root (`sys` or `syn`) by any spelling. On failure, returns the precise error at the offending segment, using the direct-interface table to tell private from absent; `provider` is the `Option` view for callers where that is benign.
+// Walk a `use` source path to its provider module, following re-export targets. A relative path's first segment may be the current module's own child of any visibility (you are inside it, so its privacy does not apply to itself); every later segment, and every segment of an absolute path, must be a public child. Each resolved hop is guarded so a consumer that did not declare it cannot follow a re-export into an internal root (`sys`) by any spelling. On failure, returns the precise error at the offending segment, using the direct-interface table to tell private from absent; `provider` is the `Option` view for callers where that is benign.
 fn resolve_provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,

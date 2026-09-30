@@ -109,7 +109,7 @@ pub struct Call {
 ///
 /// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `raw_comm` calls `raw_swap_step` which calls back, and only the composite path is a cycle.
 ///
-/// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`, and not `|closure|²` per round as the original fixpoint paid. The distinction was measured, on the one group that makes it matter: `/big_nat/add/raw_assoc`'s 88 calls — the corpus fixture that was `/std/BigNat` — close to 1,599 matrices, at fifty seconds per round-based closure, twenty-two semi-naive over all pairs, and under a second this way. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
+/// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`. The group that makes the difference matter is the corpus's `/big_nat/add/raw_assoc`, whose closure dwarfs its calls. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
 pub(super) fn close(calls: Vec<Call>) -> Option<Vec<Call>> {
     let mut closed: HashSet<Call> = HashSet::new();
     let mut frontier: Vec<Call> = Vec::new();

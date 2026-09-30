@@ -53,7 +53,7 @@ fn declaration_call_lowers() {
     "#);
 }
 
-// Caught during discovery now (`ModuleInfo::insert_binding`'s collision guard is unconditional, not pub-only), before `Context::insert_binding`'s later scope-conflict check would otherwise see it.
+// Caught during discovery (`ModuleInfo::insert_binding`'s collision guard is unconditional, not pub-only), before `Context::insert_binding`'s later scope-conflict check would otherwise see it.
 #[test]
 fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
     assert!(

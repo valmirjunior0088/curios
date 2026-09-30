@@ -1,12 +1,12 @@
 //! What elaboration starts from: modules already elaborated, seeded into a fresh [`Context`].
 //!
-//! Elaboration of a compilation unit happens against everything already in scope, and that scope is not a *part* of the unit — it is a set of finished modules whose items are replayed rather than re-checked. This names it, so a stage that used to take a bare `Option<&Module>` and re-seed a context by hand takes a thing that says what it is.
+//! Elaboration of a compilation unit happens against everything already in scope, and that scope is not a *part* of the unit — it is a set of finished modules whose items are replayed rather than re-checked. This names it, so a stage takes a thing that says what it is rather than a bare module and a context re-seeded by hand.
 //!
 //! # Why a type rather than a parameter
 //!
-//! The seeding is four separable jobs — recorded totality, the nominal registries, the definitions themselves, and the witness table — and every one of them was written inline in the middle of a two-hundred-line function. Any future question of the form "what does an environment give elaboration?" was answered by reading that function and noticing which blocks were guarded by `if let Some(prefix)`.
+//! The seeding is four separable jobs — recorded totality, the nominal registries, the definitions themselves, and the witness table — and naming them is what answers "what does an environment give elaboration?" without reading a function for the blocks a prefix guards.
 //!
-//! It is also what lets the answer stop being *one* module. A cached-modules design seeds from N of them, and with the shape below that is a different constructor rather than a different signature through every caller. Today N is one or zero, and the empty case is a from-scratch elaboration: `Established::nothing()` degenerates every step to the whole-module reading, so there is no second implementation to keep in agreement.
+//! It is also what lets the answer be many modules: [`Established::over`] seeds from every unit in scope, in dependency order, and the empty case is a from-scratch elaboration: `Established::nothing()` degenerates every step to the whole-module reading, so there is no second implementation to keep in agreement.
 
 use {
     super::{Context, Error, recorded_totality, register_witness},
@@ -18,7 +18,7 @@ use {
 pub struct Established<'a> {
     /// The units already elaborated, in dependency order. Empty for a from-scratch elaboration, where the unit defines every name it mentions.
     ///
-    /// Borrowed per unit rather than merged into one module: merging would copy every predecessor's items into every compilation, which is the cost retiring the splice removed.
+    /// Borrowed per unit rather than merged into one module: merging would copy every predecessor's items into every compilation.
     modules: &'a [&'a Module],
 }
 

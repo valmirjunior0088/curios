@@ -1,6 +1,6 @@
 //! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted Cont. What a `%` slot shows is the corpus's `/data/fmt`.
 //!
-//! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ersd `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend. These were three files before: the slot cases, four probes filed under `runtime`, and two more filed under an `arena` module whose subject was the vertical rather than the formatter.
+//! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ersd `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
     super::{cont_optm, run},
@@ -18,7 +18,7 @@ fn names_parse_code(ersd: &str) -> bool {
 
 #[test]
 fn print_partial_evaluation_reduces_residual() {
-    // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators, without depending on a legacy backend function-count metric.
+    // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators.
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io};
 
@@ -157,7 +157,7 @@ fn print_constant_args_collapses_at_ersd() {
     .expect("compile succeeded");
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself. The residual used to be a call to `/std/print`; `print` is an `Io`-returning wrapper now and inlines away with the rest, so what survives is the write inside the description thunk it erases to — one step further than before, not one less. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
         ersd.contains("sys/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\")"),
         "expected the folded write residual, got:\n{ersd}",

@@ -51,7 +51,7 @@ impl ErsdBuilder {
 
     /// Hand the module over as a replayable prefix: no entry block, and every other rule checked. [`resume`](Self::resume) is the inverse.
     ///
-    /// Verified through [`Module::verify_prefix`], which is [`finalize`](Self::finalize)'s check minus the one clause a prefix cannot satisfy. This hand-off used to skip verification entirely, and it is the hand-off whose result is *serialized*: the fixed prelude's image reached disk without any walk over it, so a fault in erasure or compaction was first reported against whichever program later compiled on top of it.
+    /// Verified through [`Module::verify_prefix`], which is [`finalize`](Self::finalize)'s check minus the one clause a prefix cannot satisfy; why a serialized prefix is walked at all is that method's.
     pub fn into_module(self) -> Result<Module, VerifyError> {
         assert!(
             self.open_blocks.is_empty(),
@@ -221,7 +221,7 @@ impl ErsdBuilder {
         self.module.set_entry(entry);
     }
 
-    /// Finish construction and hand the module over. A block left open, a function reserved and never defined, or a malformed module is a fault in the producer and panics; a broken recursion rule is the refusal returned. (An empty function slot is a construction fault here and an ordinary tombstone to the verifier, which is why the outstanding reservations are tracked in `reserved_functions` rather than read off the arena.)
+    /// Finish construction and hand the module over. A block left open, a function reserved and never defined, or a malformed module is a fault in the producer and panics; a broken recursion rule is the refusal returned.
     pub fn finalize(self) -> Result<Module, VerifyError> {
         if let Some(fault) = self.construction_fault() {
             fault.raise();

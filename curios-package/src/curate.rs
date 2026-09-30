@@ -1,4 +1,4 @@
-//! The store's tool, and the toolchain's only network actor.
+//! The store's tool, and the toolchain's one fetcher: `curate` and `pin` reach the network through it alone.
 //!
 //! **Why fetching lives here and nowhere else.** Opacity is a compiler property — it compares a `rev` and never interprets one — and interpretation is exactly what turning a revision into bytes requires. Putting it here is a decision rather than a concession, because acceptance is by hash: *any* transport may deliver the bytes, an untrusted one included, and a delivery that fails its hash is refused regardless of who fetched it. A separate fetcher layered above this would double the tooling for zero integrity gain. The compiler itself never fetches.
 //!
@@ -182,7 +182,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
         }
 
         for (name, row) in &package.dependencies {
-            // A `catalog` marker names a row the umbrella holds, and *that* row is what this walk must realize — so it is resolved before the dispatch below, leaving the fetchable arm the only place a fetch is decided. Resolving it after instead is what left a fetchable catalog row acquired by nobody: the marker landed in the store at a hash nothing had put there, `order` refused it naming `curate`, and `curate` had just declined to fetch it. A member marker names a directory rather than a row, so only this one indirects.
+            // A `catalog` marker names a row the umbrella holds, and *that* row is what this walk must realize — so it is resolved before the dispatch below, leaving the fetchable arm the only place a fetch is decided. Resolved after instead, a fetchable catalog row would be acquired by nobody: the marker would land in the store at a hash nothing had put there, and `order` would refuse it naming `curate`, which had just declined to fetch it. A member marker names a directory rather than a row, so only this one indirects.
             //
             // The base travels with the row because a relative `path` is relative to whoever wrote it: the umbrella's root for a catalog row, the depending package's own directory otherwise. `order` reads it the same way, at `Walk::point`'s catalog arm.
             let (row, base) = match row {
@@ -194,7 +194,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
             };
 
             let resolved = match row {
-                // A pin of a name the umbrella enumerates is `order`'s to refuse, and it does, naming the member; what this walk declines is to fetch on its behalf first, since a fetch is the one network action in the toolchain and a refused row earns none.
+                // A pin of a name the umbrella enumerates is `order`'s to refuse, and it does, naming the member; what this walk declines is to fetch on its behalf first, since a fetch is a network action and a refused row earns none.
                 Dependency::Git { .. } if governing.members.contains_key(name) => continue,
                 Dependency::Git { url, rev, hash } => {
                     reachable.packages.insert(Acquisition {
@@ -388,7 +388,7 @@ pub(crate) fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String
     ) {
         Ok(()) => git(scratch, &["checkout", "--quiet", "--detach", "FETCH_HEAD"])?,
 
-        // A server may decline to serve one revision by object name, and the whole history is the fallback rather than the default because it is the thing worth not transferring. The revision is then resolved against that history *by name*, never through `FETCH_HEAD`: a refspec-less fetch points it at the remote's default branch, so reaching for it here would deliver whatever that branch holds for any pin the shallow fetch could not serve — including one naming a revision that does not exist, which is how a wrong `rev` came to be reported as a delivery disagreeing with its `hash`.
+        // A server may decline to serve one revision by object name, and the whole history is the fallback rather than the default because it is the thing worth not transferring. The revision is then resolved against that history *by name*, never through `FETCH_HEAD`: a refspec-less fetch points it at the remote's default branch, so reaching for it here would deliver whatever that branch holds for any pin the shallow fetch could not serve — including one naming a revision that does not exist, which would report a wrong `rev` as a delivery disagreeing with its `hash`.
         Err(_) => {
             git(scratch, &["fetch", "--quiet", "origin"])?;
             git(scratch, &["checkout", "--quiet", "--detach", rev])?;

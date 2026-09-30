@@ -77,7 +77,7 @@ enum CafSource<'m> {
 /// The interpreter over a borrowed module.
 pub(super) struct Evaluator<'m> {
     module: &'m Module,
-    /// What a function closes over, derived the first time it is closed. A snapshot of the whole module answered the same question for every function at once, and was retaken every round while the module grew under reification; the handful actually closed are what this walks.
+    /// What a function closes over, derived the first time it is closed rather than from a whole-module snapshot, which would be retaken every round while the module grows under reification; the handful actually closed are what this walks.
     free_values: FreeValues<'m>,
     /// Every `Let`-defined value, module-wide, forced on demand. Forcing from an empty frame naturally declines anything not transitively closed (a parameter or binder leaks as an unknown), so this is exactly the "local CAF" generalization that lets curried chains rooted in entry-block locals fold.
     definitions: BTreeMap<ValueId, &'m Rhs>,
@@ -696,7 +696,7 @@ fn sequence_length(grain: SequenceGrain, sequence: &Value) -> Result<usize, Bail
 
 /// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A byte grain peels a `Byte`, a bit grain a `Bool`.
 ///
-/// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Measured before this existed: a recursive byte walk over a 6 000-byte literal rebuilt every suffix element by element, and its 256 levels allocated some 25 GB per evaluation round.
+/// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Rebuilding each suffix element by element would make a recursive byte walk quadratic.
 fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Value, Value)>, Bail> {
     match (grain, sequence) {
         (SequenceGrain::List, Value::List(elements)) => {

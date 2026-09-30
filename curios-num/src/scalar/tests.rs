@@ -1,4 +1,4 @@
-//! `flt_min`/`flt_max` were here, pinning that an equal pair answers by sign and that a NaN operand declines the fold. Neither is this module's to state any more: the model answers both — 754-2019's `minimum`/`maximum`, NaN propagated — and `Floating`'s own edge grid checks them against the host over every pair of the IEEE corners. What is left is the *allowance*, which has no oracle but the caller's own resources.
+//! The *allowance* a growing operation takes, which has no oracle but the caller's own resources. The float model's `min` and `max` are `Floating`'s edge grid's to check.
 
 use crate::{Integer, Natural};
 

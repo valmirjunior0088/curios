@@ -1,0 +1,5 @@
+# Types: findings
+
+Small fixes and possible bugs, worked as one pass. Each entry names where, what is wrong, the fix, its check and its size.
+
+- **The kernel refuses to classify a universe instance over a bodiless scheme.** `Sort::of`'s `Instance` arm (`curios-cert/src/kernel/sort.rs`) drops the occurrence's levels and classifies the bare head, which `Kernel::type_of`'s bare-occurrence rule refuses with `MissingUniverseInstance`; the answer is the instantiated scheme's sort, which `synth_neutral`'s own `Instance` arm already computes. Only a global declared without a body reaches the arm, since one with a body unfolds first, and only `Kernel::declare`, a public API no production code calls, declares one, so the over-refusal is latent. Fix: classify an instance through `sort_of_neutral`, as the neutral arms beside it do. Check: `sort/tests.rs`'s `a_universe_instance_over_a_bodiless_scheme_is_refused_rather_than_captured`, renamed, expects `Sort::Type(1)` at level 0, with a control at level 1 answering `Sort::Type(2)`, which a captured parameter would not. Size: quick.

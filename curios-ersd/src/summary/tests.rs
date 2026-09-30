@@ -110,7 +110,7 @@ fn only_a_total_and_effect_free_function_crosses_as_droppable() {
     }
 }
 
-/// A call through a field of a product the module constructs is a call to what the construction holds — the shape a concept method's call erases to, the method projected off its witness and applied, which pruning otherwise judged an unknown callee and kept for effect. A projection off a product the walk cannot see constructed stays unknown.
+/// A call through a field of a product the module constructs is a call to what the construction holds — the shape a concept method's call erases to, the method projected off its witness and applied, which pruning would otherwise judge an unknown callee and keep for effect. A projection off a product the walk cannot see constructed stays unknown.
 #[test]
 fn a_call_through_a_constructed_products_field_is_judged_as_that_field() {
     let mut builder = ErsdBuilder::new();

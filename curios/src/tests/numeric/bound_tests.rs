@@ -5,7 +5,7 @@ use {
     curios_pipeline::DEFAULT_STEP_BUDGET,
 };
 
-// The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided `Nat/Le` discharges by reduction. Identical in every other respect to the refused half below, which differs only in what the base arm returns.
+// The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided `Nat/Le` discharges by reduction. Identical in every other respect to the half below, which differs only in what the base arm returns.
 #[test]
 fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     assert_eq!(
@@ -20,9 +20,7 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     );
 }
 
-// The other half: the same shape with a base arm returning a *parameter*. `f(0, n)` reduces correctly to `n`, and `force_rec` discards that reduct for being `Var`-headed — its head-shape test cannot tell a stuck form from an answer that happens to be a variable — so the bound is left standing as `Nat/Le(n, f(0, n))` and refused. Returning one's own parameter is the ordinary shape of an accumulator, which is why this is easy to hit.
-//
-// Ignored until that specification's M1 lands. It is the acceptance check: this compiling, with the control above still compiling, is what the rule change has to achieve.
+// The other half: the same shape with a base arm returning a *parameter*. `f(0, n)` reduces correctly to `n`, and `force_rec` keeps that `Var`-headed reduct because it is free of the group: a head-shape test alone cannot tell a stuck form from an answer that happens to be a variable, and would leave the bound standing as `Nat/Le(n, f(0, n))`. Returning one's own parameter is the ordinary shape of an accumulator, which is why this is easy to hit.
 #[test]
 fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
@@ -37,7 +35,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     );
 }
 
-// **A window's bound is stated over a sum, and a guard still discharges it.** `Bytes/slice(b, s, l)` demands `s + l <= len(b)`, so the proposition a guard has to meet contains an addition that folds away — `0 + 10` to `10`, `1 + k` to `k + 1` — and the fold happens inside the intrinsic reduction, one step *after* the refinement store is probed. Keying a probe on the operands as written therefore missed every window bound the moment the window became `(start, length)`; `canonical_scrutinee` reduces an intrinsic's operands for exactly this reason, and these are the shapes that say so.
+// **A window's bound is stated over a sum, and a guard still discharges it.** `Bytes/slice(b, s, l)` demands `s + l <= len(b)`, so the proposition a guard has to meet contains an addition that folds away — `0 + 10` to `10`, `1 + k` to `k + 1` — and the fold happens inside the intrinsic reduction, one step *after* the refinement store is probed. Keying a probe on the operands as written would therefore miss every window bound, since a window is `(start, length)`; `canonical_scrutinee` reduces an intrinsic's operands for exactly this reason, and these are the shapes that say so.
 //
 // `over_a_definition` is the shape that needs the *key* reduced rather than merely rewritten: the base is a local definition, so the probe unfolds it to the literal and cancels the shared floor while the registered key holds neither. `canonical_key` settles that under a ceiling, once per key. `indexed` is the same story for `Bytes/get`'s strict bound.
 //
@@ -108,9 +106,9 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     );
 }
 
-// A bound whose subject genuinely diverges used to spend the whole budget and report exhaustion, where the same subject in a declared type was refused by name before anything ran. The check still runs — a subject that terminates discharges, whatever the analysis classified it — and only an exhausted one is re-read for the partial definition it names. `spin` recurses on `p + 1`, which no size-change order accepts.
+// A bound whose subject genuinely diverges is refused by name, as the same subject in a declared type is before anything runs, rather than reported as exhaustion. The check runs — a subject that terminates discharges, whatever the analysis classified it — and only an exhausted one is re-read for the partial definition it names. `spin` recurses on `p + 1`, which no size-change order accepts.
 //
-// The budget is stated rather than defaulted because `spin` exhausts whatever it is given: the default's thirty million steps bought nothing but the wait, and made this the slowest test in the suite. A hundred thousand is far more than the rest of the program elaborates in and still exhausts in well under a second.
+// The budget is stated rather than defaulted because `spin` exhausts whatever it is given, so the default would buy nothing but the wait. A hundred thousand is far more than the rest of the program elaborates in and still exhausts in well under a second.
 #[test]
 fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     let error = typecheck_within(
@@ -134,7 +132,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     );
 }
 
-// `Int/NonNeg` says `Int/ge(a, 0)`; the guard says `0 <= a`. Before the mirror they were two neutrals neither conversion nor refinement related, and the guard did not discharge the bound; the `/sys` rows now build both as `Int/le(0, a)`, and the reducer mirrors one built by hand.
+// `Int/NonNeg` says `Int/ge(a, 0)`; the guard says `0 <= a`. Unmirrored, they would be two neutrals neither conversion nor refinement relates; the `/sys` rows build both as `Int/le(0, a)`, and the reducer mirrors one built by hand.
 #[test]
 fn a_guard_spelled_the_other_way_discharges_a_bound() {
     assert_eq!(
@@ -147,9 +145,9 @@ fn a_guard_spelled_the_other_way_discharges_a_bound() {
     );
 }
 
-// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations costs about seventeen million reduction steps — sixteen times the default budget — so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
+// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations cost far more than the half-million budget these fixtures run at, though within the default, so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
-// **What this used to pin was something worse, and the difference is the point.** The budget counted transitions, and the memory a reduction allocated was bounded by nothing: fusing an all-literal concatenation recopied the whole accumulator every step, so the same program spent a quadratic volume of construction against a linear step count and exhausted the machine rather than refusing. `curios-core`'s `FUSION_CAP` and its measure removed that, and `curios`'s `tests::reduction` holds the figures. What is left is an ordinary bounded computation that happens to be bigger than the default allowance.
+// **The refusal is a bounded computation exceeding its allowance, not the machine running out.** The budget prices what a reduction builds, and `curios-core`'s `FUSION_CAP` keeps an all-literal concatenation from recopying its whole accumulator every step, so the volume of construction stays linear in the iteration count; `curios`'s `tests::reduction` holds the figures.
 //
 // The trio below is what isolates the cause. All three build the same value; they differ in whether the bound's subject is that value or a parameter standing for it, and in how much of it there is.
 #[test]
@@ -173,7 +171,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
     );
 }
 
-// **The one the campaign bought: the obvious spelling, at a size the ordinary budget admits.** No helper stands between the bound and its computed subject — the compiler runs the loop, measures what it built, and discharges `10 <= Bytes/len(built)` from the result. This is what a user reaching for `Bytes/slice` on a computed value writes, and it now works; what decides whether it works is the ordinary reduction budget, on a cost linear in the iteration count, rather than how much memory the host happens to have.
+// **The obvious spelling, at a size the ordinary budget admits.** No helper stands between the bound and its computed subject — the compiler runs the loop, measures what it built, and discharges `10 <= Bytes/len(built)` from the result. This is what a user reaching for `Bytes/slice` on a computed value writes, and what decides whether it works is the ordinary reduction budget, on a cost linear in the iteration count, rather than how much memory the host happens to have.
 #[test]
 fn a_bound_on_a_small_computed_subject_discharges() {
     typecheck_within(
@@ -190,9 +188,9 @@ fn a_bound_on_a_small_computed_subject_discharges() {
     .expect("a computed subject the budget can afford discharges its own bound");
 }
 
-// The shared figure above and below is *priced reduction work*, not transitions, and it moved with the pricing rather than being preserved: 50 000 transitions became 500 000 units. What the pair asserts is the contrast, and the contrast is untouched — the computed spelling is refused and the opaque one is ample, at one budget.
+// The shared figure above and below is *priced reduction work*, not transitions. What the pair asserts is the contrast — the computed spelling is refused and the opaque one is ample, at one budget.
 //
-// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the hundred-thousand-iteration spelling cannot finish inside is ample here. It says what it always meant: that opacity costs *nothing*, not that opacity is how a computed subject survives — and this is now the helper's last home, `tests::runtime`'s accumulation measurement having returned to the direct spelling once the closed machine made evaluating its subject an ordinary cost.
+// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the hundred-thousand-iteration spelling cannot finish inside is ample here. It says that opacity costs *nothing*, not that opacity is how a computed subject survives.
 #[test]
 fn a_bound_behind_a_parameter_evaluates_nothing() {
     typecheck_within(
@@ -213,7 +211,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
 
 /// **The two narrowings out of `Flt` state their domains, and a guard discharges them.** `Flt/to_nat` demands `/std/Flt/NonNeg` and `Flt/to_int` demands `/std/Flt/Finite`, both decided over the raw comparisons — so refining the scrutinee is what makes the obligation reduce to `True`, exactly as `Int/to_nat`'s bound does.
 ///
-/// The `try_` forms are the same discharge routed through `/std/Flt`'s deciders, which is the shape a caller who cannot guard in place reaches for. A closed literal is deliberately *not* probed here: it needs the fold, which is the next commit's, and this fixture is what says the bounds stand without it.
+/// The `try_` forms are the same discharge routed through `/std/Flt`'s deciders, which is the shape a caller who cannot guard in place reaches for. A closed literal is deliberately *not* probed here: it needs the fold, which the fixture below holds, and this one is what says the bounds stand without it.
 #[test]
 fn a_flt_narrowing_bound_discharges_behind_a_guard() {
     assert_eq!(
@@ -260,11 +258,11 @@ fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
     );
 }
 
-/// **The call the fold buys.** With `Flt` operations folding through the model, a closed narrowing discharges its own bound: `NonNeg(2.5)` reduces to `True` because the comparisons in it reduce, so nothing is written at the call site. That is exactly the one shape a guard could not stand in for, and it is why the two narrowings could not state their domains while the family was opaque.
+/// **The call the fold buys.** With `Flt` operations folding through the model, a closed narrowing discharges its own bound: `NonNeg(2.5)` reduces to `True` because the comparisons in it reduce, so nothing is written at the call site. That is exactly the one shape a guard cannot stand in for.
 ///
 /// The `refl` laws beside it are the same fold read as an equation, and each holds *here* rather than being a property of whatever machine compiled the program.
 ///
-/// `0.1 + 0.2 == 0.3` is the row worth reading twice. It is **false** in binary64 and true in binary32, so at this format the famous example is ours — and this fixture is where the difference is pinned rather than assumed. It asserted the opposite while `Flt` was binary32, and the fold is what decided the flip: a claim about floats is something the compiler checks rather than something a comment asserts.
+/// `0.1 + 0.2 == 0.3` is the row worth reading twice. It is **false** in binary64 and true in binary32, so at this format the famous example is ours — and this fixture is where the difference is pinned rather than assumed: a claim about floats is something the compiler checks rather than something a comment asserts.
 #[test]
 fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
     assert_eq!(
@@ -319,7 +317,7 @@ fn well_founded_recursion_serves_a_proposition_and_a_computation() {
     );
 }
 
-// A refused bound names what nothing discharged, not only the slot it would have filled. The binder says *where* the refusal is; the proposition says what was asked for, which is the whole of why the call was refused — and for a decided proposition keyed by a written name, `Has(layout, "sidebr")` and its kind, the binder alone reports something a reader cannot act on. The birth record carries the binder's instantiated type all along (`Context::insert_implicit`), and the witness branch beside this one has always rendered its goal; this pins that the implicit branch renders its bound too.
+// A refused bound names what nothing discharged, not only the slot it would have filled. The binder says *where* the refusal is; the proposition says what was asked for, which is the whole of why the call was refused — and for a decided proposition keyed by a written name, `Has(layout, "sidebr")` and its kind, the binder alone reports something a reader cannot act on. The birth record carries the binder's instantiated type, and the implicit branch renders its bound as the witness branch beside it renders its goal.
 #[test]
 fn an_undischarged_bound_is_named_in_the_refusal() {
     let error = typecheck(
@@ -430,7 +428,7 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     );
 }
 
-// A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`; the elaborator's reducer once bound that as a fresh definition per unfolding, so the two lengths came back spelled with differently named `code`s, the sum's cancellation met them as unequal, and `k + w <= k + w + 1` was refused although conversion identifies the two. The reducer substitutes a `let` as the kernel does, and both unfoldings spell one term.
+// A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`. The reducer substitutes a `let` as the kernel does, so both unfoldings spell one term; bound as a fresh definition per unfolding, the two lengths would come back spelled with differently named `code`s, the sum's cancellation would meet them as unequal, and `k + w <= k + w + 1` would be refused although conversion identifies the two.
 #[test]
 fn a_bound_over_one_length_reached_by_two_routes_discharges() {
     assert_eq!(

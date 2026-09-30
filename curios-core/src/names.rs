@@ -2,7 +2,7 @@
 //!
 //! A name here distinguishes one binding from another and renders for a human. It is not a place to store facts: nothing branches on a name's characters, its prefix, or its collation order. Where a consumer needs structure — which module a definition belongs to, which inductive a constructor came from — that structure is carried as a value by the site that knew it, never recovered by taking a name apart.
 //!
-//! The rule holds because the *capability* is absent, not because every site remembers it. A name's spelling was once an undocumented wire format between stages — five structured facts flattened into one `String`, each recovered by a hand-rolled parser whose correctness rested on an invariant enforced in another crate and stated nowhere near the parse. Two of those parsers were provably wrong about their own premise. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
+//! The rule holds because the *capability* is absent, not because every site remembers it. A spelling carrying structured facts is an undocumented wire format between stages, each fact recovered by a hand-rolled parser whose correctness rests on an invariant stated nowhere near the parse; `README.md` records what that cost. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
 //!
 //! **A minted identity is private to the unit that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each unit ([`Minted`]); a witness's ordinal counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
 
@@ -19,9 +19,9 @@ name!(Atom; archive);
 
 /// A witness's identity: the module that declares it, and its ordinal within that module.
 ///
-/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry, and the last of the four classes to be scoped. Pairing the ordinal with its declaring module makes two witnesses disjoint by the argument mount disjointness already carries: modules are disjoint within a mount and mounts are disjoint across units, so restoring two independently compiled units together cannot alias one onto the other.
+/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry. Pairing the ordinal with its declaring module makes two witnesses disjoint by the argument mount disjointness already carries: modules are disjoint within a mount and mounts are disjoint across units, so restoring two independently compiled units together cannot alias one onto the other.
 ///
-/// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-module ordinals depend on nothing but the unit itself.
+/// It also needs no floor: a counter seeded above the archived prelude's watermark would tie a unit's identities to *where it sat*, where per-module ordinals depend on nothing but the unit itself.
 ///
 /// **The module rather than the mount, which is finer than disjointness needs.** It is what lets a witness be *placed*: `by_item` keys an import scope by `Global`, and a documentation page asks which declarations belong to the module it is rendering. A mount answers `/std` for every witness in the standard library, which is no answer at all; the declaring module answers `/std/Tuple`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -44,7 +44,7 @@ impl WitnessId {
 }
 
 impl fmt::Display for WitnessId {
-    /// Module-qualified — the spelling two of this workspace's diagnostics already used while the identity behind it was still a bare counter, now naming the module a reader would look in rather than the mount.
+    /// Module-qualified, naming the module a reader would look in rather than the mount.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}/witness@{}", self.module.join(), self.ordinal)
     }
@@ -125,12 +125,12 @@ pub enum Global {
     Authored(Qualifier),
     /// A `satisfy` declaration. Witnesses are anonymous by design, so this is an identity rather than a manufactured name; the declaring module a diagnostic reports comes from `Definition::island`.
     ///
-    /// The identity is the declaring mount and an ordinal within it — see [`WitnessId`]. Nothing else distinguishes two witnesses, which is why the mount has to be part of it: two units minting bare ordinals from zero would alias, and aliasing one would silently rebind a coherence-table entry.
+    /// The identity is the declaring module and an ordinal within it — see [`WitnessId`]. Nothing else distinguishes two witnesses, which is why the module has to be part of it: two units minting bare ordinals from zero would alias, and aliasing one would silently rebind a coherence-table entry.
     Witness(WitnessId),
 }
 
 impl Global {
-    /// This name's canonical flattened spelling — the key the declaration registries are still keyed by. A boundary, not a rendering choice: retired when `InductType`/`Struct`/`ConceptDecl` carry a [`Global`] too.
+    /// This name's canonical flattened spelling, which a diagnostic names a declaration by; the registries are keyed by the [`Global`] itself.
     pub fn symbol(&self) -> String {
         self.to_string()
     }
@@ -153,7 +153,7 @@ impl Global {
 
 /// Who an inserted metavariable's call site was applying — the identity a report names, rather than the text it renders to.
 ///
-/// **Three facts shared one `String` field before this.** A function's flattened [`Global::symbol`], a witness's, and an operator's bare symbol were all written into one slot, then discriminated on the error path by trying `InfixOp::from_symbol` and otherwise scanning every registered witness for a matching *rendered* name. That is behavior recovered from spelling, which is the defect this module exists to prevent, and it leaked in both directions: the scan compared rendered text to decide identity, and a callee captured as text never met the shorten map or the import spellings, so a report could name `/sys/Nat/to_byte` — a path no program is permitted to write.
+/// **Three facts, three variants.** Written into one `String` slot — a function's flattened [`Global::symbol`], a witness's, an operator's bare symbol — they would be told apart on the error path by trying `InfixOp::from_symbol` and scanning every registered witness for a matching *rendered* name: behavior recovered from spelling, which this module exists to prevent. And a callee captured as text would never meet the shorten map or the import spellings, so a report could name `/sys/Nat/to_byte` — a path no program is permitted to write.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum CalleeId {
@@ -165,7 +165,7 @@ pub enum CalleeId {
     Witness(Global),
     /// An infix operator, which has no path to render at all.
     Operator(InfixOp),
-    /// A head with no name to report: a projection out of a recursive group, or a computed function. Reported as `<function>`, which is what the label fell back to when this was a string.
+    /// A head with no name to report: a projection out of a recursive group, or a computed function. Reported as `<function>`.
     Anonymous,
 }
 
@@ -173,7 +173,7 @@ pub enum CalleeId {
 ///
 /// **Within the unit, never across units.** No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing a predecessor minted can meet this unit's walk, and every unit's counters start at zero. That is what keeps a unit's stored bytes independent of what was compiled before it.
 ///
-/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it was a field each later one had to prove empty, and one the certifier could reach.
+/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Minted {

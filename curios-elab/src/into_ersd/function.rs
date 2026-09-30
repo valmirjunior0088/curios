@@ -2,7 +2,7 @@
 //!
 //! A lambda reserves its arena identity, classifies each parameter against the checked function type's telescope (an erasable parameter — a proof or a type — is dropped from the runtime signature entirely), erases its body into an owned block, and is bound by a one-member `Functions` statement at its defining position; the expression's operand is the function atom. No captures are stored anywhere — free values are derived by analysis.
 //!
-//! Application evaluates head first, then the kept arguments in order (the order the legacy pipeline sequenced at CPS conversion; under the operand law the erasure order *is* the runtime order). An application at an erasable (proof-/type-producing) function type whose callee is not a direct function reference is erased content applied to arguments — it collapses to the unit constant; a direct function reference keeps its call, because a never-returning host effect is proof-typed but must run. Arguments to erasable parameters are dropped; a kept slot whose instantiated type is a proof or a type is filled with the unit constant rather than a materialized witness (proof irrelevance — the slot stays, only its contents collapse).
+//! Application evaluates head first, then the kept arguments in order (under the operand law the erasure order *is* the runtime order). An application at an erasable (proof-/type-producing) function type whose callee is not a direct function reference is erased content applied to arguments — it collapses to the unit constant; a direct function reference keeps its call, because a never-returning host effect is proof-typed but must run. Arguments to erasable parameters are dropped; a kept slot whose instantiated type is a proof or a type is filled with the unit constant rather than a materialized witness (proof irrelevance — the slot stays, only its contents collapse).
 
 use {
     super::{
@@ -114,7 +114,7 @@ impl Lowering {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        // A concept method's wrapper is erased as the projection call it forwards to. Called through the wrapper, `bind(dict, value, k)` at top level is a call whose callee calls a closure the effect summary cannot see, so pruning judges its eager evaluation observable and keeps it and everything it reaches — `/std/Json/decode/decode` kept the whole `Json`/`Parse` web in every program. Written as `dict.bind(value, k)`, closed-term evaluation resolves the method off the known dictionary before the prune, as it did when the wrapper returned the method for a second call to apply.
+        // A concept method's wrapper is erased as the projection call it forwards to. Called through the wrapper, `bind(dict, value, k)` at top level is a call whose callee calls a closure the effect summary cannot see, so pruning would judge its eager evaluation observable and keep it and everything it reaches — through `/std/Json/decode/decode`, the whole `Json`/`Parse` web in every program. Written as `dict.bind(value, k)`, closed-term evaluation resolves the method off the known dictionary before the prune.
         if let Some(forwarded) = forwarded_method(context, apply) {
             return self.walk(context, &forwarded, expected, hint);
         }

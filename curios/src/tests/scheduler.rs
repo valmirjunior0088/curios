@@ -211,7 +211,7 @@ fn a_brackets_finalizer_runs_once_and_completion_does_not_repeat_it() {
 
 #[test]
 fn heterogeneous_existential_task_list_through_a_generic_map() {
-    // An `List` of existential-boxed tasks of DIFFERENT result types, mapped by a generic HOF whose body does an indirect closure call on a continuation pulled out of the box. The arity-1 closure definition is inlined away by the specializer, leaving the `call_ref` with no surviving definition — the codegen path that needs the call-site arity registered for `envr`/`clsr`.
+    // An `List` of existential-boxed tasks of DIFFERENT result types, mapped by a generic HOF whose body does an indirect closure call on a continuation pulled out of the box. The arity-1 closure definition is inlined away by the specializer, leaving the `call_indirect` with no surviving definition — the codegen path that needs the call-site arity among `clsr_arities`.
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, List, Io};
@@ -428,7 +428,7 @@ fn a_signal_parks_the_waiter_until_it_is_notified_and_keeps_an_early_notify() {
     );
 }
 
-// A selection takes nothing out of a source that does not win it. Both channels hold a value and both offers would answer, so the losing offer is what proves the discipline: under the fork-and-cancel selection this replaced, both arms ran, both took, and the loser's answer reached `Future/fulfill`'s already-ready arm and was dropped.
+// A selection takes nothing out of a source that does not win it. Both channels hold a value and both offers would answer, so the losing offer is what proves the discipline: under a fork-and-cancel selection both arms would run, both would take, and the loser's answer would reach `Future/fulfill`'s already-ready arm and be dropped.
 #[test]
 fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
     assert_eq!(

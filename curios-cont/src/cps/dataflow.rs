@@ -1,10 +1,10 @@
 //! The shared fixpoint substrate: a lattice of facts keyed by value identity, and the solver that iterates a client's constraints to their least fixpoint.
 //!
-//! Every analysis in this crate answers the same shape of question — what is established about a value, given what is established about the values feeding it — and before this module each one would have carried its own lattice, its own iteration, and its own convergence test. The one that existed carried all three privately inside the specializer.
+//! Every analysis in this crate answers the same shape of question — what is established about a value, given what is established about the values feeding it — and each one would otherwise carry its own lattice, its own iteration, and its own convergence test.
 //!
 //! Keys are [`ValueId`] alone, which covers more than it looks: a function's parameters and a continuation's parameters *are* values, so a single key space spans ordinary bindings, call arguments, and join points without a sum type over the three.
 //!
-//! **That keying is also the limit: a fact belongs to a value, never to a program point.** No client can state something that holds inside one [`super::Node::Switch`] arm and not outside it, so refining a scrutinee's tag where an arm establishes it is not expressible here. It is a per-program-point extension the key space could grow into rather than a property anything currently relies on, and no client to date has needed it.
+//! **That keying is also the limit: a fact belongs to a value, never to a program point.** No client can state something that holds inside one [`super::Node::Switch`] arm and not outside it, so refining a scrutinee's tag where an arm establishes it is not expressible here. It is a per-program-point extension the key space could grow into; no client needs it.
 //!
 //! **The solver has no direction of its own.** [`Solver::solve`] seeds the keys and re-runs a client-supplied round closure until a round establishes nothing new; which facts flow from which is stated entirely inside that closure. A backward analysis and a forward one therefore differ in the client and not here, and neither asks anything of this module that the other does not.
 //!

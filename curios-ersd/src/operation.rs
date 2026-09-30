@@ -1,6 +1,6 @@
 //! The scalar operation alphabet.
 //!
-//! One variant per intrinsic operation over the scalar shapes — `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving binary64), and `Handle` — transcribed one-to-one from Core's intrinsic vocabulary, with the operations that round carrying their [`Rounding`] direction as Core's do. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
+//! One variant per intrinsic operation over the scalar shapes — `Bool`, `Nat` (unbounded), `Byte`, `Int` (unbounded), `Flt` (bit-preserving binary64), and `Handle` — transcribed one-to-one from Core's intrinsic vocabulary, with the operations that round carrying their [`Rounding`] direction as Core's do. Every shape stays distinct: there are no carrier choices here (`Bool`→`Nat`, `Byte`→`Nat`, `Handle`→`Bin` belong exclusively to the lowering), and no 31-bit fact appears anywhere in this alphabet. Sequence operations live in their own family ([`super::SequenceOp`]).
 
 use curios_num::Rounding;
 

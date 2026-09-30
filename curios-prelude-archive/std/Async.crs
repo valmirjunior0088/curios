@@ -35,16 +35,18 @@ struct Guard: Type {
     release: Io({}),
 }
 
---- One condition a parked fiber waits for. Readiness is observed again whenever the scheduler becomes idle.
+--- `Wait`'s representation, sealed so a wait is built only through `Wait`'s constructors.
 induct Waiting: Type
 | handle(Handle, Interest)
 | timer(Duration)
 | probe(Io(Bool))
 end
 
+--- One condition a parked fiber waits for. Readiness is observed again whenever the scheduler becomes idle.
 pub let Wait: Type =
     Waiting;
 
+--- The conditions a fiber parks on: a handle ready for an interest, time elapsed, a cell filled, and a channel readable or writable.
 pub mod Wait
     pub use /std/Async/Channel/{readable, writable};
     use /std/{Cell, Option, Io, Handle};
@@ -724,7 +726,7 @@ let cancel_all(ts: List(Token)) -> Io({}) =
         cancel_all(more)
     end;
 
---- Every task's answer, in order, each spawned before the next is waited for.
+--- Every task's answer, in order: all of them are spawned before the first is waited for, so they run together.
 pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
     let go(i: Nat) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))

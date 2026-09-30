@@ -6,7 +6,7 @@
 
 use crate::tests::{error, run};
 
-// The shape the derived bodies of a structural concept take: match the constructors, call the concept's own method on each recursive payload. Before this it elaborated and the kernel then refused the definition it produced.
+// The shape the derived bodies of a structural concept take: match the constructors, call the concept's own method on each recursive payload.
 #[test]
 fn a_witness_resolves_through_its_own_entry() {
     let source = r#"
@@ -133,7 +133,7 @@ fn a_parameterized_witness_group_resolves_under_its_premises() {
     assert_eq!(run(source), b"1[2[]]");
 }
 
-// A member may also recurse through its own entry inside the group: the group's binder covers every member, itself included. This is also the program that once ran the CPS inliner without bound — the knot's forcing function, initializer and built closure reach one another through a definition rather than a call — and it holds the inliner's recursion verdict to what an inline copies.
+// A member may also recurse through its own entry inside the group: the group's binder covers every member, itself included. Its knot's forcing function, initializer and built closure reach one another through a definition rather than a call, so it also holds the CPS inliner's recursion verdict to what an inline copies.
 #[test]
 fn a_group_member_also_resolves_through_its_own_entry() {
     let source = r#"

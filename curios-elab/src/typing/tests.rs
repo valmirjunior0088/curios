@@ -35,7 +35,7 @@ fn display_type_mismatch_shows_both_types() {
     assert!(s.contains("Bool"), "should contain expected Bool: {s}");
 }
 
-// A witness for a parameterless concept once reused `InvalidWitnessHead` at a fabricated position 0, telling the user "parameter 1" of a concept that has none; the dedicated variant states the actual rule — key on parameter heads, or supply the concept through a local `use` binder.
+// A witness for a parameterless concept has its own variant: `InvalidWitnessHead` at a fabricated position 0 would tell the user "parameter 1" of a concept that has none, where the dedicated variant states the actual rule — key on parameter heads, or supply the concept through a local `use` binder.
 #[test]
 fn display_parameterless_witness_concept_states_the_rule() {
     let err = Error::parameterless_witness_concept("Nothing");
@@ -84,11 +84,11 @@ fn a_required_region_type_blanks_once_per_node() {
 
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.
 ///
-/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. The two disagreed once, in the direction that matters: the kernel additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, and a closed inhabitant of `False` followed. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.
+/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. A disagreement matters in one direction: a kernel that additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, would admit a closed inhabitant of `False`. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.
 ///
-/// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the kernel's copy is asked only about declarations that already passed here — which is what `Expect::NotAsked` records for `informative_prop_field` and `multi_constructor_prop` in `curios/src/tests/perimeter.rs`, a cell that file's own documentation calls "not a pass". So the comparison has to be made directly, as `curios-cert`'s `satisfy` module now does for universe contexts.
+/// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the kernel's copy is asked only about declarations that already passed here — which is what `Verdict::NotAsked` records for `informative_prop_field` and `multi_constructor_prop` in `curios/src/tests/perimeter/test_support.rs`, a cell that file's own documentation calls "not a pass". So the comparison has to be made directly, as `curios-cert`'s `satisfy` module does for universe contexts.
 ///
-/// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. The first draft of this table had no declaration and therefore compared eleven *informative* types against each other, agreeing perfectly while testing nothing; the control below is what caught it, and that is what a control is for.
+/// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. Without it the table would compare only *informative* types against each other, agreeing perfectly while testing nothing; the control below is what catches that.
 ///
 /// The table spans the shapes the rule turns on: both universes, a proof, an impredicative `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
 #[test]
@@ -120,13 +120,13 @@ fn both_checkers_decide_non_informativeness_alike() {
         ("Nat", nat()),
         ("Bool", Term::intrinsic(Intrinsic::BoolType)),
         ("List(Nat)", Term::intrinsic(Intrinsic::ListType(nat()))),
-        // The position that diverged: a term at `Type` is a type, and conversion reads it back in full.
+        // The position the exemption would get wrong: a term at `Type` is a type, and conversion reads it back in full.
         ("Type 0", Term::type_ground()),
         (
             "Type 1",
             Term::type_at(Level::zero().succ().expect("level zero has a successor")),
         ),
-        // The other half of the clause that admitted the first.
+        // The other universe, which the same exemption would cover.
         ("Prop", Term::prop()),
         ("the unit type", Term::tuple_type_unit()),
         // A proof, which is the one thing that genuinely carries nothing.
@@ -188,7 +188,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     );
 }
 
-/// A guard's resolved spelling opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does: a two-parameter lambda applied to one argument stops the walk where it stands, where opening it reached `Telescope::open`'s assertion as a panic. The control is the same lambda saturated, whose layer opens.
+/// A guard's resolved spelling opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does: a two-parameter lambda applied to one argument stops the walk where it stands, where opening it would reach `Telescope::open`'s assertion as a panic. The control is the same lambda saturated, whose layer opens.
 #[test]
 fn a_layer_whose_arguments_do_not_saturate_its_lambda_stops_the_walk() {
     let mut context = Context::with_default_budget(SYNTAX);

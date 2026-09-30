@@ -29,7 +29,7 @@ fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
     );
 }
 
-/// A memoized walk answers a shared node once, and each occurrence under its own span: one node under two spans comes back under the same two, through a capture and through a hook that spans its answer by the occurrence it replaced, while a hook's own replacement keeps the span it was given. Handed back as stored, a hit gave the second occurrence the first one's span, so a diagnostic there pointed at the other.
+/// A memoized walk answers a shared node once, and each occurrence under its own span: one node under two spans comes back under the same two, through a capture and through a hook that spans its answer by the occurrence it replaced, while a hook's own replacement keeps the span it was given. Handed back as stored, a hit would give the second occurrence the first one's span, so a diagnostic there would point at the other.
 #[test]
 fn a_memoized_walk_keeps_each_occurrence_s_span() {
     let source = Source::inline("a b c");
@@ -67,7 +67,7 @@ fn a_memoized_walk_keeps_each_occurrence_s_span() {
     assert_eq!(spans(&spanned_by_hook), (span(4), span(4)));
 }
 
-/// A rewrite that rebuilds a shared node once per *occurrence* rather than once per node turns a DAG into its expansion. This is the shape that made it matter: a string literal lowers to a chain threading a scan state, where every link mentions the previous state, so the term is linear in distinct nodes but triangular expanded. Losing the memo here cost O(n^2) nodes for an n-byte literal, and every later pass over the term inherited it.
+/// A rewrite that rebuilds a shared node once per *occurrence* rather than once per node turns a DAG into its expansion. This is the shape where it matters: a string literal lowers to a chain threading a scan state, where every link mentions the previous state, so the term is linear in distinct nodes but triangular expanded. Losing the memo here costs O(n^2) nodes for an n-byte literal, and every later pass over the term inherits it.
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
     let lead = Free::local(0, Some("lead"));
@@ -100,14 +100,14 @@ fn a_memoized_rewrite_keeps_a_shared_chain_linear() {
 
 #[test]
 fn deep_terms_compare_without_native_recursion() {
-    // Equality used to recurse once per link, so a term this tall answered by aborting the process. Two independently built spines are structurally equal but share no node, which is exactly the case that has to walk.
+    // Equality recursing once per link would answer a term this tall by aborting the process. Two independently built spines are structurally equal but share no node, which is exactly the case that has to walk.
     assert_eq!(deep_spine(0), deep_spine(0));
     assert_ne!(deep_spine(0), deep_spine(1));
 }
 
 #[test]
 fn deep_terms_are_released_without_native_recursion() {
-    // The other half: releasing a spine this tall used to recurse once per link through the derived drop of the `Rc` chain. Every term built here goes out of scope at the end of the test, which is the whole point.
+    // The other half: releasing a spine this tall would recurse once per link through the derived drop of the `Rc` chain. Every term built here goes out of scope at the end of the test, which is the whole point.
     let shared = deep_spine(0);
     let sharing = Term::tuple([shared.clone(), shared.clone()]);
 
@@ -116,7 +116,7 @@ fn deep_terms_are_released_without_native_recursion() {
 
 #[test]
 fn deep_terms_are_captured_without_native_recursion() {
-    // `capture` runs in `Plain` mode, which the iterative spine path is not gated for, so every link here is one native descent — the case the two fixtures above never reach, since equality walks a worklist and the drop is iterative. A ten-definition numeric web died here as a bare `SIGBUS` under the kernel's conversion history, which captures a whole normal form to key a goal: the walk began inside the `grown` segment and, with no check per level, ran it to the guard page. The traversal now re-enters `recurse` at every level, so it maps another segment instead.
+    // `capture` runs in `Plain` mode, which the iterative spine path is not gated for, so every link here is one native descent — the case the two fixtures above never reach, since equality walks a worklist and the drop is iterative. Under the kernel's conversion history, which captures a whole normal form to key a goal, a walk beginning inside the `grown` segment with no check per level would run it to the guard page and die as a bare `SIGBUS`; the traversal re-enters `recurse` at every level, so it maps another segment instead.
     let name = Free::local(0, None);
     let argument = Term::free_var(&name);
     let mut term = Term::free_var(&name);
@@ -234,7 +234,7 @@ fn the_per_occurrence_level_walk_asks_every_occurrence() {
     assert_eq!(asked.get(), 8);
 }
 
-/// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift` and `release` are not rows yet: they prune by `reach` and remember nothing, so over an open shared term they walk every path, which the invariants campaign's part 3 records.
+/// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift` and `release` are not rows: they prune by `reach` and remember nothing, so over an open shared term they walk every path.
 #[test]
 fn every_walk_answers_a_doubling_term_in_its_own_size() {
     let x = Free::local(0, Some("x"));

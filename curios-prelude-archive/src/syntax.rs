@@ -84,7 +84,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             call: name(&["std", "Spell", "call"]),
             record: name(&["std", "Spell", "record"]),
         },
-        // `Eql`'s method is named here as well as in `OperatorSyntax`, deliberately: `==` dispatches through it and this derivation applies it, and the two are free to move apart. Sharing one slot made them agree by coincidence rather than by decision.
+        // `Eql`'s method is named here as well as in `OperatorSyntax`, deliberately: `==` dispatches through it and this derivation applies it, and the two are free to move apart. Sharing one slot would make them agree by coincidence rather than by decision.
         eql: EqlDerivation {
             eql: field(&["std", "ops", "Eql", "Eql"], "eql"),
         },

@@ -1,20 +1,12 @@
 //! Index inversion and K: what forces a binder, and what may not excuse an omitted arm.
 
-//! End-to-end coverage for the soundness perimeter entries that nothing else guards.
-//!
-//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
-//!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
-//!
-//! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
-
 use crate::tests::run;
 
 use super::test_support::*;
 
 // The large-elimination guard again, at its *singleton* rung. A one-constructor proposition may eliminate into data only when every payload binder is non-informative — a proposition itself, or *pinned* by the constructor's index targets, as `Eq`'s `refl(@z) : (z, z)` recovers `z`.
 //
-// Occurring in an index target is not the same as being determined by one. `blur` is constant, so `Loose(0)` is inhabited by `mk(0)` and by `mk(7)` alike, and no index tells them apart — proof irrelevance identifies the two inhabitants while `extract` would observe them apart, and the gap is a closed inhabitant of `False`. `singleton_eliminable` once read `a` as forced because it *occurs* in `blur(a)` — a syntactic occurrence test — and this program printed "FORGED". Both checkers now decide the condition by the shared `pinned_by_targets` walk: a binder counts only when matching a value against the target recovers it, which `blur(a)` never does.
+// Occurring in an index target is not the same as being determined by one. `blur` is constant, so `Loose(0)` is inhabited by `mk(0)` and by `mk(7)` alike, and no index tells them apart — proof irrelevance identifies the two inhabitants while `extract` would observe them apart, and the gap is a closed inhabitant of `False`. Both checkers decide the condition by the shared `pinned_by_targets` walk: a binder counts only when matching a value against the target recovers it, which `blur(a)` never does, where a syntactic occurrence test would read `a` as forced because it *occurs* in `blur(a)` and let this program print "FORGED".
 //
 // The two ends of the discrimination are covered alongside: the same declaration with target `(0)` is rejected below, and `(a)` is a genuinely forced binder that must stay accepted.
 #[test]
@@ -27,7 +19,7 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
 
 // Proof irrelevance and index inversion disagree about a `Prop`-valued index, and the disagreement is a closed inhabitant of `False`. Conversion identifies `Two/a()` with `Two/b()` — any two inhabitants of a proposition are equal — so `Ind(Two/a())` and `Ind(Two/b())` are the same type and `coerce` is well typed. Inversion decides a case is impossible by *syntactic* constructor clash (`invert_indices` decomposes constructor forms and clashes on distinct tags, with no sort condition), so it reads `only`'s target `Two/a()` against the actual index `Two/b()` as disjoint and accepts the arm-less elimination as vacuous — at a type conversion just proved inhabited.
 //
-// Verified against the compiler of the day, while the hole was open: this source compiled (`curios compile` exited 0, and `recheck_module_suffix` on the compile path certified `let /bad : False = boom(coerce(only()))`), and running it trapped at the `unreachable` the vacuous elimination emitted, which is the runtime witness that the impossibility claim was false. The rule that refuses it now exists: a clash may only be concluded at a position whose type distinguishes its inhabitants, and the shared walk both checkers reach decides that from the declaration's own `result_sort` (`curios-analysis/src/invert.rs`), deriving nothing at all — no clash, no equations — at a `Prop`-valued position.
+// Without the rule that refuses it, this source compiles, the compile path certifies `let /bad : False = boom(coerce(only()))`, and running it traps at the `unreachable` the vacuous elimination emits, which is the runtime witness that the impossibility claim is false. The rule: a clash may only be concluded at a position whose type distinguishes its inhabitants, and the shared walk both checkers reach decides that from the declaration's own `result_sort` (`curios-analysis/src/invert.rs`), deriving nothing at all — no clash, no equations — at a `Prop`-valued position.
 //
 // The refusal is the coverage rule's: with the clash retracted, `only` is an ordinary reachable constructor, and an elimination with no arm for it is missing one it cannot prove absent.
 #[test]
@@ -47,9 +39,9 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     );
 }
 
-// The same rule one decomposition step down, which is where its implementation could most plausibly have parted from its statement. `invert_indices` decides the `Prop` condition from the *family of the values being compared* rather than from the declared type of the position, and it decides it wherever the recursion reaches rather than only at the top of one: here `Pair` is relevant and the `Two` it carries is not, so the condition has to fire inside a matching constructor's payload. Read off the index domain instead — `Pair : Type`, therefore relevant — or applied only at `top`, `Two/a()` against `Two/b()` would clash at depth exactly as it once did at the surface, and both routes below would be closed inhabitants of `False` again.
+// The same rule one decomposition step down, which is where its implementation could most plausibly have parted from its statement. `invert_indices` decides the `Prop` condition from the *family of the values being compared* rather than from the declared type of the position, and it decides it wherever the recursion reaches rather than only at the top of one: here `Pair` is relevant and the `Two` it carries is not, so the condition has to fire inside a matching constructor's payload. Read off the index domain instead — `Pair : Type`, therefore relevant — or applied only at `top`, `Two/a()` against `Two/b()` would clash at depth as it would at the surface, and both routes below would be closed inhabitants of `False`.
 //
-// Both were refused when run, and the part worth keeping is that `coerce` elaborated in each: conversion *did* identify the two `Ind` instances through the nested proof, so the premise each exploit needs was available and inversion's refusal to clash on it is the only thing that stood in the way. Null result; the probes are recorded so the rung is not re-attacked.
+// Both are refused, and `coerce` elaborates in each: conversion identifies the two `Ind` instances through the nested proof, so the premise each exploit needs is available and inversion's refusal to clash on it is the only thing in the way. The probes are recorded so the rung is not re-attacked.
 #[test]
 fn a_nested_proposition_valued_index_cannot_make_an_elimination_vacuous() {
     rejected_by(
@@ -66,7 +58,7 @@ fn a_nested_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     );
 }
 
-// Coverage's *accepting* rung, which had no fixture of its own: an omitted arm excused because its index target genuinely clashes with the scrutinee's. Every fixture above asserts the refusing direction, so a change that made every absent arm mandatory would break nothing else in this file. `AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA` is not this control: a family with no constructors leaves the coverage loop with nothing to iterate, so it exercises the loop's absence rather than its verdict.
+// Coverage's *accepting* rung: an omitted arm excused because its index target genuinely clashes with the scrutinee's. Every fixture above asserts the refusing direction, so a change that made every absent arm mandatory would break nothing else in this file. `AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA` is not this control: a family with no constructors leaves the coverage loop with nothing to iterate, so it exercises the loop's absence rather than its verdict.
 //
 // It is deliberately the nested shape, which is what discriminates the two refusals above rather than merely sitting beside them: the clash is at the same depth and differs only in that `Pair/mk(0)` and `Pair/mk(1)` are values a program can tell apart.
 #[test]
@@ -77,7 +69,7 @@ fn a_nested_relevant_clash_still_excuses_an_omitted_arm() {
     );
 }
 
-// The conflict rule through a *non-linear* target. `Eq`'s `refl(@z) : (z, z)` mentions its binder twice, so against `Eq()(false, true)` no position clashes on its own: each solves `z`, to `false` and to `true`. The deletion rule reconciles a binder forced twice, and where the two forcings definitely clash the case is unreachable — each was reached by injective steps, so the arm needs `false` to be `true`. Every refutation here was refused while the rule only ever dropped such a pair, and the library worked around it by transporting into a decided proposition. Stated over a literal, two constructors, a closed `Nat` pair, an open successor, a parameterized family and an equality the program declares itself, since the rule is the walk's and not `Eq`'s.
+// The conflict rule through a *non-linear* target. `Eq`'s `refl(@z) : (z, z)` mentions its binder twice, so against `Eq()(false, true)` no position clashes on its own: each solves `z`, to `false` and to `true`. The deletion rule reconciles a binder forced twice, and where the two forcings definitely clash the case is unreachable — each was reached by injective steps, so the arm needs `false` to be `true`. Stated over a literal, two constructors, a closed `Nat` pair, an open successor, a parameterized family and an equality the program declares itself, since the rule is the walk's and not `Eq`'s.
 #[test]
 fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
     assert_eq!(
@@ -88,7 +80,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
 
 // The control the rule above is most dangerous without, and the exploit it would be: `Two/a()` and `Two/b()` are distinct constructors, and they are proofs, so `Eq/refl()` inhabits `Eq()(Two/a(), Two/b())` by irrelevance. Reading the two forcings as a clash would make `absurd` total on an inhabited type, and `forged` a closed inhabitant of `False`. Two things stand in the way and either suffices: the forcings *convert* at `Two`, so the deletion rule keeps one before a clash is ever asked for; and the walk that would answer the clash reads the family's sort before its tags.
 //
-// The two are independent rather than one guard stated twice, and that was run at the unifier itself, in `curios-analysis`'s `tests/driven.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
+// The two are independent rather than one guard stated twice, as mutation at the unifier itself shows, in `curios-analysis`'s `tests/driven.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
 #[test]
 fn two_proofs_forced_on_one_binder_do_not_clash() {
     rejected_by(
@@ -115,7 +107,7 @@ fn two_applications_of_one_opaque_function_do_not_clash() {
     );
 }
 
-// `x * 2 + 1` is never `y * 2`, and the fold says so: a comparison of the two reduces to `false` by the gcd of their coefficients. That verdict is deliberately not the peel's `Clash`, so inversion does not read it as impossibility — `documentation/design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md` defers it as a row of its own — and this rule must not be the way it arrives.
+// `x * 2 + 1` is never `y * 2`, and the fold says so: a comparison of the two reduces to `false` by the gcd of their coefficients. That verdict is deliberately not the peel's `Clash`, so inversion does not read it as impossibility — `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md` defers it as a row of its own — and this rule must not be the way it arrives.
 #[test]
 fn a_parity_disagreement_is_not_a_clash() {
     rejected_by(
@@ -135,7 +127,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
 
 // The singleton rung's side condition at its other half: a payload that is *itself a type*. `mk(A : Type)` pins nothing, so eliminating a `Box` recovers the type it was built with while irrelevance says every `Box` is the same one — `Eq/cong` then equates any two types and `Eq/subst` transports `0` into `False`.
 //
-// The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needed backing up and where it was wrong: `carries_information` reported a component whose type is a universe as carrying nothing, on the reasoning that erasure deletes a type either way — which confuses what the runtime observes with what conversion observes. `recheck_module_verdicts` certified the hand-built equivalent of this program with zero refusals, memos on and off.
+// The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needs backing up: `carries_information` counts a component whose type is a universe as carrying information, since erasure deleting a type either way is what the runtime observes, not what conversion observes.
 //
 // No surface program reaches that gate, which is what the `NotAsked` in this row's kernel column means. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::tests` pin the predicate at both halves of the clause that admitted it.
 #[test]
@@ -146,7 +138,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     );
 }
 
-// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq()(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices` now; the elaborator used to bind an index only when it was itself a variable, never reached the `n` inside `n + 1`, and refused this where the kernel's own specialization would have certified it. The control is the same arm claiming `Eq()(n, 1)`, which learning `n := 0` must refuse, and whose refusal states the goal as the arm sees it, `Eq()(0, 1)`.
+// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq()(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices`, which reaches the `n` inside `n + 1` where binding an index only when it is itself a variable would not. The control is the same arm claiming `Eq()(n, 1)`, which learning `n := 0` must refuse, and whose refusal states the goal as the arm sees it, `Eq()(0, 1)`.
 #[test]
 fn an_arm_learns_an_outer_variable_inside_an_index() {
     let source = r#"
@@ -181,7 +173,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
     );
 }
 
-// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. The elaborator used to re-type by the goal's own substitution rather than by the case's solution, so it re-typed `h` to `Eq()(0, 7)`, accepted the arm, and handed the kernel a program the kernel refused. Both now re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, and the refusal is the elaborator's.
+// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. Both re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, so the refusal is the elaborator's; re-typing by the goal's own substitution would re-type `h` to `Eq()(0, 7)`, accept the arm, and hand the kernel a program it refuses.
 #[test]
 fn an_unreachable_arm_retypes_no_local() {
     rejected_by(

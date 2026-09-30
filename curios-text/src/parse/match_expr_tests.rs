@@ -165,16 +165,16 @@ fn matrix_match_round_trips() {
         "match o | some(b[h, ..t]; ih) => y | some(b[]) => y | none() => y end",
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
-        // The four hardcoded carriers as *headed* matches — no longer separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
+        // The four hardcoded carriers as *headed* matches — no separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
         "match b | false => x | true => y end",
         "match n | 0 => a | m + 1; ih => b end",
         "match n | 0 => a | m + 1 => b end",
-        // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and the mandatory `| _ =>` default.
+        // Nat literal dispatch: literal cases and the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t]; ih => c end",
         "match a | x[] => b | x[h, ..t]; ih => c end",
         "match a | b[] => b | b[h, ..t]; ih => c end",
-        // The `;` fold-hypothesis position takes any irrefutable pattern — a destructuring binds the fold result's fields directly, plain names round-tripping as before.
+        // The `;` fold-hypothesis position takes any irrefutable pattern — a destructuring binds the fold result's fields directly and round-trips as a plain name does.
         "match n | 0 => a | m + 1; (count, live) => count end",
         "match a | [] => b | [h, ..t]; (x, (y, z)) => x end",
         "match a | x[] => b | x[h, ..t]; (seen = s, rest = r) => s end",
@@ -201,7 +201,7 @@ fn match_motive_spellings_round_trip() {
         "match v : (_, _) => Nat\n| nil() => a\n| cons(m, x, xs) => b\nend",
         // A motive naming a top-level family, eta-expanded by elaboration.
         "match p : discriminates_eq\n| refl(z) => e\nend",
-        // A motive whose body is itself a Π type — the shape that made the old constant rung undecidable by shape.
+        // A motive whose body is itself a Π type, which no reading by shape can tell from a constant motive.
         "match b : (_) => (Nat) -> Nat\n| true => f\n| false => g\nend",
         // A motive on each hardcoded carrier, whose arity is 1 throughout.
         "match n : (m) => P(m)\n| 0 => a\n| p + 1; ih => b\nend",
@@ -377,7 +377,7 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
 
 /// A constructor pattern names its constructor bare, and the refusal says so rather than blaming the token the fall-through reached.
 ///
-/// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, the head used to parse as a `Binder` and the arm reported `Expected '=>'` against the `/` — with a `=>` plainly written further along the same line.
+/// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, it is refused for that, rather than the head parsing as a `Binder` and the arm reporting `Expected '=>'` against the `/` — with a `=>` plainly written further along the same line.
 #[test]
 fn a_qualified_constructor_pattern_is_refused_by_name() {
     for source in [

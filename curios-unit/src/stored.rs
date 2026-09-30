@@ -24,7 +24,7 @@ pub struct Record {
     pub reads: Vec<(String, String)>,
     /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
     pub predecessors: Vec<String>,
-    /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. It no longer stands between two compilers filing one slot at once — a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
+    /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. Concurrent filing is not its concern: a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
     pub unit: String,
 }
 

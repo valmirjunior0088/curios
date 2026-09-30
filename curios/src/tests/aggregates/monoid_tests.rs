@@ -33,7 +33,7 @@ fn list_fold_is_a_left_loop() {
 
 #[test]
 fn list_map_fills_every_slot() {
-    // `List/map` erases to a single O(n) fill loop (`emit_map`): size the result from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
+    // `List/map` emits as the shared `$list/map` helper, one fill loop: size the result from the source's length, allocate once, then write `f(src[i])` into slot `i` through the closure table. A non-identity `f` (`+1`) over `[10, 20, 30]` must fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
         use /std/{Str, Nat, List, Option, Io};
         let xs : List(Nat) = List/map([10, 20, 30], (n) => Nat/add(n, 1));
@@ -107,7 +107,7 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 
 #[test]
 fn a_literal_run_is_the_same_value_however_it_is_grouped() {
-    // **The premise the fusion cap rests on, stated as a program.** Reduction fuses an all-literal concatenation into one value today (`normalize_concat`); capping that by operand size leaves the `Concat` node standing instead, so a capped spelling and the literal it would have fused to have to remain definitionally equal. They do because `bin_atoms`/`list_atoms` flatten a concatenation into segments and `push` merges every pair of adjacent literal runs (`core::spine`), so both groupings decompose to the same segment list before anything is compared.
+    // **The premise the fusion cap rests on, stated as a program.** Reduction fuses an all-literal concatenation into one value (`normalize_concat`) up to a cap on operand size, past which the `Concat` node stands instead, so a capped spelling and the literal it would have fused to have to remain definitionally equal. They do because the peel reads a concatenation as a word (`curios-core`'s `words`), whose `push` merges every pair of adjacent literal runs, so both groupings decompose to the same segment list before anything is compared.
     //
     // **Each law carries a symbolic tail, and that is what makes this a test.** Without it both sides are all-literal, reduction fuses each into one value on the way in, and `refl` checks without the peel having decided anything. With it neither side fuses, so the peel is the only thing that can equate them. `curios-core`'s `spine` tests state the same premise directly against the peel; this states it where *both* checkers see it, since a program here is elaborated and then certified.
     //
@@ -144,7 +144,7 @@ fn a_regrouped_run_still_respects_its_order() {
 
 #[test]
 fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
-    // **The law above past a head the peel cannot strip.** `a_literal_run_is_the_same_value_however_it_is_grouped` regroups behind chunks that are syntactically their own twin, which the prefix step peels before the nesting matters. Here the leading chunks are convertible but unlike — `g(a + b)` against `g(b + a)`, and two instances of one universe-polymorphic fold — so nothing peels, and the peel used to hand the nesting back intact for shape congruence to refuse on operand count. Regrouping in the peel (`core::spine`) hands back both flat spellings instead, and the operand comparison then decides the heads.
+    // **The law above past a head the peel cannot strip.** `a_literal_run_is_the_same_value_however_it_is_grouped` regroups behind chunks that are syntactically their own twin, which the prefix step peels before the nesting matters. Here the leading chunks are convertible but unlike — `g(a + b)` against `g(b + a)`, and two instances of one universe-polymorphic fold — so nothing peels, and a peel handing the nesting back intact would leave shape congruence to refuse on operand count. Regrouping in the peel (`core::spine`) hands back both flat spellings, and the operand comparison then decides the heads.
     //
     // Stated as a program because the two checkers meet it in turn: an elaborated `refl` is certified by the kernel, so both peels are exercised, and the polymorphic fold is the shape a proof about a structural `reverse` reaches on its first inductive step.
     let source = r#"
@@ -168,7 +168,7 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
 
 #[test]
 fn a_length_and_a_window_do_not_depend_on_grouping() {
-    // **The law the measure adds, stated where both checkers see it.** `Bin/len` now answers a wholly-literal spine by folding the operands' own lengths, and `Bin/get`/`Bin/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
+    // **The law the measure adds, stated where both checkers see it.** `Bin/len` answers a wholly-literal spine by folding the operands' own lengths, and `Bin/get`/`Bin/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
     //
     // Each law puts the *same* run on both sides under different groupings, so what is being proven is precisely that grouping is invisible. `curios-core`'s `reduce::intrinsic` tests state the same thing against the folds directly and over more shapes; this is the both-checkers half.
     let source = r#"
@@ -193,9 +193,9 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
 
 #[test]
 fn bin_slice_is_a_monoid_citizen() {
-    // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a chunk carrying its own length, whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-length window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
+    // `Bytes/slice` rides the free-monoid spine (`curios-core`'s `words`) as a measured `Window` — a chunk carrying its own length, whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-length window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     //
-    // `split` is where the window's whole bound discipline is visible at once. It takes **one** hypothesis where the `(start, end)` window took three, because a count cannot spell a reversed range; and the fused window is passed `@total` — *the second window's own proof, unchanged*. That only type-checks because `(s + l1) + l2` and `s + (l1 + l2)` are convertible, which is the equation `peel_nat_terms` decides. The first window's bound is the one thing actually derived, and only to weaken the total.
+    // `split` is where the window's whole bound discipline is visible at once. It takes **one** hypothesis, where a `(start, end)` window would need three, because a count cannot spell a reversed range; and the fused window is passed `@total` — *the second window's own proof, unchanged*. That only type-checks because `(s + l1) + l2` and `s + (l1 + l2)` are convertible, which is the equation `peel_nat_terms` decides. The first window's bound is the one thing actually derived, and only to weaken the total.
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
         let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
@@ -322,7 +322,7 @@ fn bin_len_reduces_across_a_cons_spine() {
 
 #[test]
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
-    // `peel_front` (`core::free_monoid`) recognised an append only over the EMPTY base, so `append(x[0x48], b)` — what `x[0x48, b]` lowers to — went opaque and no eliminator over it could reduce, while `core::spine`'s two-value peel had always decoded the same term. The `BinConcat` arm beside it already peeled its first operand and rejoined the residual; the append arm now does the same. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
+    // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(x[0x48], b)` — what `x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BinConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Bool, Bits, Option, Io};
         let lead : Byte = 0x48;
@@ -351,7 +351,7 @@ fn nat_sub_peels_a_successor_spine() {
 
 #[test]
 fn list_concat_is_a_free_monoid() {
-    // `peel_arr` (core::spine) makes `List` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `ListConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
+    // `peel_list` (`curios-core`'s `spine`) makes `List` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `ListConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
     let source = r#"
         use /std/{Str, Eq, List, Io};
         let assoc(@T : Type, a : List(T), b : List(T), c : List(T))
@@ -370,7 +370,7 @@ fn list_concat_is_a_free_monoid() {
 
 #[test]
 fn list_concat_length_clash_is_rejected() {
-    // Unlike `Bytes`, a `List` element disagreement is NOT a clash (elements are terms that may be convertible) — but a literal *length* mismatch still is: `[x, y]` and `[x]` peel their shared head and leave one side longer, a definite `Clash`, so the `refl` is rejected. Exercises `peel_arr`'s clash against the empty identity (the element-mismatch case instead defers to the structural arm, kept sound by `Stuck` fall-through).
+    // Unlike `Bytes`, a `List` element disagreement is NOT a clash (elements are terms that may be convertible) — but a literal *length* mismatch still is: `[x, y]` and `[x]` peel their shared head and leave one side longer, a definite `Clash`, so the `refl` is rejected. Exercises `peel_list`'s clash against the empty identity (the element-mismatch case instead defers to the structural arm, kept sound by `Stuck` fall-through).
     let source = r#"
         use /std/{Str, Eq, List, Io};
         let bad(@T : Type, x : T, y : T) -> Eq()([x, y], [x]) = Eq/refl();
@@ -392,7 +392,7 @@ let _ = std/Io/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
     );
 }
 
-// A position past the first two operands of a concatenation is the third operand's start, however the second operand's width is spelled. The offset spells it through `Char/to_utf8(c)` and the operand through `Str/of_char(c).bytes`; the peel compares positions by spelling, and the elaborator's reducer once named `to_utf8`'s `let` afresh on each unfolding, so the two never met and the drop stayed stuck. The reducer substitutes a `let` as the kernel does.
+// A position past the first two operands of a concatenation is the third operand's start, however the second operand's width is spelled. The offset spells it through `Char/to_utf8(c)` and the operand through `Str/of_char(c).bytes`; the peel compares positions by spelling, so a reducer naming `to_utf8`'s `let` afresh on each unfolding would leave the two never meeting and the drop stuck. The elaborator's reducer substitutes a `let` as the kernel does.
 #[test]
 fn a_position_past_a_character_meets_the_operand_after_it() {
     assert_eq!(

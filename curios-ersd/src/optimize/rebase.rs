@@ -10,7 +10,7 @@
 //!
 //! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid, every row of which commutes, so the recursion may sit on either side of the combine.
 //!
-//! **The licence is associativity and an erasure-stable identity, because nothing here is partial.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. That once cost a third condition, monotone definedness, because a result leaving the i31 refused: a reversed order could refuse where the written one computed, and a multiplication row turned `((1 * 0) * 2¹⁶) * 2¹⁶` into a trap. `Nat` and `Int` are unbounded at run time now ([Nat and Int are an i31 until they outgrow it](../../../documentation/design/toolchain/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so every partial of every order is defined, and a reversed order costs at most the size of what its partials build.
+//! **The licence is associativity and an erasure-stable identity, because nothing here is partial.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. A bounded carrier would need a third condition, monotone definedness, since a reversed order could refuse where the written one computes — a multiplication row would turn `((1 * 0) * 2¹⁶) * 2¹⁶` into a trap. `Nat` and `Int` are unbounded at run time ([Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so every partial of every order is defined, and a reversed order costs at most the size of what its partials build.
 
 #[cfg(test)]
 mod tests;
@@ -28,9 +28,9 @@ use {
 ///
 /// Every row is an associative operation with an identity the erased stages agree on: addition and multiplication on both carriers, and `or`.
 ///
-/// No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
+/// No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up.
 ///
-/// **Every row commutes, and `recognize` relies on it**: the combine is accepted with the recursion on either side. A future non-commutative row — an append over one carrier — must re-introduce the placement rule beside its registration: the recursion only on the right, the addend folded as `acc ⊕ k`.
+/// **Every row commutes, and `recognize` relies on it**: the combine is accepted with the recursion on either side. A non-commutative row — an append over one carrier — would need the placement rule beside its registration: the recursion only on the right, the addend folded as `acc ⊕ k`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Monoid {
     NatAdd,
@@ -386,7 +386,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
 
         // A trailing dispatch whose result the block returns: its arms are tail positions.
         //
-        // **This list is a pattern, so nothing checks it is complete.** `UnconsSequence` was missing when it landed, and a sequence case split therefore stopped being walked into — the recursion under it kept its deferred context, stayed non-tail, and overflowed the runtime stack at depth. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
+        // **This list is a pattern, so nothing checks it is complete.** A dispatch form missing from it is not walked into, so the recursion under it keeps its deferred context, stays non-tail, and overflows the runtime stack at depth. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
         if let Some((
             _,
             Statement::Let {

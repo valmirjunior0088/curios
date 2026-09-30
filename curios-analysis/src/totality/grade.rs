@@ -14,9 +14,9 @@ use {
 
 /// Whether shape reading may force `term`.
 ///
-/// [`forceable`] answers the two halves every analysis on this seam shares — whether the head could move, and whether the term is closed enough to reduce. This adds totality's own, and it is the whole of what replaced a step count: **a `rec` head is refused.** The group under analysis is the one whose termination is being decided, and a group already in scope may be legitimately partial — `check_rec_group` demands descent only where a member is erased, so `/std/Async`'s scheduler and `/std/Json/decode` classify `Partial` and are still defined. Unfolding either can spin, and refusing makes the read stop on its own terms instead of by exhausting the reduction budget.
+/// [`forceable`] answers the two halves every analysis on this seam shares — whether the head could move, and whether the term is closed enough to reduce. This adds totality's own, and it is what bounds the read in place of a step count: **a `rec` head is refused.** The group under analysis is the one whose termination is being decided, and a group already in scope may be legitimately partial — `check_rec_group` demands descent only where a member is erased, so `/std/Async`'s scheduler and `/std/Json/decode` classify `Partial` and are still defined. Unfolding either can spin, and refusing makes the read stop on its own terms instead of by exhausting the reduction budget.
 ///
-/// Measured inert: across the corpus not one of 288 load-bearing unfoldings had a `rec` head, so this refuses nothing that was being read and is a determinism guarantee rather than a restriction.
+/// Measured inert — no load-bearing unfolding in the corpus has a `rec` head — so this is a determinism guarantee rather than a restriction.
 fn readable(term: &Term) -> bool {
     forceable(term) && !matches!(&**term, Subterm::Rec(_))
 }
@@ -35,11 +35,11 @@ pub struct SizeContext {
     pub(super) refined: BTreeMap<Free, Shape>,
     /// The binders an enclosing arm has established are not zero.
     ///
-    /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted while looping forever at zero.
+    /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `let loop(n: Nat) -> Nat = loop(n / 10);` would be accepted while looping forever at zero.
     pub(super) nonzero: BTreeSet<Free>,
     /// The binders the enclosing inductive arms bound as constructor payloads.
     ///
-    /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as it always did.
+    /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as any other application does.
     pub(super) payloads: BTreeSet<Free>,
     /// One entry per scope [`SizeContext::enter`] has opened and [`SizeContext::exit`] has yet to close.
     pub(super) scopes: Vec<Undo>,
@@ -300,7 +300,7 @@ impl<E: Env> Grader<'_, E> {
                 self.arithmetic_shape(left, right, &Natural::from(1usize))?
             }
 
-            // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding, as every application did before.
+            // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding.
             Subterm::Apply(_) => {
                 let (head, _) = spine(term);
                 if let Subterm::Var(var) = &*head
@@ -323,7 +323,7 @@ impl<E: Env> Grader<'_, E> {
 
     /// Read `left op right` as a decrease on the binder `left` stands for.
     ///
-    /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread — which is what this term read as before the rule existed.
+    /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread.
     fn arithmetic_shape(
         &mut self,
         left: &Term,
@@ -387,7 +387,7 @@ impl<E: Env> Grader<'_, E> {
                     let tail = match heads.is_empty() {
                         // Nothing peeled: the whole term is what stuck, and dispatching it back through `shape_of` would land right here again — force it instead.
                         true => self.unfolded_shape(&stuck)?,
-                        // The remainder after a peeled prefix is an arbitrary term — a binder, another literal spelling, an application — and gets the full dispatch, exactly as the tail of every peeled layer did when the layers were nested nodes.
+                        // The remainder after a peeled prefix is an arbitrary term — a binder, another literal spelling, an application — and gets the full dispatch.
                         false => self.shape_of(&stuck)?,
                     };
                     break Ok(Shape::elem_run(carriers, heads, tail));
@@ -398,11 +398,11 @@ impl<E: Env> Grader<'_, E> {
 
     /// Unfold weak-head steps until the term reads as a shape, or stops moving.
     ///
-    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/big_nat/mul/small` and `/std/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
+    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), `/sys` intrinsic wrappers and ordinary definitions all do. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
     ///
     /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the kernel grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle: the force is a [`Probe`], so a term with no reading is opaque and the budget's refusal propagates as the analysis's own.
     ///
-    /// Removing the count changed no verdict in the corpus, and the reason is worth keeping: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call and the count bounded *re-entries* here rather than unfoldings. Measured, 286 of 288 load-bearing unfoldings re-entered once and none more than twice, against a bound of three. What the removal buys is a stated condition in place of a number, not reach.
+    /// A count here would bound *re-entries* rather than unfoldings: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call. The stated condition above is what bounds the read instead, and no verdict in the corpus depends on a number.
     fn unfolded_shape(&mut self, term: &Term) -> Result<Shape, E::Error> {
         if !readable(term) {
             return Ok(Shape::Opaque);

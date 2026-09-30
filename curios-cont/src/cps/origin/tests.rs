@@ -50,7 +50,7 @@ fn a_construction_reaches_its_parameter_exactly() {
     assert_eq!(origins[&param], Origin::of_width(2));
 }
 
-/// The loop the specification exists for: one edge enters the join with a construction and the backedge passes the join's own parameter back unchanged. The alias contributes the parameter's own fact, so the region stays exact rather than demanding a construction on every edge.
+/// The loop the value-lifetime decision exists for: one edge enters the join with a construction and the backedge passes the join's own parameter back unchanged. The alias contributes the parameter's own fact, so the region stays exact rather than demanding a construction on every edge.
 #[test]
 fn a_loop_alias_edge_keeps_the_region_exact() {
     let mut built = ValueId(0);
@@ -103,7 +103,7 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
     assert_eq!(origins[&param], Origin::of_width(2));
 }
 
-/// Two constructions of different arities merging at one parameter: the flow is a variant, and the fact carries both widths so the rewrite can travel it at the wider one and fill the narrower edge. This read *replaced* one that answered `Opaque` — merging widths is what the variant-width capability is, and the pair below is the shape of every tagged row whose constructors carry different payload counts.
+/// Two tuple constructions of different arities merging at one parameter: the fact carries both widths so the rewrite can travel it at the wider one and fill the narrower edge. The door leaves this shape where a large elimination's arms build tuples of different arity; a family never does, since its constructions are padded to one row.
 #[test]
 fn merged_arities_travel_as_a_variant() {
     let mut param = ValueId(0);

@@ -230,7 +230,7 @@ fn top_foreign_rejects_nested_list() {
     );
 }
 
-/// The wire grammar's own refusals, which used to reach no reader: uncommitted, each left the parameter list to come back empty and the `)` after it to complain about a paren for a mistake about a type.
+/// The wire grammar's own refusals reach the reader: uncommitted, each would leave the parameter list to come back empty and the `)` after it to complain about a paren for a mistake about a type.
 #[test]
 fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
@@ -726,7 +726,7 @@ fn top_let_group_mixed_pub() {
 
 #[test]
 fn rec_is_an_ordinary_identifier() {
-    // Not a keyword any more, so it names a binding like any other word.
+    // `rec` is no keyword, so it names a binding like any other word.
     let entrypoint = "let rec : Type = Type;\nrec".parse::<Entrypoint>().unwrap();
     assert!(matches!(&entrypoint.module.items[0], TopItem::Let(items) if items[0].label == "rec"));
 }
@@ -749,7 +749,7 @@ fn a_test_declaration_parses_and_round_trips() {
 
 #[test]
 fn a_test_takes_no_parameters() {
-    // A name and a description, with nothing between them. A telescope would say the claim holds of every instantiation, which nothing but a proof decides — that is a `let` whose type states the claim — so the parentheses that used to hold one are not part of this form, empty ones included.
+    // A name and a description, with nothing between them. A telescope would say the claim holds of every instantiation, which nothing but a proof decides — that is a `let` whose type states the claim — so parentheses are not part of this form, empty ones included.
     assert!(
         "test add_commutes(n: Nat, m: Nat) = Test/assert(true);"
             .parse::<Module>()

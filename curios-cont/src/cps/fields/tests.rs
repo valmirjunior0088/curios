@@ -330,7 +330,7 @@ fn a_candidate_behind_a_sweep_mate_waits_for_the_next_round() {
     );
 }
 
-/// The full chain erases the product: after optimization no two-field tuple construction survives anywhere — not the seed, not the arm's rebuild, not the split's own head materialization. This is the campaign's focused acceptance fixture for continuation scalar replacement.
+/// The full chain erases the product: after optimization no two-field tuple construction survives anywhere — not the seed, not the arm's rebuild, not the split's own head materialization. This is the focused acceptance fixture for continuation scalar replacement.
 #[test]
 fn a_loop_carried_product_erases_through_the_chain() {
     let (mut module, ..) = loop_module();
@@ -461,7 +461,7 @@ fn a_mixed_origin_is_declined() {
     );
 }
 
-/// The loop-carried *variant*: a one-tuple nullary constructor enters the header and a four-tuple payload constructor circulates through it, so no exact product ever described the parameter. The UTF-8 scan state of `/std/Str`, in miniature.
+/// The loop-carried flow of two widths: a one-tuple enters the header and a four-tuple circulates through it, so no exact product describes the parameter. The door builds this shape from structural tuples alone — a large elimination whose arms build tuples of different arity — since every construction of a family is padded to its row.
 fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
     let mut module = Module::default();
     let narrow = module.add_value(Some("narrow".into()));
@@ -655,7 +655,7 @@ fn a_loop_carried_variant_erases_through_the_chain() {
     );
 }
 
-/// A known function whose variant argument is *itself* a merged flow — `Handle/Read`'s three constructors joining at a `choose` before the call, which is where this fixture comes from.
+/// A known function whose argument is *itself* a merged flow — tuples of two widths joining at a `choose` before the call.
 fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     let mut module = Module::default();
     let callee_param = module.add_value(Some("callee/param".into()));
@@ -804,7 +804,7 @@ fn projections_within_bounds(module: &Module) -> bool {
 
 /// A call site whose argument merges two widths cannot be taken apart there, because no fixed number of projections is right on both paths — and the narrow one would be read past its end.
 ///
-/// **This is a regression fixture with a runtime failure behind it.** Splitting at the region's widest width and projecting every edge at that width compiled cleanly, verified cleanly, and trapped `programs`-level `Handle/Read` handling at run time, where `eof()` rides a one-tuple beside `chunk(b)`'s two. The decline is not permanent: the merging join is a region of its own, and once it is split the call's argument is a materialization of one settled width.
+/// **A runtime failure stands behind it.** Splitting at the region's widest width and projecting every edge at that width compiles cleanly, verifies cleanly, and traps at run time, reading the one-tuple past its end. The decline is not permanent: the merging join is a region of its own, and once it is split the call's argument is a materialization of one settled width.
 #[test]
 fn a_call_whose_argument_merges_widths_is_declined_until_the_merge_is_split() {
     let (mut module, callee, param) = merged_argument_module();
@@ -900,7 +900,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
             args: vec![Atom::Value(head)],
         }),
     });
-    // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces rather than one it no longer can.
+    // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces.
     let slice = module.add_node(Node::LetIntrinsic {
         result: tail,
         op: Intrinsic::BinRest(curios_num::Grain::X),
@@ -974,7 +974,7 @@ fn a_suffix_walk_virtualizes_its_windows() {
         "and the split is recorded",
     );
 
-    // Counted over *every* window-producing shape, not just the one this fixture happens to build: an assertion that a form has vanished passes vacuously the moment the lowering stops emitting that form, which is the inertness this codebase keeps recording.
+    // Counted over *every* window-producing shape, not just the one this fixture happens to build: an assertion that a form has vanished passes vacuously the moment the lowering stops emitting that form.
     let mut slices = 0;
     let mut extents = 0;
     for node in module.nodes().iter().flatten() {
@@ -996,7 +996,7 @@ fn a_suffix_walk_virtualizes_its_windows() {
     );
 }
 
-/// A region with one hostile use — the window escaping into a return — is declined whole, the first implementation's documented limit.
+/// A region with one hostile use — the window escaping into a return — is declined whole, the documented limit.
 #[test]
 fn a_window_region_with_a_hostile_use_declines() {
     let (mut module, header) = walk_module();
@@ -1153,7 +1153,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
 
 /// A family's parameter is taken apart at its callers exactly as a product's is: a padded slot crosses the function boundary as the null every parameter admits, so a narrower constructor at the call site is no obstacle.
 ///
-/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s command type was an inductive whose `issue` was split into a worker over its three slots once its callers' arguments became visible constructions, and the call site projected every slot of a nullary constructor — two of them the fillers the door pads one with — into what were then non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag. The split was declined for families until every parameter became nullable; this pins that it is admitted again. That type is a struct now and pads nothing, so the end-to-end half of this pin is `a_padded_variant_survives_a_split_join_at_run_time`, which writes its own family rather than borrowing a library's.
+/// **A runtime failure stands behind it.** The call site projects every slot of a nullary constructor — the fillers the door pads one with among them — into the worker's parameters, so a non-null parameter would dereference null before the callee dispatches on the tag; every parameter is nullable, which is what admits the split for families. The end-to-end half of this pin is `a_padded_variant_survives_a_split_join_at_run_time`.
 #[test]
 fn a_family_parameter_is_split_into_a_worker() {
     let (mut module, consume) = row_consumer(vec![Slot::Tag, Slot::Opaque], true);

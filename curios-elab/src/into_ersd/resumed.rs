@@ -2,7 +2,7 @@
 //!
 //! Erasure of a compilation unit resumes over what earlier erasures established, and that scope has *two* halves which must describe the same thing. The [`ErasedArena`] is the arena the builder resumes over and the environment mapping names to operands; the [`Module`]s beside it are the Core those operands were erased from, re-seeded so the unit's own re-derived types reduce through them.
 //!
-//! Pairing them in one value is the point. They were two parameters, and nothing said they corresponded — hand `erase_unit` the Core of one prelude and the arena of another and every name resolves to an operand from a different program, silently. It held only because the single caller took both from one `Prelude`, which is a property of that caller rather than of this signature. Now there is one construction site to get right instead of one per call.
+//! Pairing them in one value is the point: as two parameters nothing would say they correspond — hand `erase_unit` the Core of one prelude and the arena of another and every name resolves to an operand from a different program, silently. One value is one construction site to get right, instead of one per call.
 //!
 //! The two halves scale differently, and deliberately. The cores are borrowed **one per unit**, because merging them would copy every predecessor's items into every compilation. The arena is **one, threaded**: each unit's erasure resumes over the arena the previous one produced, so what it accumulates is already the whole scope and there is nothing to combine.
 
@@ -13,7 +13,7 @@ use {
 
 /// Earlier erasures' output, as scope for erasing another unit.
 pub struct Resumed<'a> {
-    /// The Core each arena contribution was erased from, in dependency order. Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating per compilation walked the whole standard library again inside the erasure context's step budget.
+    /// The Core each arena contribution was erased from, in dependency order. Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating per compilation would walk the whole standard library again inside the erasure context's step budget.
     cores: &'a [&'a Module],
     arena: ErasedArena,
 }

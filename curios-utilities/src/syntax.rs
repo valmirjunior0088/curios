@@ -2,7 +2,7 @@
 //!
 //! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!
-//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and what the destructuring once caught, are `README.md`'s decisions.
+//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and why every enumeration destructures, are `README.md`'s decisions.
 
 use crate::{InfixOp, Qualifier};
 
@@ -24,7 +24,7 @@ impl SyntaxName {
         Qualifier::from(self.segments.iter().copied())
     }
 
-    /// The flattened spelling, for the nominal registries `curios-elab` still keys by `String`, and for diagnostics. Rendering, not parsing: it goes out and never back in. Retired with those keys.
+    /// The flattened spelling, for diagnostics. Rendering, not parsing: it goes out and never back in.
     pub fn symbol(self) -> String {
         self.qualifier().join()
     }
@@ -46,7 +46,7 @@ pub struct ConceptField {
 
 /// The compiler-known names, grouped by the surface feature that emits them.
 ///
-/// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot — where a positional constructor once let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
+/// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot, where a positional constructor would let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
     pub option: OptionSyntax,
@@ -326,7 +326,7 @@ pub struct ProofSyntax {
     pub true_type: SyntaxName,
     /// The reflection of a decided comparison into a proposition — `Holds(b)`, which reduces to [`ProofSyntax::true_type`] on a refined scrutinee, and that is what lets an obligation be discharged without a written proof.
     ///
-    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — made the roster reach into a root above it for what it could spell itself.
+    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — would make the roster reach into a root above it for what it can spell itself.
     pub holds: SyntaxName,
 }
 
@@ -474,7 +474,7 @@ impl TestSyntax {
 ///
 /// A struct of rows rather than a list of them, for the reason this whole registry is one — a row is a named slot, so a derivation added here is a compile error at every fill site until it is filled, where a list would have let a missing row pass every check. That is the drift the roster exists to end, and a list would have relocated it rather than removed it.
 ///
-/// The tag a body writer dispatches on and the vocabulary `curios-text`'s scheduler needs are the same value, so the two can no longer disagree: before this, the writer read one registry group and the scheduler restated its names in a parallel `if`-chain that nothing checked.
+/// The tag a body writer dispatches on and the vocabulary `curios-text`'s scheduler needs are the same value, so the two cannot disagree.
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationSyntax {
     pub spell: SpellDerivation,

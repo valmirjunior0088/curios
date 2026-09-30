@@ -1,6 +1,6 @@
 //! The Curios corpus: each `curios/src/tests/corpus/<unit>.crs` mounted as a unit, compiled once as its own test program, and every test it declares run in an instantiation of its own.
 //!
-//! What this replaces is one full compile per library fixture. A unit's tests share one `Fold::tests` and one [`to_cwasm`], so the prelude-linked baseline each fixture used to pay alone is paid once for the whole unit, and a run of the precompiled module is milliseconds. The units stay separate for two reasons that pull the same way: cargo runs them in parallel, and a compile error costs one unit's results rather than the corpus entire.
+//! A unit's tests share one `Fold::tests` and one [`to_cwasm`] rather than a full compile per fixture, so the prelude-linked baseline is paid once for the whole unit, and a run of the precompiled module is milliseconds. The units stay separate for two reasons that pull the same way: cargo runs them in parallel, and a compile error costs one unit's results rather than the corpus entire.
 //!
 //! Nothing here reaches `curios-package`. A unit is mounted from a header and a directory directly, so the corpus needs no manifest and is not a project — `wonder` and `curios test` do not reach these files, and `cargo test` is the channel, exactly as it is for the `/std` sources they exercise.
 

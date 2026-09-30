@@ -53,15 +53,13 @@ Every comma-separated list — parameter and argument lists, tuple and struct fi
 
 An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`.
 
-A name beginning with `_` is one the author keeps unused: [`curios lint`](usage.md#lint) never reports an `_`-prefixed binder or declaration, nor anything inside an `_`-prefixed module. `_` alone is a binder that names nothing.
+A name beginning with `_` is one the author keeps unused: [`curios lint`](usage.md#lint) never reports an `_`-prefixed binder or declaration, nor anything inside an `_`-prefixed module. `_` alone is a binder that names nothing, and `@_` is its implicit form.
 
 The following words are reserved and cannot be used as path segments:
 
 | Declaration and expression words | Literal words |
 | --- | --- |
 | `let`, `match`, `choose`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
-
-Twelve words. The rest are yours.
 
 `concept`, `satisfy`, `and`, and `test` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
 
@@ -113,7 +111,7 @@ A floating-point literal has a decimal point followed by at least one decimal di
 
 Floating-point literals have type `Flt`. `5.` is not one, and is refused rather than read as the numeral `5` with a stray dot after it.
 
-The values no decimal spells have literals of their own, each with a required sign: `+inf.0` and `-inf.0` are the infinities, `+nan.0` is the default quiet NaN, and `-nan.0` is the same NaN with its sign set. Without its sign, `inf.0` is field `0` of a binder named `inf`. A decimal too large for `Flt` is refused rather than rounded to an infinity. Every other NaN has no literal, and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one ([A float's non-finite values are literals](design/language/a-floats-non-finite-values-are-literals.md)).
+The values no decimal spells have literals of their own, each with a required sign: `+inf.0` and `-inf.0` are the infinities, `+nan.0` is the default quiet NaN, and `-nan.0` is the same NaN with its sign set. Without its sign, `inf.0` is field `0` of a binder named `inf`. A decimal too large for `Flt` is refused rather than rounded to an infinity. Every other NaN has no literal, and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one ([A literal is realized by its expected type](design/surface/a-literal-is-realized-by-its-expected-type.md)).
 
 ```crs
 +inf.0
@@ -140,7 +138,7 @@ A string literal has type `Str`.
 "first\nsecond"
 ```
 
-String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. A string literal is not a format string and does not try to guess which of the two you meant.
+String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. A string literal is not a format string.
 
 A block string literal spans lines. It opens with `"""` and a newline — blanks between the two are allowed — and closes with a newline, optional whitespace and `"""`; both delimiters take their newline, so the value is exactly the lines between, joined by newlines, with no newline before the first or after the last.
 
@@ -217,9 +215,9 @@ Adjacent constant atoms lower to a single packed constant rather than a chain of
 
 `Type` is the sort of computational types. `Prop` is the sort of proof-irrelevant propositions.
 
-Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required. The hierarchy is there; you just never write it down.
+Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required.
 
-All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant and definitionally K](design/language/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [Implicit cumulative universes, general recursion](design/language/implicit-cumulative-universes-general-recursion.md).
+All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant, and definitionally K](design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it came from](design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md).
 
 ### Function types
 
@@ -249,7 +247,7 @@ A tuple type is a dependent field telescope enclosed in braces.
 
 Later fields may refer to earlier named fields. The empty tuple type `{}` is the unit type.
 
-Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three distinct types, and a value of one is not a value of another. Function-type parameter names carry no such weight; only tuple labels do. Labels are not decoration.
+Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three distinct types, and a value of one is not a value of another. Function-type parameter names carry no such weight; only tuple labels do.
 
 A labeled function field may use signature sugar:
 
@@ -307,9 +305,9 @@ f(@Nat, x)
 join(use custom_show, values)
 ```
 
-Omitted implicit arguments are inferred. Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
+Omitted implicit arguments are inferred. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `Bool/True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
-A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/language/a-call-fills-one-parameter-group.md).
+A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/types/a-call-fills-one-parameter-group.md).
 
 A projection is positional or labeled:
 
@@ -378,7 +376,7 @@ x + y
 
 A binding is in scope of its own value, so a local function may call itself. A binding that mentions itself states its type, since a body that mentions the binding cannot be the source of it, and is a plain name rather than a pattern; a binding whose value performs `!` cannot mention itself, since the action runs before the binding exists. Bindings that mention one another are declared as one group with `and` — see [Recursive groups](#recursive-groups).
 
-Because a binding is in scope of its own value, `let n = n + 1;` names the binding it declares rather than an outer `n`, and is refused as the recursive value it is: a value may mention itself only under a lambda, where it is a recursive value computed the first time it is read.
+Because a binding is in scope of its own value, `let n: Nat = n + 1;` names the binding it declares rather than an outer `n`, and is refused as the recursive value it is: a value may mention itself only under a lambda, where it is a recursive value computed the first time it is read.
 
 ### Irrefutable binder patterns
 
@@ -404,7 +402,7 @@ let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C 
 compose
 ```
 
-The compiler tells you everything it knows about the hole, and then refuses to build. A goal is never accepted in a successfully compiled program.
+A goal is never accepted in a successfully compiled program.
 
 ### Whole-term forms and operand positions
 
@@ -436,7 +434,7 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `Bool/True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)). Dividing by zero is not a runtime surprise here; it is something you prove will not happen.
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `Bool/True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -466,7 +464,7 @@ Postfix `!` is not allowed in types. The token `!=` is an infix operator and is 
 
 Every operation that touches the host — writing a handle, reading a clock, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Guest cell and channel operations also return `Io(T)`, since they allocate or observe state within the guest instance. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
 
-**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions and the carrier has no eliminator](design/language/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
+**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 
 `Io/pure` wraps a value as a description performing nothing and `Io/bind` sequences one into another, but postfix `!` reaches `Io` through its `Monad` witness like any other monad. Binding a description does not perform it, and forcing one twice performs it twice:
 
@@ -477,11 +475,9 @@ let _ = once!;
 once                            -- prints "x" twice in total
 ```
 
-An `Io` is a noun, not a verb.
-
 `Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected, whether it writes constructor arms or none at all. A lone `| _ =>` arm is an irrefutable binder match rather than an elimination, and is accepted as the binding it is.
 
-A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over the same base, a bare `Result` as early return, an action of the base, and an `Io` action wherever the base admits one; `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
+A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over its own base or over one that embeds in it, a bare `Result` as early return, and an `Io` or `Async` action wherever its base admits one — which is how an `Io` or `Async` base's own actions are sequenced; an action of any other base is refused. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
@@ -513,13 +509,13 @@ pub let fiber: Async({}) =
 
 The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `lift(action)` is the spelling that embeds it.
 
-Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([Monads embed along declared edges, and `!` lifts across them](design/language/monads-embed-along-declared-edges-and-bang-lifts-across-them.md)).
+Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md)).
 
 ## Pattern matching
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled.
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `Bool/False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -527,7 +523,7 @@ The motive states the result type as a family. It is an ordinary term, checked a
 (indices) -> Scrutinee(indices) -> Sort
 ```
 
-There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/language/a-motive-is-a-term-not-a-grammar.md)).
+There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/types/a-motive-is-a-term-not-a-grammar.md)).
 
 ```crs
 match b: (_) => Nat                                -- result ignores the scrutinee
@@ -552,7 +548,7 @@ match p: (s, t, q: Eq()(s, t)) => Eq()(t, s)
 
 Omitting the motive asks the elaborator to infer it. In a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted for, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. A fold over `Nat`, `List`, `Bits` or `Bytes` whose arm reads its induction hypothesis — names it, or holds a goal `?` that could — is the exception: the hypothesis is typed at the result at the tail, so its motive is abstracted over the scrutinee instead. A case split — the same match with no `; ih` read — is not. Prefer omission wherever inference succeeds. A motive has to be written where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position — and where the result must depend on the scrutinee beyond its written occurrences.
 
-A fold's motive (`Nat`, `List`, `Bits`, `Bytes`) reaches its scrutinee only through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail, and a motive that named the scrutinee instead would have that name refined to the arm's own value. `match n: (m) => P(m)` is accepted; `match n: (_) => P(n)` is refused.
+A fold's motive (`Nat`, `List`, `Bits`, `Bytes`, with an arm reading its hypothesis) reaches its scrutinee only through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail, and a motive that named the scrutinee instead would have that name refined to the arm's own value. `match n: (m) => P(m)` is accepted; `match n: (_) => P(n)` is refused.
 
 A motive may only be written where the head dispatches directly: every arm's top-level pattern must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
 
@@ -744,9 +740,9 @@ let _right_identity(n: Nat) -> Eq()(n + 0, n) =
     Eq/refl();
 ```
 
-A test takes no parameters. A claim about *every* instantiation is a proposition rather than a description, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — the second declaration above, its leading `_` marking a declaration that exists for its type rather than its callers ([A test is a check that runs, and a proof is a `let`](design/language/a-test-is-a-check-that-runs-and-a-proof-is-a-let.md)). A test runs; a proof does not have to.
+A test takes no parameters. A claim about *every* instantiation is a proposition rather than a description, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — the second declaration above, its leading `_` marking a declaration that exists for its type rather than its callers ([A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)).
 
-To check a claim that is true but not a theorem at instances you choose, make it an ordinary definition returning `Test` and schedule a table: `Test/all(List/map(cases, ((a, b)) => claim(a, b)))` is one test over the author's own cases, whose failure names the case's position. That works because a test registers like a private definition — referable within its subtree, and colliding with a sibling of the same name.
+To check a claim at instances you choose, make it an ordinary definition returning `Test` and schedule a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's own cases, whose failure names the case's position. A test registers like a private definition of type `() -> Test`: referable within its subtree, and colliding with a sibling of the same name.
 
 `test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. Its body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk.
 
@@ -859,7 +855,7 @@ pub induct Sized(T: Type): (length: Nat) -> pub Type
 end
 ```
 
-A family with both is a function of its parameters returning a function of its indices, and is applied the way it is declared: `Sized` has type `(T: Type) -> (length: Nat) -> Type` and is written `Sized(T)(n)`, so `Sized(T)` is itself the family `(length: Nat) -> Type` that a match over it eliminates. A family with only parameters or only indices takes them in one call — `Option(A)`, `Tagged(3, s)` below. Why is [An indexed family takes its indices in a second call](design/language/an-indexed-family-takes-its-indices-in-a-second-call.md).
+A family with both is a function of its parameters returning a function of its indices, and is applied the way it is declared: `Sized` has type `(T: Type) -> (length: Nat) -> Type` and is written `Sized(T)(n)`, so `Sized(T)` is itself the family `(length: Nat) -> Type` that a match over it eliminates. A family with only parameters or only indices takes them in one call — `Option(A)`, `Tagged(3, s)` below. Why is [A call fills one parameter group](design/types/a-call-fills-one-parameter-group.md).
 
 Each index binder may be named or left bare — `(length: Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
 
@@ -968,7 +964,7 @@ pub concept Idem(A: Type): pub Type {
 }
 ```
 
-A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared — at the declaration, not in the tests you meant to write.
+A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared.
 
 A field's result may itself be a sort, which makes the field an associated type each witness chooses. `Div`'s `Ok(A) -> Prop` is what lets every carrier state its own division precondition, and a witness supplies it with the same field sugar as any other:
 
@@ -990,7 +986,7 @@ pub concept Ord(A: Type): pub Type {
 
 A local `Ord(A)` witness can therefore satisfy an `Eql(A)` goal by superclass projection.
 
-A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types, so a private superclass is a hidden obligation resolution discharges without the consumer naming it ([Concept representations may be sealed](design/language/concept-representations-may-be-sealed.md)). A transparent `pub` concept's field types are interface and must be `pub` themselves.
+A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types, so a private superclass is a hidden obligation resolution discharges without the consumer naming it ([Privacy is scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md)). A transparent `pub` concept's field types are interface and must be `pub` themselves.
 
 A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that erase completely.
 
@@ -1022,7 +1018,7 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 }
 ```
 
-A function type is **not** keyed: a `satisfy` whose concept parameter reduces to one is refused as unkeyable, with the same report a variable head gets. A function becomes a monad by being wrapped in a nominal type, which is `/std/State`'s idiom. Why the shape was tried and retired is [A tuple type is keyed by the part of its identity conversion keeps](design/language/a-tuple-type-is-keyed-by-the-part-of-its-identity-conversion-keeps.md).
+A function type is **not** keyed: a `satisfy` whose concept parameter reduces to one is refused as unkeyable, with the same report a variable head gets. A function becomes a monad by being wrapped in a nominal type, which is `/std/State`'s idiom. Why is [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
 Witnesses that resolve through each other are declared as one group with `and` — see [Recursive groups](#recursive-groups). A lone witness may resolve through its own entry with nothing said.
 
@@ -1037,7 +1033,7 @@ and Show(Forest) {
 
 A globally registered witness therefore requires a concept with at least one parameter; a parameterless one is still usable through an ordinary value supplied in a local `use` scope. Parameters key independently — `Into(Nat, Str)` and `Into(Nat, Bool)` are distinct keys — so a call must determine every parameter from its explicit arguments, its expected result, or an explicitly supplied witness before lookup can proceed.
 
-Only one witness may occupy a key across the whole program; there is no "the `Show` I meant here". Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared within the concept's declaring module's subtree.
+Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared within the concept's declaring module's subtree.
 
 To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 
@@ -1048,7 +1044,7 @@ sort(use reverse, values)
 
 ### Derived witnesses
 
-A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key ([A witness body may be written by the compiler](design/language/a-witness-body-may-be-written-by-the-compiler.md)). Derivability is a property of the concept: `Spell`, `Eql`, `Ord` and `Hash` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
+A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key ([A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md)). Derivability is a property of the concept: `Spell`, `Eql`, `Ord` and `Hash` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
 
 ```crs
 struct Point: pub Type { x: Nat, y: Nat }
@@ -1073,11 +1069,11 @@ A derived `Spell`'s text re-parses wherever the type's name is visible unqualifi
 
 ### Witness premises
 
-A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Recursive resolution terminates because the premises shrink, not because anybody counted ([A witness premise is smaller than its head](design/language/a-witness-premise-is-smaller-than-its-head.md)).
+A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Resolution terminates because the premises shrink ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
 ### Orphan rule
 
-A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key, which is what stops two independent parties from defining the same globally coherent instance ([Concepts resolve with global coherence](design/language/concepts-resolve-with-global-coherence.md)).
+A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key, which is what stops two independent parties from defining the same globally coherent instance ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
 A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-keyed witness is declared where its concept is: a program writes tuple witnesses for its own concepts and cannot add one for a `/std` concept at a shape `/std` did not write. No root is exempt, the standard library included — it declares every concept it witnesses, so the first clause admits it on the same terms as anyone.
 
@@ -1089,7 +1085,7 @@ A concept's superclass fields remain positional slots in a concept value. Omitti
 Ord { use custom_eql, ord(a, b) = reversed(a, b) }
 ```
 
-A witness body never writes one: a `use` entry in a `satisfy` is refused by name, so resolution fills every superclass slot of a registered witness, and the `Eql(A)` reached through a local `Ord(A)` is the one the table holds ([Concepts resolve with global coherence](design/language/concepts-resolve-with-global-coherence.md)).
+A witness body never writes one: a `use` entry in a `satisfy` is refused by name, so resolution fills every superclass slot of a registered witness, and the `Eql(A)` reached through a local `Ord(A)` is the one the table holds ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
 In a structure update, a spread copies superclass fields from the base. An explicit `use value` after the spread replaces the corresponding slot.
 
@@ -1134,7 +1130,7 @@ foreign flip: (Byte) -> Byte;
 foreign read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Byte`, `Flt`, `Bytes`, `Bits`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Nine words that look like types and are not. A `Byte` crosses as the integer it is, in both directions; a host answering one outside `0..=255` stops the program rather than handing it a different byte. A `Nat` or `Int` crosses as a 64-bit integer although the program's are unbounded: a `Nat` argument crosses below `2⁶⁴` and an `Int` between `-2⁶³` and `2⁶³ - 1`, and a larger one stops the program rather than crossing changed. A result comes back as a 64-bit integer too — a `Nat` read unsigned and an `Int` signed — and the program boxes it, so every result the integer holds arrives whole. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
+The wire types are `Nat`, `Int`, `Bool`, `Byte`, `Flt`, `Bytes`, `Bits`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. A `Byte` crosses as the integer it is, in both directions; a host answering one outside `0..=255` stops the program rather than handing it a different byte. A `Nat` or `Int` crosses as a 64-bit integer although the program's are unbounded: a `Nat` argument crosses below `2⁶⁴` and an `Int` between `-2⁶³` and `2⁶³ - 1`, and a larger one stops the program rather than crossing changed. A result comes back as a 64-bit integer too — a `Nat` read unsigned and an `Int` signed — and the program boxes it, so every result the integer holds arrives whole. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
 
 A wire result is a wire type, or a braced list of labelled wire types — the [tuple type](#tuple-types) the call yields. `{}` is no result at all, which is the unit type; `()` is the unit value and never stands here. Two or more fields are the tuple the guest projects by name, as `/sys` reads `.status` and `.bytes` off a host read.
 
@@ -1146,7 +1142,7 @@ A tuple type's labels are part of its identity, so nothing may be invented, drop
 
 ## Equality and proofs
 
-Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives; `Eq` gets no syntax of its own, which is the point.
+Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives; `Eq` gets no syntax of its own.
 
 ```crs
 pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
@@ -1156,6 +1152,24 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
 ```
 
 The standard equality operations include reflexivity, symmetry, transitivity, congruence, and substitution. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
+
+### Bounds from the facts in scope
+
+A bound reduction does not decide is proved by the elaborator where it follows by linear arithmetic from the facts in scope: the hypotheses and their proof fields one level down, and the guards of the arms around it, each read through the local definitions and refinements in scope. The fragment is `Nat` and `Int` comparisons with literal coefficients; at `Nat`, also a truncated subtraction, through its two cases, and a quotient or remainder at any nonzero divisor, through the quotient's bounds; and, where linear arithmetic alone finds none, the products of pairs of facts and the negated goal. The proof is an ordinary term both checkers recheck, so nothing it adds is trusted ([A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)).
+
+```crs
+let get(xs: List(Nat), i: Nat, m: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, List/len(xs))) -> Nat =
+    List/get(xs, i);
+```
+
+Two `/std` functions reach the same proof where no bound asks for it. `/std/proved()` states a fact a term needs, its proposition written or pinned by the expectation. `Bool/False/refuted()` produces the contradiction a zero-arm match eliminates, in an arm the facts rule out:
+
+```crs
+let clamp(n: Nat, q: Nat/Le(n, 10)) -> Nat =
+    match n > 20 | true => match Bool/False/refuted() end | false => n end;
+```
+
+A bound the facts do not imply is refused. The report names the facts considered and the ones it could not read, and gives an assignment of the atoms under which the facts hold and the bound fails. A written goal `?` over a bound reports the same.
 
 ## Quick reference
 

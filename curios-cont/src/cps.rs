@@ -34,7 +34,7 @@ pub fn int_is_small(value: &Integer) -> bool {
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
 }
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(NodeId, "~n");
 id!(ValueId, "~v");
 id!(FunctionId, "~f");
@@ -47,7 +47,7 @@ impl FunctionId {
     }
 }
 
-/// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f64` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
+/// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f64` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round, running the fixpoint to its backstop on any module carrying a `NaN` through a jump.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Nat(Natural),
@@ -176,13 +176,13 @@ pub enum Intrinsic {
     IsImmediate,
     /// `(value) -> value`: the bare payload of the constructor [`Intrinsic::IsImmediate`] just answered for, passed through unchanged.
     ///
-    /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanded the raw carrier, the demand reached the scrutinee's own definition, and the emitter coerced a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
+    /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanding the raw carrier would reach the scrutinee's own definition, and the emitter would coerce a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
     ImmediateGet,
 }
 
 /// The representation a value is read or produced at — the carrier, not the type.
 ///
-/// This is the vocabulary the backend's `LoadAs`/`WrapAs` coercions translate: `Nat` and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
+/// This is the vocabulary the backend's coercions translate — `LoadAs` into a carrier and `box_instr` back out of one: `Nat` and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
 ///
 /// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`] — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` its literal operands bound below `2³⁰`, which [`Intrinsic::bounds_result`] names and a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is. A `Nat` becomes a word where a position, a count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -332,7 +332,7 @@ pub enum IntrinsicEffect {
 impl Intrinsic {
     /// How many operands this operation takes, which the arena verifier checks every emitted call against.
     ///
-    /// **Exhaustive on purpose**, for [`Intrinsic::effect`]'s reason one accessor over. This was a wildcard defaulting to `2`, and a row that took any other count inherited it silently — the verifier caught it, but at the far end of a lowering rather than at the definition, reporting a shape mismatch against a node whose author had never been asked the question. A binary majority is what made the default tempting and is exactly why it was wrong: the common case is the one nobody checks.
+    /// **Exhaustive on purpose**, for [`Intrinsic::effect`]'s reason one accessor over. A wildcard defaulting to `2` would let a row taking any other count inherit it silently — the verifier would catch it, but at the far end of a lowering rather than at the definition, reporting a shape mismatch against a node whose author was never asked the question. A binary majority is what makes the default tempting and is exactly why it is wrong: the common case is the one nobody checks.
     pub fn arity(self) -> usize {
         match self {
             Self::NatEqz
@@ -422,7 +422,7 @@ impl Intrinsic {
     ///
     /// The `MayTrap` set is what is partial in the language — a division, a narrowing of an `Flt` to `Nat` or `Int`, an index and a projection — which `curios-ersd`'s `Semantics` says too. `Nat` and `Int` arithmetic is not in it: both are unbounded at run time, so a sum or a product that outgrows the i31 becomes a boxed magnitude rather than a failure, and allocating one is invisible, as an `Flt` box is.
     ///
-    /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
+    /// Exhaustive on purpose: a wildcard defaulting to `Total` would silently classify every guarded operation it missed as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> IntrinsicEffect {
         match self {
             // Partial in the language: a zero divisor, a non-finite conversion, an index or a projection out of bounds, a decode of the wrong length.
@@ -547,7 +547,7 @@ impl Intrinsic {
         )
     }
 
-    /// Whether a dominated duplicate of this op may reuse the dominating result. Every non-allocating op qualifies, `MayTrap` included: the ops are deterministic, and the dominating occurrence has already produced the identical value or already trapped, so the duplicate can neither observe a different result nor trap differently. Allocating ops are excluded to keep each construction's identity, even though nothing observes it today.
+    /// Whether a dominated duplicate of this op may reuse the dominating result. Every non-allocating op qualifies, `MayTrap` included: the ops are deterministic, and the dominating occurrence has already produced the identical value or already trapped, so the duplicate can neither observe a different result nor trap differently. Allocating ops are excluded to keep each construction's identity, even though nothing observes it.
     pub fn cse_eligible(self) -> bool {
         !self.allocates()
     }
@@ -687,7 +687,7 @@ pub enum Node {
         function: Arc<ForeignFunction>,
         args: Vec<Atom>,
     },
-    /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — today the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`Node::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
+    /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — the one such state is the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`Node::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
     Panic(Panic),
     /// An arm the theory proved impossible. Never reached by a sound compilation; the emitter renders it as [`Panic::Invariant`]'s sentence so that a compiler bug says so.
     Unreachable,
@@ -696,9 +696,9 @@ pub enum Node {
 /// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode, a host's reply — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
-    /// A `Nat` argument to a host function the wire's `i32` cannot carry. The one place a `Nat` is narrowed by refusing: everywhere inside the program it is unbounded.
+    /// A `Nat` argument to a host function the wire's unsigned `i64` cannot carry. The one place a `Nat` is narrowed by refusing: everywhere inside the program it is unbounded.
     NatWire,
-    /// An `Int` argument to a host function the wire's `i32` cannot carry.
+    /// An `Int` argument to a host function the wire's `i64` cannot carry.
     IntWire,
     /// A packed or list read, or a window, past the end of its value.
     OutOfBounds,
@@ -781,7 +781,7 @@ struct ReturnFacts<'a> {
 }
 
 impl ReturnFacts<'_> {
-    /// How many values `function` returns, reading absence as the single value a function carried before any protocol widened it.
+    /// How many values `function` returns, reading absence as the single value a function returns unless a protocol widened it.
     fn arity(&self, function: FunctionId) -> usize {
         self.arities.get(&function).copied().unwrap_or(1)
     }
@@ -935,9 +935,9 @@ impl Row {
 ///
 /// The door decides this from the erased shape recorded on each constructor's fields, and it is the whole point of keying a heap type by row: an arity-keyed type is shared by every constructor of that arity module-wide, so the join over any slot's stores is the top type and nothing can be said about it. A row's slots are written by that row alone, so a slot whose every writer agrees names a carrier — a register for the scalars, a declared heap type for the shapes — and the emitter declares the wasm field at it.
 ///
-/// Slots are assigned by carrier rather than by field position, which is what keeps a family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would have been free but types almost nothing — over the standard library it settles 11 slots against this rule's 22 — while giving each constructor a disjoint range types only five more and costs 18 slots more than this.
+/// Slots are assigned by carrier rather than by field position, which is what keeps a family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would be free and type almost nothing, since a slot shared by disagreeing constructors joins to the top type, while a disjoint range per constructor would widen every row for little more typing.
 ///
-/// Three shapes stay [`Slot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A row-typed field would need the field's row identity, which erasure does not record.
+/// A shape stays [`Slot::Opaque`] when no single heap type names its population: a `Nat` or `Int` is an i31 or a boxed magnitude, a packed carrier an immediate inside the envelope and a rope past it, and a value of a family whose one bare constructor rides the i31 is a row struct only on its other paths. A family-typed field names its row only where the door finds that costs the row no width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Slot {
     /// A variant family's discriminant, at slot zero. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies; a product row carries none.
@@ -1040,7 +1040,7 @@ impl Module {
 
     /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
     ///
-    /// Recording and shifting are one operation because they are one fact. They were two, and the shift lived in the one caller that had needed it so far — which left every other caller silently recording stale starts, reachable as soon as two parameters of one continuation were split in the same pass. Groups are kept sorted by start; [`Module::verify`] holds them to the parameter list.
+    /// Recording and shifting are one operation because they are one fact: a caller recording without shifting would leave stale starts, reachable as soon as two parameters of one continuation are split in the same pass. Groups are kept sorted by start; [`Module::verify`] holds them to the parameter list.
     pub fn record_split(&mut self, continuation: ContinuationId, start: usize, width: usize) {
         let groups = self.field_groups.entry(continuation).or_default();
         for group in groups.iter_mut() {
@@ -1130,7 +1130,7 @@ impl Module {
 
     /// How many values each live function hands back to its caller.
     ///
-    /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function carried before any protocol widened it.
+    /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function returns unless a protocol widened it.
     ///
     /// Where a function has both a return edge and a constrained tail position, the edge is taken and the disagreement is left to [`Module::verify`], whose business it is to report rather than to paper over.
     pub fn return_arities(&self) -> BTreeMap<FunctionId, usize> {
@@ -1301,7 +1301,7 @@ impl Module {
 
     /// The round-boundary subset of [`Module::verify`]: every structural clause, without the row-vocabulary one.
     ///
-    /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, which is how the full check at the boundary broke half the cross-stage corpus while the exit gate stayed green. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
+    /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, so the full check at a round boundary would refuse half the cross-stage corpus that the exit gate admits. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
     pub fn verify_structure(&self) -> Result<(), VerifyError> {
         self.verify_with(false)
     }
@@ -1419,7 +1419,7 @@ impl Module {
     ///
     /// This is what the distinct [`ValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
     ///
-    /// The last clause was documented here before it was checked, and the gap was found the way the paragraph above predicts: `split_returns` rebuilt a resume's `Tuple` for a class returning an `Option` row, the `RowGet` below it cast `$tuple/2` to the row's final type, and the only symptom was an HTTP client trapping on its first response header. The check covers direct operands — a value constructed by a `LetValue` in this module and read by a `TupleGet` or `RowGet` in it — which is every case a pass's own rebuild can produce; a value that arrives through a parameter is the emitter's cast to decide, as before.
+    /// The last clause covers direct operands — a value constructed by a `LetValue` in this module and read by a `TupleGet` or `RowGet` in it — which is every case a pass's own rebuild can produce: `split_returns` rebuilding a resume's `Tuple` for a class returning an `Option` row, read by a `RowGet` that casts `$tuple/2` to the row's final type, would otherwise surface only as a trap far downstream. A value that arrives through a parameter is the emitter's cast to decide.
     fn verify_rows(&self) -> Result<(), VerifyError> {
         // What every visible construction built, so a read can be checked against the vocabulary its operand was actually minted in rather than only against the row's own width.
         let mut built = BTreeMap::<ValueId, Option<RowId>>::new();
@@ -1748,7 +1748,7 @@ impl Module {
         let mut visited = BTreeSet::<NodeId>::new();
 
         while let Some((id, scope)) = work.pop() {
-            // Every node has exactly one structural parent: a `next`, a `body`, or a continuation's. The walk once skipped a node it had already reached, which caught a node shared between two *functions* through `node_owners` and let a node shared within one function pass — and a shared node is a region that runs on two paths while binding its values once, which the scope check cannot see either, since it admits the bindings on whichever path reached it first. It is also what a nesting printer would duplicate.
+            // Every node has exactly one structural parent: a `next`, a `body`, or a continuation's. Skipping a node already reached would catch a node shared between two *functions* through `node_owners` and let one shared within one function pass — and a shared node is a region that runs on two paths while binding its values once, which the scope check cannot see either, since it admits the bindings on whichever path reached it first. It is also what a nesting printer would duplicate.
             if !visited.insert(id) {
                 return Err(VerifyError(format!(
                     "{id} is reached from more than one place in {owner}"
@@ -2196,7 +2196,7 @@ mod simplify;
 mod specialize;
 mod uncurry;
 
-// The pass suites, each beside the pass it tests. They were one file under `optimize` — the driver — while testing eight of these modules; `test_support` holds the module builders they share.
+// The pass suites, each beside the pass it tests; `test_support` holds the module builders they share.
 #[cfg(test)]
 mod analysis_tests;
 #[cfg(test)]

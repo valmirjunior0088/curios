@@ -4,7 +4,7 @@
 //!
 //! **The carrier is not in question; the storage is.** A value's carrier is fixed by whatever produced it, so the decision is whether to hold it raw or behind a reference — but the answer must *name* the carrier, because a local has to be declared `i32` or `f64` and a continuation parameter has no producer to read it from. Its carrier is only knowable from the demands its uses impose, which is why it is carried in the lattice rather than recovered afterwards.
 //!
-//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it", which was specified first and measured worthless while `Nat` still rode a word: in the `lcg` kernel `x` was used by a multiply *and* jumped out on the loop-exit edge, so the conservative join answered boxed and the 64-bit multiply survived — the single largest cost in the loop. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31` or one `struct.new`, while boxed to raw is a runtime type check and an unbox.
+//! **A value is raw whenever any use demands the raw carrier**, and every disagreeing use is coerced. That is deliberately not the conservative rule "raw only when *every* use accepts it": a loop value used by an operation *and* jumped out on the loop-exit edge would settle boxed under it, paying the unbox and the rebox on every iteration. The asymmetry that justifies preferring raw is in the instructions rather than in any loop heuristic: coercing raw to boxed is one `ref.i31` or one `struct.new`, while boxed to raw is a runtime type check and an unbox.
 //!
 //! **An edge argument's demand is the storage of the parameter it feeds**, which is what makes this a fixpoint rather than a scan. Without that rule a loop's back-edge values have no raw use of their own — the decremented counter and the folded accumulator are *only* ever passed back round — so they would settle boxed and the loop would coerce on every iteration, losing exactly what the analysis exists to win.
 //!
@@ -158,7 +158,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
 
             // A host import's results are references too, with one exception: an `Flt` is held at its carrier. Every scalar crosses back raw, and the emitter boxes an integral one at the call — a `Nat` or `Int` past the i31 into the boxed magnitude only the guest can build — and embeds a reference into the rope; but a float's box is one allocation a use may never need. So that parameter *is* the `f64`, offered at its carrier like any other definition, and a use wanting a reference boxes at its own site through the coercion every raw carrier already has.
             //
-            // Withdrawing it with the rest is what made an `Flt` result unrepresentable: the parameter became a reference the call had no way to produce, and the module failed validation with an `f64` where an `anyref` was wanted.
+            // Withdrawing it with the rest would make an `Flt` result unrepresentable: the parameter would become a reference the call has no way to produce, and the module would fail validation with an `f64` where an `anyref` is wanted.
             Node::Foreign {
                 function,
                 return_to,
@@ -330,7 +330,7 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
                     }
                 }
 
-                // A variant construction stores each atom into a slot whose carrier the row declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
+                // A row construction stores each atom into a slot whose carrier the row declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
                 Node::LetValue {
                     value: ValueExpr::Row(row, atoms),
                     ..

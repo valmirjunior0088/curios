@@ -94,7 +94,7 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     assert_eq!(reduce_forced(&mut context, concrete), Ok(nat(0)));
 }
 
-/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application was a neutral the force handed back folded.
+/// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application would be a neutral the force hands back folded.
 #[test]
 fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let mut context = context();
@@ -146,11 +146,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let identity = Term::func([(n, nat_type.clone())], Term::free_var(&n));
 
-    // A group whose member never mentions itself has no fixed point to keep, so opening its tail
-    // reduces past the projection to the member's own value and `expose_rec_tail` leaves a `Func`.
-    // Taking the step only on a projection declined here with that `Func` in hand, and the caller
-    // then kept the folded spelling -- which the positivity walk reads at `Mixed`, so an `induct`'s
-    // type constructor reached through this spelling stopped composing.
+    // A group whose member never mentions itself has no fixed point to keep, so opening its tail reduces past the projection to the member's own value and `expose_rec_tail` leaves a `Func`. Taking the step only on a projection would decline here with that `Func` in hand, and the caller would keep the folded spelling — which the positivity walk reads at `Mixed`, so an `induct`'s type constructor reached through this spelling would stop composing.
     let term: Term = Term::apply(
         Term::rec(
             [(
@@ -408,11 +404,11 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 
 #[test]
 fn a_match_tower_reduces_without_overflowing() {
-    // Each level's scrutinee is the level below it, so reducing the top costs one nested `reduce` per link. That is the depth `PendingMatch` used to absorb and `recurse` now carries, and it is data-shaped: a tower this tall is generated rather than written.
+    // Each level's scrutinee is the level below it, so reducing the top costs one nested `reduce` per link. That depth is what `recurse` carries, and it is data-shaped: a tower this tall is generated rather than written.
     //
     // Deep enough that a regression is a stack overflow rather than a slow test, and under a budget large enough that the budget is not what decides it — which is the property `reduce`'s own documentation claims.
     //
-    // **The stated budget is the part that changed with pricing, and it is not incidental.** A guarded level now charges `Cost::FRAME` when it is a new peak, so depth is a priced resource and the default would decide this test rather than the stack: ten thousand levels cost about 10.2 million units of frames alone, which is past what the compiler ships. A test whose subject is the stack has to take the budget out of the answer, and stating one is how.
+    // **The stated budget is not incidental.** A guarded level charges `Cost::FRAME` when it is a new peak, so depth is a priced resource and a budget could decide this test rather than the stack: ten thousand levels cost about 10.2 million units of frames alone. A test whose subject is the stack has to take the budget out of the answer, and stating one is how.
     const DEEP: usize = 10_000;
 
     let mut context = Context::new(100_000_000, SYNTAX);
@@ -794,7 +790,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
 ///
 /// The probe is checker-level rather than a source program on purpose: the pair has no surface spelling, because `UniverseSolver::finalize` minimizes a body-only level to a constant instead of generalizing it.
 ///
-/// Mutation-checked while the guard was written, in the one order that could check it: both of these were written and watched failing *before* the guard existed, while both `ignores_fresh_universe_instances` tests passed throughout. So the forgery pair and the collapse pair are not testing one thing twice — removing the guard fails these two and leaves those two green, which is the whole of what the guard is claimed to do.
+/// Mutation-checked: removing the guard fails these two and leaves both `ignores_fresh_universe_instances` tests green, so the forgery pair and the collapse pair are not testing one thing twice — which is the whole of what the guard is claimed to do.
 #[test]
 fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let mut context = context();
@@ -932,7 +928,7 @@ fn refinement_is_suppressible() {
     assert_eq!(reduced, Ok(b));
 }
 
-// A solution that reaches its own metavariable sends the display walk round forever: reducing `?0` unfolds it to `f(?0)`, whose argument is `?0` again. The walk is display-only, but it ran on the native stack with no bound, so a diagnostic about such a term aborted the process instead of rendering. Charged per level, the declaration's budget refuses it, and the caller falls back to the un-normalized spelling as its contract says.
+// A solution that reaches its own metavariable sends the display walk round forever: reducing `?0` unfolds it to `f(?0)`, whose argument is `?0` again. The walk is display-only, and on the native stack with no bound a diagnostic about such a term would abort the process instead of rendering. Charged per level, the declaration's budget refuses it, and the caller falls back to the un-normalized spelling as its contract says.
 #[test]
 fn normalizing_a_solution_that_reaches_itself_is_refused_rather_than_overflowing() {
     let mut context = context();
@@ -992,7 +988,7 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
     );
 }
 
-/// A closed reduct is served across universe spellings: a definition unfolded at a universe metavariable and then at a constant is one computation, the second answered from the first through the cache's erased second key with the reduct's level rewritten to the asking spelling. Before this, checking wrote a term with metavariables and totality read it with them solved, and every fold over a literal ran once per phase and per mention.
+/// A closed reduct is served across universe spellings: a definition unfolded at a universe metavariable and then at a constant is one computation, the second answered from the first through the cache's erased second key with the reduct's level rewritten to the asking spelling. Checking writes a term with metavariables and totality reads it with them solved, so without the second key every fold over a literal would run once per phase and per mention.
 #[test]
 fn a_closed_reduct_is_served_across_universe_spellings() {
     let mut context = context();
@@ -1030,7 +1026,7 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
     );
 }
 
-/// A spelling that is its own weak-head form keeps its binder names when the erased door answers for it: the stored entry belongs to another declaration's Π-type, α-equivalent and equal once universes are erased, and the answer is the asking spelling itself rather than that one. Served the stored spelling, `satisfy Show(Tree)`'s refusal read `(T: Type) -> Type` for a `Tree` declared over `A`.
+/// A spelling that is its own weak-head form keeps its binder names when the erased door answers for it: the stored entry belongs to another declaration's Π-type, α-equivalent and equal once universes are erased, and the answer is the asking spelling itself rather than that one. Served the stored spelling, `satisfy Show(Tree)`'s refusal would read `(T: Type) -> Type` for a `Tree` declared over `A`.
 #[test]
 fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
     let mut context = context();

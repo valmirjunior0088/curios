@@ -10,7 +10,7 @@
 //!
 //! A goal that is a bound is also put to the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox: a proof it finds is a complete fit of pool 0, and a refusal is kept for the report, which then says beside the goal what it says beside an omitted bound.
 //!
-//! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq()(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal ever saw an application fit — which is every goal outside a function body, and almost no goal in a proof.
+//! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq()(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal would see an application fit — which is every goal outside a function body, and almost no goal in a proof.
 
 use {
     super::{

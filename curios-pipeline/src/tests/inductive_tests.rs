@@ -6,7 +6,7 @@ use super::test_support::*;
 
 #[test]
 fn omitted_motive_mentioning_a_type_param_lowers() {
-    // `pick` is polymorphic in `A`, and the `match c` omits its motive. The motive metavar is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards the zonk binder-realignment fix.
+    // `pick` is polymorphic in `A`, and the `match c` omits its motive. The motive metavar is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards zonk's binder realignment.
     let source = r#"
         use /std/{Bool};
         let pick(A : Type, a : A, b : A, c : Bool) -> A =
@@ -45,7 +45,7 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
 
     assert!(compile(source, Some("/std/Nat")).is_ok());
 
-    // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors. The infer position is a typeless local `let`: the entrypoint tail is always checked now.
+    // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors. The infer position is a typeless local `let`: the entrypoint tail is always checked.
     let unpinned = r#"
         use /std/{Result};
         let bad = Result/success((1, 1));
@@ -57,7 +57,7 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
 
 #[test]
 fn match_arm_arity_is_checked_statically() {
-    // Each arm's binder count is checked against the constructor's registry telescope at elaboration time. Under the legacy tagged-tuple desugar this mismatch was silent (the extra binder became an out-of-range payload projection).
+    // Each arm's binder count is checked against the constructor's registry telescope at elaboration time.
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
@@ -112,7 +112,7 @@ fn non_pub_inductive_constructors_stay_private_across_modules() {
 
 #[test]
 fn match_on_a_non_inductive_scrutinee_is_rejected_directly() {
-    // With the legacy fallback gone, matching inductive constructors on a non-inductive value reports the real problem instead of a downstream projection error.
+    // Matching inductive constructors on a non-inductive value reports the real problem rather than a downstream projection error.
     let source = r#"
         use /std/{Nat};
         match 7 : (_) => Nat
@@ -130,7 +130,7 @@ fn match_on_a_non_inductive_scrutinee_is_rejected_directly() {
 
 #[test]
 fn new_style_inductive_match_lowers_end_to_end() {
-    // The same program with correct arities compiles through to wasm: the `Result` declaration takes the intrinsic-inductive path (InductiveType / Variant / InductiveMatch) and erases back to the legacy tagged-tuple runtime shape.
+    // The same program with correct arities compiles through to wasm: the `Result` declaration takes the intrinsic-inductive path (InductiveType / Variant / InductiveMatch) and erases to its runtime shape.
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
@@ -268,7 +268,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
 
 #[test]
 fn index_refinement_learns_inside_the_arm() {
-    // Rung B: a scrutinee index that is a stable key is refined to the case's target inside the arm. Three faces of it:
+    // Index refinement: a scrutinee index that is a stable key is refined to the case's target inside the arm. Three faces of it:
     // - `subst` casts `Vec(Bytes)(n)` to `Vec(Bytes)(m)` through an `Eq(Nat)(n, m)` under a *constant* motive — the equality is learned (`n := z`, `m := z`), not eliminated;
     // - `sym` is J-style elimination from the pattern motive alone;
     // - `f`'s nil arm uses a hypothesis demanding `Vec(T)(0)` — legal because the arm refines `n := 0`.
@@ -322,7 +322,7 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
 
 #[test]
 fn inversion_prunes_impossible_arms_and_solves_binders() {
-    // Rung C: at `Vec(T)(Nat/succ(n))` the nil arm's target `0` clashes definitely with the successor spine, so the arm is omitted — checker-verified, no `impossible` keyword — and erase fills its dispatch slot with an unreachable body. In the cons arm the unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is what types `xs : Vec(T)(j)` at the declared `Vec(T)(n)`.
+    // Inversion: at `Vec(T)(Nat/succ(n))` the nil arm's target `0` clashes definitely with the successor spine, so the arm is omitted — checker-verified, no `impossible` keyword — and erase fills its dispatch slot with an unreachable body. In the cons arm the unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is what types `xs : Vec(T)(j)` at the declared `Vec(T)(n)`.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -394,7 +394,7 @@ fn omission_requires_a_definite_clash() {
         "unexpected error: {error}"
     );
 
-    // A binder forced twice keeps its arm mandatory only while the two forcings could still be one value. `same`'s target `(z, z)` constrains two positions with one binder, and at the *open* `Foo(a, b)` the forcings `z ↦ a` and `z ↦ b` neither convert nor clash, so the arm stays mandatory. This was once a blanket non-linearity refusal — no K through the back door — and the clash test now decides where the unifier used to decline; the twice-forced literal pair below is the side that decides.
+    // A binder forced twice keeps its arm mandatory only while the two forcings could still be one value. `same`'s target `(z, z)` constrains two positions with one binder, and at the *open* `Foo(a, b)` the forcings `z ↦ a` and `z ↦ b` neither convert nor clash, so the arm stays mandatory. The clash test decides this, not a blanket non-linearity refusal — no K through the back door either way — and the twice-forced literal pair below is the side where it decides.
     let open_forcing = r#"
         use /std/{Nat, Bytes};
         induct Foo : (x : Nat, y : Nat) -> Type
@@ -508,7 +508,7 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
 
 #[test]
 fn payload_relying_on_implicit_insertion_is_rebuilt() {
-    // The inductive registry used to keep `into_core`'s *lowered* payload and index types, so a type relying on implicit-argument insertion — `Eq()(0, 1)` against `Eq`'s 3-ary type constructor — survived under-applied and panicked the `Telescope::open` arity assert the first time reduction met the registry copy. The registry telescopes are now rebuilt during `elaborate_module` (indices while the inductive group's signatures are assumed, constructors once its bodies are defined), so the payload elaborates like any other type.
+    // The registry telescopes are rebuilt during module elaboration (indices while the inductive group's signatures are assumed, constructors once its bodies are defined), so a payload type relying on implicit-argument insertion — `Eq()(0, 1)` against `Eq`'s 3-ary type constructor — elaborates like any other type. Kept as `into_core` lowered it, it would survive under-applied and panic the `Telescope::open` arity assert the first time reduction met the registry copy.
     let payload = r#"
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
@@ -520,7 +520,7 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
     "#;
     assert!(typecheck(payload, Some("/std/Nat")).is_ok());
 
-    // Index types take the same path — and previously panicked even earlier, while the type-constructor binding itself elaborated (its body's `InductiveType` node checks against the index telescope).
+    // Index types take the same path — and left lowered would panic even earlier, while the type-constructor binding itself elaborated (its body's `InductiveType` node checks against the index telescope).
     let index = r#"
         induct Eq(@A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)

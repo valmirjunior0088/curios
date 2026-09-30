@@ -61,7 +61,7 @@ pub use Int/{let Int};
 
 --- IEEE binary64 floating point.
 ---
---- Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions are exact in both directions.
+--- Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions round-trip: text is read correctly rounded, and written as the shortest decimal that reads back.
 pub mod Flt;
 pub use Flt/{let Flt};
 
@@ -202,9 +202,9 @@ pub use Cli/{let Cli};
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
---- Claims the runner discharges: a theorem the kernel settled, a verdict, or an action that performs and then says.
+--- Checks `curios test` runs: the description a `test name = body;` declaration's body builds, with `assert`, `equal`, `all`, `perform` and `try`.
 ---
---- A parameterized test the kernel settles under its whole telescope reports proved; any other is a property, exhausted over a small domain or probed over drawn arguments. `Seed`, `Draw` and `Property` beneath are the property-testing library.
+--- A test takes no parameters; a claim about every instantiation is a proof, a `let` whose type states it. `main` is the tail that runs a unit's tests and reports each as passed or failed, and `curios test` reports one that traps or exits as trapped or exited.
 pub mod Test;
 pub use Test/{let Test};
 
