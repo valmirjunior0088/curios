@@ -1,6 +1,6 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
-use crate::tests::run;
+use crate::tests::{error, run};
 
 // The List witness: bind is concat-map.
 #[test]
@@ -74,4 +74,78 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
         "#;
 
     assert_eq!(run(source), b"6");
+}
+
+/// Three ways to sequence a `Result(Str, Type)`, whose payload is a type and so sits a level above the types it names: `walk` with `!` in an arm, `flat` with `!` in a flat body, and `spelled` through `Monad/bind` itself. All three go through `Result`'s `Monad` witness, which pinned the method levels at zero — `bind` took `A, B : Type 0` only — so each was refused, the arm as "this Type would need to be strictly below itself". A concept's method level is now its family's domain (`UniverseSolver::identify_bounded_choices`), which `Result`'s witness leaves to the caller. `tag` reads each outcome back, so the three are run rather than only checked.
+const LARGE_PAYLOAD: &str = r#"
+    use /std/{Str, Nat, List, Result, Monad};
+    pub let walk(x: Result(Str, Type), n: List(Str)) -> Result(Str, Type) =
+        match n
+        | [] => x
+        | [_, .._] =>
+            let t = x!;
+            Result/success(t)
+        end;
+    pub let flat(x: Result(Str, Type)) -> Result(Str, Type) =
+        let t = x!;
+        Result/success(t);
+    pub let spelled(x: Result(Str, Type)) -> Result(Str, Type) =
+        Monad/bind(x, (t) => Result/success(t));
+    let tag(r: Result(Str, Type)) -> Str =
+        match r
+        | success(_) => "s"
+        | failure(_) => "f"
+        end;
+"#;
+
+#[test]
+fn a_bang_sequences_a_large_payload() {
+    let source = format!(
+        r#"{LARGE_PAYLOAD}
+        /std/print(Str/flatten([
+            tag(walk(Result/success(Nat), ["a"])),
+            tag(flat(Result/success(Str))),
+            tag(spelled(Result/failure("refused"))),
+        ]))
+        "#
+    );
+
+    assert_eq!(run(&source), b"ssf");
+}
+
+// The control: `Result/bind` names no witness, so it sequenced the same payload before the witness's method levels were its domain, and still does.
+#[test]
+fn a_large_payload_binds_without_the_witness() {
+    let source = format!(
+        r#"{LARGE_PAYLOAD}
+        let direct(x: Result(Str, Type)) -> Result(Str, Type) = Result/bind(x, (t) => Result/success(t));
+        /std/print(Str/flatten([tag(direct(Result/success(Nat))), tag(direct(Result/failure("refused")))]))
+        "#
+    );
+
+    assert_eq!(run(&source), b"sf");
+}
+
+// `!` holds its region at the level of the action it binds. A region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality, so `small`'s `Result(Str, Nat)`, at zero, pins the region below the `Type` it answers with. `Result/bind` names no witness and instantiates each side apart, so it accepts the same program. `Result`'s levels only type its parameters, and comparing them by variance — Rocq infers such a level irrelevant — would accept both; until then `/std/Cli`'s `fill` binds through `Result/bind`, and this refusal is the fixture that flips.
+#[test]
+fn a_bang_holds_its_region_at_a_lower_nominal_actions_level() {
+    let bang = r#"
+        use /std/{Str, Nat, Result};
+        let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
+        pub let big(n: Nat) -> Result(Str, Type) =
+            let _ = small(n)!;
+            Result/success(Nat);
+        /std/print("bound")
+        "#;
+    let message = error(bang);
+    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert!(message.contains("/big"), "got: {message}");
+
+    let bind = r#"
+        use /std/{Str, Nat, Result};
+        let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
+        pub let big(n: Nat) -> Result(Str, Type) = Result/bind(small(n), (_) => Result/success(Nat));
+        /std/print("bound")
+        "#;
+    assert_eq!(run(bind), b"bound");
 }

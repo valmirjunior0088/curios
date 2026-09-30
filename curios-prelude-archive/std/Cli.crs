@@ -359,7 +359,9 @@ let step(@spec: List(Arg), w: Walk(spec), tokens: List(Str)) -> Result(Failure, 
     | [] => Result/success(w.slots)
     | [t, ..more] =>
         match w.literal
-        | true => Result/bind(place(w, t), (w2) => step(w2, more))
+        | true =>
+            let w2 = place(w, t)!;
+            step(w2, more)
         | false =>
             match Str/eql(t, "--")
             | true => step(Walk { ..w, literal = true }, more)
@@ -403,7 +405,9 @@ let step(@spec: List(Arg), w: Walk(spec), tokens: List(Str)) -> Result(Failure, 
                         | [v, ..rest2] => step(Walk { ..w2, slots = put(v) }, rest2)
                         end
                     end
-                | _ => Result/bind(place(w, t), (w2) => step(w2, more))
+                | _ =>
+                    let w2 = place(w, t)!;
+                    step(w2, more)
                 end
             end
         end
@@ -444,6 +448,7 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
 let fill(@spec: List(Arg), slots: Slots(spec)) -> Result(Failure, Values(spec)) =
     match slots
     | nil() => Result/success(Values/nil())
+    -- `Result/bind` rather than `!`: the payload, a `Carrier`, sits a level below `Values`, and a nominal type's levels are compared for equality, so `!` would hold the region at the payload's level.
     | cons(@a, @_, found, tail) =>
         Result/bind(
             field(a.long, a.kind, found),
