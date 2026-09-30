@@ -568,3 +568,29 @@ fn universe_parameter_census() {
         }
     });
 }
+
+/// A `/sys` former is levelled by its one argument alone. `List`, `Io`, `Cell` and `Channel` each take `T: Type u` to `Type u`, and each carried a second level besides — the one its body's binder was written at, bounded only by `u` — which every occurrence of the former then minted. `UniverseSolver::identify_bounded_choices` identifies a chosen level bounded only by one other chosen level with it, so each takes one.
+#[test]
+fn every_sys_former_takes_one_universe_parameter() {
+    with_prelude(|prelude| {
+        let formers = [
+            "/sys/List/List",
+            "/sys/Io/Io",
+            "/sys/Cell/Cell",
+            "/sys/Channel/Channel",
+        ];
+        let counts = items(prelude)
+            .flat_map(|item| item.definitions())
+            .map(|definition| (definition.name.to_string(), definition))
+            .filter(|(name, _)| formers.contains(&name.as_str()))
+            .map(|(name, definition)| (name, definition.universe_context.parameter_count))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(
+            counts.len(),
+            formers.len(),
+            "a former is missing: {counts:?}"
+        );
+        assert!(counts.values().all(|&count| count == 1), "{counts:?}");
+    });
+}

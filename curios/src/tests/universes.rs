@@ -131,6 +131,55 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
     );
 }
 
+// **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which is how `Result`'s `Monad` witness came to take `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
+#[test]
+fn a_method_level_bounded_by_one_domain_is_that_domain() {
+    let source = r#"
+        concept Mon(M: (Type) -> Type): pub Type {
+            ret(@A: Type, A) -> M(A),
+        }
+        concept Two(M: (Type) -> Type, N: (Type) -> Type): pub Type {
+            pick(@A: Type, M(A)) -> N(A),
+        }
+        /std/print("tied")
+        "#;
+
+    let parameters = universe_parameters(source);
+
+    assert_eq!(
+        parameters.get("/Mon"),
+        Some(&2),
+        "a method level bounded by its family's domain alone was generalized apart from it: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/Two"),
+        Some(&5),
+        "a method level bounded by two domains was identified with one of them: {parameters:?}",
+    );
+}
+
+// **A witness leaves its method levels to its callers.** `Mon`'s `ret` quantified `@A: Type` at a level of its own, bounded above by the domain of the family `M`; the witness's goal named that level only as an argument of its occurrence of `Mon`, where it counted as a result sort and went to zero, so `ret` through the witness took `Type 0` payloads only and `Mon/ret(Nat)` at `Box(Type)` was refused as a `Type` strictly below itself — the refusal `!` met at `Result(Str, Type)`. The method level is now the family's domain (`a_method_level_bounded_by_one_domain_is_that_domain`), which the witness's `(A: Type) => Box(A)` leaves to its caller. `small` is the control: the same witness at a small payload.
+#[test]
+fn a_witness_leaves_its_method_levels_to_its_callers() {
+    let source = r#"
+        use /std/{Nat};
+        concept Mon(M: (Type) -> Type): pub Type {
+            ret(@A: Type, A) -> M(A),
+        }
+        induct Box(A: Type): pub Type
+        | box(A)
+        end
+        satisfy Mon((A: Type) => Box(A)) {
+            ret(@_, a) = Box/box(a),
+        }
+        let small: Box(Nat) = Mon/ret(3);
+        let large: Box(Type) = Mon/ret(Nat);
+        match large | box(_) => /std/print("large") end
+        "#;
+
+    assert_eq!(run(source), b"large");
+}
+
 /// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. Both of `U`'s levels are carried by its body alone, so they are minimized as `a_body_carried_level_is_minimized_rather_than_generalized` pins: `X` ranges over level 0 and `U` sits at level 1.
 const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
     let Pow(A: Type) -> Type = (A) -> Type;
@@ -225,7 +274,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter its constraints leave free, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Three more of its levels are bounded by zero and are solved to the constant when the scheme is generalized, which is why the count is nineteen and not the twenty-two it was before generalization solved such levels; the context is otherwise the same, bound for bound.
+// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter its constraints leave free, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Three more of its levels are bounded by zero and are solved to the constant when the scheme is generalized, and six were the second level each occurrence of a `List`-bearing declaration minted — `List`'s body level, bounded only by its result level, which finalization identifies with it (`UniverseSolver::identify_bounded_choices`) — which is why the count is thirteen; the context is otherwise the same, bound for bound.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
     super::typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
@@ -234,7 +283,7 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
-        Some(&19),
+        Some(&13),
         "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
     );
 }

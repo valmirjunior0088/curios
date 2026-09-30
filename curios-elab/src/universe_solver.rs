@@ -435,6 +435,14 @@ pub struct UniverseSolver {
     consistency: Option<ConsistencyCache>,
 }
 
+/// The meta `level` is, when it is one bare meta at offset zero.
+fn bare_meta(level: &Level) -> Option<UniverseMetaId> {
+    match (level.constant, level.atoms.iter().next()) {
+        (0, Some((&LevelHead::Meta(meta), &0))) if level.atoms.len() == 1 => Some(meta),
+        _ => None,
+    }
+}
+
 impl UniverseSolver {
     /// The metas reachable from `metas` through constraints and solutions — the declaration's universe closure.
     ///
@@ -1065,10 +1073,6 @@ impl UniverseSolver {
                     mentioned.extend(level.metas());
                     assignments.push((meta, level));
                 };
-                let bare_meta = |level: &Level| match (level.constant, level.atoms.iter().next()) {
-                    (0, Some((&LevelHead::Meta(meta), &0))) if level.atoms.len() == 1 => Some(meta),
-                    _ => None,
-                };
 
                 // The store is read once, and only the half a lone equality looks up is indexed: the constraints bounding a maximum by a bare meta. Ordering every constraint to find the few of that shape measured at five times the cost of the merge it serves.
                 let bounding_a_meta = self
@@ -1280,6 +1284,62 @@ impl UniverseSolver {
         solved
     }
 
+    /// Identify each chosen level bounded only from above, by one other chosen level, with that level.
+    ///
+    /// Such a level occurs where a caller passes a type — `pure(@A: Type, A) -> M(A)`'s `A`, bounded by `M`'s domain — and cumulativity already lets a caller pass anything smaller, so identifying it with its bound takes no program from a caller. What it takes away is an implementation's licence to answer at a smaller level: generalized apart, `Monad`'s three method levels were five parameters in all, a witness pinned them at zero and refused `!` at a large payload, and left generic they put maxima into the domains of the witnesses built over them, which a use could only meet as a disjunction. Lean's `Pure (f : Type u → Type v)` declares `pure {α : Type u}`, and Rocq's manual writes its monad `monad@{i}` with `unit : forall (A : Type@{i}), A -> m A`. A level with two bounds names no one level to be, and stays.
+    fn identify_bounded_choices(
+        &mut self,
+        metas: &BTreeSet<UniverseMetaId>,
+    ) -> Result<(), UniverseError> {
+        loop {
+            let mut identified = false;
+            for &meta in metas {
+                if self.solution(meta).is_some()
+                    || self.provenance(meta) != Some(Provenance::Chosen)
+                {
+                    continue;
+                }
+                let head = LevelHead::Meta(meta);
+                let mut bound = None;
+                let mut sole = true;
+                for position in self.constraints.mentioning(head).collect::<Vec<_>>() {
+                    let constraint = self
+                        .constraints
+                        .get(position)
+                        .expect("the occurrence index names a live constraint");
+                    if constraint.lower.structurally_leq(&constraint.upper) {
+                        continue;
+                    }
+                    let upper = match (bare_meta(&constraint.lower), bare_meta(&constraint.upper)) {
+                        (Some(lower), Some(upper))
+                            if lower == meta
+                                && upper != meta
+                                && self.provenance(upper) == Some(Provenance::Chosen) =>
+                        {
+                            upper
+                        }
+                        _ => {
+                            sole = false;
+                            break;
+                        }
+                    };
+                    if bound.is_some_and(|bound| bound != upper) {
+                        sole = false;
+                        break;
+                    }
+                    bound = Some(upper);
+                }
+                if let (true, Some(bound)) = (sole, bound) {
+                    self.assign(meta, Level::meta(bound))?;
+                    identified = true;
+                }
+            }
+            if !identified {
+                return Ok(());
+            }
+        }
+    }
+
     /// Minimize inference-only levels and bind every surviving input meta as a deterministic declaration parameter.
     ///
     /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed.
@@ -1321,6 +1381,7 @@ impl UniverseSolver {
         self.minimize(&internal, &relevant)?;
         // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left, and only what is still free is generalized.
         self.merge_forced_equalities(&relevant)?;
+        self.identify_bounded_choices(&relevant)?;
         let metas = relevant
             .iter()
             .copied()
