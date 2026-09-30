@@ -1717,6 +1717,13 @@ impl Context {
             Some(span) => stand_in.with_span(span),
             None => stand_in,
         };
+        curios_profile::note!(
+            target: "curios_elab::solve",
+            meta = inner.0,
+            outer = outer.0,
+            %stand_in,
+            "restricted: embedded metavariable",
+        );
         self.solve_metavar(inner, stand_in);
     }
 
