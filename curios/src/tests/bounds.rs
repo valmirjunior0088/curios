@@ -10,7 +10,7 @@ use super::{core_elab, typecheck};
 const LANDED: u8 = 6;
 
 /// The imports every program opens with.
-const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io, proved};";
+const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Char, List, Eq, Io, proved};";
 
 /// What a row asks the procedure for.
 enum Ask {
@@ -147,6 +147,19 @@ const ROWS: &[Row] = &[
         "{}",
         "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = proved(); () | false => () end",
     ),
+    // A range check's guard over a call and over a local definition: its bounds are proved over the operands the arm's key spells, which both checkers hold, where their reducts — the intrinsic a call unfolds to, the value a definition stands for — are a spelling one of them misses.
+    body(
+        3,
+        "c: Byte",
+        "{}",
+        "match Nat/in_range(Byte/to_nat(c), 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, Byte/to_nat(c)) = proved(); () | false => () end",
+    ),
+    body(
+        3,
+        "m: Nat",
+        "{}",
+        "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, m) = proved(); () | false => () end",
+    ),
     // An `==` guard's true arm, as the equation it gives.
     body(
         3,
@@ -183,6 +196,32 @@ const ROWS: &[Row] = &[
         "n: Int, q: Int/Le(n, +10)",
         "Int",
         "match n > +20 | true => match Bool/False/refuted() end | false => +0 end",
+    ),
+    // A range check from zero over a local definition, `Str`'s shape: the check folds to its upper bound, which is still proved over the check the arm recorded.
+    body(
+        4,
+        "c: Byte, q: Bool/Holds(Nat/in_range(Byte/to_nat(c), 0x80, 0xBF))",
+        "Nat",
+        "let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F) | true => match Bool/False/refuted() end | false => 0 end",
+    ),
+    // A hypothesis the arm's guard reduces to an empty proposition refutes the scope by itself, for a contradiction and for a bound alike.
+    body(
+        4,
+        "n: Nat, q: Bool/Holds(Nat/in_range(n, 0x80, 0xBF))",
+        "Nat",
+        "match n <= 0x7F | true => match Bool/False/refuted() end | false => 0 end",
+    ),
+    body(
+        4,
+        "n: Nat, p: Nat/Le(0x80, n)",
+        "{}",
+        "match n <= 0x7F | true => let _: Nat/Lt(n, 3) = proved(); () | false => () end",
+    ),
+    body(
+        4,
+        "n: Int, p: Int/Le(+0x80, n)",
+        "Int",
+        "match n <= +0x7F | true => match Bool/False/refuted() end | false => +0 end",
     ),
     // Truncated subtraction, read by the case split its definition makes.
     claim(
@@ -493,6 +532,15 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
             && absurd.contains("they all hold at x = 3/2"),
         "{absurd}"
     );
+
+    // A guard written through `Cmp` is recorded as written and as the dispatch resolves, and is one fact.
+    let guarded = {
+        let program = format!(
+            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match Bool/False/refuted() end | false => 0 end;\nIo/pure(())"
+        );
+        typecheck(&program).expect_err("the control is refused")
+    };
+    assert_eq!(guarded.matches("a guard,").count(), 1, "{guarded}");
 
     // A decision the procedure reads nothing in says nothing new.
     let silent = refusal("b: Bool", "Bool/Holds(b)");

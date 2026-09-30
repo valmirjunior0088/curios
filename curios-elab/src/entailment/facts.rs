@@ -4,7 +4,8 @@
 //!
 //! - A hypothesis in scope whose type reduces to a decided comparison, a conjunction of comparisons — `&&`, and any `Bool` function unfolding to one as `in_range` and `Char/is_upper` do — or an equation at `Nat` or `Int`.
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
-//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `Le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it.
+//! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
+//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `Le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, and a truncated subtraction's cases ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
@@ -18,12 +19,12 @@
 //! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function, an equality's false arm — is kept for the report.
 
 use {
-    super::{decision_of, global, in_scope},
-    crate::{Context, Error, reduce_with},
+    super::{decision_of, global, in_scope, is_empty},
+    crate::{Context, Error, open_layer, reduce_with},
     curios_algebra::{Carrier, LinearForm, Monomial, Operation},
     curios_core::{
-        Cases, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat, StructType, Subterm,
-        Term, TupleType,
+        Apply, Cases, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat, StructType,
+        Subterm, Term, TupleType,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -287,6 +288,9 @@ impl<'a> Reader<'a> {
         if let Some(decision) = decision_of(context, &reduced)? {
             return self.decision(context, &decision, type_, proof, origin);
         }
+        if is_empty(context, &reduced) {
+            return self.refutation(context, proof, origin);
+        }
         let equality = Global::Authored(context.syntax().entailment.equality.qualifier());
         if let Subterm::InductType(InductType {
             name,
@@ -429,38 +433,38 @@ impl<'a> Reader<'a> {
 
     /// The guards live now — the arm's at insertion, the birth's at a retry, since the caller installed those.
     ///
-    /// A guard's written spelling is reduced with its own refinement withheld, which turns `i < m` written through `Cmp` into the `Nat/lt` intrinsic, and `Char/is_upper(c)` into `in_range`'s body, without the arm answering `true` for either.
+    /// **A guard's fact is proved at the spelling its key records.** `qed` checks against the guard only where the arm's refinement answers it, and the key both checkers hold is the guard as written, with its heads opened as its resolved spelling opens them — not a reduct of its operands, which is a spelling one of them may miss: a local definition the kernel substitutes and the elaborator names, a call reduced to the intrinsic it unfolds to. So the written spelling is opened by its heads alone ([`opened`]): `i < m` written through `Cmp` to the `Nat/lt` intrinsic over `i` and `m` as written, `Char/is_upper(c)` to the `in_range` call it makes. Where that reaches neither a comparison nor a range check, the guard is reduced with its own refinement withheld, without the arm answering `true` for it: a range check from zero, whose lower bound folds away, in its false arm.
+    ///
+    /// A guard written through a concept is recorded as written and as the dispatch resolves, two spellings of one fact, and is read once.
     fn guards(&mut self, context: &mut Context) -> Result<(), Error> {
         let entries = context
             .visible_scrutinee_entries()
             .map(|(frame, _, entry)| (frame, entry.original.clone(), entry.value.clone()))
             .collect::<Vec<_>>();
 
+        let mut read = Vec::<(usize, Term)>::new();
         for (frame, written, value) in entries {
             let Subterm::Intrinsic(Intrinsic::Bool(case)) = &*value else {
                 continue;
             };
             let case = *case;
+            let (opened, spelled) = context.with_refinements_withheld_from(frame, |context| {
+                Ok::<_, Error>((opened(context, &written)?, reduce_with(context, &written)?))
+            })?;
+            if read.contains(&(frame, spelled.clone())) {
+                continue;
+            }
+            read.push((frame, spelled.clone()));
             let origin = Origin::Guard(written.clone(), case);
-            let spelled = context
-                .with_refinements_withheld_from(frame, |context| reduce_with(context, &written))?;
-            match &*spelled {
-                Subterm::Intrinsic(comparison) => {
-                    self.guard(context, comparison, case, &written, origin)?;
+            match (opened, &*spelled) {
+                (Some(Opened::Range(c, lo, hi)), _) if case => {
+                    self.range(context, c, lo, hi, origin, &written)?;
                 }
-                // A range check's true arm, through `Le/of_in_range` at `qed`: the lemma's body was elaborated where no guard stood between the check and its unfolding, and `qed` checks against the check in the arm.
-                Subterm::Match(Match {
-                    head,
-                    cases:
-                        Cases::Bool {
-                            false_case,
-                            true_case,
-                        },
-                    ..
-                }) if case
-                    && matches!(&**false_case, Subterm::Intrinsic(Intrinsic::Bool(false))) =>
-                {
-                    self.range(context, head, true_case, origin, &written)?;
+                (Some(Opened::Comparison(comparison)), _) => {
+                    self.guard(context, &comparison, case, &written, origin)?;
+                }
+                (_, Subterm::Intrinsic(comparison)) => {
+                    self.guard(context, comparison, case, &written, origin)?;
                 }
                 _ => self.read.unread.push((origin, written)),
             }
@@ -511,28 +515,21 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A range check's true arm: `lo <= c` and `c <= hi`, read off `in_range`'s unfolded body. A weak head normal form leaves a match's arms as elaborated — `c <= hi` still a call through `Cmp` — so both conjuncts are reduced before they are read.
+    /// A range check's true arm: `lo <= c` and `c <= hi`, through `Le/of_in_range` at `qed` over the arguments the guard passes the check, so `qed` checks against the check the arm recorded. The lemma's body was elaborated where no guard stood between the check and its unfolding.
     fn range(
         &mut self,
         context: &mut Context,
-        first: &Term,
-        second: &Term,
+        c: Term,
+        lo: Term,
+        hi: Term,
         origin: Origin,
         written: &Term,
     ) -> Result<(), Error> {
         let range = context.syntax().entailment.range;
-        let (first, second) = (reduce_with(context, first)?, reduce_with(context, second)?);
-        let bounds = match (&*first, &*second) {
-            (
-                Subterm::Intrinsic(Intrinsic::NatLe(lo, c)),
-                Subterm::Intrinsic(Intrinsic::NatLe(bounded, hi)),
-            ) if c == bounded => Some((c.clone(), lo.clone(), hi.clone())),
-            _ => None,
-        };
-        let Some((c, lo, hi)) = bounds.filter(|_| in_scope(context, &[range])) else {
+        if !in_scope(context, &[range]) {
             self.read.unread.push((origin, written.clone()));
             return Ok(());
-        };
+        }
         let both = Term::apply(
             global(range),
             [c.clone(), lo.clone(), hi.clone(), qed(context)],
@@ -817,6 +814,24 @@ impl<'a> Reader<'a> {
             self.admit(context, statement, qed(context), Origin::Natural)?;
         }
         Ok(())
+    }
+
+    /// A proof of an empty proposition, which refutes the scope by itself: read as the fact `1 <= 0`, proved by eliminating it with a zero-arm match elaborated against that statement.
+    fn refutation(
+        &mut self,
+        context: &mut Context,
+        proof: Term,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        let statement = Intrinsic::NatLe(
+            literal(Carrier::Natural, 1u32),
+            literal(Carrier::Natural, 0u32),
+        );
+        let holds = context.syntax().proof.holds;
+        let stated = Term::apply(global(holds), [Term::intrinsic(statement.clone())]);
+        let refuted = eliminate(context, proof);
+        let proof = bound(context, stated, refuted);
+        self.admit(context, statement, proof, origin)
     }
 
     /// Admit the fact `proof` proves of `statement`, its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to — so its view is the one conversion computes; nothing where `statement` is no `Nat` or `Int` `<` or `<=`.
@@ -1107,6 +1122,44 @@ impl Lift {
             nonnegative,
         }
     }
+}
+
+/// What a guard's written spelling names once its heads are opened.
+enum Opened {
+    /// A call of the range check `Le/of_in_range` reads, with its arguments as written: `c`, `lo`, `hi`.
+    Range(Term, Term, Term),
+    /// A comparison the fragment reads, over its operands as written.
+    Comparison(Intrinsic),
+}
+
+/// `written` opened a layer at a time by its heads alone, as its resolved spelling is, until it is a call of the range check or a comparison: `None` where it becomes neither. No operand is reduced, so what it names is spelled as the arm's key spells it.
+fn opened(context: &mut Context, written: &Term) -> Result<Option<Opened>, Error> {
+    let check = global(context.syntax().entailment.in_range);
+    let mut current = written.clone();
+    // Bounded as the resolved spelling is: each step opens one application layer.
+    for _ in 0..16 {
+        match &*current {
+            Subterm::Apply(Apply { head, arguments }) if *head == check => {
+                return Ok(match arguments.as_slice() {
+                    [c, lo, hi] => Some(Opened::Range(
+                        c.term.clone(),
+                        lo.term.clone(),
+                        hi.term.clone(),
+                    )),
+                    _ => None,
+                });
+            }
+            Subterm::Intrinsic(comparison) if sides(comparison).is_some() => {
+                return Ok(Some(Opened::Comparison(comparison.clone())));
+            }
+            _ => {}
+        }
+        match open_layer(context, &current)? {
+            Some(layer) => current = layer,
+            None => return Ok(None),
+        }
+    }
+    Ok(None)
 }
 
 /// `match head | true => true_case | false => false_case end`, its motive elided as a written one is, so elaboration checks each arm against the expected type with `head` refined.

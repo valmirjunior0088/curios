@@ -973,7 +973,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 .map(|(key, original)| (key, original, false))
                 .collect::<Vec<_>>();
 
-            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it, since the written spelling already answers every probe a settlement could.
+            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it. That leaves a probe unanswered: settlement asks only an entry whose spelling names every local the probe does, and a probe reached by reduction names the locals the definitions' values mention, where the written spelling names the definitions — so under `let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F)`, `Byte/to_nat(c) <= 0x7F` is not answered. Algebra part 5's canonical refinement keys hold it.
             let unfolded = Unfolding::everything(&*context).term(head);
             if unfolded != *head {
                 for (key, original) in scrutinee_spellings(context, &unfolded)? {
@@ -1031,29 +1031,35 @@ fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, 
 /// A scrutinee's applied spine taken to weak-head normal form one application layer at a time, or `None` when it is not an application spine or nothing moved.
 ///
 /// Bounded rather than reduced: it opens layers and stops, so it never forces an argument. That is what makes it usable at *registration*, where reducing would cost the guard its subject's evaluation.
-///
-/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to ends the walk where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong reached `Telescope::open`'s assertion as a panic.
 fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let mut current = term.clone();
 
     // Bounded: each step consumes one application layer of an elaborated dispatch, and a runaway is a bug rather than something to spin on.
     for step in 0..16 {
-        let Subterm::Apply(apply) = &*current else {
+        let Some(opened) = open_layer(context, &current)? else {
             return Ok((step > 0).then_some(current));
         };
-
-        let Subterm::Func(Func { telescope, .. }) = &*reduce_with(context, &apply.head)? else {
-            return Ok((step > 0).then_some(current));
-        };
-
-        let args = apply.params().collect::<Vec<_>>();
-        if telescope.len() != args.len() {
-            return Ok((step > 0).then_some(current));
-        }
-        current = telescope.open(&args);
+        current = opened;
     }
 
     Ok(None)
+}
+
+/// One application layer of `term` opened: its head reduced to a function and the body instantiated at the arguments as written, or `None` where `term` is no application or its head reduces to no function of its arity. No argument is reduced.
+///
+/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong reached `Telescope::open`'s assertion as a panic.
+pub(crate) fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
+    let Subterm::Apply(apply) = &**term else {
+        return Ok(None);
+    };
+    let Subterm::Func(Func { telescope, .. }) = &*reduce_with(context, &apply.head)? else {
+        return Ok(None);
+    };
+    let args = apply.params().collect::<Vec<_>>();
+    if telescope.len() != args.len() {
+        return Ok(None);
+    }
+    Ok(Some(telescope.open(&args)))
 }
 
 /// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.

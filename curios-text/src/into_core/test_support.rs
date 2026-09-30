@@ -111,6 +111,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         equality: registry_name(&["std", "Eq", "Eq"]),
         sym: registry_name(&["std", "Eq", "sym"]),
         range: registry_name(&["std", "Nat", "Le", "of_in_range"]),
+        in_range: registry_name(&["std", "Nat", "in_range"]),
         nat: OrderSyntax {
             add: registry_name(&["std", "Nat", "Le", "add"]),
             scale: registry_name(&["std", "Nat", "Le", "mul_mono_r"]),

@@ -60,11 +60,15 @@ fn goal_of(context: &mut Context, reduced: &Term) -> Result<Option<Goal>, Error>
     if let Some(decision) = decision_of(context, reduced)? {
         return Ok(Some(Goal::Decision(decision)));
     }
-    let empty = matches!(&**reduced, Subterm::InductType(induct)
+    Ok(is_empty(context, reduced).then_some(Goal::Absurd))
+}
+
+/// Whether `reduced` is a proposition with no constructor.
+fn is_empty(context: &Context, reduced: &Term) -> bool {
+    matches!(&**reduced, Subterm::InductType(induct)
         if context
             .induct_decl(&induct.name)
-            .is_some_and(|decl| decl.constructor_order().next().is_none()));
-    Ok(empty.then_some(Goal::Absurd))
+            .is_some_and(|decl| decl.constructor_order().next().is_none()))
 }
 
 /// The decision `reduced` states is `true`, or `None` for a proposition the procedure reads nothing in. `/sys` states `Holds(b)` as `match b | true => True | false => False end`, so a bound it did not decide reduces to that match stuck on its decision. A weak head normal form leaves a match's arms as elaborated, so the true arm is reduced before it is compared with the truth.

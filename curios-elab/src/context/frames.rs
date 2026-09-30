@@ -42,7 +42,7 @@ impl DefEntry {
 pub(crate) struct ScrutineeEntry {
     pub(crate) original: Term,
     pub(crate) value: Term,
-    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement and canonicalization skip it, since the equation's own spelling already answers every probe they could.
+    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement and canonicalization skip it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
     pub(crate) alias: bool,
 }
 

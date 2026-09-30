@@ -105,6 +105,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         equality: name(&["std", "Eq", "Eq"]),
         sym: name(&["std", "Eq", "sym"]),
         range: name(&["std", "Nat", "Le", "of_in_range"]),
+        in_range: name(&["std", "Nat", "in_range"]),
         nat: OrderSyntax {
             add: name(&["std", "Nat", "Le", "add"]),
             scale: name(&["std", "Nat", "Le", "mul_mono_r"]),

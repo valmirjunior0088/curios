@@ -355,6 +355,8 @@ pub struct EntailmentSyntax {
     pub sym: SyntaxName,
     /// A range check's two bounds, as a pair: how a range check's guard is read, where a split on it would meet the guard's own key.
     pub range: SyntaxName,
+    /// The range check `range` reads, which a guard's written spelling is opened to: its bounds are proved over the arguments the guard's key spells, the one spelling both checkers record.
+    pub in_range: SyntaxName,
     /// The order vocabulary at `Nat`.
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
@@ -371,12 +373,13 @@ impl EntailmentSyntax {
             equality,
             sym,
             range,
+            in_range,
             nat,
             int,
             natural,
         } = self;
 
-        [holds_of_eq, refl, equality, sym, range]
+        [holds_of_eq, refl, equality, sym, range, in_range]
             .into_iter()
             .chain(nat.targets())
             .chain(int.targets())
