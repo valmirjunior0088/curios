@@ -263,14 +263,10 @@ fn a_stand_in_keeps_the_binders_the_candidate_reaches_and_prunes_the_rest() {
     let y = context.fresh(Some("y"));
     let w = context.fresh(Some("w"));
     let z = context.fresh(Some("z"));
-    context.birth_metavar(
-        MetavarId(0),
-        vec![(z.clone(), nat_type())],
-        Term::type_ground(),
-    );
+    context.birth_metavar(MetavarId(0), vec![(z, nat_type())], Term::type_ground());
     context.birth_metavar(
         MetavarId(1),
-        vec![(y.clone(), nat_type()), (w.clone(), nat_type())],
+        vec![(y, nat_type()), (w, nat_type())],
         Term::type_ground(),
     );
 
@@ -320,14 +316,14 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
         context.birth_metavar(
             MetavarId(0),
             vec![
-                (r.clone(), nat_type()),
-                (s.clone(), Term::tuple_type([(field, nat_type())])),
+                (r, nat_type()),
+                (s, Term::tuple_type([(field, nat_type())])),
             ],
             Term::type_ground(),
         );
         context.birth_metavar(
             MetavarId(1),
-            vec![(r.clone(), nat_type()), (v.clone(), nat_type())],
+            vec![(r, nat_type()), (v, nat_type())],
             Term::type_ground(),
         );
 
@@ -345,7 +341,7 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
             MetavarOrigin::Domain("x".into()),
             vec![Term::free_var(&r), argument],
         );
-        let candidate = Term::func_type([(x.clone(), embedded)], nat_type());
+        let candidate = Term::func_type([(x, embedded)], nat_type());
         let converted = conv(&mut context, &outer, &candidate);
         (context, converted, [x, r, s], pair)
     };
@@ -363,9 +359,9 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
         context.metavar_entry(stand_in.id).map(|entry| entry
             .telescope
             .iter()
-            .map(|(name, _)| name.clone())
+            .map(|(name, _)| *name)
             .collect::<Vec<_>>()),
-        Some(vec![r.clone(), s.clone()]),
+        Some(vec![r, s]),
     );
     let arm = Term::func_type(
         [(
