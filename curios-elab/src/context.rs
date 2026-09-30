@@ -21,10 +21,10 @@ use {
     curios_core::ReduceError,
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
-        ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, RecGroup,
-        StructDecl, Subterm, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
-        instantiate_universe_levels_scoped,
+        ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
+        RecGroup, StructDecl, Subterm, Term, Totality, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -587,11 +587,10 @@ impl Context {
         let spent = granted.saturating_sub(self.remaining.get());
         self.remaining.set(before.saturating_sub(spent));
 
-        match outcome {
-            Ok(value) => Ok(Some(value)),
-            // Exhaustion is the allowance's to absorb only when the allowance was the binding constraint. When the declaration's own remainder was smaller, the attempt spent the *declaration* out — swallowing that as an ordinary bail let elaboration continue at zero budget, where every later capped attempt failed for free and an unbounded retry spun without a single unit left to charge (the map-wall coda's literal-depth reproducer). The budget is the only bound that decides, so its exhaustion must outrank the cap that happened to be live.
-            Err(error) if error.is_exhausted() && before <= allowance => Err(error),
-            Err(_) => Ok(None),
+        // An attempt the declaration's own remainder bound is a probe like any other: its exhaustion is the declaration's verdict, and absorbing it would hand the caller a declined attempt where the truth is that nothing is left to spend, the caller going ahead on that answer. Only an attempt the cap bound below the remainder is the allowance's to decline, its exhaustion with every other failure, since the declaration still holds what the cap withheld.
+        match before <= allowance {
+            true => outcome.probed(),
+            false => Ok(outcome.ok()),
         }
     }
 

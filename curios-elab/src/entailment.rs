@@ -33,7 +33,7 @@ mod tests;
 
 use {
     crate::{Context, Error, Mode, elaborate, reduce_with},
-    curios_core::{Cases, Free, Global, LinearViews, Match, Subterm, Term, Var},
+    curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
 };
 
@@ -226,11 +226,9 @@ fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option
     let result = context.with_oracle(&refinements, |context| {
         elaborate(context, candidate, Mode::Check(bound.clone()))
     });
-    let verdict = match result {
-        Ok((proof, _)) => Ok(Some(proof)),
-        Err(error) if error.is_exhausted() => Err(error),
-        Err(_) => Ok(None),
-    };
+    let verdict = result
+        .probed()
+        .map(|checked| checked.map(|(proof, _)| proof));
     if !matches!(verdict, Ok(Some(_))) {
         context.rollback_solutions(mark);
     }

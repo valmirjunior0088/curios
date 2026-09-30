@@ -1,6 +1,9 @@
 use {
     super::{ClosedHost, Demand, reduce_closed, unfold_rec},
-    crate::{Category, Cost, Free, Intrinsic, Many, ReduceError, Reducer, Scope, Subterm, Term},
+    crate::{
+        Category, Cost, Exhaustion, Free, Intrinsic, Many, ReduceError, Reducer, Scope, Subterm,
+        Term,
+    },
     curios_num::{Binary, Grain},
     std::collections::BTreeMap,
 };

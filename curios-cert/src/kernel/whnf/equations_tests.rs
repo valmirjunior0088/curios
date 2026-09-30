@@ -3,7 +3,7 @@
 use {
     crate::{Kernel, whnf},
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Cost, Free, Intrinsic, Reducer, Term},
+    curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
     curios_utilities::Qualifier,
 };
 

@@ -7,8 +7,8 @@ mod tests;
 use {
     super::{Erased, Refusal, WitnessKey},
     curios_core::{
-        Atom, CalleeId, DisplayNames, Free, Global, Item, Level, Module, Polarity, ReaderNames,
-        ReaderPosition, ReduceError, Rename, Spelling, Spellings, Subterm, Term,
+        Atom, CalleeId, DisplayNames, Exhaustion, Free, Global, Item, Level, Module, Polarity,
+        ReaderNames, ReaderPosition, ReduceError, Rename, Spelling, Spellings, Subterm, Term,
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
@@ -1113,18 +1113,6 @@ impl Error {
         }
     }
 
-    /// Whether this failure is a spent budget: no judgment of the term it was spent on, so a procedure that asks and gets this propagates it rather than reading it as a refusal.
-    pub(crate) fn is_exhausted(&self) -> bool {
-        match self {
-            Self::ReduceExhausted { .. } | Self::ConvertExhausted { .. } => true,
-            Self::Located { error, .. }
-            | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
-            | Self::InScope { error, .. } => error.is_exhausted(),
-            _ => false,
-        }
-    }
-
     pub(crate) fn duplicate_witness(
         concept: Global,
         key: super::WitnessKey,
@@ -1681,6 +1669,20 @@ impl Error {
             | Self::UseParameterNotAConcept { found, .. } => out.push(found),
             Self::NonRegularWitnessPremise { premise, .. } => out.push(premise),
             _ => {}
+        }
+    }
+}
+
+impl Exhaustion for Error {
+    /// A spent budget is no judgment of the term it was spent on, however many contexts a report has wrapped it in.
+    fn is_exhausted(&self) -> bool {
+        match self {
+            Self::ReduceExhausted { .. } | Self::ConvertExhausted { .. } => true,
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. }
+            | Self::InScope { error, .. } => error.is_exhausted(),
+            _ => false,
         }
     }
 }

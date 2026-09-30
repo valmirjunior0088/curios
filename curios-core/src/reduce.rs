@@ -89,12 +89,38 @@ impl ReduceError {
             attempted: cost.get(),
         }
     }
+}
 
-    /// Whether this is a spent budget rather than a partial intrinsic folded outside its domain.
-    ///
+/// A failure that may be a spent budget rather than a verdict on the term the budget was spent on — the one distinction a [`Probe`] reads, stated by each checker's own error: [`ReduceError`] here, the elaborator's diagnostic and the kernel's error where each is defined.
+pub trait Exhaustion {
+    /// Whether this failure is a spent budget.
+    fn is_exhausted(&self) -> bool;
+}
+
+impl Exhaustion for ReduceError {
     /// A predicate rather than a pattern at every call site: the payload exists to be *read* by a diagnostic, and every other consumer only wants to know which of the two kinds of failure this is.
-    pub fn is_exhausted(&self) -> bool {
+    fn is_exhausted(&self) -> bool {
         matches!(self, Self::Exhausted { .. })
+    }
+}
+
+/// A reduction a probe asked for, read by the one rule every probe keeps.
+///
+/// **A probe asks for what its judgment can do without**: a spelling that only widens what the judgment sees — a refinement key's canonical form, the reduced spelling an inversion also abstracts, a candidate proof. A *demand* needs the value instead, and whatever reduction answers is its answer, which is why the folds propagate every failure.
+///
+/// **The rule.** The budget's exhaustion propagates: it is no verdict on the term but the declaration's own, it never refunds, and the judgment the probe serves has to see it. Every other failure is the term having no value at the type level — an access out of range, an effect — and the probe answers `None`, falling back to the spelling it was handed. A site that absorbed exhaustion instead would answer a question it could not afford — not convertible, not a proposition, no witness — and elaboration would go ahead on that answer with nothing left to spend.
+pub trait Probe<T, E> {
+    /// The value, `None` where the term has none at the type level, and the budget's exhaustion alone as a failure.
+    fn probed(self) -> Result<Option<T>, E>;
+}
+
+impl<T, E: Exhaustion> Probe<T, E> for Result<T, E> {
+    fn probed(self) -> Result<Option<T>, E> {
+        match self {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if error.is_exhausted() => Err(error),
+            Err(_) => Ok(None),
+        }
     }
 }
 
@@ -120,3 +146,6 @@ pub trait Reducer {
     /// A fresh binder identity, for a fold that must look under a binder to decide — `List/map`'s identity test opens the mapped function's body on one, and the closed machine's eta probe does the same. The identity space is the strategy's, since a binder minted here must alias none the lowerer, the elaborator or the archived prelude minted; it is assumed at no type, because what is asked of it is a weak-head reduct and never a judgment.
     fn fresh_binder(&mut self, hint: Option<&str>) -> Free;
 }
+
+#[cfg(test)]
+mod tests;

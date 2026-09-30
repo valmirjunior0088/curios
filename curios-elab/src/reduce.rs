@@ -14,9 +14,9 @@ use {
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
         FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
-        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Proj, Rec, RecGroup,
-        ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Var, Variant, Visit, accelerable, instantiate_universe_levels_scoped,
+        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Probe, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, Var, Variant, Visit, accelerable, instantiate_universe_levels_scoped,
         probe_spellings, project_erased_universes, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
@@ -301,18 +301,16 @@ pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
 ///
 /// Reached from the escalation path alone, never from a store: [`shallow_scrutinee`] is what a key is recorded under, and this is what decides a probe the recorded spelling missed.
 ///
-/// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
+/// Argument reduction is a [`Probe`]: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
         Subterm::Apply(Apply { head, arguments }) => {
             let arguments = arguments
                 .iter()
                 .map(|argument| {
-                    let term = match reduce(context, argument.term.clone()) {
-                        Ok(reduced) => reduced,
-                        Err(spent) if spent.is_exhausted() => return Err(spent),
-                        Err(_) => argument.term.clone(),
-                    };
+                    let term = reduce(context, argument.term.clone())
+                        .probed()?
+                        .unwrap_or_else(|| argument.term.clone());
                     Ok(Argument {
                         term,
                         plicity: argument.plicity,
@@ -339,7 +337,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
     Ok(project_erased_universes(&canonical))
 }
 
-/// `intrinsic` with each operand in weak-head normal form, best-effort as [`canonical_scrutinee`]'s arguments are: an operand that cannot reduce is kept as written, and exhaustion is the one error that propagates.
+/// `intrinsic` with each operand in weak-head normal form, each a [`Probe`] as [`canonical_scrutinee`]'s arguments are: an operand that cannot reduce is kept as written.
 ///
 /// The operands and never the node, and the two passes agree on what an operand is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
 fn canonical_operands(context: &mut Context, intrinsic: &Intrinsic) -> Result<Term, ReduceError> {
@@ -348,11 +346,11 @@ fn canonical_operands(context: &mut Context, intrinsic: &Intrinsic) -> Result<Te
 
     let mut operands = Vec::new();
     for operand in masking.take_masked_children() {
-        operands.push(match reduce(context, operand.clone()) {
-            Ok(value) => value,
-            Err(spent) if spent.is_exhausted() => return Err(spent),
-            Err(_) => operand,
-        });
+        operands.push(
+            reduce(context, operand.clone())
+                .probed()?
+                .unwrap_or(operand),
+        );
     }
 
     let mut index = 0;

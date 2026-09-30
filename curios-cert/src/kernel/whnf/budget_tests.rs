@@ -3,7 +3,7 @@
 use {
     crate::{Kernel, whnf},
     curios_analysis::fixture::SYNTAX,
-    curios_core::{Category, Cost, ReduceError, Reducer, Term},
+    curios_core::{Category, Cost, Exhaustion, ReduceError, Reducer, Term},
 };
 
 use super::test_support::*;

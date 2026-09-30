@@ -56,8 +56,8 @@ use {
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, Consumption, Cost, Free, Global, InductDecl, Level, LevelHead, Module,
-        Polarity, Reads, ReduceError, Reducer, Spelling, StructDecl, Term, UniverseConstraint,
-        UniverseContext, UniverseError, build_shorten_layered,
+        Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
+        UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
@@ -697,14 +697,12 @@ impl Kernel {
 
     /// Assume an arm's case equation: within the arm, `scrutinee` — as written, and as its dispatch resolves — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
     ///
-    /// The resolved spelling is computed before the equation is pushed, so it rests only on the equations outside it, which retract no earlier than it does — the view [`Kernel::settle_refinement`] has to reconstruct by withholding, had for free here. Only a local-bearing scrutinee is resolved, since [`Scope::refine`](scope::Scope) records nothing else, and only one with no head a probe presents already. Exhaustion propagates, as a settlement's does; any other refusal records the written spelling alone.
+    /// The resolved spelling is computed before the equation is pushed, so it rests only on the equations outside it, which retract no earlier than it does — the view [`Kernel::settle_refinement`] has to reconstruct by withholding, had for free here. Only a local-bearing scrutinee is resolved, since [`Scope::refine`](scope::Scope) records nothing else, and only one with no head a probe presents already. The resolution is a [`Probe`], as a settlement is: a scrutinee with no value at the type level records the written spelling alone.
     pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) -> Result<(), ReduceError> {
         let resolved = match scrutinee.has_local_free() && scrutinee.head_key().is_none() {
-            true => match whnf::resolved_spelling(self, &scrutinee) {
-                Ok(resolved) => resolved,
-                Err(error) if error.is_exhausted() => return Err(error),
-                Err(_) => None,
-            },
+            true => whnf::resolved_spelling(self, &scrutinee)
+                .probed()?
+                .flatten(),
             false => None,
         };
         self.scope.refine(scrutinee, resolved, value);
@@ -732,7 +730,7 @@ impl Kernel {
     ///
     /// **The whole of what the two-tier key defers.** Recording an equation costs nothing now; this is where the reduction the old key performed eagerly, once per arm, actually happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
     ///
-    /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; exhaustion is the one error that also propagates, because the budget it spent is real and the judgment has no business continuing at zero.
+    /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
         // Withholding equations is a change to the set in force, and so is restoring them: the local-bearing reducts remembered on either side of the settlement must not answer on the other.
         let outer = self.scope.hide_refinements_from(index);
@@ -742,18 +740,14 @@ impl Kernel {
         self.scope.show_refinements(outer);
         self.memos.begin_equations();
 
-        match reduct {
-            Ok(value) => {
-                self.scope.settle_refinement(index, Some(value));
+        match reduct.probed() {
+            Ok(settled) => {
+                self.scope.settle_refinement(index, settled);
                 Ok(())
             }
-            Err(error) => {
+            Err(spent) => {
                 self.scope.settle_refinement(index, None);
-
-                match error.is_exhausted() {
-                    true => Err(error),
-                    false => Ok(()),
-                }
+                Err(spent)
             }
         }
     }

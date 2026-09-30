@@ -24,10 +24,10 @@
 
 use {
     super::{
-        Apply, Argument, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, InstanceHead,
-        Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup,
-        ReduceError, Reducer, Scope, Subterm, Telescope, Term, instantiate_universe_levels_scoped,
-        reduce_intrinsic,
+        Apply, Argument, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid, Func,
+        InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
+        instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     std::{collections::HashMap, sync::Arc},

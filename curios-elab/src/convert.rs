@@ -32,9 +32,9 @@ use {
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Free, Func, FuncType,
         InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
-        Metavar, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        Variant, Visit, instantiate_universe_levels_scoped,
+        Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, Variant, Visit, instantiate_universe_levels_scoped,
     },
     curios_utilities::Plicity,
     std::{
@@ -1227,11 +1227,9 @@ impl Convert {
 
             subjects.push((entry.clone(), *birth));
 
-            // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling — only an exhausted budget propagates.
-            let reduced = match reduce(context, entry.clone()) {
-                Ok(reduced) => reduced,
-                Err(spent) if spent.is_exhausted() => return Err(spent),
-                Err(_) => continue,
+            // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling.
+            let Some(reduced) = reduce(context, entry.clone()).probed()? else {
+                continue;
             };
             let ambiguous = matches!(&*reduced, Subterm::Var(_))
                 || entries.contains(&reduced)
