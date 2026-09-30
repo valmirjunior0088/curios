@@ -10,7 +10,8 @@ use super::{core_elab, typecheck};
 const LANDED: u8 = 6;
 
 /// The imports every program opens with.
-const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Char, List, Eq, Io, proved};";
+const HEADER: &str =
+    "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io, proved};";
 
 /// What a row asks the procedure for.
 enum Ask {
@@ -107,6 +108,20 @@ const ROWS: &[Row] = &[
         "i: Nat, n: Nat, p: Nat/Lt(i, n)",
         "{}",
         "let k = n + 2; let _: Nat/Lt(i + 1, k) = proved(); ()",
+    ),
+    // A local definition bound to a call, `Str`'s `occurrence`: the facts over it are written over its name, where the call's reduct would carry the body it unfolds to, whose arms elaborate only where they were written.
+    body(
+        3,
+        "s: Str, at: Str/At(s), @here: Nat/Lt(at.offset, Bytes/len(s.bytes)), again: (p: Str/At(s)) -> Option({start: Str/At(s), ordered: Nat/Le(p.offset, start.offset)})",
+        "Option({start: Str/At(s), ordered: Nat/Le(at.offset, start.offset)})",
+        "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = proved())) | none() => Option/none() end",
+    ),
+    // A local definition bound to the item's own recursive call, which reduction reads as the slot the member is known by while it is checked: the bound waits on that slot alone, and is proved over the definition's name.
+    body(
+        3,
+        "k: Nat",
+        "{at: Nat, below: Nat/Le(at, k)}",
+        "match k | 0 => (at = 0, below = Bool/True/qed()) | j + 1 => let back = row(j); (at = back.at, below = proved()) end",
     ),
     // A guard's false arm, and a variable refined to a successor.
     body(

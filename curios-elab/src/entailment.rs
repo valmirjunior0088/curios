@@ -2,7 +2,7 @@
 //!
 //! **It writes a proof and elaborates it as written code is.** Both checkers recheck what it wrote, so a wrong proof is a term that does not check and the procedure's mistakes are refusals: nothing it adds is trusted. It changes no conversion rule, no refinement and no solving choice, and assigns only the hole it was asked about, with a term whose type is the hole's.
 //!
-//! **It runs only where the elaborator would otherwise report the bound**: at insertion, with the arm's refinements live, and at a parked bound's retry once the bound waits on nothing, under the refinements its slot was born under — which is what re-validation judges a solution by, so a guard is a fact for a bound born in its arm and not for one born outside it. It does not run after an item closes, which would lose the guards, since a guard here is a refinement and not a binder.
+//! **It runs only where the elaborator would otherwise report the bound**: at insertion, with the arm's refinements live, and at a parked bound's retry once the bound waits on nothing, under the refinements its slot was born under — which is what re-validation judges a solution by, so a guard is a fact for a bound born in its arm and not for one born outside it. A bound waiting only on the slot a `rec` group's member is known by while the group is checked is asked at both, and stays parked if refused: the slot's solution is the body the bound sits in, and a proof from the facts is written over the member's name rather than its slot. It does not run after an item closes, which would lose the guards, since a guard here is a refinement and not a binder.
 //!
 //! **What it proves.**
 //!
@@ -102,15 +102,17 @@ pub(crate) fn entail(
     let Some(goal) = goal_of(context, reduced)? else {
         return Ok(Entailed::Refused(Refusal::default()));
     };
+    // The decision as the bound spells it, which the proof is written over where the bound's reduct is only read.
+    let stated = held(context, bound)?;
 
     let entailed = context.with_entailing(|context| {
         if let Goal::Decision(decision) = &goal
-            && let Some(candidate) = tautology(context, decision)
+            && let Some(candidate) = tautology(context, stated.as_ref().unwrap_or(decision))
             && let Some(proof) = check(context, &candidate, bound)?
         {
             return Ok(Entailed::Proved(proof));
         }
-        linear(context, &goal, bound)
+        linear(context, &goal, stated.as_ref(), bound)
     })?;
     // The binders the proof reads are used, though the author wrote no reference to them.
     if let Entailed::Proved(proof) = &entailed {
@@ -120,12 +122,17 @@ pub(crate) fn entail(
 }
 
 /// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for. An absurd goal has no target and no negation: the facts must refute each other alone.
-fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, Error> {
+fn linear(
+    context: &mut Context,
+    goal: &Goal,
+    stated: Option<&Term>,
+    bound: &Term,
+) -> Result<Entailed, Error> {
     let mut views = LinearViews::default();
     let mut reader = Reader::new(&mut views);
     // A decision that is no `Nat` or `Int` `<` or `<=` is not a goal of the fragment: an equality's negation is a disjunction, and nothing else is a comparison the view reads. The goal is read first, so its atoms are handed out before any fact's.
     let target = match goal {
-        Goal::Decision(decision) => match reader.target(context, decision)? {
+        Goal::Decision(decision) => match reader.target(context, stated, decision)? {
             Some(target) => Some(target),
             None => return Ok(Entailed::Refused(Refusal::default())),
         },
@@ -177,7 +184,7 @@ fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, 
         &certificate,
     );
     let candidate = match written {
-        Written::Proof(candidate) => candidate,
+        Written::Proof(candidate) => facts.respell(&candidate),
         Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
     };
     match check(context, &candidate, bound)? {

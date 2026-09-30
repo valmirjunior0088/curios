@@ -117,7 +117,7 @@ pub(super) fn insert_auto_argument(
     let binder = binder_name(label);
 
     match plicity {
-        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. One that follows from the facts in scope is proved here for the same reason ([`crate::entail`]). A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
+        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. One that follows from the facts in scope is proved here for the same reason ([`crate::entail`]). A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]); one waiting only on a recursive member's slot is asked of that procedure first ([`waits_past_its_group`]).
         Plicity::Implicit => {
             let provenance = ImplicitOrigin {
                 func: func.clone(),
@@ -133,7 +133,7 @@ pub(super) fn insert_auto_argument(
             let proposition = crate::is_prop(context, type_).probed()?.unwrap_or(false);
             let waiting = proposition && waits_on_metavariable(context, &reduced);
             let mut refusal = None;
-            if proposition && !waiting {
+            if proposition && !waits_past_its_group(context, &reduced) {
                 match crate::entail(context, type_, &reduced)
                     .map_err(|error| bound_exhausted(context, error, type_, &provenance))?
                 {
@@ -202,7 +202,7 @@ pub(crate) fn attempt_discharge(
         context.solve_metavar(slot, inhabitant);
         return Ok(false);
     }
-    if waits_on_metavariable(context, &reduced) {
+    if waits_past_its_group(context, &reduced) {
         return Ok(true);
     }
     match context
@@ -214,6 +214,10 @@ pub(crate) fn attempt_discharge(
             return Ok(false);
         }
         crate::Entailed::Refused(refusal) => context.note_refusal(slot, refusal),
+    }
+    // Waiting on the group's own members alone: reduction may yet decide the bound once they are defined.
+    if waits_on_metavariable(context, &reduced) {
+        return Ok(true);
     }
     if matches!(&*reduced, Subterm::InductType(_)) {
         context.note_reduct(slot, reduced);
@@ -255,6 +259,14 @@ fn waits_on_metavariable(context: &Context, reduct: &Term) -> bool {
         .metavars()
         .iter()
         .any(|id| context.metavar_solution(*id).is_none())
+}
+
+/// Whether a bound's reduct waits on an unsolved metavariable other than the slot of a `rec` group's member — what reduction turns a recursive reference into while the group is checked. A bound waiting on such slots alone is still asked of the procedure that proves a bound from the facts in scope ([`crate::entail`]): the slot's solution is the body the bound sits in, so it waits on the bound itself, and a proof from the facts is written over the spellings in scope, which name the member rather than its slot.
+fn waits_past_its_group(context: &Context, reduct: &Term) -> bool {
+    reduct
+        .metavars()
+        .iter()
+        .any(|id| context.metavar_solution(*id).is_none() && !context.is_rec_slot(*id))
 }
 
 /// An exhausted discharge of a bound, re-reported by the partial definition it names when it names one ([`exhausted_bound`]).

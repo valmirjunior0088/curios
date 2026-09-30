@@ -14,6 +14,8 @@
 //!
 //! **A remainder by a literal is lifted away.** Conversion reads `k * (x / k) + x % k` as `x` wherever one side of a comparison holds both, so a sum of facts that holds a remainder beside its quotient's multiple is not the sum of their views. Every fact over `x % k` is therefore raised by the multiple on both sides, which conversion reads as a fact over `x` ([`Lift`]), and the remainder stays out of every form the search reads.
 //!
+//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
+//!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
 //! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function, an equality's false arm — is kept for the report.
@@ -124,9 +126,28 @@ pub(super) struct Facts {
     pub(super) splits: Vec<Split>,
     pub(super) lifts: Vec<Lift>,
     pub(super) unread: Vec<(Origin, Term)>,
+    /// Each reduct an operand was read through, beside the operand as stated.
+    spelled: Vec<(Term, Term)>,
 }
 
 impl Facts {
+    /// `term` with every reduct an operand was read through written as the operand was stated: what the facts invent over atoms — a natural's sign, a quotient's bounds, a subtraction's cases — is built from the atoms' reducts, and is written over the spellings in scope. An outer reduct is replaced before one inside it.
+    pub(super) fn respell(&self, term: &Term) -> Term {
+        let mut pending = self.spelled.iter().collect::<Vec<_>>();
+        let mut term = term.clone();
+        while let Some(at) = (0..pending.len()).find(|&index| {
+            let (reduct, _) = pending[index];
+            !pending
+                .iter()
+                .enumerate()
+                .any(|(other, (outer, _))| other != index && outer.mentions_term(reduct))
+        }) {
+            let (reduct, stated) = pending.swap_remove(at);
+            term = term.replace_term(reduct, stated);
+        }
+        term
+    }
+
     /// Whether `form` holds a remainder the facts were lifted over: a goal that does is not met by their sum, which is over the dividend, and is proved by refuting its negation, lifted as they were.
     pub(super) fn lifted_over(&self, form: &LinearForm) -> bool {
         self.lifts
@@ -162,6 +183,7 @@ impl<'a> Reader<'a> {
                 splits: Vec::new(),
                 lifts: Vec::new(),
                 unread: Vec::new(),
+                spelled: Vec::new(),
             },
             divided: Vec::new(),
             subtracted: Vec::new(),
@@ -169,31 +191,43 @@ impl<'a> Reader<'a> {
     }
 
     /// The goal `decision` states, or `None` where it is no `Nat` or `Int` `<` or `<=`: an equality's negation is a disjunction, and nothing else is a comparison the view reads. Read first, so its atoms are handed out before any fact's.
+    ///
+    /// `stated` is the decision as the bound spells it, where opening the bound reaches one: its comparison's operands are the goal's sides and it is what the refuting form splits on, so the refinement the split installs is keyed as the bound reads it. `decision` is its reduct, read where the stated spelling opens to no comparison.
     pub(super) fn target(
         &mut self,
         context: &mut Context,
+        stated: Option<&Term>,
         decision: &Term,
     ) -> Result<Option<Target>, Error> {
-        let reduced = reduce_with(context, decision)?;
-        let Subterm::Intrinsic(comparison) = &*reduced else {
-            return Ok(None);
+        let opened = match stated {
+            Some(stated) => match opened(context, stated)? {
+                Some(Opened::Comparison(comparison)) => Some((comparison, stated.clone())),
+                _ => None,
+            },
+            None => None,
+        };
+        let (comparison, decision) = match opened {
+            Some(opened) => opened,
+            None => match &*reduce_with(context, decision)? {
+                Subterm::Intrinsic(comparison) => (comparison.clone(), decision.clone()),
+                _ => return Ok(None),
+            },
         };
         let Some((carrier, relation @ (Operation::Less | Operation::AtMost), left, right)) =
-            sides(comparison)
+            sides(&comparison)
         else {
             return Ok(None);
         };
-        let Some((_, view)) = self.views.read(comparison) else {
+        let Some(form) = self.form(context, carrier, relation, &left, &right)? else {
             return Ok(None);
         };
-        let (_, form) = view.form().clone().aligned(view.relation());
         Ok(Some(Target {
             carrier,
             relation,
             left,
             right,
             form,
-            decision: decision.clone(),
+            decision,
         }))
     }
 
@@ -284,6 +318,9 @@ impl<'a> Reader<'a> {
         proof: Term,
         origin: Origin,
     ) -> Result<(), Error> {
+        if let Some(decision) = held(context, type_)? {
+            return self.decision(context, &decision, type_, proof, origin);
+        }
         let reduced = reduce_with(context, type_)?;
         if let Some(decision) = decision_of(context, &reduced)? {
             return self.decision(context, &decision, type_, proof, origin);
@@ -308,7 +345,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// A decision `proof` shows `true`: a comparison, an equality, or a conjunction of them.
+    /// A decision `proof` shows `true`: a comparison, an equality, a range check, or a conjunction of them — at the spelling `decision` states, opened by its heads, and read reduced where that opens to none of them. One that reduces to `false` refutes the scope.
     fn decision(
         &mut self,
         context: &mut Context,
@@ -317,28 +354,27 @@ impl<'a> Reader<'a> {
         proof: Term,
         origin: Origin,
     ) -> Result<(), Error> {
+        match opened(context, decision)? {
+            Some(Opened::Comparison(comparison)) => {
+                return self.comparison(context, &comparison, stated, proof, origin);
+            }
+            Some(Opened::Range(range)) => {
+                return self.range(context, range, proof, origin, stated);
+            }
+            Some(Opened::Conjunction(first, second)) => {
+                return self.conjunction(context, &first, &second, stated, proof, origin);
+            }
+            None => {}
+        }
         let reduced = reduce_with(context, decision)?;
         match &*reduced {
             Subterm::Intrinsic(Intrinsic::BoolAnd(first, second)) => {
                 self.conjunction(context, first, second, stated, proof, origin)
             }
-            Subterm::Intrinsic(comparison) => match sides(comparison) {
-                Some((_, Operation::Less | Operation::AtMost, ..)) => {
-                    self.admit(context, comparison.clone(), proof, origin)
-                }
-                Some((carrier, Operation::Equal, left, right))
-                    if in_scope(context, &[order(context, carrier).eq_of_eql]) =>
-                {
-                    let eq_of_eql = order(context, carrier).eq_of_eql;
-                    let equation =
-                        Term::apply(global(eq_of_eql), [left.clone(), right.clone(), proof]);
-                    self.equation(context, carrier, &left, &right, equation, origin)
-                }
-                _ => {
-                    self.read.unread.push((origin, stated.clone()));
-                    Ok(())
-                }
-            },
+            Subterm::Intrinsic(Intrinsic::Bool(false)) => self.refutation(context, proof, origin),
+            Subterm::Intrinsic(comparison) => {
+                self.comparison(context, comparison, stated, proof, origin)
+            }
             // A `Bool` function unfolding to a conjunction as `in_range` does: `match c >= lo | true => c <= hi | false => false end`, stuck on the first conjunct.
             Subterm::Match(Match {
                 head,
@@ -350,6 +386,33 @@ impl<'a> Reader<'a> {
                 ..
             }) if matches!(&**false_case, Subterm::Intrinsic(Intrinsic::Bool(false))) => {
                 self.conjunction(context, head, true_case, stated, proof, origin)
+            }
+            _ => {
+                self.read.unread.push((origin, stated.clone()));
+                Ok(())
+            }
+        }
+    }
+
+    /// A comparison `proof` shows holds: a bound as it stands, and an equality as the two bounds its equation gives.
+    fn comparison(
+        &mut self,
+        context: &mut Context,
+        comparison: &Intrinsic,
+        stated: &Term,
+        proof: Term,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        match sides(comparison) {
+            Some((_, Operation::Less | Operation::AtMost, ..)) => {
+                self.admit(context, comparison.clone(), proof, origin)
+            }
+            Some((carrier, Operation::Equal, left, right))
+                if in_scope(context, &[order(context, carrier).eq_of_eql]) =>
+            {
+                let eq_of_eql = order(context, carrier).eq_of_eql;
+                let equation = Term::apply(global(eq_of_eql), [left.clone(), right.clone(), proof]);
+                self.equation(context, carrier, &left, &right, equation, origin)
             }
             _ => {
                 self.read.unread.push((origin, stated.clone()));
@@ -457,8 +520,9 @@ impl<'a> Reader<'a> {
             read.push((frame, spelled.clone()));
             let origin = Origin::Guard(written.clone(), case);
             match (opened, &*spelled) {
-                (Some(Opened::Range(c, lo, hi)), _) if case => {
-                    self.range(context, c, lo, hi, origin, &written)?;
+                (Some(Opened::Range(range)), _) if case => {
+                    let qed = qed(context);
+                    self.range(context, range, qed, origin, &written)?;
                 }
                 (Some(Opened::Comparison(comparison)), _) => {
                     self.guard(context, &comparison, case, &written, origin)?;
@@ -515,13 +579,12 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A range check's true arm: `lo <= c` and `c <= hi`, through `Le/of_in_range` at `qed` over the arguments the guard passes the check, so `qed` checks against the check the arm recorded. The lemma's body was elaborated where no guard stood between the check and its unfolding.
+    /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `Le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
     fn range(
         &mut self,
         context: &mut Context,
-        c: Term,
-        lo: Term,
-        hi: Term,
+        Range { c, lo, hi }: Range,
+        proof: Term,
         origin: Origin,
         written: &Term,
     ) -> Result<(), Error> {
@@ -530,10 +593,7 @@ impl<'a> Reader<'a> {
             self.read.unread.push((origin, written.clone()));
             return Ok(());
         }
-        let both = Term::apply(
-            global(range),
-            [c.clone(), lo.clone(), hi.clone(), qed(context)],
-        );
+        let both = Term::apply(global(range), [c.clone(), lo.clone(), hi.clone(), proof]);
         let low = Term::proj(both.clone(), 0);
         self.admit(
             context,
@@ -850,19 +910,9 @@ impl<'a> Reader<'a> {
         else {
             return Ok(());
         };
-        let read = comparison_of(
-            carrier,
-            relation,
-            &reduce_with(context, &left)?,
-            &reduce_with(context, &right)?,
-        );
-        let Some((_, view)) = self.views.read(&read) else {
+        let Some(form) = self.form(context, carrier, relation, &left, &right)? else {
             return Ok(());
         };
-        let (aligned, form) = view.form().clone().aligned(view.relation());
-        if aligned != Operation::AtMost {
-            return Ok(());
-        }
         // A strict fact is the loose one of its successor, which is the spelling the lemmas take; the stated sides are the proof's, not the reduct's.
         let left = match relation {
             Operation::Less => successor(carrier, left),
@@ -881,6 +931,45 @@ impl<'a> Reader<'a> {
             lift.apply(&mut fact);
         }
         self.read.facts.push(fact);
+        Ok(())
+    }
+
+    /// The form of `left ⋈ right` at `carrier`, aligned to `<=`: its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to — so its view is the one conversion computes, and each reduct recorded beside the spelling it was read from ([`Reader::spell`]). `None` where the view does not read it.
+    fn form(
+        &mut self,
+        context: &mut Context,
+        carrier: Carrier,
+        relation: Operation,
+        left: &Term,
+        right: &Term,
+    ) -> Result<Option<LinearForm>, Error> {
+        self.spell(context, left)?;
+        self.spell(context, right)?;
+        let read = comparison_of(
+            carrier,
+            relation,
+            &reduce_with(context, left)?,
+            &reduce_with(context, right)?,
+        );
+        let Some((_, view)) = self.views.read(&read) else {
+            return Ok(None);
+        };
+        let (aligned, form) = view.form().clone().aligned(view.relation());
+        Ok((aligned == Operation::AtMost).then_some(form))
+    }
+
+    /// Each leaf of `stated` — what is no intrinsic, walked to through the intrinsics around it — recorded beside its reduct where the two differ, for [`Facts::respell`] to write what is built from the reduct over the leaf.
+    fn spell(&mut self, context: &mut Context, stated: &Term) -> Result<(), Error> {
+        if let Subterm::Intrinsic(intrinsic) = &**stated {
+            for operand in intrinsic.operands() {
+                self.spell(context, operand)?;
+            }
+            return Ok(());
+        }
+        let reduct = reduce_with(context, stated)?;
+        if reduct != *stated && !self.read.spelled.iter().any(|(known, _)| *known == reduct) {
+            self.read.spelled.push((reduct, stated.clone()));
+        }
         Ok(())
     }
 }
@@ -1124,35 +1213,68 @@ impl Lift {
     }
 }
 
-/// What a guard's written spelling names once its heads are opened.
-enum Opened {
-    /// A call of the range check `Le/of_in_range` reads, with its arguments as written: `c`, `lo`, `hi`.
-    Range(Term, Term, Term),
-    /// A comparison the fragment reads, over its operands as written.
-    Comparison(Intrinsic),
+/// A range check as stated: `lo <= c <= hi`.
+struct Range {
+    c: Term,
+    lo: Term,
+    hi: Term,
 }
 
-/// `written` opened a layer at a time by its heads alone, as its resolved spelling is, until it is a call of the range check or a comparison: `None` where it becomes neither. No operand is reduced, so what it names is spelled as the arm's key spells it.
-fn opened(context: &mut Context, written: &Term) -> Result<Option<Opened>, Error> {
+/// What a statement names once its heads are opened.
+enum Opened {
+    /// A call of the range check `Le/of_in_range` reads, its arguments as stated.
+    Range(Range),
+    /// A comparison the fragment reads, over its operands as stated.
+    Comparison(Intrinsic),
+    /// A conjunction, its conjuncts as stated.
+    Conjunction(Term, Term),
+}
+
+/// `stated` opened a layer at a time by its heads alone, as a guard's resolved spelling is, until it is a call of the range check, a comparison or a conjunction: `None` where it becomes none of them. No operand is reduced, so what it names is spelled as the statement spells it — as an arm's key spells a guard.
+fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error> {
     let check = global(context.syntax().entailment.in_range);
-    let mut current = written.clone();
-    // Bounded as the resolved spelling is: each step opens one application layer.
+    open_until(context, stated, |term| match &**term {
+        Subterm::Apply(Apply { head, arguments }) if *head == check => match arguments.as_slice() {
+            [c, lo, hi] => Some(Some(Opened::Range(Range {
+                c: c.term.clone(),
+                lo: lo.term.clone(),
+                hi: hi.term.clone(),
+            }))),
+            _ => Some(None),
+        },
+        Subterm::Intrinsic(Intrinsic::BoolAnd(first, second)) => {
+            Some(Some(Opened::Conjunction(first.clone(), second.clone())))
+        }
+        Subterm::Intrinsic(comparison) if sides(comparison).is_some() => {
+            Some(Some(Opened::Comparison(comparison.clone())))
+        }
+        _ => None,
+    })
+    .map(Option::flatten)
+}
+
+/// The decision `stated` holds, opened by its heads to `Bool/Holds(decision)` — `Nat/Lt(i, n)` to `i < n` as written — or `None` where opening reaches no `Holds`.
+pub(super) fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
+    let holds = global(context.syntax().proof.holds);
+    open_until(context, stated, |term| match &**term {
+        Subterm::Apply(Apply { head, arguments }) if *head == holds => match arguments.as_slice() {
+            [decision] => Some(decision.term.clone()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+/// What `found` answers of `term` or of the first layer opening its heads reaches that it answers of, or `None` where opening stops first. Bounded as the resolved spelling is: each step opens one application layer.
+fn open_until<T>(
+    context: &mut Context,
+    term: &Term,
+    found: impl Fn(&Term) -> Option<T>,
+) -> Result<Option<T>, Error> {
+    let mut current = term.clone();
     for _ in 0..16 {
-        match &*current {
-            Subterm::Apply(Apply { head, arguments }) if *head == check => {
-                return Ok(match arguments.as_slice() {
-                    [c, lo, hi] => Some(Opened::Range(
-                        c.term.clone(),
-                        lo.term.clone(),
-                        hi.term.clone(),
-                    )),
-                    _ => None,
-                });
-            }
-            Subterm::Intrinsic(comparison) if sides(comparison).is_some() => {
-                return Ok(Some(Opened::Comparison(comparison.clone())));
-            }
-            _ => {}
+        if let Some(answer) = found(&current) {
+            return Ok(Some(answer));
         }
         match open_layer(context, &current)? {
             Some(layer) => current = layer,
