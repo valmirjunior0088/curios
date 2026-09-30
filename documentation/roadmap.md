@@ -106,10 +106,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Algebra, part 2: a bound that follows from the facts in scope is proved by the elaborator](roadmap/algebra/02-bounds-from-facts-spec.md) — a bound that follows from a hypothesis or a guard by linear arithmetic is refused, and the author writes the lemma chain; may begin, on the view and contract `curios-core`'s `linear` module publishes
   - [ ] [Algebra, part 3: declared operations for `pow`, `min` and `max`, `abs` and `sign`, and the float identities](roadmap/algebra/03-declared-operations-spec.md) — `min`, `max`, `abs` and `sign` are library functions conversion sees unfolded, `pow` is no operation, and the float laws that hold for every bit pattern are refused
   - [ ] [Algebra, part 4: relational facts decided in conversion, justified by checked evidence](roadmap/algebra/04-relational-layer-spec.md) — not refined yet; waits for a consumer that needs a relational fact by conversion rather than by proof
-- [ ] Canonical refinement keys in place of the spelling probes, deferred to a consumer
-- [ ] Polynomial unification proposals, deferred to a consumer
-- [ ] Boolean and bitwise normal forms, with a priced budget in place of the truth table's eight-atom cap, deferred to a consumer
-- [ ] A reflection law for `Bytes/eql`, deferred to a consumer
+  - [ ] [Algebra, part 5: what conversion still decides by spelling or by cap](roadmap/algebra/05-decided-by-spelling-or-cap-spec.md) — not refined yet; refinement lookup depends on how a scrutinee is spelled, Boolean agreement stops at a fixed atom cap, unification proposes nothing through a polynomial, `Bytes/eql` has no reflection law, and the three sequence carriers are three representations inside the compiler
 
 ### Compile-time cost
 
@@ -121,7 +118,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A string literal is checked once per use
 - [x] The unfolding discard decides on progress
 - [x] Five measured cliffs where an ordinary spelling cost superlinearly, or refused
-- [ ] Elaboration linear in `let` depth: a chain of 6,000 `let`s did not finish in 25 minutes
+- [ ] [Size cliffs: a long `let` chain, deep nesting, many bindings](roadmap/size-cliffs-spec.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local, so each refuses or does not finish past a size an ordinary program reaches
 
 ## Numbers and intrinsic carriers
 
@@ -190,7 +187,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Build-scoped archived prelude and replay (`curios-prelude-archive`, certified by `curios-prelude`), erased once at compiler build time and replayed from the archive
 - [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
 - [x] [Recursion restored to the defunctionalized walks](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
-- [ ] The parser buys its depth with stack, as the lowerings do: nested calls overflow the 8 MiB main stack at about 200 levels in a debug build, and nested parentheses or `+` at about 400
 - [ ] A verdict is a function of what it reads — the certifier's own verdicts and checked evidence, and a compilation scheduled as a graph of item tasks
   - [x] Verdicts, part 1: [the certifier measured](../curios-cert/README.md#measuring-the-certifier) by item, walk stage and judgment against a recorded baseline, the profile fold reporting each span's self time and its costliest calls with their fields, and [Cranelift compiling in parallel](../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) in `curios` alone. The first reading found level entailment spending nine seconds on one `/std/Try` witness, and [entailment went forward to a least model](../curios-cert/README.md#level-entailment-is-forward-reasoning-to-a-least-model), with satisfiability decided by loop-checking the same model and the levels a declaration's constraints determine solved before it is generalized
   - [ ] [Verdicts, part 2: no verdict depends on history](roadmap/verdicts/02-no-history-spec.md) — the elaborator's closed-reduct cache outlives its declaration and hits free, so acceptance can depend on which items were compiled first
@@ -199,7 +195,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Verdicts, part 5: one environment, and every read recorded](roadmap/verdicts/05-one-environment-spec.md) — the item graph is computed three times, and the elaborator threads state from item to item
   - [ ] [Verdicts, part 6: a compilation is a graph of item tasks](roadmap/verdicts/06-item-tasks-spec.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
   - [ ] [Verdicts, part 7: checked evidence and trusted reasoning](roadmap/verdicts/07-checked-evidence-spec.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [Algebra, part 4](roadmap/algebra/04-relational-layer-spec.md)'s relational layer has a consumer
-- [ ] One internal sequence carrier for `List`, `Bits` and `Bytes`, preserving the guest carriers, deferred to a consumer
 
 ## Code generation
 
@@ -246,7 +241,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit), and full table and element section support (plural tables, every segment mode)
 - [x] Wasm-emission optimizations: `struct.new` construction with immutable fields, and direct `br` for single-target regions
 - [x] Binaryen closed-world post-optimization pass, observable as `Stage::WasmOptm` through `wonder stage`
-- [ ] Locals reused across a function's bindings: every binding gets a fresh local and the module is validated before Binaryen merges them, so 200 `let`s of 30 operations each panic with "too many locals"
 
 ### Measured workloads
 
@@ -292,7 +286,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`ForeignStore`)
 - [x] Surface `foreign` declarations, accumulating a second `ffi`-tier store
 - [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`), filled from the manifest: a package names the WebAssembly module answering its declarations and which export answers which, `curate` fetches it against a file hash, `run` and `test` link it in process, and `compile` carries it inside the executable — so a program declaring `foreign` runs where there is no manifest, no sources and no compiler
-- [ ] A plugin that speaks more than scalars and byte strings (a `Handle`, a `List` and several results at once are each refused where the signature is read, because marshalling is the host copying between a GC array and a linear memory)
+- [ ] [Foreign calls past scalars and byte strings](roadmap/foreign-calls-past-scalars-spec.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
 
 ## Standard library
 
@@ -309,8 +303,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Core collections (`/std/List` and its helpers, and `/std/Vec`, which counts a list in its type)
 - [x] Key-value map (`/std/Map`: a canonical crit-bit trie over `Bytes` keys), with `Key(Nat)`, `Key(Byte)` and `Key(Bool)` over the encodings `/std/Hash` already gave them
-- [ ] The certified sort, deferred to a consumer
-- [ ] The `Ord`-keyed tree, deferred to a consumer
+- [ ] [A certified sort and an `Ord`-keyed tree](roadmap/certified-sort-and-ord-tree-spec.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
 
 ### Text and formats
 
@@ -338,8 +331,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Standard-library invariants, part 3: a shared term costs its size](roadmap/invariants/03-shared-term-costs-spec.md) — settlement is a quarter of `/std`'s elaboration, `capture` loses sharing while `shift`, `release` and the kernel's typing walk an open term per path, and a type-level `index_of` does not finish
   - [ ] [Standard-library invariants, part 4: the library's remaining invented values](roadmap/invariants/04-remaining-invented-values-spec.md) — HTTP frames neither requests nor replies as RFC 9112 does, `Json` accepts `01`, the text formats re-check the UTF-8 of input that began as text, and no inventory says which defaults are specified
   - [ ] [Standard-library invariants, part 5: a universe level only a parameter's type mentions is irrelevant](roadmap/invariants/05-nominal-universe-variance-spec.md) — `!` holds its region at the level of a nominal action it binds, since both checkers compare a nominal type's universe levels for equality, so `/std/Cli`'s `fill` binds through `Result/bind`
-  - [ ] Witness goals deferred past their declaration — the scheduler orders an item after the witnesses it reaches by operator or method name, not after those its `!` or a `use` premise reaches, so a generic declaration dispatching through a witness declared later is settled at its least levels (`tests::universes::a_goal_deferred_past_its_declaration_settles_at_its_least_levels`); a late resolution that would constrain a level its declaration already closed is left to the kernel rather than reported there, and the refusal a program meets names neither: `rewrap` at `Box(Type)` reads `inferred: Type, expected: ?`
-  - [ ] `identify_universe_levels` commits two instances' levels equal where unfolding alone would decide, which Rocq answers with weak `ULub` constraints
+  - [ ] [Standard-library invariants, part 6: what the universe work left](roadmap/invariants/06-universe-work-left-spec.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and `identify_universe_levels` commits two instances' levels equal where unfolding alone would decide
 
 ## Diagnostics
 
@@ -371,9 +363,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
 - [x] Profiling is a property of the build, not a subcommand (`curios profile` retired; a `profile` build files every span and event of whatever it ran to `.artifacts/profile.tsv` beside the crate that wrote it, and `cargo x profile` folds it)
-- [ ] What checking a declaration cost, in the budget's own machine-independent units (not refined yet)
-- [ ] How often each priced site ran, from one execution (not refined yet)
-- [ ] A buffered stream beside the written-through one, for a run where writing each row as it is made costs more than surviving an abort is worth — about 11% on `/std`'s elaboration, measured on a shared machine
+- [ ] [Profiling in the budget's own units](roadmap/profiling-in-budget-units-spec.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, counts no priced site, and writes every row as it is made
 
 ### Distribution
 
