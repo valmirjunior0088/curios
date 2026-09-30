@@ -53,7 +53,7 @@ fn reading_module() -> Module {
     }
 }
 
-/// A definition's record holds what judging it read, of the kind it read, and nothing another judgment did. `five` applies `identity`, which types the head — its signature — and unfolds nothing. `three`'s declared type is `alias`, and a type is typed by reducing it first, so `alias` is unfolded and its own type never asked for: its body is read and its signature is not. `four` names nothing, and `alias` reads nothing of its own.
+/// A definition's record holds what judging it read, of the kind it read, and nothing another judgment did. `five` applies `identity`, which types the head — its signature — and unfolds nothing. `three`'s declared type is `alias`, which is typed as written, so `alias`'s signature is read, and checking `3` against it unfolds it, so its body is read too. `four` names nothing, and `alias` reads nothing of its own.
 #[test]
 fn a_definition_reads_the_signature_it_types_and_the_body_it_unfolds() {
     let rechecked = fixture_certified(&reading_module(), 1_000_000, &Globals::default(), SYNTAX);
@@ -76,7 +76,7 @@ fn a_definition_reads_the_signature_it_types_and_the_body_it_unfolds() {
     assert_eq!(
         reads("three"),
         Reads {
-            signatures: BTreeSet::new(),
+            signatures: BTreeSet::from([global("alias")]),
             bodies: BTreeSet::from([global("alias")]),
         },
     );

@@ -53,7 +53,7 @@ use {
 ///
 /// This once drove an explicit worklist instead, and the worklist quietly changed the *rule*: a deferred child was inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction. Since the deferred positions are exactly arguments, constructor payloads and record fields, that made a lambda or a dependent tuple in argument position take the inferred route and manufacture the non-dependent type those rules exist to avoid. Nothing in the prelude or corpus reached the shape, so it never surfaced. See `documentation/soundness/per-term-rules/checked-rules-at-deferred-child-positions.md`.
 ///
-/// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a type is checked by reducing it and typing the reduct, and a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the one before it four times — so typing it per path made a three-character claim in a type cost 677,246 inferences. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
+/// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path made a three-character claim in a type cost 677,246 inferences. Typing a type as written rather than its reduct left that standing: without the memo, `Str/split_once` and `Str/trim` claims in a type do not finish in 300 s, where they take half a minute with it. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     recurse(|| {
         // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a local-free term names no member.
@@ -432,12 +432,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 ///
 /// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate now.
 ///
-/// **The reduction comes first, and it is not incidental.** `Sort::of` opens by reducing, and typing the unreduced spelling instead answers a different question: `List.{v,w}(Waker)` types as `Type v` — its former's promised codomain — while its reduced form `ListType(Waker)` is the minimal `Type 0` that the constructor size condition needs, and a computed type is only the shape it computes to once reduced. Without this line the standard library loses twelve items to the size condition and one to a projection through `/std/Fmt`.
-///
-/// That reduction is also why `whnf` must be *total* on arbitrary terms rather than merely correct on well-typed ones: this judgment hands it a term nothing has typed yet, by construction.
+/// **The type is typed as written.** It was once reduced first and its reduct typed: an application of a former types at the former's promised codomain, and while the elaborator let an occurrence's level float above its argument's, `List.{u}(Waker)` sat at a parameter where its reduct `ListType(Waker)` sat at the `Type 0` the constructor size condition needs — typing the written spelling cost the standard library 46 declarations. Reading the reduct also accepted what a redex dropped, an argument or an arm, with nothing having typed it. The elaborator now settles an occurrence at its recorded floor, its argument's level (`curios-elab`'s `UniverseSolver::finalize`), so a written type lands in the sort its reduct does and the size condition loses nothing to reading it.
 pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
-    let reduced = kernel.reduce_forced(type_.clone())?;
-    let inferred = infer(kernel, &reduced)?;
+    let inferred = infer(kernel, type_)?;
 
     as_sort(kernel, &inferred)
 }

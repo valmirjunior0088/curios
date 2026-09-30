@@ -384,7 +384,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     );
 }
 
-/// A crafted module can spell what no elaborated term does: an instance whose head is a `let`-bound variable, which let-reduction then substitutes with an arbitrary value. `whnf` promises totality on arbitrary terms — `infer_type` reduces a declared type before anything types it — so the walk must return a verdict rather than abort: the substitution dissolves the instance to its head's value, the same levels-inert reading the sort fixtures pin for local heads. The typed head made the shape unrepresentable everywhere else; this is the one seam substitution can still drive, and the regression it pins is the walk surviving it.
+/// A crafted module can spell what no elaborated term does: an instance whose head is a `let`-bound variable, which let-reduction then substitutes with an arbitrary value. The declared type types — an instance of a local head reads levels-inert, as the sort fixtures pin for local heads — and checking `5` against it reduces it, where `whnf` promises totality on arbitrary terms, so the walk must return a verdict rather than abort: the substitution dissolves the instance to its head's value. The typed head made the shape unrepresentable everywhere else; this is the one seam substitution can still drive, and the regression it pins is the walk surviving it.
 #[test]
 fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_walk() {
     let alias = Free::local(960, Some("alias"));
