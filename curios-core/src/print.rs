@@ -1,14 +1,14 @@
 use {
     super::{
-        Apply, Argument, Arity, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Enter, Field,
-        Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Let, Level, Match, MatchResult,
+        Apply, Argument, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field, Free, Func,
+        FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Level, Match, MatchResult,
         Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Spellings, Struct, StructType,
         Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
-    curios_utilities::{InfixOp, Plicity, Qualifier, recurse},
+    curios_utilities::{InfixOp, Plicity, Qualifier, Symbol, recurse},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -59,7 +59,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 #[derive(Clone, Default)]
 pub struct Spelling {
     /// axis (a) — local binders to their source-style names.
-    pretty: Option<Rc<HashMap<Free, String>>>,
+    pretty: Option<Rc<Rename>>,
     /// axis (b) without a reader — global qualified names to their shortest unambiguous suffix.
     shorten: Option<Rc<HashMap<Global, String>>>,
     /// axis (c) — whether to suppress universe instances and metavariable-headed levels.
@@ -214,7 +214,7 @@ fn spine_arguments(term: &Term) -> Vec<Term> {
 
 impl Spelling {
     /// Rename local binders to source-style names (axis (a)).
-    pub fn with_pretty_names(mut self, rename: Rc<HashMap<Free, String>>) -> Self {
+    pub fn with_pretty_names(mut self, rename: Rc<Rename>) -> Self {
         self.pretty = Some(rename);
         self
     }
@@ -322,7 +322,7 @@ impl Spelling {
         }
         self.pretty
             .as_ref()
-            .and_then(|map| map.get(name).cloned())
+            .and_then(|rename| rename.get(name).cloned())
             .unwrap_or_else(|| match name.hint() {
                 Some(hint) => hint.to_string(),
                 None => name.to_string(),
@@ -407,141 +407,90 @@ impl<'a, T> Spelled<'a, T> {
     }
 }
 
-/// The names a render shows, which [`build_rename`] spells: every free variable and every binder the printer reopens, and among those binders the tuple labels, kept apart because a label is part of its tuple type's identity and so keeps the spelling it was written with.
+/// The terms a report renders, gathered so [`build_rename`] can spell every name any of them shows: their free variables, and the binders a render of each opens — which only a render can say, since a scope remembers a binder's hint and not its identity.
 #[derive(Debug, Default, Clone)]
 pub struct DisplayNames {
-    names: BTreeSet<Free>,
-    labels: BTreeSet<Free>,
+    terms: Vec<Term>,
+    free: BTreeSet<Free>,
 }
 
 impl DisplayNames {
-    /// Add every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from `collect_labels`, which descends scope bodies (where nested binders live).
+    /// Add `term` to what the report renders.
     pub fn add(&mut self, term: &Term) {
-        self.names.extend(term.free_vars());
-        collect_labels(term, self);
+        self.free.extend(term.free_vars());
+        self.terms.push(term.clone());
     }
 }
 
-/// Every name the printer will emit for `term` ([`DisplayNames::add`]).
+/// The names a render of `term` shows ([`DisplayNames::add`]).
 pub fn display_names(term: &Term) -> DisplayNames {
     let mut names = DisplayNames::default();
     names.add(term);
     names
 }
 
-/// Collect every binder label in `term` — the names [`Bound`]'s free-variable traversal cannot surface, because a scope's stored labels are bound by definition and the printer reopens them anyway.
+/// Give every name a report shows a clean display spelling: a local its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct names would otherwise render alike, or would shadow a global's displayed rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders of one term.
 ///
-/// Driven by [`Term::walk`] rather than its own worklist, so child enumeration stays in `Subterm::any_child_term` and a new term former carrying a binder cannot reach the printer while quietly missing this walk. What that would look like is not a crash but two distinct binders rendering under one spelling, which is exactly the thing [`build_rename`] promises cannot happen — so the failure mode argues for the shared fold rather than against it.
-///
-/// This hook adds only each node's *own* labels; the depth is [`Term::walk`]'s to absorb. `Intrinsic` and `Foreign` interiors are skipped whole: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`. A tuple type's binders are recorded as its labels as well.
-fn collect_labels(term: &Term, out: &mut DisplayNames) {
-    fn scope_names<A: Arity>(out: &mut BTreeSet<Free>, scope: &Scope<A>) {
-        if let Some(names) = scope.names() {
-            out.extend(names.iter().cloned());
-        }
-    }
-
-    /// One binder per telescope entry. The entry *types* arrive as ordinary children, so this reads the spine for labels alone — which is what lets one function serve a `Func`/`FuncType` telescope and a `TupleType`'s, whose `Done` carries no term.
-    fn telescope_binders<T: Bound>(out: &mut BTreeSet<Free>, mut cur: &Telescope<T>) {
-        while let Telescope::Cons(_, rest) = cur {
-            if let Some(binder) = rest.binder(0) {
-                out.insert(*binder);
-            }
-            cur = rest.body();
-        }
-    }
-
-    term.walk(
-        out,
-        |out, term| {
-            match &**term {
-                Subterm::Intrinsic(_) | Subterm::Foreign(..) => return Enter::Skip(()),
-                Subterm::Func(Func { telescope, .. })
-                | Subterm::FuncType(FuncType { telescope, .. }) => {
-                    telescope_binders(&mut out.names, telescope)
-                }
-                Subterm::TupleType(TupleType { telescope }) => {
-                    telescope_binders(&mut out.names, telescope);
-                    telescope_binders(&mut out.labels, telescope);
-                }
-                Subterm::Let(Let { tail, .. }) => scope_names(&mut out.names, tail),
-                Subterm::Rec(Rec { group, tail }) => {
-                    for member in group.iter() {
-                        scope_names(&mut out.names, &member.type_);
-                        scope_names(&mut out.names, &member.body);
-                    }
-                    scope_names(&mut out.names, tail);
-                }
-                Subterm::Match(Match { result, cases, .. }) => {
-                    if let Some(motive) = result.family() {
-                        scope_names(&mut out.names, motive);
-                    }
-
-                    match cases {
-                        Cases::Induct { cases, .. } => {
-                            for (_, arm) in cases {
-                                scope_names(&mut out.names, &arm.body);
-                            }
-                        }
-                        // The unary `Nat` cons arm binds a tail and a hypothesis; `Bin`/`List` bind a peeled generator before those, so the two arities do not share a pattern.
-                        Cases::FreeMonoid { carrier } => match carrier {
-                            Carrier::Nat { cons_case, .. } => {
-                                scope_names(&mut out.names, cons_case)
-                            }
-                            Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => {
-                                scope_names(&mut out.names, cons_case)
-                            }
-                        },
-                        Cases::Bool { .. } | Cases::Switch { .. } => {}
-                    }
-                }
-                _ => {}
-            }
-
-            Enter::Descend
-        },
-        |_, _, _| (),
-    )
-}
-
-/// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's displayed rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
-///
-/// `spelling` is the one the same render will apply, standing where its reader does: a global is reserved under the rendering it actually displays ([`Spelling::symbol`]), since a full path — never a bare identifier — is unshadowable by construction, while a bare label a reader reaches is exactly what a binder hint can read like.
+/// **The binders are met by rendering.** Each term is rendered once under `spelling` into nothing, by the same printer and so in the same order, and the labels that dry run mints are the ones the real render mints — see [`Minting`]. `spelling` is the one the same render will apply, standing where its reader does: a global is reserved under the rendering it actually displays ([`Spelling::symbol`]), since a full path — never a bare identifier — is unshadowable by construction, while a bare label a reader reaches is exactly what a binder hint can read like.
 ///
 /// A hintless entry's `x` is consulted only where something references the binder — the label sites spell an unreferenced unnameable binder `_` (or elide it) without the map. Hinted names are assigned first, so a synthesized `x` can never steal the spelling from a binder actually written `x`.
 ///
 /// A tuple label is the exception: it is part of its tuple type's identity, so it keeps the spelling it was written with before anything else is assigned, and a binder that would read like it is the one suffixed — a function's parameter `frame` beside a result field `frame` reads `frame2`, since a parameter's name is no part of its type. Two labels may therefore read alike, which is what their types say.
-pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, String> {
-    // `names` is sorted, so the assignment below is deterministic.
-    let (literal, prettifiable) = names
-        .names
+pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> Rename {
+    let spelling = Rc::new(spelling.clone());
+    let mut shown = names
+        .free
         .iter()
-        .partition::<Vec<&Free>, _>(|name| name.as_global().is_some());
+        .map(DisplayKey::of)
+        .collect::<BTreeSet<_>>();
+    let mut tuple_labels = BTreeSet::new();
+    for term in &names.terms {
+        let mint = Minting::recording();
+        print_minting(term.clone(), &spelling, &mint);
+        let recorded = mint
+            .recorded
+            .expect("a recording mint records")
+            .into_inner();
+        shown.extend(recorded.names);
+        tuple_labels.extend(recorded.tuple_labels);
+    }
+    assign(&shown, &tuple_labels, &spelling)
+}
+
+/// The spellings [`build_rename`] assigns, over the names a report shows and the tuple labels among them. `shown` is sorted, so the assignment is deterministic: a free variable before the binders a render minted, and those in the order a render meets them.
+fn assign(
+    shown: &BTreeSet<DisplayKey>,
+    tuple_labels: &BTreeSet<DisplayKey>,
+    spelling: &Spelling,
+) -> Rename {
+    let (literal, prettifiable) = shown
+        .iter()
+        .partition::<Vec<&DisplayKey>, _>(|key| key.name.as_global().is_some());
 
     // Globals reserve the spelling they will display under.
     let mut used = literal
         .into_iter()
-        .map(|name| match name.as_global() {
+        .map(|key| match key.name.as_global() {
             Some(global) => spelling.symbol(global),
-            None => name.to_string(),
+            None => key.name.to_string(),
         })
         .collect::<BTreeSet<_>>();
 
-    let mut map = HashMap::new();
-    for label in &names.labels {
-        if let Some(hint) = label.hint() {
+    let mut spellings = HashMap::new();
+    for label in tuple_labels {
+        if let Some(hint) = label.name.hint() {
             used.insert(hint.to_string());
-            map.insert(*label, hint.to_string());
+            spellings.insert(*label, hint.to_string());
         }
     }
 
     let (hinted, hintless) = prettifiable
         .into_iter()
-        .filter(|name| !map.contains_key(*name))
-        .partition::<Vec<&Free>, _>(|name| name.hint().is_some());
+        .filter(|key| !spellings.contains_key(*key))
+        .partition::<Vec<&DisplayKey>, _>(|key| key.name.hint().is_some());
 
-    for name in hinted.into_iter().chain(hintless) {
-        let hint = name.hint().unwrap_or("x");
+    for key in hinted.into_iter().chain(hintless) {
+        let hint = key.name.hint().unwrap_or("x");
         let mut candidate = hint.to_string();
         let mut next = 2;
         while used.contains(&candidate) {
@@ -549,9 +498,9 @@ pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, 
             next += 1;
         }
         used.insert(candidate.clone());
-        map.insert(*name, candidate);
+        spellings.insert(*key, candidate);
     }
-    map
+    Rename { spellings }
 }
 
 /// Map each global to the shortest `/`-suffix of its path that no other global shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only entries that actually shorten are recorded; an ambiguous (or single-segment) name keeps its full path.
@@ -622,11 +571,86 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
     map
 }
 
-/// A scope's stored binder, or a depth-positional stand-in when it has none — a `constant` scope never had binders written. The stand-in is minted at the de Bruijn level, so one printed term's placeholders stay distinct from each other.
-fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
-    match binder {
-        Some(binder) => *binder,
-        None => Free::local(u32::try_from(depth).unwrap_or(u32::MAX), None),
+/// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero and would exhaust its binder space long before reaching here.
+const PRINTED: u32 = 1 << 31;
+
+/// How one render labels the binders it opens. A scope remembers a binder's hint, never its identity, so the render mints one: the `k`th binder it opens is `PRINTED + k` under its hint. A dry run over the same term under the same spelling opens the same binders in the same order, which is how [`build_rename`] spells them before the render that uses the spellings.
+#[derive(Default)]
+struct Minting {
+    next: Cell<u32>,
+    /// What a dry run minted, when this is one.
+    recorded: Option<RefCell<Recorded>>,
+}
+
+/// What a dry run met: every name it showed, and which of the labels it minted are a tuple type's.
+#[derive(Default)]
+struct Recorded {
+    names: BTreeSet<DisplayKey>,
+    tuple_labels: BTreeSet<DisplayKey>,
+}
+
+impl Minting {
+    fn recording() -> Self {
+        Self {
+            next: Cell::new(0),
+            recorded: Some(RefCell::new(Recorded::default())),
+        }
+    }
+
+    /// The next binder's identity, rendering as `hint`.
+    fn local(&self, hint: Option<Symbol>) -> Free {
+        let position = self.next.get();
+        self.next.set(position + 1);
+        let index = PRINTED
+            .checked_add(position)
+            .expect("a render opens fewer binders than a compilation could mint");
+        Free::local_hinted(index, hint)
+    }
+
+    fn record(&self, name: &Free) {
+        if let Some(recorded) = &self.recorded {
+            recorded.borrow_mut().names.insert(DisplayKey::of(name));
+        }
+    }
+
+    /// Record `label` as a tuple type's, which keeps the spelling it was written with — see [`build_rename`].
+    fn note_tuple_label(&self, label: &Free) {
+        if let Some(recorded) = &self.recorded {
+            recorded
+                .borrow_mut()
+                .tuple_labels
+                .insert(DisplayKey::of(label));
+        }
+    }
+}
+
+/// A name as a rename tells it apart from the others: any name by itself, and a label a render minted by its position together with its hint. Two terms of one report restart their positions, so the hint is what keeps two binders of different names apart; two of the same name in the same position share a spelling, which is harmless, since the terms are never in scope of each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct DisplayKey {
+    name: Free,
+    hint: Option<Symbol>,
+}
+
+impl DisplayKey {
+    fn of(name: &Free) -> Self {
+        let printed = name.local_index().is_some_and(|index| index >= PRINTED);
+        Self {
+            name: *name,
+            hint: printed.then(|| name.hint_symbol()).flatten(),
+        }
+    }
+}
+
+/// Every name a render shows, with the spelling [`build_rename`] assigned it — what [`Spelling::with_pretty_names`] applies.
+#[derive(Debug, Default)]
+pub struct Rename {
+    spellings: HashMap<DisplayKey, String>,
+}
+
+impl Rename {
+    /// The spelling assigned to `name`, if it was among the names the rename was built over.
+    pub(crate) fn get(&self, name: &Free) -> Option<&String> {
+        self.spellings.get(&DisplayKey::of(name))
     }
 }
 
@@ -634,11 +658,11 @@ fn label_terms(binders: &[Free]) -> Vec<Term> {
     binders.iter().map(Term::free_var).collect()
 }
 
-/// The state a recursive print call threads: the render-constant [`Spelling`] beside the binder depth descended so far, and the witness binders in scope (axis (h)). Depth exists only to position [`binder_or`] stand-ins, and the opening helpers advance it as they mint, so an arm that opens binders is handed the frame its body prints under instead of recomputing it.
+/// The state a recursive print call threads: the render-constant [`Spelling`], the render's [`Minting`], and the witness binders in scope (axis (h)).
 #[derive(Clone, Copy)]
 struct Frame<'a> {
     spelling: &'a Rc<Spelling>,
-    depth: usize,
+    mint: &'a Minting,
     /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder: the document is built eagerly, so no frame outlives the node it borrows.
     witnesses: Option<&'a WitnessNode<'a>>,
 }
@@ -931,56 +955,48 @@ impl<'a> Frame<'a> {
     {
         Frame {
             spelling: self.spelling,
-            depth: self.depth,
+            mint: self.mint,
             witnesses: Some(node),
         }
     }
-    /// This frame, `count` binders deeper.
-    fn deeper(self, count: usize) -> Self {
-        Self {
-            depth: self.depth + count,
-            ..self
-        }
+
+    /// The label the next binder this render opens is printed under: a global its own name, and a local the identity [`Minting`] mints from where the render meets it and the hint its scope remembers — `None` for a `constant` scope, which never had binders written.
+    fn label(&self, label: Option<&Label>) -> Free {
+        let name = match label {
+            Some(Label::Global(global)) => Free::Global(*global),
+            Some(Label::Local(hint)) => self.mint.local(*hint),
+            None => self.mint.local(None),
+        };
+        self.mint.record(&name);
+        name
     }
 
-    /// One binder's display label minted at the current depth, the frame advanced past it — the telescope loops mint one label per entry as they walk.
-    fn label(&mut self, binder: Option<&Free>) -> Free {
-        let label = binder_or(binder, self.depth);
-        self.depth += 1;
-        label
+    /// Every binder of a scope, labelled in order.
+    fn labels<'b>(&self, binders: impl Iterator<Item = Option<&'b Label>>) -> Vec<Free> {
+        binders.map(|label| self.label(label)).collect()
     }
 
-    /// Every binder of a scope, unnamed ones filled with stand-ins, beside the frame past them.
-    fn labels<'b>(self, binders: impl Iterator<Item = Option<&'b Free>>) -> (Vec<Free>, Self) {
-        let labels: Vec<Free> = binders
-            .enumerate()
-            .map(|(index, binder)| binder_or(binder, self.depth + index))
-            .collect();
-        let past = self.deeper(labels.len());
-        (labels, past)
-    }
-
-    /// Open a two-binder scope under minted labels, beside the frame its body prints under.
-    fn open_two(self, scope: Scope<Two>) -> ((Free, Free), Term, Self) {
-        let fst = binder_or(scope.binder(0), self.depth);
-        let snd = binder_or(scope.binder(1), self.depth + 1);
+    /// Open a two-binder scope under minted labels.
+    fn open_two(&self, scope: Scope<Two>) -> ((Free, Free), Term) {
+        let fst = self.label(scope.label(0));
+        let snd = self.label(scope.label(1));
         let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
 
-        ((fst, snd), body, self.deeper(2))
+        ((fst, snd), body)
     }
 
     /// The three-binder counterpart of [`Frame::open_two`].
-    fn open_three(self, scope: Scope<Three>) -> ((Free, Free, Free), Term, Self) {
-        let fst = binder_or(scope.binder(0), self.depth);
-        let snd = binder_or(scope.binder(1), self.depth + 1);
-        let thd = binder_or(scope.binder(2), self.depth + 2);
+    fn open_three(&self, scope: Scope<Three>) -> ((Free, Free, Free), Term) {
+        let fst = self.label(scope.label(0));
+        let snd = self.label(scope.label(1));
+        let thd = self.label(scope.label(2));
         let body = scope.open(&[
             &Term::free_var(&fst),
             &Term::free_var(&snd),
             &Term::free_var(&thd),
         ]);
 
-        ((fst, snd, thd), body, self.deeper(3))
+        ((fst, snd, thd), body)
     }
 }
 
@@ -1334,15 +1350,14 @@ fn former_doc(former: FormerEta, frame: Frame) -> Printer {
 fn parameter_types(
     mut cursor: Cursor<'_, Term>,
     plicities: &[Plicity],
-    mut minting: Frame,
-    after: Frame,
+    frame: Frame,
     printers: &mut Vec<Printer>,
 ) -> Printer {
     let Some((_, ty)) = cursor.entry() else {
-        return sub(cursor.body().expect("a cursor past every entry"), after);
+        return sub(cursor.body().expect("a cursor past every entry"), frame);
     };
-    let raw = cursor.binder();
-    let label = minting.label(raw);
+    let raw = cursor.label();
+    let label = frame.label(raw);
     let plicity = plicities.get(cursor.args().len());
     let mark = plicity_mark(plicity);
     // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
@@ -1350,34 +1365,25 @@ fn parameter_types(
         Some(name) => name.hint().is_some() || cursor.binder_used(),
         None => false,
     };
-    let typed = sub(ty.clone(), after);
+    let typed = sub(ty.clone(), frame);
     let slot = printers.len();
     printers.push(pure(""));
     cursor.advance(Term::free_var(&label));
 
     let (output, named) =
-        if plicity == Some(&Plicity::Witness) && after.spelling.witnesses.is_some() {
+        if plicity == Some(&Plicity::Witness) && frame.spelling.witnesses.is_some() {
             // A function type cannot name its witness, so the binder is spelled only where a reference resolution would not restore still names it.
-            let node = WitnessNode::new(label, &ty, after);
-            let output = parameter_types(
-                cursor,
-                plicities,
-                minting.with_witness(&node),
-                after.with_witness(&node),
-                printers,
-            );
+            let node = WitnessNode::new(label, &ty, frame);
+            let output = parameter_types(cursor, plicities, frame.with_witness(&node), printers);
             (output, node.used.get())
         } else {
-            (
-                parameter_types(cursor, plicities, minting, after, printers),
-                named,
-            )
+            (parameter_types(cursor, plicities, frame, printers), named)
         };
 
     printers[slot] = if named {
         flat([
             pure(mark),
-            pure(after.spelling.label(&label)),
+            pure(frame.spelling.label(&label)),
             pure(": "),
             typed,
         ])
@@ -1391,7 +1397,7 @@ fn parameter_types(
 fn lambda_parameters(
     mut cursor: Cursor<'_, Term>,
     plicities: &[Plicity],
-    mut minting: Frame,
+    minting: Frame,
     marked: &mut Vec<String>,
 ) -> Printer {
     let Some((_, ty)) = cursor.entry() else {
@@ -1403,7 +1409,7 @@ fn lambda_parameters(
         };
         return indent(flat([separator, sub(body, minting)]));
     };
-    let label = minting.label(cursor.binder());
+    let label = minting.label(cursor.label());
     let plicity = plicities.get(cursor.args().len());
     let shown = if label.hint().is_none() && !cursor.binder_used() {
         "_".to_string()
@@ -1841,9 +1847,14 @@ fn sub_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
+    print_minting(term, spelling, &Minting::default())
+}
+
+/// [`print_term`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run.
+fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
     let frame = Frame {
         spelling,
-        depth: 0,
+        mint,
         witnesses: None,
     };
     if spelling.witnesses.is_none() {
@@ -1891,10 +1902,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             telescope,
             plicities,
         }) => {
-            let after = frame.deeper(telescope.len());
             let mut printers = Vec::with_capacity(telescope.len());
-            let output =
-                parameter_types(telescope.cursor(), &plicities, frame, after, &mut printers);
+            let output = parameter_types(telescope.cursor(), &plicities, frame, &mut printers);
             flat([
                 listed("(".into(), false, printers, ")"),
                 pure(" -> "),
@@ -1945,19 +1954,18 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             ])
         }
         Subterm::TupleType(TupleType { telescope, .. }) => {
-            let after = frame.deeper(telescope.len());
             let mut items = Vec::with_capacity(telescope.len());
             let mut cursor = telescope.cursor();
-            let mut minting = frame;
             while let Some((_, ty)) = cursor.entry() {
-                let raw = cursor.binder();
-                let label = minting.label(raw);
+                let raw = cursor.label();
+                let label = frame.label(raw);
+                frame.mint.note_tuple_label(&label);
                 // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
                 let named = match raw {
                     Some(name) => name.hint().is_some() || cursor.binder_used(),
                     None => false,
                 };
-                let typed = sub(ty, after);
+                let typed = sub(ty, frame);
                 let printer = if named {
                     flat([pure(frame.spelling.label(&label)), pure(": "), typed])
                 } else {
@@ -2100,7 +2108,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             // A family spells as `: labels => body`, arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder; an ambient goal spells as `~ goal`, with no binder to name.
             let result = match result {
                 MatchResult::Family(motive) => {
-                    let (motive_labels, motive_frame) = frame.labels(motive.binder_iter());
+                    let motive_labels = frame.labels(motive.label_iter());
                     let motive_terms = label_terms(&motive_labels);
                     let motive_refs = motive_terms.iter().collect::<Vec<_>>();
                     let motive_label = motive_labels
@@ -2113,7 +2121,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                         pure(": "),
                         pure(motive_label),
                         pure(" => "),
-                        sub(motive, motive_frame),
+                        sub(motive, frame),
                     ])
                 }
                 MatchResult::Ambient(goal) => flat([pure(" ~ "), sub(goal.clone(), frame)]),
@@ -2166,7 +2174,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                         cases
                             .into_iter()
                             .map(|(atom, arm)| {
-                                let (labels, inner) = frame.labels(arm.binder_iter());
+                                let labels = frame.labels(arm.label_iter());
                                 let label_terms = label_terms(&labels);
                                 let label_terms = label_terms.iter().collect::<Vec<_>>();
                                 let body = arm.open(&label_terms);
@@ -2193,7 +2201,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                                     print_atom(atom),
                                     binders,
                                     pure(" =>\n"),
-                                    indent(flat([sub(body, inner), pure(";")])),
+                                    indent(flat([sub(body, frame), pure(";")])),
                                 ])
                             })
                             .collect::<Vec<_>>(),
@@ -2210,7 +2218,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 Cases::FreeMonoid { carrier } => {
                     // The cons arm mirrors each carrier's own literal delimiters: `b[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `List` — the same bracketed shape, told apart by the grain letter.
                     let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case, inner) =
+                        let ((head_label, tail_label, ih_label), cons_case) =
                             frame.open_three(cons_case);
                         flat([
                             pure(match grain {
@@ -2223,11 +2231,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             pure("]; "),
                             pure(frame.spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, inner), pure(";")])),
+                            indent(flat([sub(cons_case, frame), pure(";")])),
                         ])
                     };
                     let cons_list = |cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case, inner) =
+                        let ((head_label, tail_label, ih_label), cons_case) =
                             frame.open_three(cons_case);
                         flat([
                             pure("\n| ["),
@@ -2237,7 +2245,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             pure("]; "),
                             pure(frame.spelling.label(&ih_label)),
                             pure(" =>\n"),
-                            indent(flat([sub(cons_case, inner), pure(";")])),
+                            indent(flat([sub(cons_case, frame), pure(";")])),
                         ])
                     };
 
@@ -2247,15 +2255,14 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             empty_case,
                             cons_case,
                         } => {
-                            let ((pred_label, ih_label), cons_case, inner) =
-                                frame.open_two(cons_case);
+                            let ((pred_label, ih_label), cons_case) = frame.open_two(cons_case);
                             let cons_arm = flat([
                                 pure("\n| "),
                                 pure(frame.spelling.label(&pred_label)),
                                 pure(" "),
                                 pure(frame.spelling.label(&ih_label)),
                                 pure(" =>\n"),
-                                indent(flat([sub(cons_case, inner), pure(";")])),
+                                indent(flat([sub(cons_case, frame), pure(";")])),
                             ]);
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
@@ -2288,7 +2295,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             flat([prefix, arms])
         }
         Subterm::Let(Let { bindings, tail, .. }) => {
-            let (labels, inner) = frame.labels(tail.binder_iter());
+            let labels = frame.labels(tail.label_iter());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
@@ -2298,25 +2305,22 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 .map(|(index, binding)| {
                     let type_ = binding.type_().release(&label_terms[..index]);
                     let value = binding.value().release(&label_terms[..index]);
-                    // Binding `index` sits under the `index` bindings above it.
-                    let at = frame.deeper(index);
-
                     flat([
                         pure("let "),
                         pure(frame.spelling.label(&labels[index])),
                         pure(": "),
-                        sub(type_, at),
+                        sub(type_, frame),
                         pure(" =\n"),
-                        indent(flat([sub(value, at), pure(";")])),
+                        indent(flat([sub(value, frame), pure(";")])),
                         pure("\n"),
                     ])
                 })
                 .collect::<Vec<_>>();
 
-            flat([flat(lines), sub(tail.open(&label_terms), inner)])
+            flat([flat(lines), sub(tail.open(&label_terms), frame)])
         }
         Subterm::Rec(Rec { group, tail }) => {
-            let (labels, inner) = frame.labels(tail.binder_iter());
+            let labels = frame.labels(tail.label_iter());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
@@ -2331,9 +2335,9 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                     flat([
                         pure(frame.spelling.label(&labels[index])),
                         pure(": "),
-                        sub(type_, inner),
+                        sub(type_, frame),
                         pure(" =\n"),
-                        indent(sub(body, inner)),
+                        indent(sub(body, frame)),
                     ])
                 })
                 .collect::<Vec<_>>();
@@ -2344,7 +2348,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
                 pure(";\n"),
-                sub(tail, inner),
+                sub(tail, frame),
             ])
         }
         Subterm::Var(var) => {

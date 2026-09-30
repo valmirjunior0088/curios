@@ -46,7 +46,7 @@ impl<B: Bound> Telescope<B> {
                 ty,
                 Scope {
                     arity: One,
-                    names: Some(vec![*binder]),
+                    labels: Some(vec![Label::of(*binder)]),
                     body: Box::new(telescope),
                 },
             );
@@ -127,11 +127,11 @@ impl<B: Bound> Telescope<B> {
                 Telescope::Done(body) => break body,
                 Telescope::Cons(ty, rest) => {
                     let label = labels.next().expect("relabel arity");
-                    let names = rest
-                        .names
+                    let labels = rest
+                        .labels
                         .as_ref()
-                        .map(|names| names.iter().map(|name| name.relabelled(label)).collect());
-                    entries.push((ty, names));
+                        .map(|labels| labels.iter().map(|each| each.relabelled(label)).collect());
+                    entries.push((ty, labels));
                     current = *rest.body;
                 }
             }
@@ -140,12 +140,12 @@ impl<B: Bound> Telescope<B> {
         entries
             .into_iter()
             .rev()
-            .fold(Telescope::Done(body), |rest, (ty, names)| {
+            .fold(Telescope::Done(body), |rest, (ty, labels)| {
                 Telescope::Cons(
                     ty,
                     Scope {
                         arity: One,
-                        names,
+                        labels,
                         body: Box::new(rest),
                     },
                 )
@@ -254,10 +254,10 @@ impl<'a, B: Bound> Cursor<'a, B> {
         }
     }
 
-    /// The binder the entry at this position was closed over, for a caller that renders it; `None` at the end, or for a scope built without names.
-    pub(crate) fn binder(&self) -> Option<&'a Free> {
+    /// What the scope remembers of the binder at this position, for a caller that renders it; `None` at the end, or for a scope built without labels.
+    pub(crate) fn label(&self) -> Option<&'a Label> {
         match self.at {
-            Telescope::Cons(_, rest) => rest.binder(0),
+            Telescope::Cons(_, rest) => rest.label(0),
             Telescope::Done(_) => None,
         }
     }
@@ -514,7 +514,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let body = loop {
             match current {
                 Telescope::Cons(ty, rest) => {
-                    entries.push((visit.visit_subterm(ty), rest.names.clone(), rest.arity()));
+                    entries.push((visit.visit_subterm(ty), rest.labels.clone(), rest.arity()));
                     visit.enter_scope(rest.arity());
                     current = rest.body();
                 }
@@ -525,13 +525,13 @@ impl<B: Bound> Bound for Telescope<B> {
         entries
             .into_iter()
             .rev()
-            .fold(Telescope::Done(body.into()), |rest, (ty, names, arity)| {
+            .fold(Telescope::Done(body.into()), |rest, (ty, labels, arity)| {
                 visit.leave_scope(arity);
                 Telescope::Cons(
                     ty,
                     Scope {
                         arity: One,
-                        names,
+                        labels,
                         body: Box::new(rest),
                     },
                 )

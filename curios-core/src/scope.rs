@@ -7,7 +7,7 @@ use {
         Free, Global, Level, LevelHead, MetavarId, Subterm, Term, UniverseError, UniverseMetaId,
         UniverseParam,
     },
-    curios_utilities::Span,
+    curios_utilities::{Span, Symbol},
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap},
@@ -424,11 +424,51 @@ pub fn stamp_declaration_instance<B: Bound>(
 
 // === Scope ===================================================================
 
-/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the [`Free`] identities it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `names` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder names are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
+/// What a scope remembers of one binder it closed over: a global's name, which means the same in every compilation, or a local's display hint.
+///
+/// **Never a local's identity.** That was minted by the compilation that closed the scope, and a stored scope that kept it carried a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub(crate) enum Label {
+    /// A global a `rec` group's binder closes over, rendered as its path as a free occurrence of it would be.
+    Global(Global),
+    /// A local binder: its display hint, `None` where it was minted hintless.
+    Local(Option<Symbol>),
+}
+
+impl Label {
+    /// What a scope closing over `binder` remembers of it.
+    fn of(binder: Free) -> Self {
+        match binder {
+            Free::Global(global) => Label::Global(global),
+            Free::Local(mint) => Label::Local(mint.hint_symbol()),
+        }
+    }
+
+    /// The same label rendering as `hint`. A global has no hint to replace — its rendering is its path — so it is returned unchanged.
+    ///
+    /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
+    fn relabelled(&self, hint: &str) -> Self {
+        match self {
+            Label::Local(_) => Label::Local((!hint.is_empty()).then(|| Symbol::new(hint))),
+            Label::Global(_) => *self,
+        }
+    }
+
+    /// The hint a local binder was written with; `None` for a global, whose rendering is its path, and for a hintless local.
+    pub(crate) fn hint(&self) -> Option<&'static str> {
+        match self {
+            Label::Local(hint) => hint.map(|hint| hint.as_str()),
+            Label::Global(_) => None,
+        }
+    }
+}
+
+/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `labels` remembers a [`Label`] per binder it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `labels` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder labels are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
 #[curios_archive::archived]
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
-    names: Option<Vec<Free>>,
+    labels: Option<Vec<Label>>,
     body: Box<B>,
 }
 
@@ -443,7 +483,13 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
         Self {
             arity,
-            names: Some(binders.as_ref().iter().map(|&name| *name).collect()),
+            labels: Some(
+                binders
+                    .as_ref()
+                    .iter()
+                    .map(|&&name| Label::of(name))
+                    .collect(),
+            ),
             body: body.capture(binders.as_ref()).into(),
         }
     }
@@ -454,10 +500,6 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
     pub fn body(&self) -> &B {
         &self.body
-    }
-
-    pub(crate) fn names(&self) -> Option<&[Free]> {
-        self.names.as_deref()
     }
 
     pub(crate) fn reach(&self) -> usize {
@@ -478,7 +520,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     pub fn constant(arity: A, body: B) -> Self {
         Self {
             arity,
-            names: None,
+            labels: None,
             body: body.into(),
         }
     }
@@ -489,7 +531,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     pub(crate) fn map_body(&self, f: impl FnOnce(&B) -> B) -> Self {
         Self {
             arity: self.arity,
-            names: self.names.clone(),
+            labels: self.labels.clone(),
             body: f(&self.body).into(),
         }
     }
@@ -498,40 +540,40 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     pub fn try_map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
         Ok(Self {
             arity: self.arity,
-            names: self.names.clone(),
+            labels: self.labels.clone(),
             body: f(&self.body)?.into(),
         })
     }
 
-    /// The identity of the binder at position `index` (0 = first/outermost), for a rebuild that must re-close over the very same binders.
-    pub(crate) fn binder(&self, index: usize) -> Option<&Free> {
-        self.names.as_deref()?.get(index)
+    /// What this scope remembers of the binder at position `index` (0 = first/outermost), for a printer reopening it.
+    pub(crate) fn label(&self, index: usize) -> Option<&Label> {
+        self.labels.as_deref()?.get(index)
     }
 
     /// What the binder at position `index` was called where it was written — a rendering aid a rebuild carries onto the binder it re-mints, never a way to recognize which binder this is.
-    pub fn hint(&self, index: usize) -> Option<&str> {
-        self.binder(index)?.hint()
+    pub fn hint(&self, index: usize) -> Option<&'static str> {
+        self.label(index)?.hint()
     }
 
-    pub fn first_hint(&self) -> Option<&str> {
+    pub fn first_hint(&self) -> Option<&'static str> {
         self.hint(0)
     }
 
-    pub fn second_hint(&self) -> Option<&str> {
+    pub fn second_hint(&self) -> Option<&'static str> {
         self.hint(1)
     }
 
-    pub fn third_hint(&self) -> Option<&str> {
+    pub fn third_hint(&self) -> Option<&'static str> {
         self.hint(2)
     }
 
-    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&'static str>> {
         (0..self.arity()).map(move |index| self.hint(index))
     }
 
-    /// The identity of each binder in order, `None` where the scope was built without them (`constant`).
-    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
-        (0..self.arity()).map(move |index| self.binder(index))
+    /// What this scope remembers of each binder in order, `None` where the scope was built without them (`constant`).
+    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
+        (0..self.arity()).map(move |index| self.label(index))
     }
 
     /// Whether the binder at position `index` (0 = first/outermost label) is referenced anywhere in the body. A bound var refers to this binder iff its de Bruijn index equals `index` plus the number of binders entered since — which `Visit` tracks as `depth`. Used by erasure to spot an eliminator whose induction hypothesis is dead: that arm is a case-split, not a fold.
@@ -552,17 +594,17 @@ impl<B: Bound> Scope<Many, B> {
     ///
     /// Done by one direct `capture` on the body — free occurrences of the binders bind to the new leading indices while every existing bound index shifts past them — rather than an open/close round-trip through names, which would have to reopen inner binders into free occurrences and could not tell them from genuine outer references. Taking the whole list at once is what lets a block of `k` bindings prepend in one walk rather than `k`.
     pub fn prepend(&self, binders: &[&Free]) -> Self {
-        let names = self.names.as_ref().map(|names| {
+        let labels = self.labels.as_ref().map(|labels| {
             binders
                 .iter()
-                .map(|&binder| *binder)
-                .chain(names.iter().cloned())
+                .map(|&&binder| Label::of(binder))
+                .chain(labels.iter().copied())
                 .collect()
         });
 
         Self {
             arity: Many(self.arity() + binders.len()),
-            names,
+            labels,
             body: self.body.capture(binders).into(),
         }
     }
@@ -572,7 +614,7 @@ impl<A: Arity + fmt::Debug, B: Bound> fmt::Debug for Scope<A, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Scope")
             .field("arity", &self.arity)
-            .field("names", &self.names)
+            .field("labels", &self.labels)
             .field("body", &self.body)
             .finish()
     }
@@ -582,7 +624,7 @@ impl<A: Arity + Clone, B: Bound> Clone for Scope<A, B> {
     fn clone(&self) -> Self {
         Self {
             arity: self.arity,
-            names: self.names.clone(),
+            labels: self.labels.clone(),
             body: self.body.clone(),
         }
     }
@@ -1083,7 +1125,7 @@ where
 
         Scope {
             arity: scope.arity,
-            names: scope.names.clone(),
+            labels: scope.labels.clone(),
             body,
         }
     }

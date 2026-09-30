@@ -8,16 +8,12 @@ use {
     super::{Erased, WitnessKey},
     curios_core::{
         Atom, CalleeId, DisplayNames, Free, Global, Item, Level, Module, Polarity, ReaderNames,
-        ReaderPosition, ReduceError, Spelling, Spellings, Subterm, Term, UniverseConstraintOrigin,
-        UniverseError, build_rename, build_shorten_layered,
+        ReaderPosition, ReduceError, Rename, Spelling, Spellings, Subterm, Term,
+        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
-    std::{
-        collections::{BTreeMap, HashMap},
-        fmt,
-        rc::Rc,
-    },
+    std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
@@ -38,7 +34,7 @@ pub struct GoalReport {
 
 impl GoalReport {
     /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — renamed the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
-    fn rename_map(&self, spelling: &Spelling) -> Rc<HashMap<Free, String>> {
+    fn rename_map(&self, spelling: &Spelling) -> Rc<Rename> {
         let mut names = DisplayNames::default();
         for (name, type_) in &self.scope {
             names.add(name);
@@ -1332,7 +1328,7 @@ impl Error {
     }
 
     /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. Globals are reserved under the spelling `spelling` displays them by, which stands where this error's reader does.
-    fn rename_map(&self, spelling: &Spelling) -> Rc<HashMap<Free, String>> {
+    fn rename_map(&self, spelling: &Spelling) -> Rc<Rename> {
         let mut terms = Vec::new();
         self.collect_terms(&mut terms);
 

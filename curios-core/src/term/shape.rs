@@ -2,7 +2,7 @@
 //!
 //! Nothing here judges or reduces. The types are plain records with the binder discipline spelled in their field types — a [`Scope`] where one binder is bound, a [`Telescope`] where several are — and the handful of impls are the operations that discipline forces: [`RecGroup`]'s member arithmetic, [`InductArm`]'s and [`LetBinding`]'s accessors, and the two hand-written [`TupleType`] instances that make an anonymous product compare by its fields.
 
-use super::*;
+use {super::*, crate::Label};
 
 /// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on `Bool` — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -428,13 +428,13 @@ impl InductArm {
     }
 
     /// The arm's payload binder hints, in order.
-    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&str>> {
+    pub fn hint_iter(&self) -> impl Iterator<Item = Option<&'static str>> {
         self.body.hint_iter()
     }
 
-    /// The arm's payload binders, in order.
-    pub(crate) fn binder_iter(&self) -> impl Iterator<Item = Option<&Free>> {
-        self.body.binder_iter()
+    /// What the arm's scope remembers of its payload binders, in order.
+    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
+        self.body.label_iter()
     }
 
     /// Rebuild the arm with its whole body scope replaced, preserving the plicity vector (the traversal-side reconstruction helper).

@@ -79,5 +79,4 @@ fn a_hint_never_splits_one_identity() {
         1
     );
     assert_eq!(written.hint(), Some("xs"));
-    assert_eq!(written.with_hint(Some("ys")).hint(), Some("ys"));
 }

@@ -72,9 +72,9 @@ impl Mint {
         self.hint.map(|hint| hint.as_str())
     }
 
-    /// The same identity under a different display hint. Used where a rebuild has to restore the source spelling of binders it re-minted.
-    pub fn with_hint(&self, hint: Option<&str>) -> Self {
-        Self::new(self.index, hint)
+    /// The hint as the interned symbol it is kept as, for a scope that remembers it without re-interning its spelling.
+    pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
+        self.hint
     }
 }
 
@@ -176,6 +176,11 @@ impl Free {
         Free::Local(Mint::new(index, hint))
     }
 
+    /// [`Free::local`] for a caller that already holds the hint as a symbol — a printer reopening a scope under the hint it remembers.
+    pub(crate) fn local_hinted(index: u32, hint: Option<Symbol>) -> Self {
+        Free::Local(Mint { index, hint })
+    }
+
     /// A definition at an authored path.
     pub fn global(qualifier: Qualifier) -> Self {
         Free::Global(Global::Authored(qualifier))
@@ -221,14 +226,9 @@ impl Free {
         self.as_local().and_then(Mint::hint)
     }
 
-    /// The same identity rendering as `hint`. A global has no hint to replace — its rendering is its path — so it is returned unchanged.
-    ///
-    /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
-    pub(crate) fn relabelled(&self, hint: &str) -> Self {
-        match self {
-            Free::Local(mint) => Free::Local(mint.with_hint((!hint.is_empty()).then_some(hint))),
-            Free::Global(_) => *self,
-        }
+    /// [`Free::hint`] as the interned symbol it is kept as.
+    pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
+        self.as_local().and_then(Mint::hint_symbol)
     }
 }
 

@@ -8,8 +8,8 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
 
     let binder = Free::local(0, Some("helper"));
     let names = DisplayNames {
-        names: BTreeSet::from([Free::Global(global), binder]),
-        labels: BTreeSet::new(),
+        terms: Vec::new(),
+        free: BTreeSet::from([Free::Global(global), binder]),
     };
     let rename = build_rename(
         &names,
@@ -19,18 +19,21 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
 }
 
 /// A tuple label keeps the spelling it was written with, being part of its tuple type's identity, and a binder that would read like it is the one suffixed: a function's parameter `frame` beside its result's field `frame`.
+///
+/// The two binders are met by rendering: neither scope remembers an identity, so the rename is built from the labels a dry run of the render mints.
 #[test]
 fn a_tuple_label_keeps_its_spelling_and_a_like_named_binder_is_suffixed() {
-    let parameter = Free::local(0, Some("frame"));
-    let label = Free::local(1, Some("frame"));
-    let names = DisplayNames {
-        names: BTreeSet::from([parameter, label]),
-        labels: BTreeSet::from([label]),
-    };
-    let rename = build_rename(&names, &Spelling::default());
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let result = Term::tuple_type([(Free::local(1, Some("frame")), nat.clone())]);
+    let term = Term::func_type([(Free::local(0, Some("frame")), nat)], result);
 
-    assert_eq!(rename.get(&label).map(String::as_str), Some("frame"));
-    assert_eq!(rename.get(&parameter).map(String::as_str), Some("frame2"));
+    let spelling = Spelling::default();
+    let rename = Rc::new(build_rename(&display_names(&term), &spelling));
+    let rendered = term
+        .spelled(&Rc::new(spelling.with_pretty_names(rename)))
+        .to_string();
+
+    assert_eq!(rendered, "(frame2: Nat) -> {frame: Nat}");
 }
 
 /// A reader's own declaration keeps the bare name, and a like-named one from the environment takes the longer spelling that actually reaches it.
@@ -503,4 +506,25 @@ fn an_append_prints_as_the_literal_that_writes_it() {
         item: var(1, "x"),
     });
     assert_eq!(list.to_string(), "[..xs, x]");
+}
+
+/// The render meets the binders its dry run met, in the same order: two nested binders written `x` read apart only if the rename built from the dry run's labels spells the labels the render mints, since a label it cannot find falls back to its bare hint.
+///
+/// Mutation-checked: a dry run that mints from a different position than the render fails it.
+#[test]
+fn a_render_spells_the_binders_its_dry_run_met() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let inner = Free::local(1, Some("x"));
+    let term = Term::func(
+        [(Free::local(0, Some("x")), nat.clone())],
+        Term::func([(inner, nat)], Term::free_var(&inner)),
+    );
+
+    let spelling = Spelling::default();
+    let rename = Rc::new(build_rename(&display_names(&term), &spelling));
+    let rendered = term
+        .spelled(&Rc::new(spelling.with_pretty_names(rename)))
+        .to_string();
+
+    assert_eq!(rendered, "(x) => (x2) => x2");
 }
