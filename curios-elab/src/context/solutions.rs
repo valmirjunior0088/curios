@@ -38,6 +38,8 @@ pub(crate) struct MetaEntry {
 pub(crate) enum MetaKind {
     Inference,
     RecSlot,
+    /// A parked checking problem's stand-in for the term it will rebuild ([`ParkedWork::Checking`]). Unification may reach it first with a value, which the retry reconciles with its own; nothing may solve it to less than one, since the retry reads any solution as the check discharged and the term would never be elaborated.
+    Placeholder,
 }
 
 /// The work a parked problem will retry.
@@ -148,7 +150,8 @@ impl Solutions {
         self.birth_with_kind(id, telescope, refinements, None, result, MetaKind::RecSlot);
     }
 
-    fn birth_with_kind(
+    /// [`Solutions::birth`] for a metavariable of another kind than an inference hole's.
+    pub(crate) fn birth_with_kind(
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,

@@ -746,6 +746,31 @@ pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance
         .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
+/// The spines `id` occurs at in `term`, one per occurrence: what a restriction spells the embedding metavariable's entries through ([`Context::metavar_restriction`]).
+pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<Rc<Vec<Term>>> {
+    let spines: Rc<RefCell<Vec<Rc<Vec<Term>>>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = Rc::clone(&spines);
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, term: &Term| {
+            if let Subterm::Metavar(Metavar {
+                id: occurring,
+                spine,
+                ..
+            }) = &**term
+                && *occurring == id
+            {
+                sink.borrow_mut().push(Rc::clone(spine));
+            }
+            None
+        }),
+    );
+    let _: Term = term.traverse(&mut visit);
+    Rc::try_unwrap(spines)
+        .map(RefCell::into_inner)
+        .unwrap_or_else(|shared| shared.borrow().clone())
+}
+
 fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), Error> {
     let super::ParkedProblem {
         work,

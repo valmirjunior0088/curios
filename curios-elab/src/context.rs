@@ -15,15 +15,17 @@ mod tests;
 
 use {
     super::{
-        Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
+        Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
+        WitnessKey,
     },
     curios_core::ReduceError,
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind,
         Free, Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId,
-        MetavarOrigin, RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
+        MetavarOrigin, RecGroup, Retention, StructDecl, Subterm, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -67,6 +69,13 @@ type SharedSpine = Rc<Vec<Term>>;
 pub(crate) struct DomainScope {
     telescope: SharedTelescope,
     spine: SharedSpine,
+}
+
+/// How an embedded metavariable is re-expressed in the context of the one whose candidate embeds it ([`Context::metavar_restriction`]): the stand-in's telescope, drawn from the embedding metavariable's, the arguments it is applied to in the embedded one's birth names, and its type over its own binders. Opaque outside this module — the guard that plans one can only pass it to [`Context::restrict_metavar`].
+pub(crate) struct Restriction {
+    telescope: SharedTelescope,
+    arguments: Vec<Term>,
+    result: Term,
 }
 
 pub(crate) struct UniverseMutation<'a> {
@@ -1381,12 +1390,22 @@ impl Context {
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
+        self.birth_metavar_as(id, telescope.into(), result, MetaKind::Inference);
+    }
+
+    fn birth_metavar_as(
+        &mut self,
+        id: MetavarId,
+        telescope: SharedTelescope,
+        result: Term,
+        kind: MetaKind,
+    ) {
         self.caches.note_write();
         let refinements = self.frames.refinement_snapshot();
         let witnesses = self.witness_scope();
         let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
         self.solutions
-            .birth(id, telescope.into(), refinements, witnesses, result);
+            .birth_with_kind(id, telescope, refinements, witnesses, result, kind);
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
@@ -1534,58 +1553,171 @@ impl Context {
             .all(|(name, _)| outer_names.contains(name))
     }
 
-    /// Whether the unsolved `inner`, occurring as `origin` in a candidate for `outer` and not contained in its birth context, may be restricted to it ([`Context::restrict_metavar`]) rather than hold the candidate back: contained by names, so refinements alone separate them, and an omitted implicit or a settled lambda's domain — a hole whose solution nothing but unification fills. A written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge and a placeholder by its parked check, each keyed on the id restriction would solve, so those still wait.
-    pub(crate) fn metavar_restrictable(
+    /// How the unsolved `inner`, occurring at `occurrences` in a candidate for the occurrence `outer` and not contained in `outer`'s birth context, may be re-expressed in that context rather than hold the candidate back ([`Context::restrict_metavar`]): a stand-in born over binders of `outer`'s telescope, and what `inner` is in terms of it.
+    ///
+    /// A candidate for `outer` is inverted through `outer`'s spine — its variables back to their binders, its other entries abstracted — so whatever `inner` contributes must be spelled in those entries, and the stand-in takes them as its arguments. An `inner` contained by names keeps its own telescope. One whose telescope holds binders `outer`'s lacks is applied to `outer`'s entries spelled in its own birth names: an implicit born under a match arm's `v`, embedded in the match's type `?M(r, success(v))`, becomes `?E′(r, success(v))` for a stand-in over `?M`'s binders. No solution `outer` could take is lost — one of `inner` using `v` outside `success(v)` was never one the inversion admits, and one using it inside is the stand-in's — and an entry `inner` cannot spell is one it could never have contributed to. This is pruning (Abel and Pientka, *Higher-Order Dynamic Pattern Unification*, 2011), which restricts one pattern substitution by the inverse of another, over the solver's wider inverse; dropping `v` instead, as a context approximation does, would lose exactly the solutions through `success(v)`, which is how a match's inferred type depends on its scrutinee.
+    ///
+    /// What cannot be spelled that way waits: occurrences that disagree or are not a renaming, a binder the stand-in needs whose type depends on one it cannot take, and a type of `inner`'s own that mentions one. So does a hole something else fills: a written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge, a parked check's placeholder by that check, and a recursive group's slot by its group.
+    pub(crate) fn metavar_restriction(
         &self,
         inner: MetavarId,
-        outer: MetavarId,
         origin: &MetavarOrigin,
-    ) -> bool {
-        matches!(
-            origin,
-            MetavarOrigin::Implicit(_) | MetavarOrigin::Domain(_)
-        ) && !self.is_rec_slot(inner)
-            && self
-                .metavar_entry(inner)
-                .is_some_and(|entry| !entry.proposition)
-            && self.metavar_names_contained(inner, outer)
+        occurrences: &[Rc<Vec<Term>>],
+        outer: &Metavar,
+    ) -> Option<Restriction> {
+        let (inner_entry, outer_entry) =
+            (self.metavar_entry(inner)?, self.metavar_entry(outer.id)?);
+        let unification_fills = inner_entry.kind == MetaKind::Inference
+            && !inner_entry.proposition
+            && matches!(
+                origin,
+                MetavarOrigin::Hole | MetavarOrigin::Implicit(_) | MetavarOrigin::Domain(_)
+            );
+        if !unification_fills {
+            return None;
+        }
+
+        if self.metavar_names_contained(inner, outer.id) {
+            return Some(Restriction {
+                arguments: inner_entry
+                    .telescope
+                    .iter()
+                    .map(|(name, _)| Term::free_var(name))
+                    .collect(),
+                telescope: Rc::clone(&inner_entry.telescope),
+                result: inner_entry.result.clone(),
+            });
+        }
+
+        // `outer`'s entries are spelled in `inner`'s birth names through its occurrence, which is one renaming wherever it occurs.
+        let (spine, others) = occurrences.split_first()?;
+        if others.iter().any(|other| other != spine)
+            || spine.len() != inner_entry.telescope.len()
+            || outer.spine.len() != outer_entry.telescope.len()
+        {
+            return None;
+        }
+        let mut births = BTreeMap::<&Free, &Free>::new();
+        for (argument, (birth, _)) in spine.iter().zip(inner_entry.telescope.iter()) {
+            let Subterm::Var(var) = &**argument else {
+                return None;
+            };
+            let name = var.as_free()?;
+            if self.is_top_level(name) || births.insert(name, birth).is_some() {
+                return None;
+            }
+        }
+        let spelled = |term: &Term| {
+            term.free_vars_shared()
+                .iter()
+                .all(|name| births.contains_key(name) || self.is_top_level(name))
+        };
+
+        let entries = outer
+            .spine
+            .iter()
+            .map(|entry| crate::zonk_solved_term_metas(self, entry))
+            .collect::<Vec<_>>();
+        if entries
+            .iter()
+            .any(|entry| entry.metavars().contains(&inner))
+        {
+            return None;
+        }
+        let keep = entries.iter().map(spelled).collect::<Vec<_>>();
+        let dropped = outer_entry
+            .telescope
+            .iter()
+            .zip(&keep)
+            .filter(|(_, kept)| !**kept)
+            .map(|((name, _), _)| name)
+            .collect::<BTreeSet<_>>();
+        let telescope = outer_entry
+            .telescope
+            .iter()
+            .zip(&keep)
+            .filter(|(_, kept)| **kept)
+            .map(|(binder, _)| binder.clone())
+            .collect::<Vec<_>>();
+        if telescope.iter().any(|(_, type_)| {
+            type_
+                .free_vars_shared()
+                .iter()
+                .any(|name| dropped.contains(name))
+        }) {
+            return None;
+        }
+
+        let (currents, birth_names): (Vec<&Free>, Vec<Term>) = births
+            .iter()
+            .map(|(current, birth)| (*current, Term::free_var(birth)))
+            .unzip();
+        let birth_refs = birth_names.iter().collect::<Vec<_>>();
+        let arguments = entries
+            .iter()
+            .zip(&keep)
+            .filter(|(_, kept)| **kept)
+            .map(|(entry, _)| entry.capture(&currents).release(&birth_refs))
+            .collect::<Vec<_>>();
+
+        // `inner`'s type, spelled over the stand-in's binders: every birth name it mentions is one of the arguments.
+        let mut mentioned = Vec::new();
+        let mut binders = Vec::new();
+        for name in inner_entry.result.free_vars_shared() {
+            if self.is_top_level(name) {
+                continue;
+            }
+            let position = arguments.iter().position(
+                |argument| matches!(&**argument, Subterm::Var(var) if var.as_free() == Some(name)),
+            )?;
+            mentioned.push(name);
+            binders.push(Term::free_var(&telescope[position].0));
+        }
+        let binder_refs = binders.iter().collect::<Vec<_>>();
+        let result = inner_entry.result.capture(&mentioned).release(&binder_refs);
+
+        Some(Restriction {
+            telescope: Rc::new(telescope),
+            arguments,
+            result,
+        })
     }
 
-    /// Narrow the unsolved `inner` to the refinements it shares with `outer`'s birth, as a solver restricts a context it prunes: a fresh metavariable at `inner`'s telescope and type, born under the shared refinements alone, and `inner` solved to it. Called as a solution for `outer` that embeds `inner` commits: whatever reaches `outer` through `inner` must hold where `outer` does, so narrowing loses no solution `outer` could take, and `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. Birth records stay frozen; the narrowing is a solution, rolled back and reported like any other.
+    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`]), born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. The stand-in keeps `inner`'s origin and `span`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
     pub(crate) fn restrict_metavar(
         &mut self,
         inner: MetavarId,
         outer: MetavarId,
-        origin: MetavarOrigin,
+        (origin, span): Provenance,
+        restriction: Restriction,
     ) {
         let (Some(inner_entry), Some(outer_entry)) =
             (self.metavar_entry(inner), self.metavar_entry(outer))
         else {
             return;
         };
-        let telescope = Rc::clone(&inner_entry.telescope);
         let refinements = Rc::new(
             inner_entry
                 .refinements
                 .shared_with(&outer_entry.refinements),
         );
         let witnesses = inner_entry.witnesses.clone();
-        let result = inner_entry.result.clone();
+        let Restriction {
+            telescope,
+            arguments,
+            result,
+        } = restriction;
 
         self.caches.note_write();
         let narrowed = self.solutions.mint();
-        self.solutions.birth(
-            narrowed,
-            Rc::clone(&telescope),
-            refinements,
-            witnesses,
-            result,
-        );
-        let spine = telescope
-            .iter()
-            .map(|(name, _)| Term::free_var(name))
-            .collect::<Vec<_>>();
-        self.solve_metavar(inner, Term::metavar_birthed(narrowed, origin, spine));
+        self.solutions
+            .birth(narrowed, telescope, refinements, witnesses, result);
+        let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
+        let stand_in = match span {
+            Some(span) => stand_in.with_span(span),
+            None => stand_in,
+        };
+        self.solve_metavar(inner, stand_in);
     }
 
     fn fresh_metavar_with(
@@ -1870,7 +2002,7 @@ impl Context {
         self.solutions.park(work, origin, frame);
     }
 
-    /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance. If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
+    /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance, and of its own kind, since its check is what fills it ([`MetaKind::Placeholder`]). If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
     pub(crate) fn fresh_placeholder(
         &mut self,
         result: Term,
@@ -1878,7 +2010,7 @@ impl Context {
     ) -> (MetavarId, Term) {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        self.birth_metavar(id, telescope, result);
+        self.birth_metavar_as(id, telescope, result, MetaKind::Placeholder);
         let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
 
         let term = match span {

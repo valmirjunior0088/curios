@@ -201,7 +201,7 @@ fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
         Term::type_ground(),
     );
 
-    // ?0 ≟ (x : ?1) -> Nat — ?1's birth context holds a binder ?0's lacks, so its eventual solution could smuggle `y` past ?0's scope: postponed, the stand-in for pruning.
+    // ?0 ≟ (x : ?1) -> Nat — ?1's birth context holds a binder ?0's lacks, so its eventual solution could smuggle `y` past ?0's scope. This bare occurrence says nothing of what `y` is at it, so ?1 cannot be re-expressed over ?0's binders, and the candidate waits.
     let candidate = Term::func_type(
         [(x.clone(), Term::hole(1))],
         Term::intrinsic(Intrinsic::NatType),
@@ -210,7 +210,7 @@ fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
-/// A metavariable born in an arm, embedded in a candidate for one born outside it, is restricted to the outer one's refinements as the candidate commits rather than holding it back: `?0 ≟ (x : ?1) -> Nat` solves, and `?1` is solved to a fresh metavariable born under no refinement, whose own solution is then judged without the arm's guard. The control is the same candidate over a silent hole, whose id a parked check may be keyed on, and which still waits. Mutation-checked: postponing on refinements, as containment alone does, leaves `?0` unsolved.
+/// A metavariable born in an arm, embedded in a candidate for one born outside it, is restricted to the outer one's refinements as the candidate commits rather than holding it back: `?0 ≟ (x : ?1) -> Nat` solves, and `?1` is solved to a fresh metavariable born under no refinement, whose own solution is then judged without the arm's guard. The control is the same candidate over a written goal, which reports by its identity and still waits. Mutation-checked: postponing on refinements, as containment alone does, leaves `?0` unsolved.
 #[test]
 fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it() {
     let embedding = |origin: MetavarOrigin| {
@@ -259,7 +259,171 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
         "the restriction is born under the refinements the two share — none — and left open"
     );
 
-    let (context, converted) = embedding(MetavarOrigin::Hole);
+    let (context, converted) = embedding(MetavarOrigin::Goal);
+    assert_eq!(converted, Ok(false));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+/// A metavariable born under binders the candidate's metavariable lacks is re-expressed over the candidate's own: `?0 ≟ (x : ?1(z, w)) -> Nat` solves, `?1` is solved to a stand-in over `?0`'s binder `z` applied to `y` — `z` spelled in `?1`'s birth names — and `w`, which no entry of `?0`'s spine reaches, is pruned, since no solution of `?1` using it could be one `?0` takes. Mutation-checked: refusing every binder `?0` lacks leaves `?0` unsolved.
+#[test]
+fn a_stand_in_keeps_the_binders_the_candidate_reaches_and_prunes_the_rest() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    let w = context.fresh(Some("w"));
+    let z = context.fresh(Some("z"));
+    context.birth_metavar(
+        MetavarId(0),
+        vec![(z.clone(), nat_type())],
+        Term::type_ground(),
+    );
+    context.birth_metavar(
+        MetavarId(1),
+        vec![(y.clone(), nat_type()), (w.clone(), nat_type())],
+        Term::type_ground(),
+    );
+
+    let outer = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&z)]);
+    let embedded = Term::metavar_birthed(
+        1,
+        MetavarOrigin::Domain("x".into()),
+        vec![Term::free_var(&z), Term::free_var(&w)],
+    );
+    let candidate = Term::func_type([(x, embedded)], nat_type());
+    assert_eq!(conv(&mut context, &outer, &candidate), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+
+    let Some(Subterm::Metavar(stand_in)) = context
+        .metavar_solution(MetavarId(1))
+        .map(|solution| &**solution)
+    else {
+        panic!("the embedded metavariable is solved to its stand-in");
+    };
+    assert_eq!(*stand_in.spine, vec![Term::free_var(&y)]);
+    let entry = context
+        .metavar_entry(stand_in.id)
+        .expect("the stand-in has a birth record");
+    assert_eq!(
+        entry
+            .telescope
+            .iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>(),
+        vec![&z],
+        "the stand-in is born over the binder of `?0`'s the candidate reaches"
+    );
+    assert!(entry.solution.is_none());
+}
+
+/// An argument the candidate's metavariable reaches only inside a non-pattern entry of its spine is spelled through that entry, as the inversion abstracts it: a match's type `?0(r, (v,))`, met by an arm's type embedding `?1(r, v)`, solves `?1` to a stand-in over the match's binders applied to `(r, (v,))`, and `?0` to the arm's type over the stand-in at its own binders. Pruning `v` instead would lose every solution of `?1` through `(v,)`, which is how a match's inferred type depends on its scrutinee. The control passes `?1` the entry itself, which is no renaming its birth names could spell the spine through, and waits. Mutation-checked: carrying only the entries that are variables fails the first half.
+#[test]
+fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
+    let embedding = |renaming: bool| {
+        let mut context = context();
+        let x = context.fresh(Some("x"));
+        let r = context.fresh(Some("r"));
+        let s = context.fresh(Some("s"));
+        let v = context.fresh(Some("v"));
+        let field = context.fresh(None);
+        let pair = Term::tuple([Term::free_var(&v)]);
+        context.birth_metavar(
+            MetavarId(0),
+            vec![
+                (r.clone(), nat_type()),
+                (s.clone(), Term::tuple_type([(field, nat_type())])),
+            ],
+            Term::type_ground(),
+        );
+        context.birth_metavar(
+            MetavarId(1),
+            vec![(r.clone(), nat_type()), (v.clone(), nat_type())],
+            Term::type_ground(),
+        );
+
+        let outer = Term::metavar_birthed(
+            0,
+            MetavarOrigin::Hole,
+            vec![Term::free_var(&r), pair.clone()],
+        );
+        let argument = match renaming {
+            true => Term::free_var(&v),
+            false => pair.clone(),
+        };
+        let embedded = Term::metavar_birthed(
+            1,
+            MetavarOrigin::Domain("x".into()),
+            vec![Term::free_var(&r), argument],
+        );
+        let candidate = Term::func_type([(x.clone(), embedded)], nat_type());
+        let converted = conv(&mut context, &outer, &candidate);
+        (context, converted, [x, r, s], pair)
+    };
+
+    let (context, converted, [x, r, s], pair) = embedding(true);
+    assert_eq!(converted, Ok(true));
+    let Some(Subterm::Metavar(stand_in)) = context
+        .metavar_solution(MetavarId(1))
+        .map(|solution| &**solution)
+    else {
+        panic!("the embedded metavariable is solved to its stand-in");
+    };
+    assert_eq!(*stand_in.spine, vec![Term::free_var(&r), pair]);
+    assert_eq!(
+        context.metavar_entry(stand_in.id).map(|entry| entry
+            .telescope
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>()),
+        Some(vec![r.clone(), s.clone()]),
+    );
+    let arm = Term::func_type(
+        [(
+            x,
+            Term::metavar_birthed(
+                stand_in.id,
+                MetavarOrigin::Domain("x".into()),
+                vec![Term::free_var(&r), Term::free_var(&s)],
+            ),
+        )],
+        nat_type(),
+    );
+    assert_eq!(
+        context.metavar_solution(MetavarId(0)),
+        Some(&arm),
+        "the match's type is the arm's, over the stand-in at the match's own binders"
+    );
+
+    let (context, converted, _, _) = embedding(false);
+    assert_eq!(converted, Ok(false));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+/// A silent hole — an elided annotation, motive or element type — is restricted like an omitted implicit, while a parked check's placeholder, minted the same way, waits: its check reads any solution as the check discharged and would never elaborate its term. The two share their origin and differ in kind. Mutation-checked: restricting a placeholder commits the control.
+#[test]
+fn a_silent_hole_is_restricted_where_a_parked_checks_placeholder_waits() {
+    let embedding = |placeholder: bool| {
+        let mut context = context();
+        let x = context.fresh(Some("x"));
+        let y = context.fresh(Some("y"));
+        context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+        let hole = context.with_frame(|context| {
+            context.assume(&y, &nat_type());
+            match placeholder {
+                true => context.fresh_placeholder(Term::type_ground(), None).1,
+                false => context.fresh_hole_metavar(Term::type_ground(), None),
+            }
+        });
+
+        let candidate = Term::func_type([(x, hole)], nat_type());
+        let converted = conv(&mut context, &Term::hole(0), &candidate);
+        (context, converted)
+    };
+
+    let (context, converted) = embedding(false);
+    assert_eq!(converted, Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+
+    let (context, converted) = embedding(true);
     assert_eq!(converted, Ok(false));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }

@@ -441,3 +441,47 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
 
     assert_eq!(output, b"1");
 }
+
+/// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it held the match's type open until `read!` pinned it to the region's monad, which refused the first arm with `Async(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program again.
+#[test]
+fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_it() {
+    let output = run(r#"
+        use /std/{Str, Bytes, Option, Result, Show, Try, Async, Io};
+
+        let program(r: Result(Io/Error, Bytes)) -> Try(Async, Io/Error, Str) =
+            let read =
+                match r
+                | success(v) => Async/pure(Result/success(v))
+                | failure(e) => Async/pure(Result/failure(e))
+                end;
+            let out = read!;
+            let bytes = out!;
+            Try/pure(Option/unwrap_or(Str/of_bytes(bytes), "?"));
+
+        let fiber: Async({}) =
+            let r = Try/run(program(Result/success(Str/to_bytes("read"))))!;
+            match r
+            | failure(e) => /std/print(Show/show(e))
+            | success(s) => /std/print(s)
+            end;
+        Async/run(fiber)
+        "#);
+
+    assert_eq!(output, b"read");
+}
+
+/// An elided element type is restricted as an omitted implicit is: each arm's `[]` leaves its element type open inside the match's type, so both arms waited on it, and matching on `xs` met a type still a metavariable and refused it as no list. The hole is minted as a silent one, the origin a parked check's placeholder shares, and it is the placeholder's own kind that keeps that one waiting. Mutation-checked: waiting on every silent hole refuses the program again.
+#[test]
+fn an_elided_element_type_is_restricted_like_an_implicit_to_type_the_match() {
+    let output = run(r#"
+        use /std/{Str, List, print};
+
+        let first(raw: List(Str)) -> Str =
+            let xs = match raw | [] => [] | [_, .._] => [] end;
+            match xs | [] => "none" | [s, .._] => s end;
+
+        print(first(["a"]))
+        "#);
+
+    assert_eq!(output, b"none");
+}

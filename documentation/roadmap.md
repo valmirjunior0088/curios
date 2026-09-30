@@ -83,7 +83,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
   - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
   - [x] An implicit a candidate embeds, born under refinements the candidate's metavariable was not, is restricted to the ones they share as the candidate commits — a fresh metavariable solved in its place — rather than holding the candidate back
-  - [ ] An embedded metavariable whose birth telescope holds binders the candidate's lacks is restricted the same way, retiring the postponement `Convert::solve` calls its stand-in for pruning
+  - [x] An embedded metavariable whose birth telescope holds binders the candidate's lacks is re-expressed over the candidate's metavariable's binders — applied to its spine's entries spelled in its own birth names, so an argument no entry reaches is pruned and one reached inside a non-pattern entry, `?E(r, v)` under a match type `?M(r, success(v))`, is carried by that entry — and silent holes are restricted as implicits are, a parked check's placeholder, of its own kind, excepted
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
 - [x] `spine_whnf` opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does, so a spine that does not match its lambda ends the walk instead of reaching `Telescope::open`'s assertion
 
