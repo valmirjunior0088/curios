@@ -485,6 +485,30 @@ pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
     )
 }
 
+/// A sum or a product rebuilt with its summands or factors in structural-hash order, each put through `order` first — [`Nat`]'s `in_order` over the group, and as it is never written back. `None` for any other node.
+pub(crate) fn int_in_order(node: &Term, order: &impl Fn(&Term) -> Term) -> Option<Term> {
+    match &**node {
+        Subterm::Intrinsic(Intrinsic::IntAdd(..)) => {
+            let (constant, summands) = int_terms(node);
+            let mut combination = int_linear(summands.iter().map(order));
+            combination.sort_by_key(|(_, factors)| {
+                factors
+                    .iter()
+                    .map(Term::structural_hash)
+                    .collect::<Vec<_>>()
+            });
+            Some(int_from_linear(constant, combination))
+        }
+        Subterm::Intrinsic(Intrinsic::IntMul(..)) => {
+            let (coefficient, factors) = int_monomial(node);
+            let mut factors = factors.iter().map(order).collect::<Vec<_>>();
+            factors.sort_by_key(Term::structural_hash);
+            Some(int_scaled(coefficient, &factors))
+        }
+        _ => None,
+    }
+}
+
 /// Whether a reduced term is one of the shapes the cancellation reads: a literal, a sum spine, or a product.
 pub fn int_shaped(term: &Term) -> bool {
     matches!(

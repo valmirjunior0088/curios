@@ -8,7 +8,7 @@
 //! 4. two connective trees flattened, their leaves forced;
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor and comparison-side pairings first;
-//! 7. the `Nat` peel retried once with each summand's arguments forced;
+//! 7. steps 3 to 6 read once more with every atom's arguments forced, where they decided nothing ([`force_atoms`]);
 //! 8. the elaborator's packed-literal view ([`Driver::packed_view`]);
 //! 9. two numbers of one operation compared as numbers;
 //! 10. the congruence, each operand at the type its operation declares.
@@ -20,12 +20,13 @@
 //! **Two numbers of one operation are one number up to universe instances** (step 9). A number never depends on a level — Core offers no elimination from a type or a level into one — so `len(xs)` at two instances is one number whether it stands alone or inside a sum, as the cancellation already reads it inside one. Before this chain was shared, a bare pair fell to the congruence, which compared the operands' levels and refused where they differed.
 
 use {
-    curios_algebra::{Conclusion, Deduction},
+    curios_algebra::Conclusion,
     curios_core::{
         Aligned, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
-        Term, Var, Visit, align_comparisons, decide_bool, int_has_stuck_product, int_normalize,
-        int_same, is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_comparison,
-        peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
+        Term, Var, Visit, align_comparisons, decide_bool, force_atoms, int_has_stuck_product,
+        int_normalize, int_same, is_bool_connective, normalize_bool, peel_bin, peel_bool,
+        peel_comparison, peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position,
+        peel_symmetric,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -105,92 +106,14 @@ pub fn convert_intrinsics(
         }
     };
 
-    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so everything below runs as it did.
-    if decide_bool(
-        driver,
-        &Term::intrinsic(this.clone()),
-        &Term::intrinsic(that.clone()),
-    )? {
-        return Ok(Outcome::Equal);
-    }
-
-    // **Two `&&` trees, or two `||` trees, are flattened with their leaves forced before they are peeled** — the same demand by name as the stuck product's, because the fold leaves a stuck connective's right operand as written and the peel reads leaves without reducing. A tree against a `Bool` literal is flattened the same way: what decides it against `true` or `false` is a law on its leaves — an operand beside its own negation — and the fold left those leaves as written.
-    let (this, that) = match (
-        normalize_bool(driver, &this)?,
-        normalize_bool(driver, &that)?,
-    ) {
-        (Some(this_tree), Some(that_tree)) => {
-            match (as_intrinsic(&this_tree), as_intrinsic(&that_tree)) {
-                (Some(this), Some(that)) => (this, that),
-                _ => return Ok(Outcome::Residual(this_tree, that_tree)),
-            }
-        }
-        (Some(this_tree), None) if matches!(that, Intrinsic::Bool(_)) => {
-            match as_intrinsic(&this_tree) {
-                Some(this) => (this, that),
-                None => return Ok(Outcome::Residual(this_tree, Term::intrinsic(that))),
-            }
-        }
-        (None, Some(that_tree)) if matches!(this, Intrinsic::Bool(_)) => {
-            match as_intrinsic(&that_tree) {
-                Some(that) => (this, that),
-                None => return Ok(Outcome::Residual(Term::intrinsic(this), that_tree)),
-            }
-        }
-        _ => (this, that),
+    // Steps 3 to 6 read the pair through the carriers' algebra ([`read`]); what they leave undecided is read once more with every atom's arguments forced (step 7, [`read_forced`]), and what that leaves undecided goes on to the congruence as the reading left it.
+    let (this, that) = match read(driver, this.clone(), that.clone())? {
+        Read::Decided(outcome) => return Ok(outcome),
+        Read::Undecided(read) => match read_forced(driver, &this, &that)? {
+            Some(outcome) => return Ok(outcome),
+            None => *read,
+        },
     };
-
-    // A negated comparison is read as its dual, and two `Nat` or `Int` comparisons through their linear views: one proposition where those agree, and otherwise both respelled in the one spelling their views give, so the congruence meets aligned operands. Probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
-    let (this, that) = match align_comparisons(driver, &this, &that)? {
-        Some(Aligned::Same) => return Ok(Outcome::Equal),
-        Some(Aligned::Respelled(pair)) => *pair,
-        None => (this, that),
-    };
-
-    // `Nat`, `Bin` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
-    if let Some(conclusion) = peel_monomial(&this, &that)
-        .or_else(|| peel_comparison(&this, &that))
-        .or_else(|| {
-            peel_nat_pair(&this, &that)
-                .or_else(|| peel_int_pair(&this, &that))
-                .or_else(|| peel_bin(&this, &that))
-                .or_else(|| peel_list(&this, &that))
-                .or_else(|| peel_bool(&this, &that))
-                .or_else(|| peel_symmetric(&this, &that))
-                .or_else(|| peel_position(&this, &that))
-                .map(Conclusion::from)
-        })
-    {
-        match conclusion {
-            Conclusion::Equal => return Ok(Outcome::Equal),
-            Conclusion::Impossible => return Ok(Outcome::Unequal),
-            Conclusion::Equivalent((left, right)) | Conclusion::Sufficient((left, right)) => {
-                return Ok(Outcome::Residual(left, right));
-            }
-            // **The `Nat` peel's one unforced shape**, retried once with each summand's own arguments forced. The fold leaves a stuck application's arguments as written, so two summands that differ only inside their heads never pair; forcing them is `normalize_bool`'s demand for the other carrier, and it costs nothing on a pair that already decided. A retry that still finds nothing falls through to the congruence on the *original* spelling, so nothing downstream meets a respelled sum.
-            Conclusion::Undecided => {
-                if peel_nat_pair(&this, &that).is_some() {
-                    let forced_this = Nat::normalize_atoms(driver, Term::intrinsic(this.clone()))?;
-                    let forced_that = Nat::normalize_atoms(driver, Term::intrinsic(that.clone()))?;
-
-                    if let (Some(forced_this), Some(forced_that)) =
-                        (as_intrinsic(&forced_this), as_intrinsic(&forced_that))
-                        && (forced_this != this || forced_that != that)
-                        && let Some(peel) = peel_nat_pair(&forced_this, &forced_that)
-                    {
-                        match peel {
-                            Deduction::Equal => return Ok(Outcome::Equal),
-                            Deduction::Impossible => return Ok(Outcome::Unequal),
-                            Deduction::Equivalent((left, right)) => {
-                                return Ok(Outcome::Residual(left, right));
-                            }
-                            Deduction::Undecided => {}
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     if let Some(view) = driver.packed_view(&this, &that) {
         return Ok(match view {
@@ -242,15 +165,136 @@ pub fn convert_intrinsics(
     }))
 }
 
+/// What reading a pair through the carriers' algebra came to.
+enum Read {
+    Decided(Outcome),
+    /// Nothing decided: the pair as the reading respelled it, which is what the congruence reads.
+    Undecided(Box<(Intrinsic, Intrinsic)>),
+}
+
+/// Steps 3 to 6 over one pair: the truth table, the connective trees, the comparisons' views and the peels.
+fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Read, ReduceError> {
+    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so everything below runs as it did.
+    if decide_bool(
+        driver,
+        &Term::intrinsic(this.clone()),
+        &Term::intrinsic(that.clone()),
+    )? {
+        return Ok(Read::Decided(Outcome::Equal));
+    }
+
+    // **Two `&&` trees, or two `||` trees, are flattened with their leaves forced before they are peeled** — the same demand by name as the stuck product's, because the fold leaves a stuck connective's right operand as written and the peel reads leaves without reducing. A tree against a `Bool` literal is flattened the same way: what decides it against `true` or `false` is a law on its leaves — an operand beside its own negation — and the fold left those leaves as written.
+    let (this, that) = match (
+        normalize_bool(driver, &this)?,
+        normalize_bool(driver, &that)?,
+    ) {
+        (Some(this_tree), Some(that_tree)) => {
+            match (as_intrinsic(&this_tree), as_intrinsic(&that_tree)) {
+                (Some(this), Some(that)) => (this, that),
+                _ => return Ok(Read::Decided(Outcome::Residual(this_tree, that_tree))),
+            }
+        }
+        (Some(this_tree), None) if matches!(that, Intrinsic::Bool(_)) => {
+            match as_intrinsic(&this_tree) {
+                Some(this) => (this, that),
+                None => {
+                    return Ok(Read::Decided(Outcome::Residual(
+                        this_tree,
+                        Term::intrinsic(that),
+                    )));
+                }
+            }
+        }
+        (None, Some(that_tree)) if matches!(this, Intrinsic::Bool(_)) => {
+            match as_intrinsic(&that_tree) {
+                Some(that) => (this, that),
+                None => {
+                    return Ok(Read::Decided(Outcome::Residual(
+                        Term::intrinsic(this),
+                        that_tree,
+                    )));
+                }
+            }
+        }
+        _ => (this, that),
+    };
+
+    // A negated comparison is read as its dual, and two `Nat` or `Int` comparisons through their linear views: one proposition where those agree, and otherwise both respelled in the one spelling their views give, so the congruence meets aligned operands. Probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
+    let (this, that) = match align_comparisons(driver, &this, &that)? {
+        Some(Aligned::Same) => return Ok(Read::Decided(Outcome::Equal)),
+        Some(Aligned::Respelled(pair)) => *pair,
+        None => (this, that),
+    };
+
+    // `Nat`, `Bin` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
+    if let Some(conclusion) = peel_monomial(&this, &that)
+        .or_else(|| peel_comparison(&this, &that))
+        .or_else(|| {
+            peel_nat_pair(&this, &that)
+                .or_else(|| peel_int_pair(&this, &that))
+                .or_else(|| peel_bin(&this, &that))
+                .or_else(|| peel_list(&this, &that))
+                .or_else(|| peel_bool(&this, &that))
+                .or_else(|| peel_symmetric(&this, &that))
+                .or_else(|| peel_position(&this, &that))
+                .map(Conclusion::from)
+        })
+    {
+        match conclusion {
+            Conclusion::Equal => return Ok(Read::Decided(Outcome::Equal)),
+            Conclusion::Impossible => return Ok(Read::Decided(Outcome::Unequal)),
+            Conclusion::Equivalent((left, right)) | Conclusion::Sufficient((left, right)) => {
+                return Ok(Read::Decided(Outcome::Residual(left, right)));
+            }
+            Conclusion::Undecided => {}
+        }
+    }
+
+    Ok(Read::Undecided(Box::new((this, that))))
+}
+
+/// Step 7: `this` and `that` read once more with every atom's arguments forced — `None` where the forcing moved neither side, or the forced pair decided nothing either.
+///
+/// **Every reader above keys an atom on its spelling**, and the fold leaves a stuck application's arguments exactly as written, so `f(a + b)` and `f(b + a)` are two atoms to all of them though conversion decides that pair the moment it compares it directly. What a pair of them came to then fell to the congruence, whose operand order is a structural hash, and one equation held or failed with the order its binders were declared in. [`force_atoms`] forces what the readers read, once and for all of them, and only where the pair as it stood decided nothing — so it costs nothing on a pair that already decided.
+///
+/// **The congruence still meets the spelling it was handed.** A forced pair that decides nothing is dropped, so no reordered term reaches a checker's comparison; one that decides hands on an outcome whose residuals are the forced spelling's, a pair definitionally equal to the one asked about.
+fn read_forced(
+    driver: &mut impl Driver,
+    this: &Intrinsic,
+    that: &Intrinsic,
+) -> Result<Option<Outcome>, ReduceError> {
+    let this = Term::intrinsic(this.clone());
+    let that = Term::intrinsic(that.clone());
+    let Some((this, that)) = force_atoms(driver, &this, &that)? else {
+        return Ok(None);
+    };
+    // A node the readers read through is rebuilt as the same node, so both sides are still intrinsics.
+    let (Some(this), Some(that)) = (as_intrinsic(&this), as_intrinsic(&that)) else {
+        return Ok(None);
+    };
+    Ok(match read(driver, this, that)? {
+        Read::Decided(outcome) => Some(outcome),
+        Read::Undecided(..) => None,
+    })
+}
+
 /// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the truth table both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. `false` says nothing, and leaves the pair where it was. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
+///
+/// The table keys its atoms on spelling, as every reader in the chain does, so a pair it does not decide is put to it once more with every atom's arguments forced ([`force_atoms`]), as the chain's step 7 reads its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
 pub fn connectives_agree(
     reducer: &mut impl Reducer,
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
-    match is_bool_connective(this) || is_bool_connective(that) {
-        true => decide_bool(reducer, this, that),
-        false => Ok(false),
+    if !(is_bool_connective(this) || is_bool_connective(that)) {
+        return Ok(false);
+    }
+    if decide_bool(reducer, this, that)? {
+        return Ok(true);
+    }
+    match force_atoms(reducer, this, that)? {
+        Some((this, that)) => decide_bool(reducer, &this, &that),
+        None => Ok(false),
     }
 }
 

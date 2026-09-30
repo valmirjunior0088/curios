@@ -19,7 +19,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(f(x + y), f(y + x))",
             // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so this was refused by the elaborator alone, as `x` against `y` under the positional congruence, until the solved ones were substituted before the peel.
             "Eq()(f(x + 1) + f(y + 1), f(y + 1) + f(x + 1))",
-            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` never met `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` still takes no reducer — what forces the summands' arguments is `Nat::normalize_atoms`, at the conversion site that already normalizes a stuck product and already forces a Boolean tree's leaves, and only once the peel has found nothing to cancel.
+            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` never met `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` still takes no reducer — what forces the summands' arguments is `force_atoms`, the conversion chain's one retry for every reader of atoms, asked only once the pair has decided nothing as it stood.
             "Eq()(f(x + y) + g(y + z), g(z + y) + f(y + x))",
         ],
         refused: &[],

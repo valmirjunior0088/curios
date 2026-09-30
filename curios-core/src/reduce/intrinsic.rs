@@ -22,6 +22,9 @@ use scalar::*;
 mod truth;
 pub use truth::*;
 
+mod forced;
+pub use forced::*;
+
 use {
     super::{ReduceError, Reducer},
     crate::{
