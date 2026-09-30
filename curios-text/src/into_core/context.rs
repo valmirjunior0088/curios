@@ -403,7 +403,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
+    /// Mint a metavariable id for a surface hole, unique within the unit.
     pub(super) fn fresh_metavar(&self) -> usize {
         self.metavars.fresh()
     }
@@ -476,7 +476,7 @@ impl<'a> Context<'a> {
 
     /// Mint a binder identity, rendering as `hint`.
     ///
-    /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and seeds its counter above [`PreparedText::binder_floor`](super::PreparedText::binder_floor), so the two sources share one identity space without colliding.
+    /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and starts its counter above this unit's count ([`curios_core::Minted::binders`]), so the two sources share one identity space per unit without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
         curios_core::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),

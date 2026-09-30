@@ -1,4 +1,4 @@
-//! Fixtures the kernel's inference suites share: a kernel above every binder they use, and the declarations they infer against.
+//! Fixtures the kernel's inference suites share: the kernel they start from, and the declarations they infer against.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
@@ -12,9 +12,7 @@ use {
 };
 
 pub(super) fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(1_000);
-    kernel
+    Kernel::new(100_000, SYNTAX)
 }
 
 pub(super) fn binder(index: u32, hint: &str) -> Free {

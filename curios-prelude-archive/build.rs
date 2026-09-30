@@ -9,7 +9,7 @@ use sources::*;
 
 use {
     curios_core::Item,
-    curios_core::{Global, Sharing, Zonked, derived_binder_floor, validate_stored_identities},
+    curios_core::{Global, Sharing, Zonked, validate_stored_identities},
     curios_elab::{
         Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
@@ -83,14 +83,9 @@ fn build() {
 fn lower(root: &str, modules: &curios_text::RootSource, scope: &[&PreparedText]) -> PreparedText {
     let prepared = prepare_prelude(modules, scope, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
-    assert_eq!(
-        prepared.core().universe_seeds.len(),
-        prepared.universe_floor(),
-        "lowered Text universe floor of /{root} does not match its seed table"
-    );
-    validate_lowered_universe_seeds(prepared.core(), prepared.universe_floor()).unwrap_or_else(
-        |error| panic!("lowered Text universe seeds of /{root} are invalid: {error}"),
-    );
+    validate_lowered_universe_seeds(prepared.core()).unwrap_or_else(|error| {
+        panic!("lowered Text universe seeds of /{root} are invalid: {error}")
+    });
 
     prepared
 }
@@ -111,13 +106,7 @@ fn archive(
     context.set_broken(prepared.broken_names());
     // Grown explicitly, where the whole-module spelling this replaced grew for its caller: a root is the deepest module the compiler ever elaborates, and a build script's thread is the smallest stack it is ever elaborated on.
     let elaborated = curios_utilities::grown(|| {
-        elaborate_and_zonk_unit(
-            &mut context,
-            established,
-            &lowered,
-            prepared.metavariable_floor(),
-            prepared.universe_floor(),
-        )
+        elaborate_and_zonk_unit(&mut context, established, &lowered, prepared.minted())
     });
     // A broken item refuses the root whatever elaboration said of the rest, and its parse report comes first, with elaboration's beside it in the same build — the pipeline's `with_broken`, for the one unit it does not compile.
     let broken = prepared.broken();
@@ -184,11 +173,8 @@ fn archive(
         sharing.structures()
     );
 
-    // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
-    let binder_floor = derived_binder_floor(&core);
-
     // Uncertified: no certifier can walk it from here. `curios-prelude`'s build files its record, and that crate certifies the unit as it restores it.
-    Uncertified::new(prepared, core, ersd, binder_floor)
+    Uncertified::new(prepared, core, ersd)
 }
 
 /// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and `predecessors`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.

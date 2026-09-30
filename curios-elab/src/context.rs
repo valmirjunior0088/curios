@@ -386,18 +386,18 @@ impl Context {
 
     /// Mint a binder nothing else can name, rendering as `hint`.
     ///
-    /// The counter is seeded above every index `into_core` minted ([`Context::set_local_floor`]), so a lowered binder and an elaborated one can never be the same identity.
+    /// The counter starts above every index the unit's lowering minted ([`Context::seed_binders`]), so a lowered binder and an elaborated one can never be the same identity.
     pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
         let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
 
         Free::local(index, hint)
     }
 
-    /// Raise the binder counter above every index already minted elsewhere.
+    /// Start the binder counter above the `minted` binders the unit's lowering handed out.
     ///
-    /// `into_core` mints the binders of every lowered scope, and `core` mints more while elaborating them; both draw from one identity space, so the second source must start above the first. The archived prelude replays terms whose binders were minted in an earlier compiler run, and this is what keeps a fresh mint from aliasing one of them.
-    pub fn set_local_floor(&mut self, floor: usize) {
-        self.fresh_names.seed(floor);
+    /// `into_core` mints the binders of every lowered scope, and elaboration mints more while opening them; both draw from one identity space per unit, so the second source starts above the first. Nothing from another unit is in that space: no term the scope replays carries a local.
+    pub(crate) fn seed_binders(&mut self, minted: usize) {
+        self.fresh_names.seed(minted);
     }
 
     /// Charge `cost` against the current declaration's budget, failing when it cannot be afforded.
@@ -1432,9 +1432,9 @@ impl Context {
         self.frames.identity_snapshot()
     }
 
-    /// Raise the minting floor: every id `fresh_metavar` hands out will be `>= floor`. Called by `elaborate_module_suffix` with its `metavar_floor` argument (the count `into_core` minted) before any item is elaborated.
-    pub(crate) fn seed_metavars(&mut self, floor: usize) {
-        self.solutions.seed_floor(floor);
+    /// Start the metavariable counter above the `minted` ids the unit's lowering handed out: every id `fresh_metavar` hands out will be `>= minted`. Called by `elaborate_module_suffix` before any item is elaborated.
+    pub(crate) fn seed_metavars(&mut self, minted: usize) {
+        self.solutions.seed_floor(minted);
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
@@ -1846,12 +1846,7 @@ impl Context {
         Term::type_at(level)
     }
 
-    pub(crate) fn seed_universes(&mut self, seeds: &[UniverseSeed], floor: usize) {
-        assert_eq!(
-            seeds.len(),
-            floor,
-            "the universe floor must equal the lowering seed table length"
-        );
+    pub(crate) fn seed_universes(&mut self, seeds: &[UniverseSeed]) {
         self.universe_solver.seed(seeds);
         self.caches.note_universe_write();
     }

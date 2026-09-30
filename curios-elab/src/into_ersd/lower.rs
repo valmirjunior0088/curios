@@ -162,7 +162,6 @@ fn project_module(module: &Module) -> Module {
             .collect(),
         witnesses: module.witnesses.clone(),
         tests: module.tests.clone(),
-        binder_floor: module.binder_floor,
     }
 }
 

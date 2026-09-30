@@ -3,6 +3,8 @@
 //! A name here distinguishes one binding from another and renders for a human. It is not a place to store facts: nothing branches on a name's characters, its prefix, or its collation order. Where a consumer needs structure — which module a definition belongs to, which inductive a constructor came from — that structure is carried as a value by the site that knew it, never recovered by taking a name apart.
 //!
 //! The rule holds because the *capability* is absent, not because every site remembers it. A name's spelling was once an undocumented wire format between stages — five structured facts flattened into one `String`, each recovered by a hand-rolled parser whose correctness rested on an invariant enforced in another crate and stated nowhere near the parse. Two of those parsers were provably wrong about their own premise. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
+//!
+//! **A minted identity is private to the unit that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each unit ([`Minted`]); a witness's ordinal counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
 
 #[cfg(test)]
 mod tests;
@@ -158,6 +160,18 @@ pub enum CalleeId {
     Anonymous,
 }
 
+/// How many identities one unit's lowering minted in each space elaboration goes on minting in — counts within the unit, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds.
+///
+/// **Within the unit, never across units.** No stored term carries a local or a metavariable (`validate_stored_identities`), so nothing a predecessor minted can meet this unit's walk, and every unit's counters start at zero. That is what keeps a unit's stored bytes independent of what was compiled before it. Universes need no count here: the lowering's seed table is the unit's own, and its length is the count.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Minted {
+    /// Binder identities. A lowered scope is closed before the elaborator sees it, so the ones that survive into a lowered term are the unbound names — each lowered to a free local that elaboration must report rather than find bound.
+    pub binders: usize,
+    /// Term metavariables, one per hole the lowering left for elaboration to solve.
+    pub metavariables: usize,
+}
+
 /// A free variable's identity: a top-level definition, or a binder some scope opened.
 ///
 /// The distinction is a discriminant rather than a spelling convention. Asking "is this a local?" is a `matches!` — exact, and impossible to get wrong the way a marker character in a string could be.
@@ -171,7 +185,7 @@ pub enum Free {
 impl Free {
     /// A local binder with identity `index`, rendering as `hint`.
     ///
-    /// The index space is shared with `Context::fresh`, which seeds its counter above every index minted here — see `Context::set_local_floor`.
+    /// An index means something within the unit that minted it and nowhere else: the lowering and the elaborator share one space per unit, the elaborator's counter starting above the lowering's count ([`Minted::binders`]), and no stored term carries one.
     pub fn local(index: u32, hint: Option<&str>) -> Self {
         Free::Local(Mint::new(index, hint))
     }
@@ -196,7 +210,7 @@ impl Free {
 
     /// The raw counter behind a locally minted name, or `None` for a global.
     ///
-    /// What a binder floor must exceed. `Entropy::seed` only ever raises its counter, so a checker that mints binders of its own can derive a safe floor from the names a module already contains rather than taking one on trust.
+    /// What a checker minting binders of its own must stay clear of: the kernel raises its counter above every local it is handed (`Kernel::assume`), and refuses a module or entry mentioning one it was not.
     pub fn local_index(&self) -> Option<u32> {
         self.as_local().map(|mint| mint.index)
     }

@@ -244,7 +244,6 @@ fn a_shared_closed_term_is_typed_once_per_node() {
     assert!(infer(&mut kernel(), &doubled(60)).is_ok());
 
     let mut uncached = Kernel::uncached(100_000, SYNTAX);
-    uncached.set_local_floor(1_000);
     assert_eq!(
         infer(&mut kernel(), &doubled(8)),
         infer(&mut uncached, &doubled(8))

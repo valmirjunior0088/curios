@@ -277,7 +277,6 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
 fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
     let attempt = |budget: u64, ambient: bool| {
         let mut kernel = Kernel::new(budget, SYNTAX);
-        kernel.set_local_floor(1_000);
 
         let (b, t, x) = (binder(80, "b"), binder(81, "T"), binder(82, "x"));
         let universe = Term::nat_match(

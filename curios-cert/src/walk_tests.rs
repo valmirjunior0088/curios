@@ -17,7 +17,6 @@ fn doubled(base: Term) -> Term {
 /// A kernel with `n: Nat` assumed, and a fresh budget: each row spends its own, so one row's cost cannot exhaust the next.
 fn kernel(n: &Free) -> Kernel {
     let mut kernel = Kernel::new(1_000_000, SYNTAX);
-    kernel.set_local_floor(1_000);
     kernel.assume(n, &Term::intrinsic(Intrinsic::NatType));
     kernel
 }

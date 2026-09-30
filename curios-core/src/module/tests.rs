@@ -61,11 +61,11 @@ fn recursive_members_cannot_silently_discard_different_universe_contexts() {
     );
 }
 
-/// The floor must clear every local a module's terms mention, whatever `Module::binder_floor` claims.
+/// Every local a module's terms mention is found, with the name owning the position — and nothing in an item the caller already answers for.
 ///
-/// A binder the kernel mints while comparing under a telescope or eta-contracting aliases a free local the moment the floor is too low, and two terms that differ stop being distinguishable. The carried number is the elaborator's word and nothing checks it, so the walk derives its own and the caller takes the larger.
+/// What the kernel refuses before it mints a binder of its own, since a binder aliasing a free local silently identifies two terms that differ. The skip is the control: an item whose names `in_scope` holds was refused by the walk that answered for it.
 #[test]
-fn the_floor_clears_every_local_a_term_mentions() {
+fn every_local_a_term_mentions_is_found() {
     let mentioned = Free::local(4_242, Some("y"));
     let definition = Definition {
         name: Global::Authored(Qualifier::from(["held"])),
@@ -86,11 +86,13 @@ fn the_floor_clears_every_local_a_term_mentions() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        // The understated claim the walk must not believe.
-        binder_floor: 0,
     };
 
-    assert_eq!(derived_binder_floor(&module), 4_243);
+    assert_eq!(
+        free_locals_outside(&module, |_| false),
+        BTreeSet::from([(Some(Global::Authored(Qualifier::from(["held"]))), mentioned)])
+    );
+    assert_eq!(free_locals_outside(&module, |_| true), BTreeSet::new());
 }
 
 /// A module carrying `body` in its one definition.
@@ -112,7 +114,6 @@ fn stored(body: Term) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     }
 }
 
@@ -194,7 +195,6 @@ fn a_meta_free_module_projects_as_zonked() {
         concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
-        binder_floor: 0,
     };
 
     assert!(Zonked::project(&module).is_ok());
@@ -213,7 +213,6 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
         concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
-        binder_floor: 0,
     };
 
     let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");
@@ -236,7 +235,6 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
         concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
-        binder_floor: 0,
     };
 
     let refusal = Zonked::project(&module).expect_err("the transient must refuse the projection");
@@ -254,7 +252,6 @@ fn over(items: Vec<Item>) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     }
 }
 

@@ -7,9 +7,7 @@ use {
         Globals, KernelError, certify_module, recheck_module_measured,
         recheck_module_verdicts_uncached,
     },
-    curios_core::{
-        Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked, derived_binder_floor,
-    },
+    curios_core::{Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked},
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
     curios_unit::{Record, Uncertified, segments},
     curios_utilities::digest,
@@ -271,7 +269,7 @@ fn kernel_disagreements() {
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
             let rechecked = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
             verdicts.extend(rechecked.verdicts);
-            globals.mount(core, root.binder_floor(), &rechecked.certification);
+            globals.mount(core, &rechecked.certification);
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -316,7 +314,7 @@ fn kernel_memo_parity() {
                 cached.verdicts,
                 recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
             );
-            globals.mount(core, root.binder_floor(), &cached.certification);
+            globals.mount(core, &cached.certification);
         }
     });
 }
@@ -348,7 +346,7 @@ fn kernel_memo_parity() {
 /// | Re-erasing one whole unit over the stored Core | 661–682 ms | 608 ms — up, partly spread |
 /// | Certifying one whole unit, from an empty environment | 11.9–12.0 s, 0 refusals | 11.8 s — confirmed |
 ///
-/// Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts; `derived_binder_floor` **0** against a lowering watermark of 6748.
+/// Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts.
 ///
 /// **Ranges, not points**, because those are two runs and the spread between them is part of what the figure is: the re-erasure alone moved 21 ms between consecutive readings, which is half of what separates it from the number it replaces. Nobody should read 608 → 682 as a 12% regression on that evidence.
 ///
@@ -469,13 +467,8 @@ fn stored_prelude_measurements() {
                 core.struct_decls.len()
             );
             println!("  concepts                     {:>10}", core.concepts.len());
-            println!(
-                "  derived binder floor         {:>10}   (lowering watermark {})",
-                derived_binder_floor(core),
-                core.binder_floor
-            );
 
-            globals.mount(core, root.binder_floor(), &rechecked.certification);
+            globals.mount(core, &rechecked.certification);
             cores.push(core);
             arena = erased;
         }

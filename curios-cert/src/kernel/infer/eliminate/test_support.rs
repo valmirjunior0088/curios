@@ -13,9 +13,7 @@ use {
 };
 
 pub(super) fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(1_000);
-    kernel
+    Kernel::new(100_000, SYNTAX)
 }
 
 pub(super) fn binder(index: u32, hint: &str) -> Free {

@@ -60,7 +60,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 ///
 /// Definitional proof irrelevance accepts without inspecting either term, and what makes that correct is that every inhabitant of a proposition is total, which is (V)'s job (see `documentation/soundness/per-term-rules/definitional-proof-irrelevance.md`). The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
 ///
-/// For a time it did not, and a constructor's index target was the gap. `partial_definitions` iterates `module.items` and nothing else, and the module below has none; `derived_binder_floor` is the only other pass that reads a registry entry, and it collects free variables rather than partiality. Nor did the item walk reach these terms — the sizing check walks a constructor telescope's domains and stops at the terminal — so a target was typed by nothing, and `check_group`'s local gate, which refuses a proof-typed member whose group does not descend, never fired on a group no judgment met.
+/// For a time it did not, and a constructor's index target was the gap. `partial_definitions` iterates `module.items` and nothing else, and the module below has none; `free_locals_outside` is the only other pass that reads a registry entry, and it collects free locals rather than partiality. Nor did the item walk reach these terms — the sizing check walks a constructor telescope's domains and stops at the terminal — so a target was typed by nothing, and `check_group`'s local gate, which refuses a proof-typed member whose group does not descend, never fired on a group no judgment met.
 ///
 /// So the module below states its constructor's index at `rec p : Held = p`, a closed non-descending inhabitant of a proposition, and `recheck_module_verdicts` returned **zero refusals** for it. Irrelevance identifies that target with any other proof of `Held`, which is the identification (V) exists to prevent. Reachable from no surface program — the elaborator builds registry and bindings from one declaration and types the targets through the constructor wrappers it lowers — which is why it is built here.
 ///
@@ -176,7 +176,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 1_000,
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);

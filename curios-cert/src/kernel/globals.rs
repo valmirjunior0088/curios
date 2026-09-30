@@ -47,19 +47,15 @@ pub struct Globals {
     partial: BTreeSet<Global>,
     /// The items of every unit mounted here with a record that does not cover it — one naming fewer definitions than the unit holds, an empty one included. A walk classifies these for itself, from their terms, beside the non-total set it seeds its closure from.
     unclassified: Vec<Item>,
-    /// One above the highest binder index every term in scope here mentions, as derived by the walk that established this environment.
-    ///
-    /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later walk. A floor is a bound rather than a verdict, so a caller combines it with its own by maximum and can only ever widen.
-    binder_floor: usize,
 }
 
 impl Globals {
     /// Everything `module` puts in scope: its definitions at their declared types with their real bodies, and its nominal registry.
     ///
-    /// `carried` is the binder floor derived by the build that established `module` — `curios_core::derived_binder_floor` over exactly it — which is why this does not walk the terms again. `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it does not, `module`'s items are held for a walk to classify. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
+    /// `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it does not, `module`'s items are held for a walk to classify. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///
     /// A definition enters here exactly as a refused item enters a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
-    pub fn of(module: &Module, carried: usize, certification: &Certification) -> Self {
+    pub fn of(module: &Module, certification: &Certification) -> Self {
         let mut definitions = HashMap::new();
         let mut record = |name: Free, type_: &Term, value: &Term, universes: &UniverseContext| {
             // Written straight in rather than through `insert`: a fresh environment has no memos behind it, so the overwrite that method reports has nothing to invalidate.
@@ -119,17 +115,14 @@ impl Globals {
             concepts: module.concepts.keys().cloned().collect(),
             partial,
             unclassified,
-            binder_floor: carried,
         }
     }
 
-    /// Add everything a second `module` puts in scope, at the binder floor its own walk derived and with the record it filed, as [`Globals::of`] reads them.
+    /// Add everything a second `module` puts in scope, with the record its walk filed, as [`Globals::of`] reads them.
     ///
     /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike `Globals::insert`, for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
-    ///
-    /// The floor combines by maximum, which can only widen: a bound is not a verdict, and a walk seeded above every identity in scope cannot capture one.
-    pub fn mount(&mut self, module: &Module, carried: usize, certification: &Certification) {
-        let added = Self::of(module, carried, certification);
+    pub fn mount(&mut self, module: &Module, certification: &Certification) {
+        let added = Self::of(module, certification);
 
         for (name, definition) in added.definitions {
             assert!(
@@ -142,7 +135,6 @@ impl Globals {
         self.concepts.extend(added.concepts);
         self.partial.extend(added.partial);
         self.unclassified.extend(added.unclassified);
-        self.binder_floor = self.binder_floor.max(carried);
     }
 
     /// The names in scope here that are not known to terminate. See the field.
@@ -173,11 +165,6 @@ impl Globals {
             || self.inducts.contains_key(name)
             || self.structs.contains_key(name)
             || self.concepts.contains(name)
-    }
-
-    /// The floor below which every binder identity in scope here was minted. See the field.
-    pub fn binder_floor(&self) -> usize {
-        self.binder_floor
     }
 
     /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one.

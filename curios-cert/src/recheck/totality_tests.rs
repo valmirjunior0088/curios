@@ -73,16 +73,12 @@ fn refuses_the_proof_reaching_the_lie(verdicts: &[Verdict]) -> bool {
     })
 }
 
-/// The walk over the proof alone, the lying library mounted beneath it as the compile path mounts a unit — at its floor, with `certification` as the record filed beside it.
+/// The walk over the proof alone, the lying library mounted beneath it as the compile path mounts a unit — with `certification` as the record filed beside it.
 fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
     fixture_verdicts(
         &carried_proof_module(),
         1_000_000,
-        &Globals::of(
-            &stamp_trial_module(Totality::Total, false),
-            1_000,
-            certification,
-        ),
+        &Globals::of(&stamp_trial_module(Totality::Total, false), certification),
         SYNTAX,
     )
 }

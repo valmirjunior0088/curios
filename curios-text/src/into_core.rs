@@ -229,9 +229,8 @@ pub struct PreparedText {
     table: BTreeMap<Qualifier, ModuleInfo>,
     public: BTreeMap<Qualifier, PublicInterface>,
     core: curios_core::Module,
-    metavariable_floor: usize,
-    binder_floor: usize,
-    universe_floor: usize,
+    /// What this unit's lowering minted, which its elaboration's counters start above. A count within the unit: nothing here resumes above a predecessor.
+    minted: curios_core::Minted,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// How this unit's names can be written: every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports` — and every absolute path the unit may write for each global. What a goal report's candidate pool reaches beyond the names the program already mentions, and what every report spells a name by.
@@ -292,7 +291,7 @@ impl PreparedText {
 
     /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
     ///
-    /// The rest of a `PreparedText` is resolution metadata and floors — no terms — so the lowered module is the whole of what there is to share.
+    /// The rest of a `PreparedText` is resolution metadata and counts — no terms — so the lowered module is the whole of what there is to share.
     pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
         Self {
             core: self.core.shared(sharing),
@@ -300,16 +299,9 @@ impl PreparedText {
         }
     }
 
-    pub fn metavariable_floor(&self) -> usize {
-        self.metavariable_floor
-    }
-
-    pub fn binder_floor(&self) -> usize {
-        self.binder_floor
-    }
-
-    pub fn universe_floor(&self) -> usize {
-        self.universe_floor
+    /// What this unit's lowering minted — see the field.
+    pub fn minted(&self) -> curios_core::Minted {
+        self.minted
     }
 
     /// What each unresolved bare name could have meant, by the binder it lowered to — the table `curios-elab`'s `unbound variable` report reads its suggestion from.
@@ -1461,7 +1453,7 @@ impl<'a> UnitSource<'a> {
     ///
     /// **Declaring nothing means every open prefix, not every prefix.** A closed root — `/sys`, the compiler's own, which no manifest can name because it has no path — is in the fold of every compilation and in the default set of none. So the honest reading of "the caller did not decide" is "everything a program may name", and the standard library reaches `/sys` by being the one unit that declares it.
     ///
-    /// Narrowing *resolution*, never allocation: the floors, the universe-seed table and the nominal audit read the whole of `scope`, because an identity minted against an unspellable predecessor still exists and a bound that ignored it would alias.
+    /// Narrowing *resolution*, never auditing: the nominal audit reads the whole of `scope`, because a declaration in an unspellable predecessor still exists and a public exposure of it is still one.
     fn visible_mounts(&self, scope: &[&PreparedText], own: &[Mount]) -> Vec<Mount> {
         scope
             .iter()
@@ -1624,14 +1616,10 @@ fn into_core_unit_within(
         Scoped::over(&scope_public),
     )?;
 
-    // Each counter resumes above every predecessor's, so an identity minted here can alias none already in scope. A floor is a bound: combining by maximum can only widen.
-    let floor = |of: fn(&PreparedText) -> usize| scope.iter().copied().map(of).max().unwrap_or(0);
+    // Every counter starts at zero. No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what this unit mints depends on nothing compiled before it.
     let metavars = Entropy::<usize>::new();
-    metavars.seed(floor(PreparedText::metavariable_floor));
     let universes = Entropy::<usize>::new();
-    universes.seed(floor(PreparedText::universe_floor));
     let binders = Entropy::<usize>::new();
-    binders.seed(floor(PreparedText::binder_floor));
     // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
@@ -1641,13 +1629,8 @@ fn into_core_unit_within(
     let lints = RefCell::new(Vec::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
-    let universe_seeds = RefCell::new(
-        scope_cores
-            .last()
-            .map(|core| core.universe_seeds.clone())
-            .unwrap_or_default(),
-    );
+    // This unit's own seed table, from index zero, in step with `universes`.
+    let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
 
     let mut context = Context::new(
@@ -1800,11 +1783,11 @@ fn into_core_unit_within(
             concepts,
             witnesses,
             tests,
-            binder_floor: binders.count(),
         },
-        metavariable_floor: metavars.count(),
-        binder_floor: binders.count(),
-        universe_floor: universes.count(),
+        minted: curios_core::Minted {
+            binders: binders.count(),
+            metavariables: metavars.count(),
+        },
         unbound: unbound.into_inner(),
         spellings: curios_core::Spellings {
             imports: imports.into_inner(),
@@ -1830,7 +1813,7 @@ pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Program, usize, usize, ForeignStore), Error> {
+) -> Result<(curios_core::Program, curios_core::Minted, ForeignStore), Error> {
     let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax)?;
 
     Ok((
@@ -1838,8 +1821,7 @@ pub fn into_core(
             module: unit.core,
             entry: entry.expect("an entry source's parse holds its final term"),
         },
-        unit.metavariable_floor,
-        unit.universe_floor,
+        unit.minted,
         unit.foreigns,
     ))
 }
@@ -1855,11 +1837,10 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), scope, syntax)
 }
 
-/// The entry program lowered: its module and the term it closes with, the floors elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
+/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
 pub struct LoweredEntry {
     pub program: curios_core::Program,
-    pub metavariable_floor: usize,
-    pub universe_floor: usize,
+    pub minted: curios_core::Minted,
     pub foreigns: ForeignStore,
     /// See [`PreparedText::unbound`].
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
@@ -1899,8 +1880,7 @@ pub fn into_core_with_prelude(
             module: unit.core,
             entry: entry.expect("an entry source's parse holds its final term"),
         },
-        metavariable_floor: unit.metavariable_floor,
-        universe_floor: unit.universe_floor,
+        minted: unit.minted,
         foreigns: unit.foreigns,
         unbound: unit.unbound,
         spellings: unit.spellings,

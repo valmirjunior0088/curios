@@ -37,7 +37,6 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
         concepts: Default::default(),
         witnesses: Default::default(),
         tests: Default::default(),
-        binder_floor: 0,
     }
 }
 
@@ -46,24 +45,8 @@ fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
     let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))), Vec::new());
 
     assert!(matches!(
-        validate_lowered_universe_seeds(&module, 0),
+        validate_lowered_universe_seeds(&module),
         Err(Error::UniverseInvariant(message)) if message.contains("?u0")
-    ));
-}
-
-#[test]
-fn lowered_module_validation_rejects_a_seed_floor_mismatch() {
-    let module = lowered_module(
-        Term::type_ground(),
-        vec![UniverseSeed {
-            role: UniverseRole::Flexible,
-            origin: None,
-        }],
-    );
-
-    assert!(matches!(
-        validate_lowered_universe_seeds(&module, 0),
-        Err(Error::UniverseInvariant(message)) if message.contains("seed table")
     ));
 }
 

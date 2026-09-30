@@ -220,7 +220,6 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 1_000,
     };
 
     assert_eq!(
@@ -320,7 +319,6 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 1_000,
     };
 
     assert_eq!(
@@ -369,7 +367,6 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 1_000,
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
@@ -413,7 +410,6 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     };
 
     let applied: Term = Subterm::StructType(StructType {

@@ -230,6 +230,24 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     .map(|mut units| units.pop().expect("one unit was compiled"))
 }
 
+/// Every unit `sources` holds, compiled in order against the prelude, each after the ones before it.
+pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
+    with_prelude(|prelude| {
+        compile_units(
+            DEFAULT_STEP_BUDGET,
+            Prefix::over(prelude),
+            &SYNTAX,
+            &sources
+                .iter()
+                .map(|modules| (UnitSource::mounted(modules), None))
+                .collect::<Vec<_>>(),
+            None,
+            |_| {},
+        )
+    })
+    .expect("the units compile")
+}
+
 /// [`recompile_over`] over modules already supplied; the recompiling half of [`compile_modules`]'s differential.
 pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, String> {
     with_prelude(|prelude| {
@@ -244,7 +262,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
     .map_err(String::from)
 }
 
-/// The differential predicate: the two elaborated modules agree item by item in order, on every registry entry, marker and the entry, with the incremental floor no lower than the whole compile's — a bound, so widening is the one difference allowed.
+/// The differential predicate: the two elaborated modules agree item by item in order, on every registry entry, marker and the entry.
 pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(
         whole.items.len(),
@@ -266,7 +284,6 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.concepts, incremental.concepts);
     assert_eq!(whole.witnesses, incremental.witnesses);
     assert_eq!(whole.tests, incremental.tests);
-    assert!(incremental.binder_floor >= whole.binder_floor);
 }
 
 /// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.

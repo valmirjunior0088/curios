@@ -121,7 +121,7 @@ pub(super) fn global_name(path: &str) -> curios_core::Global {
 }
 
 pub(super) fn run(src: &str) -> curios_core::Term {
-    let (program, _, _, _) = super::into_core(
+    let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
@@ -132,7 +132,7 @@ pub(super) fn run(src: &str) -> curios_core::Term {
 }
 
 pub(super) fn lowered_module(src: &str) -> curios_core::Module {
-    let (program, _, _, _) = super::into_core(
+    let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
@@ -148,7 +148,7 @@ pub(super) fn written_type(id: usize) -> curios_core::Term {
 
 /// `src` lowered and elaborated as a program against `established`, its entry inferred.
 fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> curios_core::Program {
-    let (program, metavar_floor, universe_floor, _) = super::into_core(
+    let (program, minted, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
@@ -158,8 +158,7 @@ fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> cu
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         established,
         &program.module,
-        metavar_floor,
-        universe_floor,
+        minted,
         curios_elab::Tail::Entry(&program.entry),
     )
     .unwrap();
@@ -181,7 +180,7 @@ pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
 }
 
 pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
-    let (lowered, metavar_floor, universe_floor, _) = super::into_core(
+    let (lowered, minted, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
         syntax(),
@@ -199,8 +198,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
-        metavar_floor,
-        universe_floor,
+        minted,
     )
     .unwrap();
 

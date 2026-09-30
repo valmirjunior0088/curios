@@ -398,10 +398,6 @@ pub struct Module {
     pub witnesses: BTreeSet<Global>,
     /// The definition names that are `test` declarations, in declaration order — the order the synthesized test tail schedules them and the runner reports them, so a `Vec` rather than a set.
     pub tests: Vec<Global>,
-    /// One past the highest binder index `into_core` minted for this module.
-    ///
-    /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
-    pub binder_floor: usize,
 }
 
 impl Module {
@@ -462,7 +458,6 @@ impl Module {
                 .collect(),
             witnesses: self.witnesses.clone(),
             tests: self.tests.clone(),
-            binder_floor: self.binder_floor,
         }
     }
 
@@ -637,7 +632,6 @@ impl Module {
                 .filter(|name| keep(name))
                 .cloned()
                 .collect(),
-            binder_floor: self.binder_floor,
         }
     }
 
@@ -727,14 +721,13 @@ impl Term {
 }
 
 impl Entrypoint {
-    /// One past the highest local binder index the entry's body or stated type mentions — what a walk judging the entry beside its module must seed above, as [`derived_binder_floor`] is for the module.
-    pub fn binder_floor(&self) -> usize {
+    /// Every free local the entry's body or stated type mentions — what a walk judging the entry beside its module refuses, as [`free_locals_outside`] is for the module.
+    pub fn free_locals(&self) -> BTreeSet<Free> {
         std::iter::once(&self.body)
             .chain(&self.type_)
             .flat_map(Term::free_vars)
-            .filter_map(|free| free.local_index())
-            .max()
-            .map_or(0, |index| index as usize + 1)
+            .filter(Free::is_local)
+            .collect()
     }
 
     /// The top-level names the entry reaches, through its body and the type it states.
@@ -900,7 +893,7 @@ impl<B: Bound> Carried for B {
 
 /// Every position in `module` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for.
 ///
-/// One list, read by every walk that asks what a module carries — the floor below it and the storage refusal beside that. A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about a module's contents is a new `visit` and never a new walk. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
+/// One list, read by every walk that asks what a module carries — the kernel's free-local refusal below it and the storage refusal beside that. A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about a module's contents is a new `visit` and never a new walk. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
 fn module_positions(
     module: &Module,
     in_scope: impl Fn(&Global) -> bool,
@@ -948,7 +941,7 @@ fn module_positions(
 /// An identity a stored unit may not carry: one meaningful only in the compilation that assigned it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Positional {
-    /// A free local binder. Its index came from one compilation's binder counter, and a compilation restoring the unit seeds its own counter from a floor — so a local surviving into stored output is an index two compilations can both hand out.
+    /// A free local binder. Its index came from one compilation's binder counter, and every walk mints from a counter of its own that starts at zero — so a local surviving into stored output is an index two compilations can both hand out.
     FreeLocal { owner: Option<Global>, index: u32 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
@@ -984,7 +977,7 @@ impl fmt::Display for Positional {
 ///
 /// The witness class is asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns, which is a question about `Module::witnesses` rather than about any position — so it is asked over the declarations and not through the walk.
 ///
-/// It refuses where [`derived_binder_floor`] reports, over the same positions, and the difference is what each answer is for. A floor is a bound, so a gap in that walk degrades to a wider floor and to nothing worse. An identity reaching a stored unit has no safe direction to degrade in: it aliases silently in whatever compilation restores two such units together, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+/// It refuses the free locals [`free_locals_outside`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     let mut found: Option<Positional> = None;
 
@@ -1027,34 +1020,30 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     found.map_or(Ok(()), Err)
 }
 
-/// One above the highest local binder index any of `module`'s terms mentions — the lowest floor at which a binder a checker mints cannot alias one already in the program.
+/// Every free local `module`'s terms mention outside what `in_scope` already answers for, each with the top-level name owning the position it was found in.
 ///
-/// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while capture-avoidance depends on it: a checker that opens binders of its own — eta, telescope comparison — and mints one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, a caller takes the maximum of the two: widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
+/// **What a checker refuses before it mints a binder of its own.** Both checkers mint from a counter no predecessor raised — the kernel's from zero, the elaborator's from its own unit's lowering count — because no term a walk is handed from elsewhere carries a local ([`validate_stored_identities`]). A free local reaching a walk is therefore one its counter could hand out again, and the binder it mints while comparing under a telescope or eta-contracting would silently identify two terms that differ. The judgment could not see it: by the time it looks the local up, the local is bound. So the refusal is taken at the boundary, over every position a term can sit in, rather than where a judgment meets it.
 ///
-/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Reading the highest index a term mentions asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
+/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
-/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace, which is why the positions are enumerated once in `module_positions` and read from there rather than listed again here.
-pub fn derived_binder_floor(module: &Module) -> usize {
-    derived_binder_floor_outside(module, |_| false)
-}
+/// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name identifies one top-level thing within a module, and an environment populates every namespace it holds from the same source. An item is skipped only when *every* name it declares is already answered for, since the walk that answered for it refused a local of its own.
+pub fn free_locals_outside(
+    module: &Module,
+    in_scope: impl Fn(&Global) -> bool,
+) -> BTreeSet<(Option<Global>, Free)> {
+    let mut found = BTreeSet::new();
 
-/// [`derived_binder_floor`] over only what `in_scope` does not already answer for — the items whose every declared name it holds, and the declarations it names.
-///
-/// A caller that already has an environment established by an earlier walk has that walk's floor beside it, as a constant computed where the environment was built; the caller maximizes the two. This is the same widening argument the function above rests on, only with one of the two bounds read instead of walked: a floor is a bound, so combining by maximum is safe whatever either side covers.
-///
-/// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name identifies one top-level thing within a module, and an environment populates every namespace it holds from the same source. Skipping is the direction that needs the argument — including an item can only raise the floor, and a higher floor costs freshness rather than correctness — so an item is skipped only when *every* name it declares is already answered for.
-pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) -> bool) -> usize {
-    let mut highest: Option<u32> = None;
-
-    module_positions(module, in_scope, |_, carried| {
-        for free in carried.free_vars() {
-            if let Some(index) = free.local_index() {
-                highest = Some(highest.map_or(index, |seen: u32| seen.max(index)));
-            }
-        }
+    module_positions(module, in_scope, |owner, carried| {
+        found.extend(
+            carried
+                .free_vars()
+                .into_iter()
+                .filter(Free::is_local)
+                .map(|local| (owner.copied(), local)),
+        );
     });
 
-    highest.map_or(0, |index| index as usize + 1)
+    found
 }
 
 /// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, the lowering-time `universe_seeds` are cleared, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.

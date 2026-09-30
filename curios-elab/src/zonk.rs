@@ -269,7 +269,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
         tests: module.tests.clone(),
-        binder_floor: module.binder_floor,
     };
     validate_universes(&module)?;
     Ok(module)
@@ -725,14 +724,9 @@ pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(
     Ok(())
 }
 
-/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a corresponding seed below the recorded allocator floor.
-pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<(), Error> {
-    if module.universe_seeds.len() != floor {
-        return Err(Error::UniverseInvariant(format!(
-            "lowered universe seed table has {} entries but its allocator floor is {floor}",
-            module.universe_seeds.len()
-        )));
-    }
+/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a seed in the unit's own table, which the lowering fills from index zero.
+pub fn validate_lowered_universe_seeds(module: &Module) -> Result<(), Error> {
+    let seeded = module.universe_seeds.len();
 
     let mut metas = BTreeSet::new();
     macro_rules! collect {
@@ -766,9 +760,9 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
         collect!(&concept.params);
     }
 
-    if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= floor) {
+    if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= seeded) {
         return Err(Error::UniverseInvariant(format!(
-            "lowered universe meta {meta} has no seed below allocator floor {floor}"
+            "lowered universe meta {meta} has no seed among the table's {seeded}"
         )));
     }
     Ok(())

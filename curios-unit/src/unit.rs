@@ -23,21 +23,12 @@ pub struct Uncertified {
     ///
     /// That is what lets a unit be stored whole. The worry it answers was real: two *independently* erased arenas both start at zero, so per-unit artifacts would need a relocation pass, which is `cnum_map` again. They are not independent, and a stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the prefix it is restored into.
     arena: ErasedArena,
-    /// `curios_core::derived_binder_floor` over `core`, computed by the walk that established this unit.
-    ///
-    /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later one. A floor is a bound rather than a verdict, so a consumer combines it with its own by maximum and can only ever widen.
-    binder_floor: usize,
 }
 
 impl Uncertified {
     /// Assemble a unit from what each stage produced for it.
-    pub fn new(text: PreparedText, core: Module, arena: ErasedArena, binder_floor: usize) -> Self {
-        Self {
-            text,
-            core,
-            arena,
-            binder_floor,
-        }
+    pub fn new(text: PreparedText, core: Module, arena: ErasedArena) -> Self {
+        Self { text, core, arena }
     }
 
     /// This unit with the record the certifier's walk over it left — the only way a [`Unit`] is made.
@@ -46,11 +37,6 @@ impl Uncertified {
             unit: self,
             certification,
         }
-    }
-
-    /// The floor below which every binder identity in this unit was minted. See the field.
-    pub fn binder_floor(&self) -> usize {
-        self.binder_floor
     }
 
     /// The prefixes this unit claims, and the privilege tier each carries.
@@ -96,11 +82,6 @@ impl Unit {
     /// What the certifier concluded about this unit's definitions. See the field.
     pub fn certification(&self) -> &Certification {
         &self.certification
-    }
-
-    /// See [`Uncertified::binder_floor`].
-    pub fn binder_floor(&self) -> usize {
-        self.unit.binder_floor()
     }
 
     /// See [`Uncertified::mounts`].

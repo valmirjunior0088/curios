@@ -32,6 +32,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** An optional record, which is what this replaced: a special case every reader carried for one producer. A unit generic over its record, with `()` for an image: two named types say the same with none of the machinery. The record outside the unit: every scope would become a slice of pairs and every slot would gain a third segment, for nothing the pairing inside does not already give.
 
+### A unit carries no identity another compilation could mint
+
+**Decision.** Nothing a unit stores is a position in a counter some other compilation also counts. A binder's label is its display hint; no term holds a free local or a metavariable; a witness's ordinal counts within the module that declares it; and every counter a unit's lowering and elaboration mint from starts at zero for that unit. The erased arena below is the one exception, until the verdicts campaign's part 6 deletes it.
+
+**Rationale.** An identity meaningful only in the compilation that assigned it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently, which admits rather than fails. Refusing one where a unit is stored (`validate_stored_identities`) and where a module is judged (the kernel's free-local refusal) is what lets every counter start at zero — so a unit's bytes depend on its own sources and its scope's interfaces, never on how much its predecessors minted.
+
+**Rejected.** Floors, which this replaced: each unit's binder, metavariable and universe counters resumed above every predecessor's, and the universe-seed table was cumulative from the first unit. A floor is a bound and widened safely, but it tied a unit's bytes to where it sat in the fold, and asked every walk to trust a carried number nothing checked.
+
 ### The erased arena is the prefix's, not the unit's
 
 **Decision.** The arena a `Unit` carries is cumulative from the first unit forward — each unit's erasure resumes over the previous one's — and never an independent arena numbered from zero.

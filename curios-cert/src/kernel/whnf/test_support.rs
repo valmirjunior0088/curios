@@ -1,4 +1,4 @@
-//! Fixtures the weak-head reduction suites share: a kernel above every binder they use, the chains they spend budget on, and the arm they take equations under.
+//! Fixtures the weak-head reduction suites share: the kernel they start from, the chains they spend budget on, and the arm they take equations under.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
@@ -8,14 +8,12 @@ use {
     curios_core::{Free, Intrinsic, Nat, Reducer, Term, UniverseContext},
 };
 
-/// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
+/// The kernel every test starts from.
 pub(super) fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(1_000_000, SYNTAX);
-    kernel.set_local_floor(1_000);
-    kernel
+    Kernel::new(1_000_000, SYNTAX)
 }
 
-/// A test binder. Indices below the kernel's floor, so they cannot alias one it mints itself.
+/// A test binder. Once assumed it is one the kernel mints nothing over ([`Kernel::assume`]), so a binder it opens for eta-contraction cannot alias it.
 pub(super) fn binder(index: u32, hint: &str) -> Free {
     Free::local(index, Some(hint))
 }

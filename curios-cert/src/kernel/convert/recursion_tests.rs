@@ -87,7 +87,6 @@ fn two_alpha_variant_recursive_groups_convert() {
 #[test]
 fn a_folded_recursive_call_converts_without_unfolding_forever() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
-    kernel.set_local_floor(1_000);
 
     let n = binder(0, "n");
     let motive = binder(1, "m");
@@ -142,32 +141,28 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
     );
 }
 
-/// Conversion keeps the constant function apart from the identity even when the binder floor claims every name is available.
+/// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.
 ///
-/// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local if the floor were wrong — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so seeding at zero and colliding deliberately with what the kernel mints next is the sharpest form of the question. It does not produce a capture, and the route that would have made it reachable is now closed at the source: `recheck` derives the floor from the module's own terms rather than reading `Module::binder_floor`, which nothing checks.
+/// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local the kernel could mint again — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so `y` is assumed at each of the first identities a fresh kernel hands out, one of which is the binder the comparison opens. `Kernel::assume` raises the counter past it, so that binder is another. Mutation-checked: an `assume` that leaves the counter alone makes the two convertible.
 #[test]
-fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
-    let colliding = {
-        let mut scout = Kernel::new(100_000, SYNTAX);
-        scout.set_local_floor(0);
-        scout.fresh(Some("y"))
-    };
-
-    let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(0);
-
+fn conversion_separates_a_constant_from_the_identity_at_every_colliding_index() {
     let nat = Term::intrinsic(Intrinsic::NatType);
-    kernel.assume(&colliding, &nat);
-
     let parameter = Free::local(9_000, Some("x"));
-    let constant = Term::func([(parameter, nat.clone())], Term::free_var(&colliding));
     let identity = Term::func([(parameter, nat.clone())], Term::free_var(&parameter));
-    let function = Term::func_type([(parameter, nat.clone())], nat);
+    let function = Term::func_type([(parameter, nat.clone())], nat.clone());
 
-    assert!(
-        !convert(&mut kernel, &function, &constant, &identity).expect("the comparison completes"),
-        "the constant function and the identity are not convertible",
-    );
+    for index in 0..16 {
+        let colliding = Free::local(index, Some("y"));
+        let mut kernel = Kernel::new(100_000, SYNTAX);
+        kernel.assume(&colliding, &nat);
+        let constant = Term::func([(parameter, nat.clone())], Term::free_var(&colliding));
+
+        assert!(
+            !convert(&mut kernel, &function, &constant, &identity)
+                .expect("the comparison completes"),
+            "the constant function over local {index} and the identity are not convertible",
+        );
+    }
 }
 
 /// The coinductive recurrence rule, which nothing in the corpus reaches.
@@ -227,7 +222,6 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
-    kernel.set_local_floor(1_000);
     kernel.assume_universes(&UniverseContext {
         parameter_count: 2,
         constraints: vec![between(0, 1)],
@@ -285,7 +279,6 @@ fn a_recurrence_does_not_excuse_a_finite_disagreement() {
 #[test]
 fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     let mut kernel = Kernel::new(10_000, SYNTAX);
-    kernel.set_local_floor(1_000);
     let proposition = declare(&mut kernel, "P", Term::prop());
 
     let countdown = binder(20, "countdown");

@@ -55,7 +55,6 @@ fn module(items: Vec<Item>, body: Term) -> Program {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 0,
         },
         entry: Entrypoint { body, type_: None },
     }
@@ -705,7 +704,6 @@ fn a_variant_constructs_with_its_registered_schema() {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 0,
         },
         entry: Entrypoint { body, type_: None },
     };
@@ -1000,7 +998,6 @@ fn a_variant_match_binds_payload_without_projections() {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 0,
         },
         entry: Entrypoint { body, type_: None },
     };
@@ -1317,7 +1314,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 0,
         },
         entry: Entrypoint { body, type_: None },
     };

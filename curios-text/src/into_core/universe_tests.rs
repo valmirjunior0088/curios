@@ -12,7 +12,7 @@ fn no_items_simple_tail() {
 
 #[test]
 fn written_types_get_distinct_levels_and_lexical_roles() {
-    let (program, _, universe_floor, _) = super::into_core(
+    let (program, _, _) = super::into_core(
         &"let id(@A : Type, x : A) -> A = x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
@@ -21,7 +21,6 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
     )
     .unwrap();
 
-    assert_eq!(universe_floor, 2);
     assert_eq!(
         program
             .module

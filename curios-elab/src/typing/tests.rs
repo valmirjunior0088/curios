@@ -95,7 +95,6 @@ fn a_required_region_type_blanks_once_per_node() {
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, SYNTAX);
     let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(1_000);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let binder = |index: u32| Free::local(index, Some("x"));

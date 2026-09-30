@@ -21,7 +21,6 @@ fn entry_module(entry: Entrypoint) -> Program {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 1_000,
         },
         entry,
     }

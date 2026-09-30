@@ -9,7 +9,7 @@ use {
     curios_cert::{Rechecked, certify_module},
     curios_core::{
         Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
-        Term, Zonked, derived_binder_floor,
+        Term, Zonked,
     },
     curios_elab::{
         Context, Established, Recompile, Resumed, elaborate_and_zonk_unit_over, erase_unit,
@@ -58,8 +58,7 @@ pub fn compile_unit_over(
                 closure: &changed,
                 lowered: lowered.core(),
             },
-            lowered.metavariable_floor(),
-            lowered.universe_floor(),
+            lowered.minted(),
         )
         .map_err(|error| {
             CompileError::of(&error, |member| {
@@ -91,13 +90,10 @@ pub fn compile_unit_over(
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 
-    let core = core.into_module();
-    let binder_floor = derived_binder_floor(&core);
-
-    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(certification))
+    Ok(Uncertified::new(lowered, core.into_module(), ersd).certified(certification))
 }
 
-/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. They are mounted at the baseline's binder floor, a bound over every binder the reused terms mention, and with the baseline's record, whose classifications of them nothing in the closure has moved.
+/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. They are mounted with the baseline's record, whose classifications of them nothing in the closure has moved.
 ///
 /// The reused registry entries are both mounted and kept in `module`: the walk declares every entry the module carries, overwriting the mounted copy with an equal one, and its positivity pass extends the environment's registries with the module's, resolving a name in both to the module's own.
 pub(crate) fn recheck_over(
@@ -109,7 +105,7 @@ pub(crate) fn recheck_over(
     syntax: &SyntaxRegistry,
 ) -> Rechecked {
     let mut globals = globals(scope);
-    globals.mount(reused, baseline.binder_floor(), baseline.certification());
+    globals.mount(reused, baseline.certification());
 
     certify_module(module, budget, &globals, *syntax)
 }

@@ -75,13 +75,12 @@ fn module(items: Vec<Item>) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     }
 }
 
 /// Every refusal one elaboration reports, rendered.
 fn refusals(context: &mut Context, module: &Module) -> Vec<String> {
-    match elaborate_and_zonk_module(context, module, 0, 0) {
+    match elaborate_and_zonk_module(context, module, Minted::default()) {
         Ok(_) => Vec::new(),
         Err(error) => error.each().map(Error::to_string).collect(),
     }
@@ -137,8 +136,8 @@ fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_s
         let_item("c", nat(), nat_lit(2)),
     ]);
 
-    let elaborated =
-        elaborate_and_zonk_module(&mut context, &module, 0, 0).expect("nothing was refused");
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, Minted::default())
+        .expect("nothing was refused");
 
     assert_eq!(
         elaborated
@@ -173,8 +172,8 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
         },
     );
 
-    let elaborated =
-        elaborate_and_zonk_module(&mut context, &module, 0, 0).expect("nothing was refused");
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, Minted::default())
+        .expect("nothing was refused");
 
     assert!(elaborated.items.is_empty());
     assert!(elaborated.induct_decls.is_empty());
@@ -186,7 +185,7 @@ fn a_refused_item_leaves_no_binding_parked_work_deferred_goal_or_constraint_behi
     let mut context = context();
     let module = module(vec![let_item("a", nat(), boolean(true))]);
 
-    elaborate_and_zonk_module(&mut context, &module, 0, 0).expect_err("refused");
+    elaborate_and_zonk_module(&mut context, &module, Minted::default()).expect_err("refused");
 
     assert!(context.assumption(&Free::from(&nominal("a"))).is_none());
     assert_eq!(context.parked_len(), 0);

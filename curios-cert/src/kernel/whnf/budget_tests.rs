@@ -12,7 +12,6 @@ use super::test_support::*;
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
     let mut kernel = Kernel::new(1_000, SYNTAX);
-    kernel.set_local_floor(1_000);
     let loop_ = binder(0, "loop");
     let n = binder(1, "n");
 
@@ -43,7 +42,6 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 #[test]
 fn restoring_the_budget_refills_it() {
     let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get(), SYNTAX);
-    kernel.set_local_floor(1_000);
     let occurrence = |index: u32| Term::free_var(&binder(index, "x"));
 
     assert_eq!(whnf(&mut kernel, occurrence(0)), Ok(occurrence(0)));
@@ -59,7 +57,6 @@ fn restoring_the_budget_refills_it() {
 #[test]
 fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
     let mut kernel = Kernel::new(Cost::FRAME.get() * 4, SYNTAX);
-    kernel.set_local_floor(1_000);
     let tip = binder(0, "tip");
 
     let refusal = kernel

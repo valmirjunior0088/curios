@@ -50,7 +50,6 @@ fn an_unsatisfiable_universe_context_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     };
 
     assert!(
@@ -93,7 +92,6 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     };
 
     assert!(
@@ -328,7 +326,6 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     };
 
     assert_eq!(
@@ -407,7 +404,6 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     };
 
     assert_eq!(

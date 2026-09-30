@@ -17,8 +17,8 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
-        Global, InductDecl, InductParam, Intrinsic, Item, Level, Module, RecItem, SelfReference,
-        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
+        Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, RecItem,
+        SelfReference, StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
         stamp_declaration_instance, universe_metas,
     },
@@ -1250,8 +1250,7 @@ fn elaborate_module_suffix(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
@@ -1281,10 +1280,10 @@ fn elaborate_module_suffix(
 
     established.replay_definitions(context)?;
 
-    // Implicit-argument insertion mints metavariables during elaboration; floor the counter above `into_core`'s (which returns the count alongside the lowered module) so the id spaces never collide. A cached prefix is meta-free, so its ids never collide with the user range either.
-    context.seed_metavars(metavar_floor);
-    context.set_local_floor(module.binder_floor);
-    context.seed_universes(&module.universe_seeds, universe_floor);
+    // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
+    context.seed_metavars(minted.metavariables);
+    context.seed_binders(minted.binders);
+    context.seed_universes(&module.universe_seeds);
 
     // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip.
     //
@@ -1438,7 +1437,6 @@ fn elaborate_module_suffix(
         concepts,
         witnesses,
         tests,
-        binder_floor: module.binder_floor,
     };
 
     Ok(ElaboratedSuffix {
@@ -1586,19 +1584,12 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
-        let suffix = elaborate_module_suffix(
-            context,
-            Established::nothing(),
-            module,
-            metavar_floor,
-            universe_floor,
-            None,
-        )?;
+        let suffix =
+            elaborate_module_suffix(context, Established::nothing(), module, minted, None)?;
         // Nothing is inherited: `module` is the whole unit, so every name it mentions it also defines.
         let finalized = finalize_and_check(context, suffix.module, None, &BTreeMap::new());
         if !suffix.refusals.is_empty() {
@@ -1624,22 +1615,14 @@ pub enum Tail<'a> {
 ///
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
-/// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost. The one quantity that combines is the binder floor, which is a bound rather than a set and is taken as the maximum of the scope's and this unit's.
+/// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost.
 pub fn elaborate_and_zonk_unit(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
 ) -> Result<Module, Error> {
-    let finalized = elaborate_and_zonk(
-        context,
-        established,
-        module,
-        metavar_floor,
-        universe_floor,
-        None,
-    )?;
+    let finalized = elaborate_and_zonk(context, established, module, minted, None)?;
     raise(finalized).map(|(module, _)| module)
 }
 
@@ -1650,16 +1633,14 @@ pub fn elaborate_and_zonk_program(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>), Error> {
     raise(elaborate_and_zonk(
         context,
         established,
         module,
-        metavar_floor,
-        universe_floor,
+        minted,
         Some(tail),
     )?)
 }
@@ -1671,22 +1652,14 @@ pub fn elaborate_and_zonk_program_reporting(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
     let Finalized {
         module,
         entry,
         obligations,
-    } = elaborate_and_zonk(
-        context,
-        established,
-        module,
-        metavar_floor,
-        universe_floor,
-        Some(tail),
-    )?;
+    } = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
 
     Ok(FinalizedProgram {
         module,
@@ -1700,20 +1673,12 @@ fn elaborate_and_zonk(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        let elaborated = elaborate_module_suffix(
-            context,
-            established,
-            module,
-            metavar_floor,
-            universe_floor,
-            tail,
-        )?;
+        let elaborated = elaborate_module_suffix(context, established, module, minted, tail)?;
         // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
         let inherited = established.recorded_totality();
         let finalized =
@@ -1721,19 +1686,12 @@ fn elaborate_and_zonk(
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
+        // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
         let Finalized {
-            module: suffix,
+            module,
             entry,
             obligations,
         } = finalized?;
-
-        // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
-        //
-        // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
-        let module = Module {
-            binder_floor: established.binder_floor().max(suffix.binder_floor),
-            ..suffix
-        };
 
         Ok(Finalized {
             module,
@@ -1761,40 +1719,23 @@ pub fn elaborate_and_zonk_unit_over(
     context: &mut Context,
     established: Established<'_>,
     recompile: Recompile<'_>,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
-    grown(|| {
-        elaborate_and_zonk_unit_over_within(
-            context,
-            established,
-            recompile,
-            metavar_floor,
-            universe_floor,
-        )
-    })
+    grown(|| elaborate_and_zonk_unit_over_within(context, established, recompile, minted))
 }
 
 fn elaborate_and_zonk_unit_over_within(
     context: &mut Context,
     established: Established<'_>,
     recompile: Recompile<'_>,
-    metavar_floor: usize,
-    universe_floor: usize,
+    minted: Minted,
 ) -> Result<Module, Error> {
     let mut scope = established.modules().to_vec();
     scope.push(recompile.reused);
     let extended = Established::over(&scope);
 
-    let elaborated = elaborate_module_suffix(
-        context,
-        extended,
-        recompile.closure,
-        metavar_floor,
-        universe_floor,
-        None,
-    )?;
+    let elaborated = elaborate_module_suffix(context, extended, recompile.closure, minted, None)?;
     let inherited = extended.recorded_totality();
     let finalized = finalize_and_check(context, elaborated.module, None, &inherited);
     if !elaborated.refusals.is_empty() {
@@ -1806,12 +1747,7 @@ fn elaborate_and_zonk_unit_over_within(
         ..
     } = finalized?;
 
-    let mut module = reassemble(
-        &recompile,
-        closure,
-        extended.binder_floor(),
-        &elaborated.dropped,
-    );
+    let mut module = reassemble(&recompile, closure, &elaborated.dropped);
     context.restore_budget();
     check_positivity(context, &mut module)?;
     record_totality(context, &mut module, &established.recorded_totality());
@@ -1833,12 +1769,7 @@ fn elaborate_and_zonk_unit_over_within(
 /// `dropped` is what the closure's elaboration produced no item for. A lowered item whose names are all in it is left out, exactly as the whole-unit path leaves a withheld item out of its module, and nothing dangles behind it: the closure is closed under reverse reachability, so no reused item reaches one of its names. A lowered item missing for any other reason is the contract broken and says so.
 ///
 /// The markers follow the items rather than the lowering for the same reason the whole-unit path filters them (`elaborate_module_suffix`): a witness or test naming an item that is not there would reach zonk and erasure as a marker for nothing. On a run that dropped nothing the filter admits every one, which is every run that produces a unit.
-fn reassemble(
-    recompile: &Recompile<'_>,
-    closure: Module,
-    scope_floor: usize,
-    dropped: &BTreeSet<Global>,
-) -> Module {
+fn reassemble(recompile: &Recompile<'_>, closure: Module, dropped: &BTreeSet<Global>) -> Module {
     let first = |item: &Item| {
         item.declared_names()
             .first()
@@ -1912,7 +1843,6 @@ fn reassemble(
             .filter(|name| declared.contains(*name))
             .cloned()
             .collect(),
-        binder_floor: scope_floor.max(closure.binder_floor),
     }
 }
 

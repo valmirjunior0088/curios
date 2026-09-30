@@ -1,4 +1,6 @@
-//! Mounts and prefixes across compilation units, and the orphan rule that fires between them.
+//! Mounts and prefixes across compilation units, the orphan rule that fires between them, and the bytes a unit stores whatever came before it.
+
+use {curios_core::Module, curios_text::RootSource};
 
 use super::test_support::*;
 
@@ -109,4 +111,41 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
     );
     compile_with_units(&[("one", &together)], "/std/print(/std/Nat/to_str(0))")
         .expect("one unit may satisfy its own concept at its own type");
+}
+
+/// A unit's stored bytes do not change with what was compiled before it.
+///
+/// `/lib` is compiled twice: with only the prelude beneath it, and after `/pre`, which mints binders and universe metavariables of its own. Nothing a unit mints resumes above a predecessor's count, so the lowered and the elaborated module serialize to the same bytes either way, and the lowering hands elaboration the same counts. What legitimately moves is left out: the spellings a unit may write for its scope's names, which are its scope's interface, and the erased arena, which is cumulative from the first unit until the verdicts campaign's part 6 deletes it.
+#[test]
+fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
+    let pre = mounted(
+        "pre",
+        "pub let pick(@A: Type, a: A) -> A = a;\npub let one: /std/Nat = pick(1);",
+    );
+    let lib = mounted(
+        "lib",
+        "pub let same(@A: Type, a: A) -> A = a;\npub let three: /std/Nat = same(3);",
+    );
+    let last = |sources: &[&RootSource]| {
+        compile_in_order(sources)
+            .pop()
+            .expect("a unit was compiled")
+    };
+    let alone = last(&[&lib]);
+    let after = last(&[&pre, &lib]);
+    let bytes = |module: &Module| {
+        curios_archive::to_bytes(module)
+            .expect("a module serializes")
+            .to_vec()
+    };
+
+    assert!(
+        bytes(alone.text().core()) == bytes(after.text().core()),
+        "the lowered module moved with its predecessors"
+    );
+    assert!(
+        bytes(alone.core()) == bytes(after.core()),
+        "the elaborated module moved with its predecessors"
+    );
+    assert_eq!(alone.text().minted(), after.text().minted());
 }

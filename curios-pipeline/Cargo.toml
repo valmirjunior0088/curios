@@ -41,3 +41,5 @@ curios-prelude = { workspace = true }
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-utilities = { workspace = true, features = ["test-support"] }
+# The bytes a unit is stored as, which a suite compares across two compilations of it.
+curios-archive = { workspace = true, features = ["enabled"] }

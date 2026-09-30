@@ -67,7 +67,6 @@ fn spent_entry_beside_an_aliased_payload() -> Program {
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
-            binder_floor: 1_000,
         },
         entry: Entrypoint {
             body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),

@@ -33,7 +33,6 @@ fn module(items: Vec<Item>) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 0,
     }
 }
 

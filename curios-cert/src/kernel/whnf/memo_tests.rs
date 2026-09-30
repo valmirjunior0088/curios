@@ -126,7 +126,6 @@ fn cached_spend_never_exceeds_uncached() {
 
     let mut cached = kernel();
     let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
-    uncached.set_local_floor(1_000);
 
     let with_memos = spent(&mut cached, repeated.clone()) + spent(&mut cached, repeated.clone());
     let without = spent(&mut uncached, repeated.clone()) + spent(&mut uncached, repeated);

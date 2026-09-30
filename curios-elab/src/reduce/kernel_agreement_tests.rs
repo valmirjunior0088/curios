@@ -14,11 +14,9 @@ use {
     curios_cert::Kernel,
 };
 
-/// A kernel minting above every binder these fixtures use.
+/// The kernel these fixtures are put to.
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(10_000);
-    kernel
+    Kernel::new(100_000, SYNTAX)
 }
 
 /// Reduce `term` both ways and require the same answer.

@@ -7,7 +7,7 @@ use {
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
     },
-    curios_core::{Certification, Consumption, Intrinsic, Program, Term, derived_binder_floor},
+    curios_core::{Certification, Consumption, Intrinsic, Program, Term},
     curios_elab::{
         Context, Established, FinalizedProgram, Resumed, Tail, elaborate_and_zonk_program,
         elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, erase_program, erase_unit,
@@ -197,11 +197,11 @@ pub fn recheck_measured(
     (rechecked.verdicts, kernel)
 }
 
-/// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived and with the record the certifier filed with it.
+/// The kernel's environment for `scope`: every unit mounted, with the record the certifier filed with it.
 pub(crate) fn globals(scope: Prefix<'_>) -> Globals {
     let mut globals = Globals::default();
     for unit in scope.units() {
-        globals.mount(unit.core(), unit.binder_floor(), unit.certification());
+        globals.mount(unit.core(), unit.certification());
     }
 
     globals
@@ -254,8 +254,7 @@ pub fn typecheck_measured(
     let cores = scope.cores();
     let LoweredEntry {
         program: lowered,
-        metavariable_floor: metavars,
-        universe_floor,
+        minted,
         unbound,
         spellings,
         broken,
@@ -276,8 +275,7 @@ pub fn typecheck_measured(
             &mut context,
             Established::over(&cores),
             &lowered.module,
-            metavars,
-            universe_floor,
+            minted,
             Tail::Entry(&lowered.entry),
         )
         .map_err(|error| {
@@ -431,8 +429,7 @@ where
     let cores = scope.cores();
     let LoweredEntry {
         program: mut lowered,
-        metavariable_floor: metavars,
-        universe_floor,
+        minted,
         foreigns: user_foreigns,
         unbound,
         spellings,
@@ -477,8 +474,7 @@ where
             &mut context,
             Established::over(&cores),
             &lowered.module,
-            metavars,
-            universe_floor,
+            minted,
             elab_tail,
         )
         .map_err(|error| {
@@ -679,8 +675,7 @@ pub fn compile_unit(
             &mut context,
             Established::over(&cores),
             lowered.core(),
-            lowered.metavariable_floor(),
-            lowered.universe_floor(),
+            lowered.minted(),
         )
         .map_err(|error| {
             CompileError::of(&error, |member| {
@@ -711,9 +706,8 @@ pub fn compile_unit(
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 
     let core = core.into_module();
-    let binder_floor = derived_binder_floor(&core);
 
-    Ok(Uncertified::new(lowered, core, ersd, binder_floor).certified(rechecked.certification))
+    Ok(Uncertified::new(lowered, core, ersd).certified(rechecked.certification))
 }
 
 /// Where a judged unit is kept between compilations.

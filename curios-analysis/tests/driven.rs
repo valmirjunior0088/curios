@@ -31,9 +31,7 @@ fn planted() -> Free {
 }
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, SYNTAX);
-    kernel.set_local_floor(1_000);
-    kernel
+    Kernel::new(100_000, SYNTAX)
 }
 
 /// A nullary family at `result_sort` with two nullary constructors, `a` and `b`.
@@ -319,7 +317,6 @@ fn a_negative_self_occurrence_is_refused() {
 #[test]
 fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let mut kernel = Kernel::new(0, SYNTAX);
-    kernel.set_local_floor(1_000);
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
@@ -371,7 +368,6 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
 
     for budget in [0, 100_000] {
         let mut kernel = Kernel::new(budget, SYNTAX);
-        kernel.set_local_floor(1_000);
 
         let alias = Free::local(1, Some("D"));
         kernel.define(

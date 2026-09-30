@@ -765,6 +765,7 @@ name = "curios-pipeline"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-cert",
  "curios-cont",
  "curios-core",

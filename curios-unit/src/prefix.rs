@@ -23,7 +23,7 @@ impl<'a> Prefix<'a> {
 
     /// The units themselves, in dependency order.
     ///
-    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its carried binder floor together, and this crate cannot build it itself without depending on the kernel it is defined to stay below.
+    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its certification together, and this crate cannot build it itself without depending on the kernel it is defined to stay below.
     pub fn units(&self) -> &'a [&'a Unit] {
         self.units
     }

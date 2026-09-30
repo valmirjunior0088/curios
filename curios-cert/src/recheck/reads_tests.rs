@@ -49,7 +49,6 @@ fn reading_module() -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
-        binder_floor: 1_000,
     }
 }
 

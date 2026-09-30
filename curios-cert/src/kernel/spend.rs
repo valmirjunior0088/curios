@@ -130,11 +130,9 @@ impl Spend {
         Free::local(index, hint)
     }
 
-    /// Raise the binder counter above every index minted by an earlier stage.
-    ///
-    /// The lowerer, the elaborator, and the archived prelude all mint into one identity space; a kernel that started at zero would mint binders that alias theirs, and an alias between two distinct binders is a capture.
-    pub(super) fn set_local_floor(&mut self, floor: usize) {
-        self.minted.seed(floor);
+    /// Keep every binder minted from now on clear of `index`: one handed in from outside, which the counter would otherwise reach and hand out again — and an alias between two distinct binders is a capture.
+    pub(super) fn reserve(&mut self, index: u32) {
+        self.minted.seed(index as usize + 1);
     }
 
     /// A consumption snapshot, for measuring what a computation charges.

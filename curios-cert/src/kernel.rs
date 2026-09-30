@@ -541,11 +541,6 @@ impl Kernel {
         self.spend.replay_since(reduct, before)
     }
 
-    /// Raise the binder counter above every index minted by an earlier stage.
-    pub fn set_local_floor(&mut self, floor: usize) {
-        self.spend.set_local_floor(floor);
-    }
-
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Kernel::restore_budget`], this is a declaration-boundary reset.
     pub fn assume_universes(&mut self, universes: &UniverseContext) {
         self.assumed = universes.constraints.clone();
@@ -667,7 +662,12 @@ impl Kernel {
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     ///
     /// Locals are a stack, and closing them is `Kernel::scoped`'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
+    ///
+    /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing — and a remembered reduct's replay, which counts the kernel's own mints, is untouched. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_outside`).
     pub fn assume(&mut self, name: &Free, type_: &Term) {
+        if let Some(index) = name.local_index() {
+            self.spend.reserve(index);
+        }
         self.scope.assume(name, type_);
     }
 

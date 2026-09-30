@@ -23,6 +23,8 @@ mod entry_tests;
 #[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
+mod identity_tests;
+#[cfg(test)]
 mod occurrence_tests;
 #[cfg(test)]
 mod plicity_tests;
@@ -53,8 +55,7 @@ use {
     curios_core::{
         Bound, Certification, Certified, Definition, Entrypoint, Free, Global, InductDecl, Item,
         Level, MetavarId, Module, Program, Reads, StructDecl, Term, Totality, UniverseContext,
-        Zonked, derived_binder_floor_outside, rewrite_universe_levels_scoped_shared,
-        universe_metas,
+        Zonked, free_locals_outside, rewrite_universe_levels_scoped_shared, universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -423,18 +424,21 @@ fn verdicts_within(
     // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope is defined exactly as a refused item is — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it.
     kernel.seed(globals);
 
-    // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
-    //
-    // The mark is derived here rather than taken from `Module::binder_floor`, which nothing checks. The three are combined by maximum because a floor is a bound and not a verdict: widening can never refuse a module that was fine, so a position this walk fails to reach degrades to a carried value instead of to a capture.
-    kernel.set_local_floor(
-        module
-            .binder_floor
-            .max(globals.binder_floor())
-            .max(derived_binder_floor_outside(module, |name| {
-                globals.in_scope(name)
-            }))
-            .max(entry.map_or(0, Entrypoint::binder_floor)),
-    );
+    // The kernel mints its binders from zero, so a free local in a term it judges is one it could mint again while comparing under a telescope or eta-contracting — a capture, after which the judgment sees a bound variable and never an unbound one. So a local is refused here, at the boundary, over every position a term can sit in. What `globals` answers for was refused by the walk that built it.
+    for (owner, local) in free_locals_outside(module, |name| globals.in_scope(name)) {
+        verdicts.push(Verdict {
+            name: owner,
+            error: KernelError::Unbound(local),
+        });
+    }
+    if let Some(entry) = entry {
+        for local in entry.free_locals() {
+            verdicts.push(Verdict {
+                name: None,
+                error: KernelError::Unbound(local),
+            });
+        }
+    }
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
     let contexts = module
