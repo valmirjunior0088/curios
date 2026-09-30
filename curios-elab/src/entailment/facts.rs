@@ -75,6 +75,8 @@ pub(super) struct Target {
     pub(super) right: Term,
     /// `left - right`, aligned to `<=`.
     pub(super) form: LinearForm,
+    /// The decision as the bound's reduct spells it: what the refuting form splits on, so the refinement its arms install is keyed where the bound reads it.
+    pub(super) decision: Term,
 }
 
 /// What the scope states: the facts read, and the propositions stating a decision the view does not read.
@@ -125,6 +127,7 @@ impl<'a> Reader<'a> {
             left,
             right,
             form,
+            decision: decision.clone(),
         }))
     }
 
@@ -132,7 +135,7 @@ impl<'a> Reader<'a> {
     pub(super) fn collect(
         mut self,
         context: &mut Context,
-        target: &Target,
+        target: Option<&Target>,
     ) -> Result<Facts, Error> {
         curios_profile::profile!("entailment::collect");
         for (name, type_) in context.locals().to_vec() {
@@ -477,14 +480,14 @@ impl<'a> Reader<'a> {
     }
 
     /// That every monomial over naturals is at least zero — clause 2 of what conversion decides, so `Bool/True/qed()` proves it — for every such monomial a fact or the goal was read over: a goal over an atom no fact names still needs that atom's sign.
-    fn naturals(&mut self, context: &mut Context, target: &Target) -> Result<(), Error> {
+    fn naturals(&mut self, context: &mut Context, target: Option<&Target>) -> Result<(), Error> {
         let mut monomials: Vec<Monomial> = Vec::new();
         let forms = self
             .read
             .facts
             .iter()
             .map(|fact| &fact.form)
-            .chain([&target.form]);
+            .chain(target.map(|target| &target.form));
         for form in forms {
             for (_, monomial) in &form.terms {
                 let natural = monomial
@@ -589,7 +592,7 @@ pub(super) fn negated(
 }
 
 /// `match head | true => true_case | false => false_case end`, its motive elided as a written one is, so elaboration checks each arm against the expected type with `head` refined.
-fn split(context: &mut Context, head: &Term, false_case: Term, true_case: Term) -> Term {
+pub(super) fn split(context: &mut Context, head: &Term, false_case: Term, true_case: Term) -> Term {
     let motive = Term::match_motive_written(Term::hole(context.mint_metavar()));
     Term::bool_match_scoped(head.clone(), motive, false_case, true_case)
 }

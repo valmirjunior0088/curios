@@ -1,0 +1,7 @@
+pub use /sys/Bool/{False};
+
+--- `False`, where the facts in scope refute each other: the elaborator proves the bound from them, and the arm's own match eliminates it — `match Bool/False/refuted() end`.
+---
+--- A producer, not an eliminator: the zero-arm match stays the one way a contradiction is discharged, and this is what it is handed where no proof of `False` is in scope under a name.
+pub let refuted(@p: False) -> False =
+    p;

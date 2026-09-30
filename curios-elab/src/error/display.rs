@@ -137,10 +137,11 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
     let mut lines = String::new();
     if !refusal.considered.is_empty() {
         let heading = match refusal.conclusion {
-            Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
-            Conclusion::Certified | Conclusion::Unwritten | Conclusion::Rejected => {
-                "it follows from the facts in scope:"
+            Conclusion::Counterexample(_) | Conclusion::Unsearched if refusal.absurd => {
+                "the facts in scope do not refute each other:"
             }
+            Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
+            Conclusion::Unwritten | Conclusion::Rejected => "it follows from the facts in scope:",
             Conclusion::Unsearched | Conclusion::Counterexample(_) => {
                 "it does not follow from the facts in scope:"
             }
@@ -164,16 +165,16 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
                 .map(|(atom, value)| format!("{} = {value}", atom.spelled(spelling)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            lines += &format!("\n  it fails at {values}");
+            lines += &match refusal.absurd {
+                true => format!("\n  they all hold at {values}"),
+                false => format!("\n  it fails at {values}"),
+            };
         }
         Conclusion::Exhausted(cap) => {
             lines +=
                 &format!("\n  the search for a proof ran out of its bound of {cap} derived rows");
         }
         Conclusion::Unwritten => lines += "\n  the lemmas a proof would use are not in scope here",
-        Conclusion::Certified => {
-            lines += "\n  by a refutation of its negation, which this compiler does not write yet";
-        }
         Conclusion::Rejected => {
             lines += "\n  a proof was found and did not check, which is the compiler's fault: please report it";
         }

@@ -8,6 +8,7 @@
 //!
 //! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
+//! - An empty proposition the facts refute: how `Bool/False/refuted` reaches the procedure, and `proved` wherever its proposition is one.
 //!
 //! **What failure is.** Today's refusal, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
@@ -44,6 +45,26 @@ pub(crate) enum Entailed {
     Refused(Refusal),
 }
 
+/// What a bound asks for, read off its reduct.
+enum Goal {
+    /// `Holds(e)`: the decision `e` is `true`.
+    Decision(Term),
+    /// A proposition with no constructor: the facts must refute each other.
+    Absurd,
+}
+
+/// The goal `reduced` states, or `None` for a proposition the procedure reads nothing in.
+fn goal_of(context: &mut Context, reduced: &Term) -> Result<Option<Goal>, Error> {
+    if let Some(decision) = decision_of(context, reduced)? {
+        return Ok(Some(Goal::Decision(decision)));
+    }
+    let empty = matches!(&**reduced, Subterm::InductType(induct)
+        if context
+            .induct_decl(&induct.name)
+            .is_some_and(|decl| decl.constructor_order().next().is_none()));
+    Ok(empty.then_some(Goal::Absurd))
+}
+
 /// The decision `reduced` states is `true`, or `None` for a proposition the procedure reads nothing in. `/sys` states `Holds(b)` as `match b | true => True | false => False end`, so a bound it did not decide reduces to that match stuck on its decision. A weak head normal form leaves a match's arms as elaborated, so the true arm is reduced before it is compared with the truth.
 fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Error> {
     let Subterm::Match(Match {
@@ -72,30 +93,39 @@ pub(crate) fn entail(
     if context.entailing() {
         return Ok(Entailed::Refused(Refusal::default()));
     }
-    let Some(decision) = decision_of(context, reduced)? else {
+    let Some(goal) = goal_of(context, reduced)? else {
         return Ok(Entailed::Refused(Refusal::default()));
     };
 
     context.with_entailing(|context| {
-        if let Some(candidate) = tautology(context, &decision)
+        if let Goal::Decision(decision) = &goal
+            && let Some(candidate) = tautology(context, decision)
             && let Some(proof) = check(context, &candidate, bound)?
         {
             return Ok(Entailed::Proved(proof));
         }
-        linear(context, &decision, bound)
+        linear(context, &goal, bound)
     })
 }
 
-/// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for.
-fn linear(context: &mut Context, decision: &Term, bound: &Term) -> Result<Entailed, Error> {
+/// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for. An absurd goal has no target and no negation: the facts must refute each other alone.
+fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, Error> {
     let mut views = LinearViews::default();
     let mut reader = Reader::new(&mut views);
     // A decision that is no `Nat` or `Int` `<` or `<=` is not a goal of the fragment: an equality's negation is a disjunction, and nothing else is a comparison the view reads. The goal is read first, so its atoms are handed out before any fact's.
-    let Some(target) = reader.target(context, decision)? else {
-        return Ok(Entailed::Refused(Refusal::default()));
+    let target = match goal {
+        Goal::Decision(decision) => match reader.target(context, decision)? {
+            Some(target) => Some(target),
+            None => return Ok(Entailed::Refused(Refusal::default())),
+        },
+        Goal::Absurd => None,
     };
-    let facts = reader.collect(context, &target)?;
-    let negated = negated(context, &mut views, &target)?;
+    let facts = reader.collect(context, target.as_ref())?;
+    let negated = match &target {
+        Some(target) => negated(context, &mut views, target)?,
+        None => None,
+    };
+    let absurd = target.is_none();
 
     let forms = facts
         .facts
@@ -104,7 +134,9 @@ fn linear(context: &mut Context, decision: &Term, bound: &Term) -> Result<Entail
         .map(|fact| fact.form.clone())
         .collect::<Vec<_>>();
     let refused = |views: &LinearViews, outcome: SearchOutcome| -> Result<Entailed, Error> {
-        Ok(Entailed::Refused(Refusal::of(&facts, views, outcome)))
+        Ok(Entailed::Refused(Refusal::of(
+            &facts, views, outcome, absurd,
+        )))
     };
     let mut budget = DERIVED_ROWS;
     let multipliers = match refute(&forms, &mut budget) {
@@ -114,9 +146,15 @@ fn linear(context: &mut Context, decision: &Term, bound: &Term) -> Result<Entail
         }
         Search::Exhausted => return refused(&views, SearchOutcome::Exhausted(DERIVED_ROWS)),
     };
-    let candidate = match write(context, &facts.facts, &target, &multipliers) {
+    let written = write(
+        context,
+        &facts.facts,
+        target.as_ref(),
+        negated.as_ref(),
+        &multipliers,
+    );
+    let candidate = match written {
         Written::Proof(candidate) => candidate,
-        Written::Refuting => return refused(&views, SearchOutcome::Certified),
         Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
     };
     match check(context, &candidate, bound)? {

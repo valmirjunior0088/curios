@@ -1,11 +1,15 @@
 pub use /sys/{Bool};
-pub use /sys/Bool/{and, or, xor, eql, False, Holds};
+pub use /sys/Bool/{and, or, xor, eql, Holds};
 use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Or, And, Cmp};
 
 --- The trivial proposition, inhabited by `qed`: what a decided bound reduces to when it holds.
 pub mod True;
 pub use True/{let True};
+
+--- The empty proposition: what a decided bound reduces to when it fails.
+pub mod False;
+pub use False/{let False};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =

@@ -4,10 +4,14 @@
 //!
 //! **The direct form.** Where the negated goal's multiplier is one, the facts' sum is the goal's view plus a constant `s >= 0` — `a <= b` and `b <= c` sum to `a <= c`, a strict fact to its successor's — and the sum with the literal fact `0 <= s` is the proof, one proposition with the goal by clause 5.
 //!
+//! **The refuting form.** Otherwise the proof splits on the goal's own decision, spelled as the bound's reduct spells it, so the arm's refinement is keyed where the bound reads it. The true arm is `Bool/True/qed()`. The false arm eliminates, with a zero-arm match, the sum of the facts with the negated goal — proved there by `Le/of_not_lt` or `Lt/of_not_le` at `qed` — whose type reduces to `Bool/False`: `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`.
+//!
+//! **The absurd form.** Where the goal is itself an empty proposition, the sum of the facts is the proof, its type reducing to that proposition; where the facts refute each other without the goal, the sum is eliminated by a zero-arm match in the goal's place.
+//!
 //! **The carrier of a sum** is `Int` where the goal or any fact it sums is at `Int`, and `Nat` otherwise. A `Nat` fact enters an `Int` sum as its sides widened, the proposition conversion aligns it with. `Nat` addition never truncates, so a `Nat` sum is exact.
 
 use {
-    super::{Fact, Target, global, in_scope, literal, order, qed},
+    super::{Fact, Target, eliminate, global, in_scope, literal, order, qed, split},
     crate::Context,
     curios_algebra::Carrier,
     curios_core::{Intrinsic, Term},
@@ -19,38 +23,62 @@ use {
 pub(super) enum Written {
     /// The proof, not yet checked.
     Proof(Term),
-    /// A certificate the direct form cannot write: the negated goal's multiplier is not one, which a refutation of the negated goal scaled, or of the facts alone, needs.
-    Refuting,
     /// A name the proof applies is not in scope: inside `/std`, an item compiled before the vocabulary.
     Unwritten,
 }
 
-/// The proof `multipliers` stands for over `facts` and `goal`, the negated goal's multiplier last.
+/// The proof `multipliers` stands for over `facts`, the goal where there is one, and its negation where it could be written — the negation's multiplier last.
 pub(super) fn write(
-    context: &Context,
+    context: &mut Context,
     facts: &[Fact],
-    goal: &Target,
+    goal: Option<&Target>,
+    negated: Option<&Fact>,
     multipliers: &[Natural],
 ) -> Written {
-    // The search ran over the facts and, where the goal's negation could be written, the negation last: its multiplier is the last one, and absent it is zero.
     let (weights, goal_weight) = multipliers.split_at(facts.len());
-    if goal_weight.first() != Some(&Natural::from(1u32)) {
-        return Written::Refuting;
-    }
+    let goal_weight = goal_weight
+        .first()
+        .cloned()
+        .unwrap_or_else(|| Natural::from(0u32));
     let used = facts
         .iter()
         .zip(weights)
         .filter(|(_, weight)| !weight.is_zero())
         .collect::<Vec<_>>();
-    let carrier = match goal.carrier == Carrier::Integer
+    let integer = goal.is_some_and(|goal| goal.carrier == Carrier::Integer)
         || used
             .iter()
-            .any(|(fact, _)| fact.carrier == Carrier::Integer)
-    {
+            .any(|(fact, _)| fact.carrier == Carrier::Integer);
+    let carrier = match integer {
         true => Carrier::Integer,
         false => Carrier::Natural,
     };
-    match sum(context, carrier, &used, slack(&used, goal)) {
+    let none = Integer::from(0);
+
+    let written = match (goal, negated) {
+        // The goal is empty, and the facts' sum is a proof of it.
+        (None, _) => sum(context, carrier, &used, none),
+        // The facts refute each other without the goal.
+        (Some(_), _) if goal_weight.is_zero() => {
+            sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted))
+        }
+        (Some(goal), _) if goal_weight == Natural::from(1u32) => {
+            sum(context, carrier, &used, slack(&used, goal))
+        }
+        (Some(goal), Some(negated)) => {
+            let mut with_goal = used.clone();
+            with_goal.push((negated, &goal_weight));
+            sum(context, carrier, &with_goal, none).map(|refuted| {
+                let false_arm = eliminate(context, refuted);
+                // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
+                let true_arm = qed(context);
+                split(context, &goal.decision, false_arm, true_arm)
+            })
+        }
+        // The negation is the only row that carries the goal's weight, so a weighted goal without one cannot be.
+        (Some(_), None) => None,
+    };
+    match written {
         Some(proof) => Written::Proof(proof),
         None => Written::Unwritten,
     }

@@ -107,8 +107,10 @@ Prelude elaboration and certification are read from the two profile streams `car
 | The baseline, `bb28989d` | 34 123.3 MB | 5 003.0 MB | — |
 | Stage 2 | 34 111.8 MB | 5 002.4 MB | 0 |
 | Stage 3 | 34 169.3 MB | 5 007.2 MB | 0 |
+| The rebased base, `4976ac03` | 61 795.5 MB | — | — |
+| Stage 4 | 61 893.6 MB | 5 011.4 MB | 0 |
 
-Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be. Stage 3's growth is the six lemmas it adds to `/std` — `Le/add`, `Le/of_eq` and `Lt/of_not_le` at each carrier — elaborated and certified, and not the procedure, which is still never asked.
+Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be. Stage 3's growth is the six lemmas it adds to `/std` — `Le/add`, `Le/of_eq` and `Lt/of_not_le` at each carrier — elaborated and certified, and not the procedure, which is still never asked. The branch was then rebased onto `main` at `4976ac03`, whose own prelude elaboration allocates 81% more than `bb28989d` did. That rise is `main`'s, measured on its own stream, and stage 4 is compared against it: its `Bool/False` module and `proved` add 98 MB.
 
 ## Census
 

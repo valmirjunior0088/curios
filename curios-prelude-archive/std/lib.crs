@@ -251,3 +251,9 @@ pub let print_err(s: Str) -> Io({}) =
 --- One line of standard input without its newline; `none` at the end of the input.
 pub let read() -> Io(Option(Bytes)) =
     Io/read_line(Io/stdin);
+
+--- `P`, a fact a term needs that no bound demands: the elaborator proves it from the facts in scope, or the program is refused naming them.
+---
+--- The proposition is written — `proved(@Nat/Lt(i, n))` — or pinned by the expectation, where the bound waits until it is and is proved then, from the facts the expression's own scope holds.
+pub let proved(@P: Prop, @p: P) -> P =
+    p;

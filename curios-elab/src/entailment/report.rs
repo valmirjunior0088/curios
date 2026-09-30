@@ -17,6 +17,8 @@ pub struct Refusal {
     pub unread: Vec<(Origin, Term)>,
     /// What the search concluded.
     pub conclusion: Conclusion,
+    /// Whether the bound was an empty proposition, which only a contradiction among the facts proves: a counterexample then shows them all holding, not a goal failing.
+    pub absurd: bool,
 }
 
 /// The search's conclusion, as the report states it.
@@ -31,8 +33,6 @@ pub enum Conclusion {
     Exhausted(usize),
     /// A certificate was found and a name its proof applies is not in scope: inside `/std`, an item compiled before the vocabulary.
     Unwritten,
-    /// The facts refute the goal's negation, and the proof of that shape — a split on the goal — is not written yet.
-    Certified,
     /// A certificate was found and its proof did not check: the procedure's mistake, reported as the refusal it has to be.
     Rejected,
 }
@@ -42,7 +42,6 @@ pub(super) enum SearchOutcome {
     Counterexample(Vec<(Monomial, Rational)>),
     Exhausted(usize),
     Unwritten,
-    Certified,
     Rejected,
 }
 
@@ -68,7 +67,12 @@ impl Refusal {
     }
 
     /// The report of a search over `facts`, read by `views`, that ended in `outcome`.
-    pub(super) fn of(facts: &Facts, views: &LinearViews, outcome: SearchOutcome) -> Self {
+    pub(super) fn of(
+        facts: &Facts,
+        views: &LinearViews,
+        outcome: SearchOutcome,
+        absurd: bool,
+    ) -> Self {
         let considered = facts
             .facts
             .iter()
@@ -81,13 +85,13 @@ impl Refusal {
             }
             SearchOutcome::Exhausted(cap) => Conclusion::Exhausted(cap),
             SearchOutcome::Unwritten => Conclusion::Unwritten,
-            SearchOutcome::Certified => Conclusion::Certified,
             SearchOutcome::Rejected => Conclusion::Rejected,
         };
         Refusal {
             considered,
             unread: facts.unread.clone(),
             conclusion: outcome,
+            absurd,
         }
     }
 }

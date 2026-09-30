@@ -1,18 +1,16 @@
 //! The grid of bounds proved from the facts in scope: omitted bounds the elaborator must fill with a proof both checkers recheck, and controls it must refuse.
 //!
-//! **A row is a bound and the facts it follows from.** A claim row states a proposition over its binders and asks for it twice: through `hold(@claim)`, whose bound is decided where the call is inserted, and through `hold()` pinned by the item's declared result, whose bound waits for the expectation and is decided when it is retried. A body row states a call whose own bound is omitted — `List/get(xs, i)` — or a contradiction arm, and is asked once. `hold` and `refute` are declared by each program, as `/std/proved` and `/std/Bool/False/refuted` state them, so a row does not change when those land.
+//! **A row is a bound and the facts it follows from.** A claim row states a proposition over its binders and asks for it twice: through `proved(@claim)`, whose bound is decided where the call is inserted, and through `proved()` pinned by the item's declared result, whose bound waits for the expectation and is decided when it is retried. A body row states a call whose own bound is omitted — `List/get(xs, i)` — or a contradiction arm, `match Bool/False/refuted() end`, and is asked once.
 //!
 //! **Each row names the stage of `documentation/roadmap/algebra/02-bounds-from-facts-spec.md` that fills it.** A row whose stage has landed must compile; a row whose stage has not must be refused for its bound, and nothing else — a row refused for a misspelling would pass as refused, so the refusal must name what nothing discharged. A control is refused for its bound at every stage: it states what the procedure's fragment leaves out.
 
 use super::{core_elab, typecheck};
 
 /// The last stage of algebra part 2 that has landed.
-const LANDED: u8 = 3;
+const LANDED: u8 = 4;
 
-/// The imports every program opens with, and the two entry points each declares for itself.
-const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io};
-let hold(@P: Prop, @p: P) -> P = p;
-let refute(@p: Bool/False) -> Bool/False = p;";
+/// The imports every program opens with.
+const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io, proved};";
 
 /// What a row asks the procedure for.
 enum Ask {
@@ -108,20 +106,20 @@ const ROWS: &[Row] = &[
         3,
         "i: Nat, n: Nat, p: Nat/Lt(i, n)",
         "{}",
-        "let k = n + 2; let _: Nat/Lt(i + 1, k) = hold(); ()",
+        "let k = n + 2; let _: Nat/Lt(i + 1, k) = proved(); ()",
     ),
     // A guard's false arm, and a variable refined to a successor.
     body(
         3,
         "n: Int",
         "{}",
-        "match n >= +0 | true => () | false => let _: Int/Le(+0, +0 - n) = hold(); () end",
+        "match n >= +0 | true => () | false => let _: Int/Le(+0, +0 - n) = proved(); () end",
     ),
     body(
         3,
         "k: Nat, n: Nat, p: Nat/Le(k, n)",
         "{}",
-        "match k | 0 => () | j + 1 => let _: Nat/Lt(j, n) = hold(); () end",
+        "match k | 0 => () | j + 1 => let _: Nat/Lt(j, n) = proved(); () end",
     ),
     // A natural's bound read at `Int`.
     claim(
@@ -141,43 +139,50 @@ const ROWS: &[Row] = &[
         3,
         "n: Nat",
         "{}",
-        "match Nat/in_range(n, 0, 0x7F) | true => let _: Nat/Lt(n, 0x80) = hold(); () | false => () end",
+        "match Nat/in_range(n, 0, 0x7F) | true => let _: Nat/Lt(n, 0x80) = proved(); () | false => () end",
     ),
     body(
         3,
         "c: Char",
         "{}",
-        "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = hold(); () | false => () end",
+        "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = proved(); () | false => () end",
     ),
     // An `==` guard's true arm, as the equation it gives.
     body(
         3,
         "x: Nat, y: Nat, p: Nat/Lt(y, 5)",
         "{}",
-        "match x == y | true => let _: Nat/Lt(x, 5) = hold(); () | false => () end",
+        "match x == y | true => let _: Nat/Lt(x, 5) = proved(); () | false => () end",
     ),
     // A goal that needs the negated goal scaled: the refuting form.
     claim(4, "a: Nat, b: Nat, p: Nat/Le(a * 2, b * 2)", "Nat/Le(a, b)"),
     claim(4, "x: Nat, p: Nat/Le(x * 3, 10)", "Nat/Le(x, 3)"),
     claim(4, "x: Int, p: Int/Le(x * +3, +10)", "Int/Le(x, +3)"),
+    // `proved` pinned by a later argument: its bound waits for the proposition, and is proved from the scope's facts when it is known.
+    body(
+        4,
+        "i: Nat, m: Nat, n: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, n)",
+        "Nat",
+        "let f(r: Nat/Lt(i, n)) -> Nat = 0; let x = proved(); f(x)",
+    ),
     // Contradiction arms: facts that refute each other, from hypotheses and from a guard.
     body(
         4,
         "n: Nat, p: Nat/Le(0x80, n), q: Nat/Le(n, 0x7F)",
         "Nat",
-        "match refute() end",
+        "match Bool/False/refuted() end",
     ),
     body(
         4,
         "n: Nat, q: Nat/Le(n, 10)",
         "Nat",
-        "match n > 20 | true => match refute() end | false => 0 end",
+        "match n > 20 | true => match Bool/False/refuted() end | false => 0 end",
     ),
     body(
         4,
         "n: Int, q: Int/Le(n, +10)",
         "Int",
-        "match n > +20 | true => match refute() end | false => +0 end",
+        "match n > +20 | true => match Bool/False/refuted() end | false => +0 end",
     ),
     // Truncated subtraction, read by the case split its definition makes.
     claim(
@@ -229,7 +234,7 @@ const CONTROLS: &[Row] = &[
         0,
         "x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)",
         "Nat",
-        "match refute() end",
+        "match Bool/False/refuted() end",
     ),
     // A product of three facts.
     claim(0, "x: Nat, p: Nat/Le(x * x * x, 7)", "Nat/Le(x, 1)"),
@@ -244,14 +249,14 @@ const CONTROLS: &[Row] = &[
         0,
         "n: Nat, q: Nat/Le(n, 10)",
         "Nat",
-        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Nat/Lt(n, 3) = hold(); 0 end",
+        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Nat/Lt(n, 3) = proved(); 0 end",
     ),
     // A guard's fact at a retry the hole was born outside of: the bound is decided under the refinements its slot was born under, and the arm's are not among them.
     body(
         0,
         "i: Nat, m: Nat, n: Nat, q: Nat/Le(m, n)",
         "Nat",
-        "let h = hold(); match i < m | true => let _: Nat/Lt(i, n) = h; 0 | false => 0 end",
+        "let h = proved(); match i < m | true => let _: Nat/Lt(i, n) = h; 0 | false => 0 end",
     ),
 ];
 
@@ -262,8 +267,8 @@ fn programs(binders: &str, ask: &Ask) -> Vec<String> {
     };
     match *ask {
         Ask::Claim(claim) => vec![
-            item(claim, &format!("hold(@{claim})")),
-            item(claim, "hold()"),
+            item(claim, &format!("proved(@{claim})")),
+            item(claim, "proved()"),
         ],
         Ask::Body { result, body } => vec![item(result, body)],
     }
@@ -379,9 +384,8 @@ Io/pure(())";
 #[test]
 fn a_filled_row_files_the_same_proof_every_time() {
     // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
-    let omitted = "use /std/{Nat, Io};
-let hold(@P: Prop, @p: P) -> P = p;
-let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = hold(@Nat/Lt(a * 16 + b, 256));
+    let omitted = "use /std/{Nat, Io, proved};
+let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = proved(@Nat/Lt(a * 16 + b, 256));
 Io/pure(())";
     let first = core_elab(omitted);
     assert_eq!(core_elab(omitted), first);
@@ -413,7 +417,7 @@ fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
 fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let refusal = |binders: &str, claim: &str| {
         let program =
-            format!("{HEADER}\nlet row({binders}) -> {claim} = hold(@{claim});\nIo/pure(())");
+            format!("{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())");
         typecheck(&program).expect_err("the control is refused")
     };
 
@@ -431,6 +435,19 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
         "Nat/Le(x, 0)",
     );
     assert!(rational.contains("3/2"), "{rational}");
+
+    // A contradiction goal the facts do not refute: they all hold at the assignment, which is a fraction here.
+    let absurd = {
+        let program = format!(
+            "{HEADER}\nlet row(x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)) -> Nat = match Bool/False/refuted() end;\nIo/pure(())"
+        );
+        typecheck(&program).expect_err("the control is refused")
+    };
+    assert!(
+        absurd.contains("the facts in scope do not refute each other")
+            && absurd.contains("they all hold at x = 3/2"),
+        "{absurd}"
+    );
 
     // A decision the procedure reads nothing in says nothing new.
     let silent = refusal("b: Bool", "Bool/Holds(b)");
