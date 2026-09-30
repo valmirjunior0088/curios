@@ -342,7 +342,7 @@ impl ProofSyntax {
     }
 }
 
-/// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context, which is how an item of `/std` compiled before this vocabulary keeps the behavior it had without it, and why the scheduler gains no edge for it.
+/// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-text`'s scheduler orders every item the vocabulary does not itself need after it ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
 #[derive(Debug, Clone, Copy)]
 pub struct EntailmentSyntax {
     /// A decision conversion equates with `true` holds: the proof of a tautology conversion decides and reduction does not.
@@ -366,7 +366,8 @@ pub struct EntailmentSyntax {
 }
 
 impl EntailmentSyntax {
-    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+    /// Every name the procedure writes or reads.
+    pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
             holds_of_eq,
             refl,

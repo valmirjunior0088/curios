@@ -268,6 +268,7 @@ pub(super) fn order_flat_items(
             witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rows, syntax),
         );
     }
+    order_after_entailment(&nodes, &owner, &mut deps, &soft_deps, syntax);
     // Refused at the first member's written name, which is what the reader prefixes with `and`: the report names every definition on the cycle, and the source position it needs is one the reader can act on. The written type is the fallback for a definition the compiler named, since function sugar synthesizes a type with no span of its own.
     let order = topological_order(&nodes, &deps, &soft_deps).map_err(|cycle| {
         let error = Error::UndeclaredCycle {
@@ -288,6 +289,44 @@ pub(super) fn order_flat_items(
         .into_iter()
         .map(|node| slots[node].take().unwrap())
         .collect())
+}
+
+/// Every node the procedure that proves a bound from the facts in scope may run in, ordered after the procedure's vocabulary: in the unit that declares it, `/std`, its lemmas are elaborated beside the items that lean on them, and a proof form is written only where every name it applies is already in scope. Any item may omit a bound, and none says so before elaboration, so the edge runs from every node the vocabulary does not itself need.
+///
+/// **What the vocabulary needs is its closure under both kinds of edge.** A node the vocabulary reaches by a name, or by a witness row it dispatches through, cannot follow it, so it is left where it is. No node inside that closure depends on a node outside it, so the edges added here close no cycle and leave the soft witness edges the closure holds as satisfiable as they were. In a unit that does not declare the vocabulary no node owns its names, and nothing moves.
+fn order_after_entailment(
+    nodes: &[usize],
+    owner: &HashMap<curios_core::Global, usize>,
+    deps: &mut HashMap<usize, HashSet<usize>>,
+    soft_deps: &HashMap<usize, HashSet<usize>>,
+    syntax: &SyntaxRegistry,
+) {
+    let vocabulary = syntax
+        .entailment
+        .targets()
+        .filter_map(|name| {
+            owner
+                .get(&curios_core::Global::Authored(name.qualifier()))
+                .copied()
+        })
+        .collect::<BTreeSet<usize>>();
+    if vocabulary.is_empty() {
+        return;
+    }
+    let mut needed = vocabulary.clone();
+    let mut pending = vocabulary.iter().copied().collect::<Vec<usize>>();
+    while let Some(node) = pending.pop() {
+        for &dep in deps[&node].iter().chain(&soft_deps[&node]) {
+            if needed.insert(dep) {
+                pending.push(dep);
+            }
+        }
+    }
+    for node in nodes.iter().filter(|node| !needed.contains(node)) {
+        deps.get_mut(node)
+            .expect("every node has its dependencies recorded")
+            .extend(&vocabulary);
+    }
 }
 
 fn first_let(item: &FlatItem) -> &FlatLet {
