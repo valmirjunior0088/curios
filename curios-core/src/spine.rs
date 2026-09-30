@@ -7,10 +7,13 @@ use {
         Atoms, Declaration, Element, Intrinsic, Nat, Operands, Sequence, Subterm, Term, Words,
         bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, int_shaped, list_element,
     },
-    curios_algebra::{Conclusion, Deduction, Stripped, pair_factors, same_leaves, same_position},
+    curios_algebra::{
+        Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
+        same_position,
+    },
 };
 
-/// What a peel concludes, over the pair of residuals it hands back. Every peel here is at [`Deduction`]'s strength — a residual it hands back holds exactly when the pair does, a common prefix or summand peeled off or a side regrouped — except [`peel_monomial`]'s, which is merely sufficient and is therefore a [`Conclusion`] only conversion reads. `Undecided` is a pair the peel reads and makes no progress on, which every reader treats as the refusing direction, so declining can only cost reductions; `None` beside it is a pair the peel does not read at all.
+/// What a peel concludes, over the pair of residuals it hands back. Every peel here is at [`Deduction`]'s strength — a residual it hands back holds exactly when the pair does, a common prefix or summand peeled off or a side regrouped — except [`peel_monomial`]'s and [`peel_comparison`]'s, which are merely sufficient and are therefore [`Conclusion`]s only conversion reads. `Undecided` is a pair the peel reads and makes no progress on, which every reader treats as the refusing direction, so declining can only cost reductions; `None` beside it is a pair the peel does not read at all.
 pub type Verdict = Deduction<(Term, Term)>;
 
 /// Classify a reduced intrinsic pair: the entry inversion reads, and so only ever a [`Verdict`]. `None` means the pair is not a matched spine-intrinsic, so the caller keeps its own handling.
@@ -87,6 +90,25 @@ pub fn peel_monomial(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(
         }
         _ => None,
     }
+}
+
+/// Two `Nat` or `Int` equalities, or two disequalities, with their sides paired by identity up to universe instances rather than by position: one pair of sides is `Equal`, and one side left on each is `Conclusion::Sufficient` over those two. `None` for anything else, so the caller's shape congruence decides as it did.
+///
+/// **A comparison's side order is a hash**, as a monomial's factor order is ([`peel_monomial`]). The linear views respell two comparisons alike before any peel reads them, each side of the difference where its atoms' ranks put it, and a rank is a structural hash, which an unsolved metavariable takes from its own number. The shape congruence then compared sides in that order, so `?w != y` against `x != y` paired `?w` with `x` or with `y` according to where `?w` sorted, and a rule that solves the metavariable solved it or not as metavariables minted earlier in the item moved its number. Pairing by identity leaves `?w` against `x` wherever the two were put.
+///
+/// **Conversion's alone**, as the monomial pairing is: `a == b` against `c == b` does not give `a = c`, since the two are one value wherever both `a` and `c` differ from `b`. It is not in [`peel_intrinsic`], whose [`Deduction`] has no sufficient variant to carry it.
+pub fn peel_comparison(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(Term, Term)>> {
+    let sides = |intrinsic: &Intrinsic| match intrinsic.algebra() {
+        Declaration::Operation {
+            carrier: carrier @ (Carrier::Natural | Carrier::Integer),
+            operation: operation @ (Operation::Equal | Operation::Unequal),
+            operands: Operands::Two([a, b]),
+        } => Some(((carrier, operation), [a.clone(), b.clone()])),
+        _ => None,
+    };
+    let (this, left_sides) = sides(left)?;
+    let (that, right_sides) = sides(right)?;
+    paired((&this, &left_sides), (&that, &right_sides))
 }
 
 /// Two monomials' factors paired by `curios-algebra`'s `pair_factors` over numeric atoms, each leftover read back as the factor it was on its own side.

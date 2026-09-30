@@ -1,4 +1,4 @@
-//! Peels that decide a value up to the order of its operands: a conjunction's leaf set, and the symmetric comparisons and bitwise operations.
+//! Peels that decide a value up to the order of its operands: a conjunction's leaf set, the symmetric comparisons and bitwise operations, and two comparisons' sides paired by identity.
 
 use super::{test_support::*, *};
 
@@ -101,5 +101,50 @@ fn peel_symmetric_decides_a_swapped_bitwise_operation_equal() {
     assert!(
         peel_symmetric(&shifted, &reversed).is_none(),
         "a shift is not symmetric and is not this peel's"
+    );
+}
+
+// Two comparisons' sides are paired by identity, not by the positions the linear views' rank order put them in: `y != w` against `x != y` leaves `w` against `x`, which is what solves a metavariable standing for `w` wherever its number sorts it.
+#[test]
+fn peel_comparison_pairs_sides_by_identity_not_by_position() {
+    let (w, x, y) = (sym(0, "w"), sym(1, "x"), sym(2, "y"));
+    assert_eq!(
+        peel_comparison(
+            &Intrinsic::NatNeq(y.clone(), w.clone()),
+            &Intrinsic::NatNeq(x.clone(), y)
+        ),
+        Some(Conclusion::Sufficient((w, x))),
+    );
+}
+
+#[test]
+fn peel_comparison_decides_a_swapped_comparison_equal() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    assert_eq!(
+        peel_comparison(
+            &Intrinsic::IntEql(x.clone(), y.clone()),
+            &Intrinsic::IntEql(y, x)
+        ),
+        Some(Conclusion::Equal),
+    );
+}
+
+// No side in common is a pair the peel does not read, and neither is an equality against a disequality: the shape congruence keeps both.
+#[test]
+fn peel_comparison_declines_where_no_side_is_shared() {
+    let (v, w, x, y) = (sym(0, "v"), sym(1, "w"), sym(2, "x"), sym(3, "y"));
+    assert!(
+        peel_comparison(
+            &Intrinsic::NatEql(v, w),
+            &Intrinsic::NatEql(x.clone(), y.clone())
+        )
+        .is_none()
+    );
+    assert!(
+        peel_comparison(
+            &Intrinsic::NatEql(x.clone(), y.clone()),
+            &Intrinsic::NatNeq(x, y)
+        )
+        .is_none()
     );
 }

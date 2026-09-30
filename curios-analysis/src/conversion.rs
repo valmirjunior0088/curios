@@ -7,7 +7,7 @@
 //! 3. the truth table over two `Bool` terms;
 //! 4. two connective trees flattened, their leaves forced;
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
-//! 6. the peels, the product-factor pairing first;
+//! 6. the peels, the product-factor and comparison-side pairings first;
 //! 7. the `Nat` peel retried once with each summand's arguments forced;
 //! 8. the elaborator's packed-literal view ([`Driver::packed_view`]);
 //! 9. two numbers of one operation compared as numbers;
@@ -24,8 +24,8 @@ use {
     curios_core::{
         Aligned, Intrinsic, Level, Nat, Operand, Produced, ReduceError, Reducer, Subterm, Term,
         Var, Visit, align_comparisons, decide_bool, int_has_stuck_product, int_normalize, int_same,
-        is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_int_pair, peel_list,
-        peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
+        is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_comparison, peel_int_pair,
+        peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -137,16 +137,19 @@ pub fn convert_intrinsics(
     };
 
     // `Nat`, `Bin` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
-    if let Some(conclusion) = peel_monomial(&this, &that).or_else(|| {
-        peel_nat_pair(&this, &that)
-            .or_else(|| peel_int_pair(&this, &that))
-            .or_else(|| peel_bin(&this, &that))
-            .or_else(|| peel_list(&this, &that))
-            .or_else(|| peel_bool(&this, &that))
-            .or_else(|| peel_symmetric(&this, &that))
-            .or_else(|| peel_position(&this, &that))
-            .map(Conclusion::from)
-    }) {
+    if let Some(conclusion) = peel_monomial(&this, &that)
+        .or_else(|| peel_comparison(&this, &that))
+        .or_else(|| {
+            peel_nat_pair(&this, &that)
+                .or_else(|| peel_int_pair(&this, &that))
+                .or_else(|| peel_bin(&this, &that))
+                .or_else(|| peel_list(&this, &that))
+                .or_else(|| peel_bool(&this, &that))
+                .or_else(|| peel_symmetric(&this, &that))
+                .or_else(|| peel_position(&this, &that))
+                .map(Conclusion::from)
+        })
+    {
         match conclusion {
             Conclusion::Equal => return Ok(Outcome::Equal),
             Conclusion::Impossible => return Ok(Outcome::Unequal),
