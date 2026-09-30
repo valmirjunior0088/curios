@@ -1172,7 +1172,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — [`Provenance::Occurrence`].
+    /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
     pub fn instantiate(&mut self, context: &UniverseContext) -> Result<Vec<Level>, UniverseError> {
         let levels = (0..context.parameter_count)
             .map(|_| Level::meta(self.mint(Provenance::Occurrence, None)))
@@ -1468,7 +1468,7 @@ impl UniverseSolver {
     ///
     /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed. `pending` names the levels a still-deferred witness goal mentions.
     ///
-    /// Three kinds of level are settled rather than generalized, by [`Self::settle`]: a level the constraints reach that neither the type nor the body mentions; a level a still-deferred goal names, and every level settling it lands on, until the goal is ground; and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
+    /// Three kinds of level are settled rather than generalized, by `Self::settle`: a level the constraints reach that neither the type nor the body mentions; a level a still-deferred goal names, and every level settling it lands on, until the goal is ground; and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
     pub fn finalize(
         &mut self,
         interface: impl IntoIterator<Item = UniverseMetaId>,
