@@ -7,7 +7,7 @@
 use super::{core_elab, typecheck};
 
 /// The last stage of algebra part 2 that has landed.
-const LANDED: u8 = 5;
+const LANDED: u8 = 6;
 
 /// The imports every program opens with.
 const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io, proved};";
@@ -241,6 +241,13 @@ const ROWS: &[Row] = &[
         "a: Int, b: Int, p: Int/Le(+0, a), q: Int/Le(+0, b)",
         "Int/Le(+0, a * b)",
     ),
+    // A bound two guards imply through a product, `(n - i - 1) * k >= 0`, which the refinement seam leaves stuck.
+    body(
+        6,
+        "n: Nat, k: Nat, l: List(Nat), i: Nat",
+        "List(Nat)",
+        "match i < n | false => [] | true => match List/len(l) == n * k | false => [] | true => List/slice(l, i * k, k) end end",
+    ),
 ];
 
 /// What the procedure must refuse, at every stage.
@@ -362,10 +369,23 @@ fn binders(row: &Row) -> Vec<&'static str> {
     found
 }
 
-/// Whether a binder states a fact: its type is a comparison, an equation or a decision, which nothing but the bound refers to.
-fn is_fact(binder: &str) -> bool {
-    let type_ = binder.split_once(':').map_or("", |(_, type_)| type_.trim());
-    [
+/// Whether a binder states a fact nothing but the bound refers to: its type is a comparison, an equation or a decision, and what the row asks never names it — `ok` in `Nat/div(n, d, @ok)` is the division's own proof, which dropping would leave unbound.
+fn is_fact(binder: &str, row: &Row) -> bool {
+    let Some((name, type_)) = binder.split_once(':') else {
+        return false;
+    };
+    let asked = match row.ask {
+        Ask::Claim(claim) => [claim, ""],
+        Ask::Body { result, body } => [result, body],
+    };
+    let named = format!("@{}", name.trim());
+    let mentioned = asked.iter().any(|text| {
+        text.match_indices(&named).any(|(at, _)| {
+            !text[at + named.len()..]
+                .starts_with(|next: char| next.is_alphanumeric() || next == '_')
+        })
+    });
+    let stated = [
         "Nat/Lt(",
         "Nat/Le(",
         "Int/Lt(",
@@ -374,7 +394,8 @@ fn is_fact(binder: &str) -> bool {
         "Bool/Holds(",
     ]
     .iter()
-    .any(|head| type_.starts_with(head))
+    .any(|head| type_.trim().starts_with(head));
+    stated && !mentioned
 }
 
 #[test]
@@ -383,7 +404,7 @@ fn every_fact_of_a_filled_row_is_needed() {
     let mut found = Vec::new();
     for row in ROWS.iter().filter(|row| row.stage <= LANDED) {
         let all = binders(row);
-        for dropped in all.iter().filter(|binder| is_fact(binder)) {
+        for dropped in all.iter().filter(|binder| is_fact(binder, row)) {
             let kept = all
                 .iter()
                 .filter(|binder| binder != &dropped)

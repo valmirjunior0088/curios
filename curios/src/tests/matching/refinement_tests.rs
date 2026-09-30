@@ -351,9 +351,9 @@ fn a_bound_below_a_length_is_decided_by_the_successor_guard() {
     assert_eq!(run(source), b"6");
 }
 
-// **The seam is a second spelling, not a second fact.** Two guards that between them imply a bound only through arithmetic — `i < n` and `len(l) == n * k` give `(i * k) + k <= len(l)` by monotonicity of `*` — leave it stuck, because nothing here reasons about the operands. A retry that answered this would be deciding a proposition rather than looking up another spelling of one.
+// **The seam is a second spelling, not a second fact.** A retry looks up another spelling of a guard and decides no proposition, so a bound the guards do not imply stays stuck — `i < n` and `len(l) == n * k` bound `i * k + k` by `len(l)` and say nothing of `i * k + k + 1`. A bound they do imply through arithmetic is the procedure that proves a bound from the facts in scope, which `tests::bounds` holds: its grid fills `i * k + k <= len(l)` from these two guards by a product.
 #[test]
-fn a_bound_a_hypothesis_only_implies_is_still_stuck() {
+fn a_bound_the_guards_do_not_imply_is_still_stuck() {
     let source = r#"
         use /std/{Nat, List};
 
@@ -363,7 +363,7 @@ fn a_bound_a_hypothesis_only_implies_is_still_stuck() {
             | true =>
                 match List/len(l) == n * k
                 | false => []
-                | true => List/slice(l, i * k, k)
+                | true => List/slice(l, i * k + 1, k)
                 end
             end;
 
@@ -372,7 +372,7 @@ fn a_bound_a_hypothesis_only_implies_is_still_stuck() {
     let message = error(source);
     assert!(
         message.contains("nothing discharged"),
-        "the seam decided a bound that needs arithmetic:\n{message}"
+        "a bound the guards do not imply was discharged:\n{message}"
     );
 }
 

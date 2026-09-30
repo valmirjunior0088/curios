@@ -114,6 +114,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         nat: OrderSyntax {
             add: registry_name(&["std", "Nat", "Le", "add"]),
             scale: registry_name(&["std", "Nat", "Le", "mul_mono_r"]),
+            mul: registry_name(&["std", "Nat", "Le", "mul"]),
             of_eq: registry_name(&["std", "Nat", "Le", "of_eq"]),
             eq_of_eql: registry_name(&["std", "Nat", "eq_of_eql"]),
             of_not_lt: registry_name(&["std", "Nat", "Le", "of_not_lt"]),
@@ -122,6 +123,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         int: OrderSyntax {
             add: registry_name(&["std", "Int", "Le", "add"]),
             scale: registry_name(&["std", "Int", "Le", "mul_mono_r"]),
+            mul: registry_name(&["std", "Int", "Le", "mul"]),
             of_eq: registry_name(&["std", "Int", "Le", "of_eq"]),
             eq_of_eql: registry_name(&["std", "Int", "eq_of_eql"]),
             of_not_lt: registry_name(&["std", "Int", "Le", "of_not_lt"]),
@@ -129,6 +131,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
         natural: NaturalSyntax {
             below: registry_name(&["std", "Nat", "Le", "add_r"]),
+            above: registry_name(&["std", "Nat", "Lt", "add_mul_lt"]),
             shift: registry_name(&["std", "Nat", "Le", "add_mono_l"]),
             difference: registry_name(&["std", "Nat", "Le", "add_sub_cancel"]),
             truncated: registry_name(&["std", "Nat", "Le", "sub_zero"]),

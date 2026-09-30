@@ -387,9 +387,11 @@ impl EntailmentSyntax {
 /// The lemmas only `Nat` needs, each stated over its operands as arguments.
 #[derive(Debug, Clone, Copy)]
 pub struct NaturalSyntax {
-    /// `a <= a + k`: a quotient's multiple is at most its dividend, once conversion reads `k * (x / k) + x % k` as `x`.
+    /// `a <= a + k`: a quotient's multiple is at most its dividend, once conversion reads `d * (x / d) + x % d` as `x`.
     pub below: SyntaxName,
-    /// `a <= b` gives `n + a <= n + b`: a quotient's upper bound, and a fact over a remainder raised to one over its dividend.
+    /// `a < m` and `b < n` give `a * n + b < m * n`: a dividend is below its quotient's successor's multiple, from `x % d < d`.
+    pub above: SyntaxName,
+    /// `a <= b` gives `n + a <= n + b`: a fact over a remainder raised to one over its dividend.
     pub shift: SyntaxName,
     /// `a <= b` gives `a + (b - a) = b`: the case of a truncated subtraction that does not truncate.
     pub difference: SyntaxName,
@@ -403,13 +405,14 @@ impl NaturalSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
             below,
+            above,
             shift,
             difference,
             truncated,
             loosened,
         } = self;
 
-        [below, shift, difference, truncated, loosened].into_iter()
+        [below, above, shift, difference, truncated, loosened].into_iter()
     }
 }
 
@@ -420,6 +423,8 @@ pub struct OrderSyntax {
     pub add: SyntaxName,
     /// A bound scaled by a literal, `a * k <= b * k`: how a fact enters a certificate with a multiplier.
     pub scale: SyntaxName,
+    /// Two bounds multiplied, `a * d + b * c <= a * c + b * d` from `a <= b` and `c <= d`: a product of two facts, for a multiplier that is no literal.
+    pub mul: SyntaxName,
     /// An equation's bound: `a = b` gives `a <= b`.
     pub of_eq: SyntaxName,
     /// A decided equality as an equation: an `==` guard's true arm.
@@ -435,13 +440,14 @@ impl OrderSyntax {
         let Self {
             add,
             scale,
+            mul,
             of_eq,
             eq_of_eql,
             of_not_lt,
             of_not_le,
         } = self;
 
-        [add, scale, of_eq, eq_of_eql, of_not_lt, of_not_le].into_iter()
+        [add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le].into_iter()
     }
 }
 

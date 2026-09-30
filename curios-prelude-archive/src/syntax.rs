@@ -108,6 +108,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         nat: OrderSyntax {
             add: name(&["std", "Nat", "Le", "add"]),
             scale: name(&["std", "Nat", "Le", "mul_mono_r"]),
+            mul: name(&["std", "Nat", "Le", "mul"]),
             of_eq: name(&["std", "Nat", "Le", "of_eq"]),
             eq_of_eql: name(&["std", "Nat", "eq_of_eql"]),
             of_not_lt: name(&["std", "Nat", "Le", "of_not_lt"]),
@@ -116,6 +117,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         int: OrderSyntax {
             add: name(&["std", "Int", "Le", "add"]),
             scale: name(&["std", "Int", "Le", "mul_mono_r"]),
+            mul: name(&["std", "Int", "Le", "mul"]),
             of_eq: name(&["std", "Int", "Le", "of_eq"]),
             eq_of_eql: name(&["std", "Int", "eq_of_eql"]),
             of_not_lt: name(&["std", "Int", "Le", "of_not_lt"]),
@@ -123,6 +125,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
         natural: NaturalSyntax {
             below: name(&["std", "Nat", "Le", "add_r"]),
+            above: name(&["std", "Nat", "Lt", "add_mul_lt"]),
             shift: name(&["std", "Nat", "Le", "add_mono_l"]),
             difference: name(&["std", "Nat", "Le", "add_sub_cancel"]),
             truncated: name(&["std", "Nat", "Le", "sub_zero"]),

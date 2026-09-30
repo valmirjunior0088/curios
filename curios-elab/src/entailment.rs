@@ -8,7 +8,8 @@
 //!
 //! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
-//! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder by a literal through the quotient's bounds, and a truncated subtraction through the case split `omega` makes, opened only where the search needs it ([`plan`]).
+//! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, and a truncated subtraction through the case split `omega` makes, opened only where the search needs it ([`plan`]).
+//! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
 //! - An empty proposition the facts refute: how `Bool/False/refuted` reaches the procedure, and `proved` wherever its proposition is one.
 //!
 //! **What failure is.** Today's refusal, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
@@ -121,36 +122,43 @@ fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, 
         },
         Goal::Absurd => None,
     };
-    let facts = reader.collect(context, target.as_ref())?;
+    let mut facts = reader.collect(context, target.as_ref())?;
     let negated = match &target {
         Some(target) => negated(context, &mut views, target, &facts.lifts)?,
         None => None,
     };
     let absurd = target.is_none();
 
-    let forms_of = |facts: &[Fact]| facts.iter().map(|fact| fact.form.clone()).collect();
-    let forms: Vec<_> = forms_of(&facts.facts);
-    let splits = facts
-        .splits
-        .iter()
-        .map(|split| Arms {
-            holds: forms_of(&split.holds),
-            fails: forms_of(&split.fails),
-        })
-        .collect::<Vec<_>>();
+    let mut budget = DERIVED_ROWS;
+    let searched = match search(&facts, negated.as_ref(), &mut budget) {
+        Plan::Certified(certificate) => Ok(certificate),
+        Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
+        // Where linear arithmetic finds an assignment, the facts' products are asked, under what is left of the cap. The linear assignment is the one reported: a product search reads a product as an unknown, so its own assignment may be no values of the atoms at all.
+        Plan::Satisfied(assignment) => {
+            let linear = SearchOutcome::Counterexample(assignment);
+            let products = products(context, &mut views, &facts, negated.as_ref())?;
+            if products.is_empty() {
+                Err(linear)
+            } else {
+                facts.facts.extend(products);
+                match search(&facts, negated.as_ref(), &mut budget) {
+                    Plan::Certified(certificate) => Ok(certificate),
+                    Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
+                    Plan::Satisfied(_) => Err(linear),
+                }
+            }
+        }
+    };
+    // What the cap is set against: the rows one bound's search derived, products and cases included.
+    curios_profile::sample!("entailment::derived", DERIVED_ROWS - budget);
     let refused = |views: &LinearViews, outcome: SearchOutcome| -> Result<Entailed, Error> {
         Ok(Entailed::Refused(Refusal::of(
             &facts, views, outcome, absurd,
         )))
     };
-    let mut budget = DERIVED_ROWS;
-    let negation = negated.as_ref().map(|fact| &fact.form);
-    let certificate = match plan(&forms, negation, &splits, &mut budget) {
-        Plan::Certified(certificate) => certificate,
-        Plan::Satisfied(assignment) => {
-            return refused(&views, SearchOutcome::Counterexample(assignment));
-        }
-        Plan::Exhausted => return refused(&views, SearchOutcome::Exhausted(DERIVED_ROWS)),
+    let certificate = match searched {
+        Ok(certificate) => certificate,
+        Err(outcome) => return refused(&views, outcome),
     };
     let written = write(
         context,
@@ -168,6 +176,26 @@ fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, 
         // A certificate whose proof does not check is the procedure's mistake, surfaced as the refusal it has to be and named as what it is.
         None => refused(&views, SearchOutcome::Rejected),
     }
+}
+
+/// Search `facts`, their splits and the negated goal, spending from `budget`.
+fn search(facts: &Facts, negated: Option<&Fact>, budget: &mut usize) -> Plan {
+    let forms_of = |facts: &[Fact]| {
+        facts
+            .iter()
+            .map(|fact| fact.form.clone())
+            .collect::<Vec<_>>()
+    };
+    let arms = facts
+        .splits
+        .iter()
+        .map(|split| Arms {
+            holds: forms_of(&split.holds),
+            fails: forms_of(&split.fails),
+        })
+        .collect::<Vec<_>>();
+    let negation = negated.map(|fact| &fact.form);
+    plan(&forms_of(&facts.facts), negation, &arms, budget)
 }
 
 /// `Bool/holds_of_eq(decision, Eq/refl())`: the decision holds because it is `true`, which conversion's probe-side decisions settle where reduction does not — `b || Bool/not(b)`. `None` where the two names are not in scope.

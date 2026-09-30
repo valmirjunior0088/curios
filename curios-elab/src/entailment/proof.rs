@@ -8,6 +8,8 @@
 //!
 //! **The absurd form.** Where the goal is itself an empty proposition, the sum of the facts is the proof, its type reducing to that proposition; where the facts refute each other without the goal, the sum is eliminated by a zero-arm match in the goal's place.
 //!
+//! **A product with the negated goal** is proved from the negation's proof, which holds only in the false arm of the split on the goal, so a certificate that uses the negation at all — directly or through a product — is written in the refuting form, whatever its multiplier.
+//!
 //! **A remainder lifted out of the facts** leaves their sum over the dividend, so a goal over the remainder is not met by it and is proved in the refuting form, its negation lifted as the facts were.
 //!
 //! **A certificate over case splits** is written as the split on each opened guard, `b <= a` for a truncated `a - b`, with each arm's proof over the facts that case adds.
@@ -16,12 +18,12 @@
 
 use {
     super::{
-        Certificate, Fact, Facts, Split, Target, eliminate, global, in_scope, literal, order, qed,
-        split,
+        Certificate, Fact, Facts, Split, Target, add, eliminate, global, in_scope, literal,
+        multiply, order, qed, split,
     },
     crate::Context,
     curios_algebra::Carrier,
-    curios_core::{Intrinsic, Term},
+    curios_core::Term,
     curios_num::{Integer, Natural},
     curios_utilities::Plicity,
 };
@@ -106,20 +108,25 @@ impl Case<'_> {
             false => Carrier::Natural,
         };
         let none = Integer::from(0);
+        let through_product = used.iter().any(|(fact, _)| fact.origin.negates());
 
         match (self.goal, self.negated) {
             // The goal is empty, and the facts' sum is a proof of it.
             (None, _) => sum(context, carrier, &used, none),
             // The facts refute each other without the goal.
-            (Some(_), _) if goal_weight.is_zero() => {
+            (Some(_), _) if goal_weight.is_zero() && !through_product => {
                 sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted))
             }
-            (Some(goal), _) if goal_weight == Natural::from(1u32) && !self.lifted => {
+            (Some(goal), _)
+                if goal_weight == Natural::from(1u32) && !through_product && !self.lifted =>
+            {
                 sum(context, carrier, &used, slack(&used, goal))
             }
             (Some(goal), Some(negated)) => {
                 let mut with_goal = used.clone();
-                with_goal.push((negated, &goal_weight));
+                if !goal_weight.is_zero() {
+                    with_goal.push((negated, &goal_weight));
+                }
                 sum(context, carrier, &with_goal, none).map(|refuted| {
                     let false_arm = eliminate(context, refuted);
                     // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
@@ -202,11 +209,7 @@ fn scaled(
     fact: &Fact,
     weight: &Natural,
 ) -> (Term, Term, Term) {
-    let widen = |side: &Term| match (fact.carrier, carrier) {
-        (Carrier::Natural, Carrier::Integer) => Term::intrinsic(Intrinsic::NatToInt(side.clone())),
-        _ => side.clone(),
-    };
-    let (left, right) = (widen(&fact.left), widen(&fact.right));
+    let (left, right) = fact.sides_at(carrier);
     if *weight == Natural::from(1u32) {
         return (left, right, fact.proof.clone());
     }
@@ -228,18 +231,4 @@ fn scaled(
         multiply(carrier, right, k),
         proof,
     )
-}
-
-fn add(carrier: Carrier, left: Term, right: Term) -> Term {
-    Term::intrinsic(match carrier {
-        Carrier::Natural => Intrinsic::NatAdd(left, right),
-        _ => Intrinsic::IntAdd(left, right),
-    })
-}
-
-fn multiply(carrier: Carrier, left: Term, right: Term) -> Term {
-    Term::intrinsic(match carrier {
-        Carrier::Natural => Intrinsic::NatMul(left, right),
-        _ => Intrinsic::IntMul(left, right),
-    })
 }

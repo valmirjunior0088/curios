@@ -6,6 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `Le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, and a truncated subtraction's cases ([`Reader::definitions`]).
+//! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
 //! A local definition and a variable a match refined need no reading of their own: every statement is read reduced, so a fact stated over a `let` meets a goal stated over its value, and one over `k` meets one over the successor an arm refined `k` to.
@@ -41,6 +42,8 @@ pub enum Origin {
     Natural,
     /// What an operation defines: a quotient's bound, or a case of a truncated subtraction.
     Definition,
+    /// The product of two facts, from where each came.
+    Product(Box<Origin>, Box<Origin>),
     /// The goal, negated.
     Negated,
 }
@@ -52,13 +55,25 @@ impl Origin {
             Origin::Hypothesis(name) | Origin::Field(name, _) | Origin::Guard(name, _) => {
                 Some(name)
             }
-            Origin::Natural | Origin::Definition | Origin::Negated => None,
+            Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => None,
         }
     }
 
-    /// Whether a report names the fact: one a reader can act on, which a natural's sign and an operation's definition are not.
+    /// Whether a report names the fact: one a reader can act on, which a natural's sign, an operation's definition and a product of two facts are not.
     pub(super) fn is_reported(&self) -> bool {
-        !matches!(self, Origin::Natural | Origin::Definition)
+        !matches!(
+            self,
+            Origin::Natural | Origin::Definition | Origin::Product(..)
+        )
+    }
+
+    /// Whether the fact is the negated goal or a product with it: proved only where a split on the goal refuted it, so a certificate using one is written in the refuting form.
+    pub(super) fn negates(&self) -> bool {
+        match self {
+            Origin::Negated => true,
+            Origin::Product(left, right) => left.negates() || right.negates(),
+            _ => false,
+        }
     }
 }
 
@@ -75,6 +90,19 @@ pub(super) struct Fact {
     pub(super) form: LinearForm,
     /// A term whose type conversion aligns with `left <= right`.
     pub(super) proof: Term,
+}
+
+impl Fact {
+    /// Its sides at `carrier`: widened where the fact is at `Nat` and `carrier` is `Int`, the proposition conversion aligns it with.
+    pub(super) fn sides_at(&self, carrier: Carrier) -> (Term, Term) {
+        let widen = |side: &Term| match (self.carrier, carrier) {
+            (Carrier::Natural, Carrier::Integer) => {
+                Term::intrinsic(Intrinsic::NatToInt(side.clone()))
+            }
+            _ => side.clone(),
+        };
+        (widen(&self.left), widen(&self.right))
+    }
 }
 
 /// The goal a decision states: `left < right` or `left <= right` at `carrier`, as its reduct spells it.
@@ -175,7 +203,14 @@ impl<'a> Reader<'a> {
         target: Option<&Target>,
     ) -> Result<Facts, Error> {
         curios_profile::profile!("entailment::collect");
-        for (name, type_) in context.locals().to_vec() {
+        // The hole's own binders: a global of every mounted unit is an assumption in the base frame too, and none is a fact about this scope.
+        let binders = context
+            .locals()
+            .iter()
+            .filter(|(name, _)| name.as_global().is_none())
+            .cloned()
+            .collect::<Vec<_>>();
+        for (name, type_) in binders {
             self.hypothesis(context, &name, &type_)?;
         }
         self.guards(context)?;
@@ -528,14 +563,14 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The bounds of each quotient and remainder by a literal among the atoms read so far — `k * (x / k) <= x` and `x < k * (x / k) + k` — with the remainder lifted out of every fact ([`Lift`]). Whether it read one.
+    /// The bounds of each quotient and remainder among the atoms read so far — `d * (x / d) <= x` and `x < d * (x / d) + d` — with the remainder lifted out of every fact ([`Lift`]). Whether it read one.
     ///
-    /// The bounds are `Le/add_r(k * (x / k), x % k)` and `Le/add_mono_l(k * (x / k), @x % k + 1, @k, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them.
+    /// The bounds are `Le/add_r(d * (x / d), x % d)` and `Lt/add_mul_lt(x / d, x % d, x / d + 1, d, qed, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. The second asks for `x % d < d`, which conversion decides at any divisor, where it decides the aligned `x % d + 1 <= d` only at a literal. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them. Where the divisor is no literal its multiple is a product, which linear arithmetic reads as an unknown of its own and [`products`] relate to its factors.
     ///
     /// `Nat` alone: at `Int`, conversion decides Euclid's identity and neither of a remainder's bounds.
     fn quotients(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
         let natural = context.syntax().entailment.natural;
-        if !in_scope(context, &[natural.below, natural.shift]) {
+        if !in_scope(context, &[natural.below, natural.above, natural.shift]) {
             return Ok(false);
         }
         let mut read = false;
@@ -569,13 +604,16 @@ impl<'a> Reader<'a> {
             let below = Term::apply(global(natural.below), [multiple.clone(), remainder.clone()]);
             let floor = Intrinsic::NatLe(multiple.clone(), division.dividend.clone());
             self.admit(context, floor, below, Origin::Definition)?;
-            let above = Term::apply_marked(
-                global(natural.shift),
+            let quotient = division.quotient();
+            let above = Term::apply(
+                global(natural.above),
                 [
-                    (Plicity::Explicit, multiple.clone()),
-                    (Plicity::Implicit, successor(Carrier::Natural, remainder)),
-                    (Plicity::Implicit, division.divisor.clone()),
-                    (Plicity::Explicit, qed(context)),
+                    quotient.clone(),
+                    remainder,
+                    successor(Carrier::Natural, quotient),
+                    division.divisor.clone(),
+                    qed(context),
+                    qed(context),
                 ],
             );
             let ceiling = Term::intrinsic(Intrinsic::NatAdd(multiple, division.divisor.clone()));
@@ -594,7 +632,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// What lifting `division`'s remainder out of a fact takes: the remainder's monomial, and what it denotes — `x - k * (x / k)`, the form of `x <= k * (x / k)`. `None` where the remainder does not read as one atom.
+    /// What lifting `division`'s remainder out of a fact takes: the remainder's monomial, and what it denotes — `x - d * (x / d)`, the form of `x <= d * (x / d)`. `None` where the remainder does not read as one atom.
     fn lift(&mut self, context: &mut Context, division: &Division) -> Result<Option<Lift>, Error> {
         let zero = literal(Carrier::Natural, 0u32);
         let Some(remainder) = self.form_of(context, &division.remainder(), &zero)? else {
@@ -869,7 +907,72 @@ pub(super) fn negated(
     Ok(negation)
 }
 
-/// A quotient or a remainder by a nonzero literal: its dividend, its divisor, and the program's proof that the divisor is not zero — so the quotient and the remainder rebuilt from it are the atoms the program wrote.
+/// The product of each pair of `facts` and the negated goal, through `Le/mul`: `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`, read as every fact is — the products Mathlib's `nlinarith` adds before its linear search, each a fact whose monomials that search reads as unknowns.
+///
+/// A natural's sign is a factor only over one atom, and never beside another natural's, whose product conversion decides; a pair at two carriers is taken at `Int`, the `Nat` factor's sides widened as a sum's are. A pair whose `Le/mul` is not in scope is left out.
+pub(super) fn products(
+    context: &mut Context,
+    views: &mut LinearViews,
+    facts: &Facts,
+    negated: Option<&Fact>,
+) -> Result<Vec<Fact>, Error> {
+    let factors = facts
+        .facts
+        .iter()
+        .chain(negated)
+        .filter(|fact| {
+            fact.origin != Origin::Natural
+                || fact
+                    .form
+                    .terms
+                    .iter()
+                    .all(|(_, monomial)| monomial.atoms().len() == 1)
+        })
+        .collect::<Vec<_>>();
+    let mut reader = Reader::new(views);
+    for (index, first) in factors.iter().enumerate() {
+        for second in &factors[index + 1..] {
+            if first.origin == Origin::Natural && second.origin == Origin::Natural {
+                continue;
+            }
+            let carrier = match (first.carrier, second.carrier) {
+                (Carrier::Natural, Carrier::Natural) => Carrier::Natural,
+                _ => Carrier::Integer,
+            };
+            let mul = order(context, carrier).mul;
+            if !in_scope(context, &[mul]) {
+                continue;
+            }
+            let ((a, b), (c, d)) = (first.sides_at(carrier), second.sides_at(carrier));
+            let proof = Term::apply_marked(
+                global(mul),
+                [
+                    (Plicity::Implicit, a.clone()),
+                    (Plicity::Implicit, b.clone()),
+                    (Plicity::Implicit, c.clone()),
+                    (Plicity::Implicit, d.clone()),
+                    (Plicity::Explicit, first.proof.clone()),
+                    (Plicity::Explicit, second.proof.clone()),
+                ],
+            );
+            let times = |left: &Term, right: &Term| multiply(carrier, left.clone(), right.clone());
+            let statement = comparison_of(
+                carrier,
+                Operation::AtMost,
+                &add(carrier, times(&a, &d), times(&b, &c)),
+                &add(carrier, times(&a, &c), times(&b, &d)),
+            );
+            let origin = Origin::Product(
+                Box::new(first.origin.clone()),
+                Box::new(second.origin.clone()),
+            );
+            reader.admit(context, statement, proof, origin)?;
+        }
+    }
+    Ok(reader.read.facts)
+}
+
+/// A quotient or a remainder: its dividend, its divisor, and the program's proof that the divisor is not zero — so the quotient and the remainder rebuilt from it are the atoms the program wrote.
 #[derive(Clone, PartialEq)]
 struct Division {
     dividend: Term,
@@ -878,7 +981,7 @@ struct Division {
 }
 
 impl Division {
-    /// The division `term` is, where it is one by a nonzero literal.
+    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold.
     fn of(term: &Term) -> Option<Self> {
         let Subterm::Intrinsic(
             Intrinsic::NatDiv {
@@ -895,17 +998,13 @@ impl Division {
         else {
             return None;
         };
-        let Subterm::Intrinsic(Intrinsic::Nat(literal)) = &**divisor else {
-            return None;
-        };
-        literal
-            .to_natural()
-            .is_some_and(|value| !value.is_zero())
-            .then(|| Division {
-                dividend: dividend.clone(),
-                divisor: divisor.clone(),
-                non_zero: non_zero.clone(),
-            })
+        let zero = matches!(&**divisor, Subterm::Intrinsic(Intrinsic::Nat(literal))
+            if literal.to_natural().is_some_and(|value| value.is_zero()));
+        (!zero).then(|| Division {
+            dividend: dividend.clone(),
+            divisor: divisor.clone(),
+            non_zero: non_zero.clone(),
+        })
     }
 
     fn quotient(&self) -> Term {
@@ -924,7 +1023,7 @@ impl Division {
         })
     }
 
-    /// `k * (x / k)`, which conversion reads beside `x % k` as `x`.
+    /// `d * (x / d)`, which conversion reads beside `x % d` as `x`.
     fn multiple(&self) -> Term {
         Term::intrinsic(Intrinsic::NatMul(self.divisor.clone(), self.quotient()))
     }
@@ -933,9 +1032,9 @@ impl Division {
 /// A remainder lifted out of the facts: a fact over it is raised by a multiple of its quotient's multiple on both sides, which conversion reads as a fact over the dividend, and its form has the remainder replaced by what it denotes.
 pub(super) struct Lift {
     remainder: Monomial,
-    /// `x - k * (x / k)`.
+    /// `x - d * (x / d)`.
     denotes: LinearForm,
-    /// `k * (x / k)`.
+    /// `d * (x / d)`.
     multiple: Term,
     /// `Le/add_mono_l`.
     shift: SyntaxName,
@@ -950,7 +1049,7 @@ impl Lift {
             .map(|(coefficient, _)| coefficient.clone())
     }
 
-    /// `fact` raised by `c * k * (x / k)` on both sides, `c` the remainder's coefficient in it, through `Le/add_mono_l`: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. An `Int` fact reads a remainder only through its widening, which is left as it is: a certificate that needs it does not check, and is reported as the procedure's refusal.
+    /// `fact` raised by `c * d * (x / d)` on both sides, `c` the remainder's coefficient in it, through `Le/add_mono_l`: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. An `Int` fact reads a remainder only through its widening, which is left as it is: a certificate that needs it does not check, and is reported as the procedure's refusal.
     fn apply(&self, fact: &mut Fact) {
         let Some(coefficient) = self.coefficient(&fact.form) else {
             return;
@@ -980,7 +1079,7 @@ impl Lift {
         fact.form = self.substituted(&fact.form, &coefficient);
     }
 
-    /// `form` with its `coefficient · remainder` replaced by `coefficient · (x - k * (x / k))`.
+    /// `form` with its `coefficient · remainder` replaced by `coefficient · (x - d * (x / d))`.
     fn substituted(&self, form: &LinearForm, coefficient: &Integer) -> LinearForm {
         let mut terms = form
             .terms
@@ -1056,10 +1155,22 @@ fn comparison_of(carrier: Carrier, relation: Operation, left: &Term, right: &Ter
 
 /// `term + 1` at `carrier`.
 fn successor(carrier: Carrier, term: Term) -> Term {
-    let one = literal(carrier, 1u32);
+    add(carrier, term, literal(carrier, 1u32))
+}
+
+/// `left + right` at `carrier`.
+pub(super) fn add(carrier: Carrier, left: Term, right: Term) -> Term {
     Term::intrinsic(match carrier {
-        Carrier::Natural => Intrinsic::NatAdd(term, one),
-        _ => Intrinsic::IntAdd(term, one),
+        Carrier::Natural => Intrinsic::NatAdd(left, right),
+        _ => Intrinsic::IntAdd(left, right),
+    })
+}
+
+/// `left * right` at `carrier`.
+pub(super) fn multiply(carrier: Carrier, left: Term, right: Term) -> Term {
+    Term::intrinsic(match carrier {
+        Carrier::Natural => Intrinsic::NatMul(left, right),
+        _ => Intrinsic::IntMul(left, right),
     })
 }
 
