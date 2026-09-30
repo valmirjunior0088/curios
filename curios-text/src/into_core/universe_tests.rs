@@ -265,19 +265,19 @@ fn a_concept_method_wrapper_shares_its_concept_universe_context() {
     assert_eq!(universe_parameters(&module, "/C/f"), 1);
 }
 
-/// The same rule where the concept's levels genuinely exceed any one wrapper's: `pure` names a strict subset of `M`'s and `bind` a different subset, so generalizing either alone comes out short.
+/// The same rule where the concept's levels genuinely exceed any one wrapper's: `left` names `F`'s two levels and `right` `G`'s other two, so generalizing either alone comes out short. A method's own `@A` is its family's domain, so a concept over one family — a monad's `pure` and `bind` — names the same levels in every wrapper and could not tell the two contexts apart.
 #[test]
 fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
     let module = elaborate_source(
-        "pub concept M(F : (Type) -> Type) : pub Type {
-             pure(@A : Type, value : A) -> F(A),
-             bind(@A : Type, @B : Type, action : F(A), next : (A) -> F(B)) -> F(B),
+        "pub concept M(F : (Type) -> Type, G : (Type) -> Type) : pub Type {
+             left(@A : Type, value : A) -> F(A),
+             right(@B : Type, value : B) -> G(B),
          } M",
     );
-    // Five, against `pure`'s own two and `bind`'s one: the point of the test is lost if the concept ever stops outrunning its wrappers.
-    assert_eq!(universe_parameters(&module, "/M"), 5);
-    assert_eq!(universe_parameters(&module, "/M/pure"), 5);
-    assert_eq!(universe_parameters(&module, "/M/bind"), 5);
+    // Four, against each wrapper's own two: the point of the test is lost if the concept ever stops outrunning its wrappers.
+    assert_eq!(universe_parameters(&module, "/M"), 4);
+    assert_eq!(universe_parameters(&module, "/M/left"), 4);
+    assert_eq!(universe_parameters(&module, "/M/right"), 4);
 }
 
 /// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq()(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.
