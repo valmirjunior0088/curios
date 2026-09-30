@@ -654,6 +654,12 @@ impl Context {
                             Error::not_a_tuple(resolved_for_display(self, &projection.head_type))
                                 .at_opt(parked_origin.span())
                         }
+                        // A scrutinee whose type never reached a carrier is what the match refused before it could wait.
+                        ParkedWork::Match(parked) => super::refused_scrutinee(
+                            &parked.term,
+                            resolved_for_display(self, &parked.scrutinee_type),
+                        )
+                        .at_opt(parked_origin.span()),
                         // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
                         ParkedWork::Discharge { .. } => continue,
                     });
@@ -804,6 +810,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
         ParkedWork::Projection(projection) => {
             return super::retry_projection(context, projection, origin, frame);
         }
+        ParkedWork::Match(parked) => return super::retry_match(context, parked, origin, frame),
     };
 
     enum Retry {
@@ -844,6 +851,37 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
     }
 }
 
+/// Solve a parked problem's `placeholder` to the term its retry rebuilt, at `type_`. Unification may have reached the placeholder first: reconcile rather than overwrite, since `Solutions::solve` replaces silently and goals already discharged against the earlier solution would be standing on a value that just changed under them. The rebuilt term must convert with what the tree committed to, at the type both inhabit; a disagreement is an honest mismatch at `origin`, and an undecidable comparison parks like any conversion.
+pub(crate) fn fill_placeholder(
+    context: &mut Context,
+    placeholder: MetavarId,
+    type_: &Term,
+    rebuilt: Term,
+    origin: &Term,
+) -> Result<(), Error> {
+    let Some(existing) = context.metavar_solution(placeholder).cloned() else {
+        context.solve_metavar(placeholder, rebuilt);
+        return Ok(());
+    };
+    let outcome = super::convert_outcome(context, type_, &rebuilt, &existing).map_err(|error| {
+        Error::from_reduce(error, || {
+            Error::convert_exhausted(rebuilt.clone(), existing.clone())
+        })
+    })?;
+    match outcome {
+        Outcome::Converts => Ok(()),
+        Outcome::Mismatch => {
+            Err(display_mismatch(context, origin, &rebuilt, &existing).at_opt(origin.span()))
+        }
+        Outcome::Blocked(goals) => {
+            for goal in goals {
+                context.park(ParkedWork::Conversion(goal), origin.clone());
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and solve the placeholder with the rebuilt term. Errors propagate carrying the term's own spans.
 fn retry_checking(
     context: &mut Context,
@@ -868,34 +906,7 @@ fn retry_checking(
     })?;
 
     match rebuilt {
-        Some(rebuilt) => match context.metavar_solution(placeholder).cloned() {
-            None => {
-                context.solve_metavar(placeholder, rebuilt);
-                Ok(())
-            }
-            // Unification reached the placeholder first. Reconcile rather than overwrite: `Solutions::solve` replaces silently, and goals already discharged against the earlier solution would be standing on a value that just changed under them. The checked term must convert with what the tree committed to, at the type both inhabit; a disagreement is an honest mismatch at the argument, and an undecidable comparison parks like any conversion.
-            Some(existing) => {
-                let outcome = super::convert_outcome(context, &expected, &rebuilt, &existing)
-                    .map_err(|error| {
-                        Error::from_reduce(error, || {
-                            Error::convert_exhausted(rebuilt.clone(), existing.clone())
-                        })
-                    })?;
-                match outcome {
-                    Outcome::Converts => Ok(()),
-                    Outcome::Mismatch => {
-                        Err(display_mismatch(context, &origin, &rebuilt, &existing)
-                            .at_opt(origin.span()))
-                    }
-                    Outcome::Blocked(goals) => {
-                        for goal in goals {
-                            context.park(ParkedWork::Conversion(goal), origin.clone());
-                        }
-                        Ok(())
-                    }
-                }
-            }
-        },
+        Some(rebuilt) => fill_placeholder(context, placeholder, &expected, rebuilt, &origin),
         None => {
             context.repark(
                 ParkedWork::Checking {

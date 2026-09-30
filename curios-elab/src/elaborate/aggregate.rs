@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FrozenFrame, Outcome, ParkedProjection};
+use crate::{FrozenFrame, ParkedProjection};
 use curios_core::{SelfReference, stamp_declaration_instance};
 
 pub(super) fn elaborate_tuple_type(
@@ -177,30 +177,16 @@ pub(crate) fn retry_projection(
         Ok(Some(projection))
     })?;
 
-    let Some(projection) = projected else {
-        context.repark(ParkedWork::Projection(parked), origin, frame);
-        return Ok(());
-    };
-    let Some(existing) = context.metavar_solution(parked.placeholder).cloned() else {
-        context.solve_metavar(parked.placeholder, projection);
-        return Ok(());
-    };
-    let outcome = crate::convert_outcome(context, &parked.result, &projection, &existing).map_err(
-        |error| {
-            Error::from_reduce(error, || {
-                Error::convert_exhausted(projection.clone(), existing.clone())
-            })
-        },
-    )?;
-    match outcome {
-        Outcome::Converts => Ok(()),
-        Outcome::Mismatch => Err(
-            crate::display_mismatch(context, &origin, &projection, &existing).at_opt(origin.span()),
+    match projected {
+        Some(projection) => crate::fill_placeholder(
+            context,
+            parked.placeholder,
+            &parked.result,
+            projection,
+            &origin,
         ),
-        Outcome::Blocked(goals) => {
-            for goal in goals {
-                context.park(ParkedWork::Conversion(goal), origin.clone());
-            }
+        None => {
+            context.repark(ParkedWork::Projection(parked), origin, frame);
             Ok(())
         }
     }

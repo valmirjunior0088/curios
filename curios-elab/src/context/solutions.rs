@@ -4,7 +4,7 @@
 
 use {
     super::{FrozenFrame, ItemStamp, SharedRefinements, SharedTelescope},
-    crate::Problem,
+    crate::{Mode, Problem},
     curios_core::{
         Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
         WitnessOrigin,
@@ -61,6 +61,8 @@ pub(crate) enum ParkedWork {
     },
     /// A projection from a head whose type had not yet reached a tuple or a struct ([`ParkedProjection`]).
     Projection(ParkedProjection),
+    /// A match whose scrutinee's type had not yet reached a carrier ([`ParkedMatch`]).
+    Match(ParkedMatch),
     /// A decided bound nothing discharged when it was inserted, because its subject still waited on a metavariable — one a later argument or the expectation pins. `slot` is the hole standing in the bound's place, `bound` its type. Woken when a watched metavariable solves; the bound is reduced again and the hole filled if it came to truth.
     Discharge {
         slot: MetavarId,
@@ -75,6 +77,17 @@ pub(crate) struct ParkedProjection {
     pub head: Term,
     pub head_type: Term,
     pub field: Field,
+    pub result: Term,
+    pub placeholder: MetavarId,
+}
+
+/// A match parked because its scrutinee's type was stuck on an unsolved metavariable, so no eliminator could read its carrier off it: `match xs | [] => … end` over an `xs` whose type waits on tuple arms the drain settles. It waits as a [`ParkedProjection`] does. `scrutinee` is elaborated already, for the reason a projection's head is; `term` is the match as written, its arms elaborated only once the carrier is known; `mode` is the one it was met in, so an unannotated match still infers its own type; and `placeholder` stands for it at `result`, the expected type or a fresh one. Woken when the scrutinee type's metavariables solve.
+#[derive(Debug)]
+pub(crate) struct ParkedMatch {
+    pub term: Term,
+    pub scrutinee: Term,
+    pub scrutinee_type: Term,
+    pub mode: Mode,
     pub result: Term,
     pub placeholder: MetavarId,
 }
@@ -322,6 +335,12 @@ impl Solutions {
                 .collect(),
             ParkedWork::Projection(projection) => projection
                 .head_type
+                .metavars()
+                .into_iter()
+                .filter(|id| self.solution(*id).is_none())
+                .collect(),
+            ParkedWork::Match(parked) => parked
+                .scrutinee_type
                 .metavars()
                 .into_iter()
                 .filter(|id| self.solution(*id).is_none())

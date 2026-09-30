@@ -1,6 +1,9 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
-    crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
+    crate::{
+        FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head, check_motive,
+        is_prop, reduce_with, refine_head,
+    },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
     },
@@ -13,16 +16,18 @@ use {
     std::collections::BTreeSet,
 };
 
-/// Infer and rebuild a match scrutinee, requiring its reduced type to be the given intrinsic type. The authoritative analogue of `expect_intrinsic_head` (kept for `erase`): it returns the rebuilt head alongside its reduced type.
-fn elaborate_intrinsic_head(
-    context: &mut Context,
-    head: &Term,
-    expected: IntrinsicHead,
-) -> Result<(Term, Term), Error> {
-    let (head, head_type) = elaborate(context, head, Mode::Infer)?;
-    let head_type = reduce_with(context, &head_type)?;
+/// A match's scrutinee, elaborated once by [`elaborate_match`] before any arm is: rebuilt, beside its type reduced — what every eliminator reads its carrier off.
+struct Scrutinee {
+    term: Term,
+    type_: Term,
+}
 
-    check_intrinsic_head(expected, head_type).map(|head_type| (head, head_type))
+impl Scrutinee {
+    /// The rebuilt scrutinee and its type, required to be the given intrinsic type. The authoritative analogue of `expect_intrinsic_head` (kept for `erase`).
+    fn of_intrinsic(self, expected: IntrinsicHead) -> Result<(Term, Term), Error> {
+        let Self { term, type_ } = self;
+        check_intrinsic_head(expected, type_).map(|type_| (term, type_))
+    }
 }
 
 /// When a match is elaborated in checking mode, solve its motive against the expected type *before* the arms are checked. An omitted motive is a constant scope wrapping a fresh metavar (`text::into_core::match_compile`'s `motive_scope`), so `motive.open` is that bare metavar and this pins it to `expected` up front — checking-only arms (tuples, constructors) then see a concrete target instead of an unsolved hole, and a result mentioning an enclosing type variable is taken straight from `expected` rather than inverted out of an arm. For an explicit motive it is the same consistency check that the `Check` turnaround would otherwise run post-hoc on the match's type (`elaborate_subterm`), only earlier.
@@ -182,14 +187,14 @@ fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> E
 
 fn elaborate_nat_match(
     context: &mut Context,
-    head: &Term,
+    scrutinee: Scrutinee,
     motive: &Scope<Many>,
     zero_case: &Term,
     succ_case: &Scope<Two>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Nat)?;
 
     let reads_hypothesis = may_read_hypothesis(succ_case, 1);
     let result = resolve_fold_result(
@@ -247,16 +252,18 @@ fn elaborate_nat_match(
 
 fn elaborate_list_match(
     context: &mut Context,
-    head: &Term,
+    scrutinee: Scrutinee,
     motive: &Scope<Many>,
     empty_case: &Term,
     cons_case: &Scope<Three>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `List` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — infer the head, then demand its type is `List(elem)`.
-    let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
-    let head_type = reduce_with(context, &head_type)?;
+    // `List` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — its type must be `List(elem)`.
+    let Scrutinee {
+        term: head_elaborated,
+        type_: head_type,
+    } = scrutinee;
     let elem = match &*head_type {
         Subterm::Intrinsic(Intrinsic::ListType(elem)) => elem.clone(),
         _ => return Err(Error::not_list_type(head_type)),
@@ -337,7 +344,7 @@ fn elaborate_list_match(
 fn elaborate_bin_match(
     context: &mut Context,
     grain: Grain,
-    head: &Term,
+    scrutinee: Scrutinee,
     motive: &Scope<Many>,
     cases: (&Term, &Scope<Three>),
     term: &Term,
@@ -345,8 +352,7 @@ fn elaborate_bin_match(
 ) -> Result<(Term, Term), Error> {
     let (empty_case, cons_case) = cases;
     // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `List` needs.
-    let (head_elaborated, head_type) =
-        elaborate_intrinsic_head(context, head, IntrinsicHead::Bin(grain))?;
+    let (head_elaborated, head_type) = scrutinee.of_intrinsic(IntrinsicHead::Bin(grain))?;
 
     let reads_hypothesis = may_read_hypothesis(cons_case, 2);
     let result = resolve_fold_result(
@@ -440,14 +446,14 @@ fn resolve_intrinsic_result(
 
 fn elaborate_switch(
     context: &mut Context,
-    head: &Term,
+    scrutinee: Scrutinee,
     motive: &Scope<Many>,
     cases: &[(Natural, Term)],
     default: &Term,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Nat)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
     let result = resolve_intrinsic_result(
@@ -501,20 +507,135 @@ pub(crate) fn elaborate_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Match {
-        head,
-        result,
-        cases,
-    } = m;
     // A rebuilt match coming back through re-elaboration at its ambient goal: the goal *is* the expected type it was elaborated against, so it re-elaborates as the elided motive it came from, checked against that goal.
-    let mut mode = mode;
+    let mode = match (&m.result, mode) {
+        (MatchResult::Ambient(goal), Mode::Infer) => Mode::Check(goal.clone()),
+        (_, mode) => mode,
+    };
+
+    let (head, head_type) = elaborate(context, &m.head, Mode::Infer)?;
+    let scrutinee = Scrutinee {
+        term: head,
+        type_: reduce_with(context, &head_type)?,
+    };
+
+    // No carrier *yet*: a scrutinee type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms of an unannotated match the drain settles, a projection waiting on them — may still be coming. The match waits for it rather than refusing its scrutinee one step early.
+    if !context.parking_suppressed() && crate::stuck_on_metavar(context, &scrutinee.type_) {
+        return Ok(park_match(context, term, mode, scrutinee));
+    }
+
+    eliminate(context, m, term, mode, scrutinee)
+}
+
+/// Park a match whose scrutinee's type is stuck ([`ParkedMatch`]): a placeholder stands for it at the expected type, or at a fresh one when it infers its own, until its scrutinee's type is known.
+fn park_match(
+    context: &mut Context,
+    term: &Term,
+    mode: Mode,
+    scrutinee: Scrutinee,
+) -> (Term, Term) {
+    let result = match &mode {
+        Mode::Check(expected) => expected.clone(),
+        Mode::Infer => {
+            let classifier = context.fresh_classifier_type("parked match type");
+            context.fresh_hole_metavar(classifier, term.span())
+        }
+    };
+    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.span());
+    let Scrutinee {
+        term: scrutinee,
+        type_: scrutinee_type,
+    } = scrutinee;
+    context.park(
+        ParkedWork::Match(ParkedMatch {
+            term: term.clone(),
+            scrutinee,
+            scrutinee_type,
+            mode,
+            result: result.clone(),
+            placeholder,
+        }),
+        term.clone(),
+    );
+    (stand_in, result)
+}
+
+/// Retry a parked match: under the frozen frame, its scrutinee's type is either still stuck (re-park) or has reached a carrier, and then the match is elaborated over its elaborated scrutinee in the mode it was parked in — an inferred type met with the stand-in type — and the placeholder solved to it.
+pub(crate) fn retry_match(
+    context: &mut Context,
+    parked: ParkedMatch,
+    origin: Term,
+    frame: FrozenFrame,
+) -> Result<(), Error> {
+    let rebuilt = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
+        let type_ = reduce_with(context, &parked.scrutinee_type)?;
+        if crate::stuck_on_metavar(context, &type_) {
+            return Ok(None);
+        }
+        let Subterm::Match(m) = &*parked.term else {
+            unreachable!("a parked match is a match");
+        };
+        let scrutinee = Scrutinee {
+            term: parked.scrutinee.clone(),
+            type_,
+        };
+        let (rebuilt, type_) = eliminate(context, m, &parked.term, parked.mode.clone(), scrutinee)
+            .map_err(|error| error.at_opt(origin.span()))?;
+        if matches!(parked.mode, Mode::Infer) {
+            expect(context, &parked.term, &type_, &parked.result)?;
+        }
+        Ok(Some(rebuilt))
+    })?;
+
+    match rebuilt {
+        Some(rebuilt) => crate::fill_placeholder(
+            context,
+            parked.placeholder,
+            &parked.result,
+            rebuilt,
+            &origin,
+        ),
+        None => {
+            context.repark(ParkedWork::Match(parked), origin, frame);
+            Ok(())
+        }
+    }
+}
+
+/// The refusal a match's eliminator gives a scrutinee of `type_`, for a parked match whose scrutinee's type never reached a carrier.
+pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
+    let Subterm::Match(Match { cases, .. }) = &**term else {
+        unreachable!("a parked match is a match");
+    };
+    match cases {
+        Cases::Bool { .. } => Error::not_bool_type(type_),
+        Cases::Switch { .. }
+        | Cases::FreeMonoid {
+            carrier: Carrier::Nat { .. },
+        } => Error::not_nat_type(type_),
+        Cases::FreeMonoid {
+            carrier: Carrier::List { .. },
+        } => Error::not_list_type(type_),
+        Cases::FreeMonoid {
+            carrier: Carrier::Bin { grain, .. },
+        } => Error::not_bin_type(*grain, type_),
+        Cases::Induct { .. } => Error::not_a_induct_type(type_),
+    }
+}
+
+/// Elaborate a match over its elaborated scrutinee, by the eliminator its cases name.
+fn eliminate(
+    context: &mut Context,
+    m: &Match,
+    term: &Term,
+    mode: Mode,
+    scrutinee: Scrutinee,
+) -> Result<(Term, Term), Error> {
+    let Match { result, cases, .. } = m;
     let elided;
     let motive = match result {
         MatchResult::Family(motive) => motive,
-        MatchResult::Ambient(goal) => {
-            if matches!(mode, Mode::Infer) {
-                mode = Mode::Check(goal.clone());
-            }
+        MatchResult::Ambient(_) => {
             elided = Term::match_motive_written(Term::hole(context.mint_metavar()));
             &elided
         }
@@ -524,14 +645,16 @@ pub(crate) fn elaborate_match(
         Cases::Bool {
             false_case,
             true_case,
-        } => elaborate_bool_match(context, head, motive, false_case, true_case, term, mode),
+        } => elaborate_bool_match(
+            context, scrutinee, motive, false_case, true_case, term, mode,
+        ),
         Cases::Switch { cases, default } => {
-            elaborate_switch(context, head, motive, cases, default, term, mode)
+            elaborate_switch(context, scrutinee, motive, cases, default, term, mode)
         }
         Cases::Induct { cases, default } => elaborate_induct_match(
             context,
             InductMatchInput {
-                head,
+                scrutinee,
                 motive,
                 cases,
                 default: default.as_ref(),
@@ -545,7 +668,9 @@ pub(crate) fn elaborate_match(
                     empty_case,
                     cons_case,
                 },
-        } => elaborate_nat_match(context, head, motive, empty_case, cons_case, term, mode),
+        } => elaborate_nat_match(
+            context, scrutinee, motive, empty_case, cons_case, term, mode,
+        ),
         Cases::FreeMonoid {
             carrier:
                 Carrier::List {
@@ -553,7 +678,9 @@ pub(crate) fn elaborate_match(
                     cons_case,
                     ..
                 },
-        } => elaborate_list_match(context, head, motive, empty_case, cons_case, term, mode),
+        } => elaborate_list_match(
+            context, scrutinee, motive, empty_case, cons_case, term, mode,
+        ),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
@@ -564,7 +691,7 @@ pub(crate) fn elaborate_match(
         } => elaborate_bin_match(
             context,
             *grain,
-            head,
+            scrutinee,
             motive,
             (empty_case, cons_case),
             term,
@@ -574,7 +701,7 @@ pub(crate) fn elaborate_match(
 }
 
 struct InductMatchInput<'a> {
-    head: &'a Term,
+    scrutinee: Scrutinee,
     motive: &'a Scope<Many>,
     cases: &'a [(Atom, InductArm)],
     default: Option<&'a Term>,
@@ -583,14 +710,14 @@ struct InductMatchInput<'a> {
 
 fn elaborate_bool_match(
     context: &mut Context,
-    head: &Term,
+    scrutinee: Scrutinee,
     motive: &Scope<Many>,
     false_case: &Term,
     true_case: &Term,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Bool)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Bool)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
     let result = resolve_intrinsic_result(
@@ -682,7 +809,7 @@ fn elaborate_induct_match(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let InductMatchInput {
-        head,
+        scrutinee,
         motive,
         cases,
         default,
@@ -690,8 +817,10 @@ fn elaborate_induct_match(
     } = input;
 
     // A match with no arms is a vacuous elimination — either of an empty inductive (`False`) or of one whose every constructor inversion-clashes at the scrutinee's indices. Such a match compiles to unreachable code that never inspects the scrutinee. A proof/type scrutinee carries no runtime content (sort-driven erasure), so an empty match discharging an erased witness of falsity into a relevant result is sound without a usage discipline.
-    let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
-    let head_type = reduce_with(context, &head_type)?;
+    let Scrutinee {
+        term: head_elaborated,
+        type_: head_type,
+    } = scrutinee;
 
     let (name, universes, params, indices) = match &*head_type {
         Subterm::InductType(InductType {

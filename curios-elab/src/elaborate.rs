@@ -21,6 +21,7 @@ use intrinsic::*;
 
 mod match_;
 use match_::*;
+pub(crate) use match_::{refused_scrutinee, retry_match};
 
 mod module;
 pub use module::*;

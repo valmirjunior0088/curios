@@ -274,3 +274,36 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
         "the report should point at the destructuring:\n{report}"
     );
 }
+
+// A match waits for its scrutinee's type as a projection waits for its head's. `xs` is read off `p` by a projection that waits for the drain to settle `p`'s tuple arms, so its type is still a metavariable when the match on it is met; the match was refused there as `expected List but got ?`, one step before the settle that types its scrutinee. Mutation-checked: refusing a match whose scrutinee's type is stuck refuses the program again.
+#[test]
+fn a_match_waits_for_the_type_of_its_scrutinee() {
+    let source = r#"
+        use /std/{Str, List, Nat};
+        let first(raw: List(Str)) -> Str =
+            let p = match raw | [] => ([], 0) | [_, .._] => (["x"], 1) end;
+            let (xs, n) = p;
+            match xs | [] => Nat/to_str(n) | [s, .._] => s end;
+        /std/print(Str/flatten([first(["a"]), first([])]))
+        "#;
+
+    assert_eq!(run(source), b"x0");
+}
+
+// A match whose scrutinee's type nothing ever decides is refused at the drain as its eliminator refuses a scrutinee of another type, not as a check that merely waited. Mutation-checked: reporting it as a postponed check loses the carrier it expected.
+#[test]
+fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let g(n: Nat) -> Nat =
+            let p = ?;
+            match p | [] => 0 | [_, .._] => 1 end;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("expected List but got"),
+        "the report should name the carrier the match expected:\n{report}"
+    );
+}
