@@ -10,7 +10,7 @@
 
 use {
     super::dual_comparison,
-    crate::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    crate::{Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{Formula, Node},
     curios_utilities::recurse,
 };
@@ -23,14 +23,17 @@ struct Table {
 }
 
 impl Table {
-    /// Read `term` into the table and answer its root's position, or `None` once the atoms pass the cap. Every node is forced before it is read, which is what makes a leaf the value's rather than the spelling's.
+    /// Read `term` into the table and answer its root's position, or `None` once the atoms pass the cap. Every node is forced before it is read, which is what makes a leaf the value's rather than the spelling's — a [`Probe`], so a node with no value at the type level is read as written, an atom like any other.
     fn read(
         &mut self,
         reducer: &mut impl Reducer,
         term: Term,
     ) -> Result<Option<usize>, ReduceError> {
         recurse(|| {
-            let forced = reducer.reduce_forced(term)?;
+            let forced = reducer
+                .reduce_forced(term.clone())
+                .probed()?
+                .unwrap_or(term);
             let node = match &*forced {
                 Subterm::Intrinsic(Intrinsic::Bool(value)) => Node::Literal(*value),
                 Subterm::Intrinsic(

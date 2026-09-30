@@ -42,12 +42,12 @@ fn a_partial_name_from_outside_the_module_still_taints_what_mentions_it() {
     let module = module(vec![mentioning("caller", "prelude_partial")]);
 
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Partial)]);
-    let classified = classify_module(&mut context, &module, &inherited);
+    let classified = classify_module(&mut context, &module, &inherited).expect("classified");
     assert_eq!(classified[&name("caller")], Totality::Partial);
 
     // And the verdict is inherited, not assumed: the same module against a total prelude name stays total.
     let inherited = BTreeMap::from([(name("prelude_partial"), Totality::Total)]);
-    let classified = classify_module(&mut context, &module, &inherited);
+    let classified = classify_module(&mut context, &module, &inherited).expect("classified");
     assert_eq!(classified[&name("caller")], Totality::Total);
 }
 
@@ -61,7 +61,7 @@ fn inherited_partiality_propagates_through_a_local_chain() {
     ]);
 
     let inherited = BTreeMap::from([(name("outside"), Totality::Partial)]);
-    let classified = classify_module(&mut context, &module, &inherited);
+    let classified = classify_module(&mut context, &module, &inherited).expect("classified");
     assert_eq!(classified[&name("first")], Totality::Partial);
     assert_eq!(classified[&name("second")], Totality::Partial);
 }
@@ -78,10 +78,10 @@ fn stamping_a_module_is_what_the_next_compilation_reads_back() {
         recorded_totality(&module)[&name("caller")],
         Totality::Partial
     );
-    record_totality(&mut context, &mut module, &BTreeMap::new());
+    record_totality(&mut context, &mut module, &BTreeMap::new()).expect("stamped");
     assert_eq!(recorded_totality(&module)[&name("caller")], Totality::Total);
 
-    record_totality(&mut context, &mut module, &inherited);
+    record_totality(&mut context, &mut module, &inherited).expect("stamped");
     assert_eq!(
         recorded_totality(&module)[&name("caller")],
         Totality::Partial

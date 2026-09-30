@@ -133,10 +133,14 @@ pub enum Callee {
 pub enum Error {
     ReduceExhausted {
         term: Box<Term>,
+        /// The budget's refusal, kept so a judgment reporting in reduction's terms can hand it on ([`Probe::probed_refusal`](curios_core::Probe::probed_refusal)).
+        refusal: ReduceError,
     },
     ConvertExhausted {
         this: Box<Term>,
         that: Box<Term>,
+        /// As [`Error::ReduceExhausted`]'s.
+        refusal: ReduceError,
     },
     BinGetOutOfBounds {
         len: usize,
@@ -597,10 +601,13 @@ pub enum Error {
 }
 
 impl Error {
-    /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports what the term did; naming it is this crate's job, which is why the conversion lives on [`Error`] rather than on the core failure. The `exhausted` callback lets each caller decide what a spent budget reports — the term being reduced, or the pair being compared.
-    pub(crate) fn from_reduce(error: ReduceError, exhausted: impl FnOnce() -> Error) -> Error {
+    /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports what the term did; naming it is this crate's job, which is why the conversion lives on [`Error`] rather than on the core failure. The `exhausted` callback lets each caller decide what a spent budget reports — the term being reduced, or the pair being compared — and is handed the refusal to keep.
+    pub(crate) fn from_reduce(
+        error: ReduceError,
+        exhausted: impl FnOnce(ReduceError) -> Error,
+    ) -> Error {
         match error {
-            ReduceError::Exhausted { .. } => exhausted(),
+            refusal @ ReduceError::Exhausted { .. } => exhausted(refusal),
             ReduceError::BinGetOutOfBounds { len, index, span } => {
                 Error::BinGetOutOfBounds { len, index }.at_opt(span)
             }
@@ -634,16 +641,22 @@ impl Error {
         }
     }
 
-    pub(crate) fn reduce_exhausted<T: Into<Term>>(term: T) -> Self {
+    pub(crate) fn reduce_exhausted<T: Into<Term>>(term: T, refusal: ReduceError) -> Self {
         Self::ReduceExhausted {
             term: Box::new(term.into()),
+            refusal,
         }
     }
 
-    pub(crate) fn convert_exhausted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
+    pub(crate) fn convert_exhausted<T: Into<Term>, U: Into<Term>>(
+        this: T,
+        that: U,
+        refusal: ReduceError,
+    ) -> Self {
         Self::ConvertExhausted {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
+            refusal,
         }
     }
 
@@ -1566,8 +1579,8 @@ impl Error {
                     error.collect_terms(out);
                 }
             }
-            Self::ReduceExhausted { term } => out.push(term),
-            Self::ConvertExhausted { this, that } => {
+            Self::ReduceExhausted { term, .. } => out.push(term),
+            Self::ConvertExhausted { this, that, .. } => {
                 out.push(this);
                 out.push(that);
             }
@@ -1675,14 +1688,16 @@ impl Error {
 
 impl Exhaustion for Error {
     /// A spent budget is no judgment of the term it was spent on, however many contexts a report has wrapped it in.
-    fn is_exhausted(&self) -> bool {
+    fn refusal(&self) -> Option<&ReduceError> {
         match self {
-            Self::ReduceExhausted { .. } | Self::ConvertExhausted { .. } => true,
+            Self::ReduceExhausted { refusal, .. } | Self::ConvertExhausted { refusal, .. } => {
+                Some(refusal)
+            }
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
-            | Self::InScope { error, .. } => error.is_exhausted(),
-            _ => false,
+            | Self::InScope { error, .. } => error.refusal(),
+            _ => None,
         }
     }
 }

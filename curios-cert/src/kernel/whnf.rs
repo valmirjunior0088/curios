@@ -23,7 +23,7 @@ use {
     super::Kernel,
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Proj, Rec,
+        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
         accelerable, instantiate_universe_levels_scoped, probe_spellings, reduce_closed,
         reduce_intrinsic,
@@ -251,6 +251,8 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
 }
 
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.
+///
+/// Each operand is a [`Probe`], as the elaborator's twin reads it: an operand with no value at the type level is kept as written, so a probe that meets one misses rather than refusing the judgment it serves.
 pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Term, ReduceError> {
     if term.head_key().is_none() {
         return Ok(term.clone());
@@ -264,7 +266,7 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
 
     let mut operands = Vec::new();
     for operand in masking.take_masked_children() {
-        operands.push(whnf(kernel, operand)?);
+        operands.push(whnf(kernel, operand.clone()).probed()?.unwrap_or(operand));
     }
 
     let mut index = 0;

@@ -28,3 +28,9 @@ fn a_probe_reads_a_term_with_no_value_as_nothing_to_offer() {
 fn a_probe_propagates_the_budget_it_ran_out_of() {
     assert_eq!(Err::<u8, _>(exhausted()).probed(), Err(exhausted()));
 }
+
+#[test]
+fn a_probe_reporting_in_reductions_terms_hands_on_the_refusal_alone() {
+    assert_eq!(Err::<u8, _>(exhausted()).probed_refusal(), Err(exhausted()));
+    assert_eq!(Err::<u8, _>(refused()).probed_refusal(), Ok(None));
+}

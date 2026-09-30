@@ -123,7 +123,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
         Subterm::Var(var) => {
             if !spine_head && let Some(free) = var.as_free() {
-                kernel.record_call(free, &[]);
+                kernel.record_call(free, &[])?;
             }
 
             kernel
@@ -187,7 +187,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 if let Subterm::Var(var) = &*head
                     && let Some(free) = var.as_free()
                 {
-                    kernel.record_call(free, &arguments);
+                    kernel.record_call(free, &arguments)?;
                 }
             }
 
@@ -528,10 +528,10 @@ fn check_cases(
         let expected = result.at(scrutinee, &[], &[], &value);
 
         kernel.scoped(|kernel| {
-            kernel.assume_guard(scrutinee, &value);
+            kernel.assume_guard(scrutinee, &value)?;
             let mut solutions = Vec::new();
             eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
-            kernel.assume_arm(scrutinee, &value, &solutions);
+            kernel.assume_arm(scrutinee, &value, &solutions)?;
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -595,7 +595,7 @@ fn check_cases(
                     && let Some(binder) = var.as_free()
                     && cases.iter().any(|(key, _)| key.is_zero())
                 {
-                    kernel.assume_nonzero(*binder);
+                    kernel.assume_nonzero(*binder)?;
                 }
 
                 check(kernel, default, &expected)
@@ -662,7 +662,7 @@ fn check_free_monoid(
 
             let mut solutions = Vec::new();
             eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
-            kernel.assume_arm(scrutinee, &size_value, &solutions);
+            kernel.assume_arm(scrutinee, &size_value, &solutions)?;
             eliminate::shadow(kernel, &solutions);
 
             check(
@@ -1071,7 +1071,7 @@ fn infer_telescope(
 
             let binder = kernel.advance_assumed(&mut cursor, &domain);
             if let Some(argument) = arguments.get(entries.len()) {
-                kernel.refine_size(&binder, argument);
+                kernel.refine_size(&binder, argument)?;
             }
             entries.push((binder, domain));
         }

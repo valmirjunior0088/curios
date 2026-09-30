@@ -22,10 +22,10 @@
 use {
     curios_algebra::{Conclusion, Deduction},
     curios_core::{
-        Aligned, Intrinsic, Level, Nat, Operand, Produced, ReduceError, Reducer, Subterm, Term,
-        Var, Visit, align_comparisons, decide_bool, int_has_stuck_product, int_normalize, int_same,
-        is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_comparison, peel_int_pair,
-        peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
+        Aligned, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
+        Term, Var, Visit, align_comparisons, decide_bool, int_has_stuck_product, int_normalize,
+        int_same, is_bool_connective, normalize_bool, peel_bin, peel_bool, peel_comparison,
+        peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -83,10 +83,21 @@ pub fn convert_intrinsics(
     let (this, that) = match !(literal(&this) || literal(&that)) && (stuck(&this) || stuck(&that)) {
         false => (this, that),
         true => {
-            let this = Nat::normalize(driver, Term::intrinsic(this))?;
-            let that = Nat::normalize(driver, Term::intrinsic(that))?;
-            let this = int_normalize(driver, this)?;
-            let that = int_normalize(driver, that)?;
+            // Both normalizers are demands where the fold's comparison asks them and probes here, where the chain can compare a side as it arrived: one with no value at the type level is left undistributed.
+            let this = Term::intrinsic(this);
+            let that = Term::intrinsic(that);
+            let this = Nat::normalize(driver, this.clone())
+                .probed()?
+                .unwrap_or(this);
+            let that = Nat::normalize(driver, that.clone())
+                .probed()?
+                .unwrap_or(that);
+            let this = int_normalize(driver, this.clone())
+                .probed()?
+                .unwrap_or(this);
+            let that = int_normalize(driver, that.clone())
+                .probed()?
+                .unwrap_or(that);
             match (as_intrinsic(&this), as_intrinsic(&that)) {
                 (Some(this), Some(that)) => (this, that),
                 _ => return Ok(Outcome::Residual(this, that)),

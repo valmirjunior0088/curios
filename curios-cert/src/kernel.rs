@@ -55,8 +55,8 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Advance, Atom, Consumption, Cost, Free, Global, InductDecl, Level, LevelHead, Module,
-        Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
+        Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
+        Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
         UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
@@ -176,6 +176,15 @@ pub enum KernelError {
     UniverseInstance { lower: Level, upper: Level },
     /// An occurrence of a universe-polymorphic definition that states no instance. Such an occurrence denotes no particular instance, which is why `Globals::value` withholds its body; reading its *type* regardless hands back the scheme's own parameters, which are then read as the ambient item's, and skips `check_instance` entirely — so the scheme's constraints are discharged by nothing and a use the stated-instance spelling refuses is admitted by dropping the instance.
     MissingUniverseInstance { name: Free, expected: usize },
+}
+
+impl Exhaustion for KernelError {
+    fn refusal(&self) -> Option<&ReduceError> {
+        match self {
+            Self::Reduce(error) => error.refusal(),
+            _ => None,
+        }
+    }
 }
 
 impl From<ReduceError> for KernelError {

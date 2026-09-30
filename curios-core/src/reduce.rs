@@ -93,14 +93,26 @@ impl ReduceError {
 
 /// A failure that may be a spent budget rather than a verdict on the term the budget was spent on — the one distinction a [`Probe`] reads, stated by each checker's own error: [`ReduceError`] here, the elaborator's diagnostic and the kernel's error where each is defined.
 pub trait Exhaustion {
+    /// The budget's refusal this failure is or carries, or `None` for a verdict on the term — so a failure of one checker's vocabulary can hand the refusal on in reduction's ([`Probe::probed_refusal`]).
+    fn refusal(&self) -> Option<&ReduceError>;
+
     /// Whether this failure is a spent budget.
-    fn is_exhausted(&self) -> bool;
+    fn is_exhausted(&self) -> bool {
+        self.refusal().is_some()
+    }
+}
+
+/// A failure that cannot happen carries no refusal — the error of a driver that never spends.
+impl Exhaustion for std::convert::Infallible {
+    fn refusal(&self) -> Option<&ReduceError> {
+        match *self {}
+    }
 }
 
 impl Exhaustion for ReduceError {
-    /// A predicate rather than a pattern at every call site: the payload exists to be *read* by a diagnostic, and every other consumer only wants to know which of the two kinds of failure this is.
-    fn is_exhausted(&self) -> bool {
-        matches!(self, Self::Exhausted { .. })
+    /// Read rather than matched at every call site: the payload exists to be *read* by a diagnostic, and every other consumer only wants to know which of the two kinds of failure this is.
+    fn refusal(&self) -> Option<&ReduceError> {
+        matches!(self, Self::Exhausted { .. }).then_some(self)
     }
 }
 
@@ -112,6 +124,9 @@ impl Exhaustion for ReduceError {
 pub trait Probe<T, E> {
     /// The value, `None` where the term has none at the type level, and the budget's exhaustion alone as a failure.
     fn probed(self) -> Result<Option<T>, E>;
+
+    /// [`Probe::probed`] for a judgment that reports in reduction's terms while its probe reports in another's — a conversion asking an elaboration: the refusal the failure carries, handed on as the [`ReduceError`] it is.
+    fn probed_refusal(self) -> Result<Option<T>, ReduceError>;
 }
 
 impl<T, E: Exhaustion> Probe<T, E> for Result<T, E> {
@@ -120,6 +135,16 @@ impl<T, E: Exhaustion> Probe<T, E> for Result<T, E> {
             Ok(value) => Ok(Some(value)),
             Err(error) if error.is_exhausted() => Err(error),
             Err(_) => Ok(None),
+        }
+    }
+
+    fn probed_refusal(self) -> Result<Option<T>, ReduceError> {
+        match self {
+            Ok(value) => Ok(Some(value)),
+            Err(error) => match error.refusal() {
+                Some(refusal) => Err(refusal.clone()),
+                None => Ok(None),
+            },
         }
     }
 }

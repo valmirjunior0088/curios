@@ -9,13 +9,13 @@
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
-        Coverage, Declarations, Invert, PositivityRefusal, fixture::SYNTAX, group_totality,
+        Coverage, Declarations, Invert, Judge, PositivityRefusal, fixture::SYNTAX, group_totality,
         invert_indices, positivity_vectors, solve_indices,
     },
     curios_cert::Kernel,
     curios_core::{
-        Apply, Argument, Atom, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductDecl,
-        InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Many, Match,
+        Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
+        InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Many, Match,
         MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope, Struct,
         StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient, Tuple, Two,
         UniverseContext, Var, Variant,
@@ -452,7 +452,7 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
     };
 
     // A constant argument never decreases, so the verdict is `Partial` — promptly.
-    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
 }
 
 /// Whether the engine finds a nullary self-call planted at one child position.
@@ -468,7 +468,7 @@ fn call_is_seen(body: Term) -> bool {
         panic!("the fixture changed shape");
     };
 
-    group_totality(&mut kernel, group) == Totality::Partial
+    group_totality(&mut kernel, group) == Ok(Totality::Partial)
 }
 
 /// The `index`th placeholder child: a literal no walk reads as anything, distinct from every other so that replacing one names one position.
@@ -1124,7 +1124,7 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
 
     let control = Term::rec(
         vec![(
@@ -1140,7 +1140,7 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
 }
 
 /// A lambda applied to an arm's payload is graded as its contractum: the call inside reads the payload, which is below the scrutinee. This is the shape a convoy takes — an arm generalized over a hypothesis and applied back to it — and without the rule a proof that descends through one closes to an all-unknown matrix. The control applies the same lambda to an unrelated parameter, which must stay unread: the rule reads a binder as what it stands for, never as a decrease of its own.
@@ -1187,13 +1187,13 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
 }
 
 /// The same pair through a `let`: a binder aliasing the payload is below the scrutinee exactly as the payload is, and one aliasing an unrelated parameter is not.
@@ -1239,13 +1239,13 @@ fn a_let_alias_of_the_arm_payload_descends() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
 }
 
 /// The outer direction reaches a variable inside an index, and only a local's.
@@ -1317,4 +1317,65 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
         !pinned.mentions_free(&n),
         "the pinned value still names what the substitution replaces: {pinned}"
     );
+}
+
+/// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. It used to read the argument as nothing and classify the group `Partial`, a verdict with no cause in the term that the drivers then reported as non-termination. The control is the same group with the budget to read it.
+#[test]
+fn a_size_the_budget_cannot_read_refuses_the_classification() {
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let f = Free::local(2, Some("f"));
+    let n = Free::local(3, Some("n"));
+    let v = Free::local(4, Some("v"));
+    let identity = Term::func([(v, nat())], Term::free_var(&v));
+    let rec = Term::rec(
+        vec![(
+            f,
+            Term::func_type([(n, nat())], nat()),
+            Term::func(
+                [(n, nat())],
+                Term::apply(
+                    Term::free_var(&f),
+                    [Term::apply(identity, [Term::free_var(&n)])],
+                ),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    let mut starved = Kernel::new(0, SYNTAX);
+    assert!(group_totality(&mut starved, group).is_err_and(|error| error.is_exhausted()));
+    assert_eq!(group_totality(&mut kernel(), group), Ok(Totality::Partial));
+}
+
+/// The conversion chain's respellings are probes: a connective's leaf with no value at the type level is read as written, an atom like any other, where it used to turn the comparison into the leaf's own failure. The two sides differ by a unit the truth table sees through once the leaf is an atom.
+#[test]
+fn a_connective_leaf_with_no_value_is_compared_as_written() {
+    let mut kernel = kernel();
+    let b = Free::local(900, Some("b"));
+    let x = Free::local(901, Some("x"));
+    let boolean = Term::intrinsic(Intrinsic::BoolType);
+    kernel.assume(&b, &boolean);
+    kernel.assume(&x, &Term::intrinsic(Intrinsic::NatType));
+    let nat = |k: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(k)));
+    let undefined = Term::intrinsic(Intrinsic::NatEql(
+        Term::intrinsic(Intrinsic::NatDiv {
+            dividend: nat(1),
+            divisor: nat(0),
+            non_zero: Term::free_var(&x),
+        }),
+        nat(0),
+    ));
+    let this = Term::intrinsic(Intrinsic::BoolAnd(Term::free_var(&b), undefined.clone()));
+    let that = Term::intrinsic(Intrinsic::BoolAnd(
+        Term::free_var(&b),
+        Term::intrinsic(Intrinsic::BoolAnd(
+            undefined,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        )),
+    ));
+
+    assert_eq!(kernel.convert_at(&boolean, &this, &that), Ok(true));
 }

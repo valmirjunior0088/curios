@@ -1013,9 +1013,11 @@ fn zonk_term(context: &Zonk, term: &Term) -> Result<Term, Error> {
     // The level itself, charged when it is a new peak, exactly as `reduce` charges its own bracket — see [`Context::enter_level`] and [`Cost::FRAME`], whose documentation states why the row exists: `recurse` grows the native stack rather than aborting, and nothing else bounds total depth.
     //
     // Substitution is a route into unbounded computation like any other, and it was the one route the budget did not price. A metavariable whose solution reaches the metavariable again sends this walk down forever, and every level it takes is memory `recurse` asks the allocator for; uncharged, the compilation died by exhausting the machine instead of refusing the program. Charged, the declaration's own budget decides, and the answer is a fact about the program rather than about how much memory the host had.
-    context
-        .enter_level()
-        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(term.clone())))?;
+    context.enter_level().map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(term.clone(), refusal)
+        })
+    })?;
     let zonked = zonk_level(context, term);
     context.leave_level();
 

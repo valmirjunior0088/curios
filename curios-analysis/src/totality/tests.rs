@@ -314,7 +314,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         operands: vec![single, Term::free_var(&t)],
     });
 
-    let shape = grader.shape_of(&cons);
+    let Ok(shape) = grader.shape_of(&cons);
     assert!(
         shape.same_as(&Shape::elem_run(
             Carriers::Bin,
@@ -393,12 +393,14 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
         context: &context,
     };
     let parameter = grader.expand(&a, EXPAND_FUEL);
-    assert_eq!(grader.shape_of(&applied).against(&parameter), LESS);
+    let Ok(shape) = grader.shape_of(&applied);
+    assert_eq!(shape.against(&parameter), LESS);
 
     context.payloads.clear();
     let mut grader = Grader {
         env: &mut kernel,
         context: &context,
     };
-    assert_eq!(grader.shape_of(&applied).against(&parameter), Size::Unknown);
+    let Ok(shape) = grader.shape_of(&applied);
+    assert_eq!(shape.against(&parameter), Size::Unknown);
 }

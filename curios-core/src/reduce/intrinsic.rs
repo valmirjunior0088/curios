@@ -26,9 +26,9 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Aligned, Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, LinearViews,
-        Nat, Operands, Subterm, Telescope, Term, Words, int_cancel_common, int_negate, int_of_nat,
-        int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
-        peel_first_elem, project_erased_universes,
+        Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common, int_negate,
+        int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin,
+        peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
@@ -36,7 +36,7 @@ use {
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
 ///
-/// The fold leaves a stuck connective's right operand as written, on the record `reduce_bool_binary` keeps of the `&&`/`||` cliff, so a leaf as the fold left it may be a spelling that reduces to a subtree — a witness projection standing for `c && d`. Forcing each leaf and descending is what makes the leaf set the value's rather than the spelling's, and it is paid once per comparison of two trees rather than at every reduction of one, which is the whole of the difference from the cliff. The rebuilt tree is reduced again, so a leaf that forced to a literal meets the lattice laws where it stands.
+/// The fold leaves a stuck connective's right operand as written, on the record `reduce_bool_binary` keeps of the `&&`/`||` cliff, so a leaf as the fold left it may be a spelling that reduces to a subtree — a witness projection standing for `c && d`. Forcing each leaf and descending is what makes the leaf set the value's rather than the spelling's, and it is paid once per comparison of two trees rather than at every reduction of one, which is the whole of the difference from the cliff. The rebuilt tree is reduced again, so a leaf that forced to a literal meets the lattice laws where it stands. Every forcing is a [`Probe`]: a leaf with no value at the type level stays the leaf it was written as.
 pub fn normalize_bool(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -54,7 +54,10 @@ pub fn normalize_bool(
     let mut leaves = Vec::new();
     let mut pending = vec![right.clone(), left.clone()];
     while let Some(term) = pending.pop() {
-        let forced = reducer.reduce_forced(term)?;
+        let forced = reducer
+            .reduce_forced(term.clone())
+            .probed()?
+            .unwrap_or(term);
         match (&*forced, conjunction) {
             (Subterm::Intrinsic(Intrinsic::BoolAnd(left, right)), true)
             | (Subterm::Intrinsic(Intrinsic::BoolOr(left, right)), false) => {
@@ -70,12 +73,17 @@ pub fn normalize_bool(
         .into_iter()
         .reduce(|acc, leaf| Term::intrinsic(rebuild(acc, leaf)))
         .expect("a connective has two operands, so at least two leaves");
-    reducer.reduce_forced(tree).map(Some)
+    Ok(Some(
+        reducer
+            .reduce_forced(tree.clone())
+            .probed()?
+            .unwrap_or(tree),
+    ))
 }
 
 /// Whether a function is the identity: one binder, whose body is that binder once it is weak-head reduced, so `(v) => v + 0` and `(v) => ((w) => w)(v)` are the identity as `(v) => v` is. This is beta and the folds under the binder, never extensionality: a function that is the identity only *pointwise* — `(v) => match v | 0 => 0 | k + 1 => k + 1 end` — has a stuck match for a body, and stays a function nothing here recognises.
 ///
-/// The body is read as conversion would read it, which is what makes the test agree with what both checkers already say of the function itself: `(v) => v + 0` converts with `(v) => v`, so a `map` by one that stayed stuck while a `map` by the other collapsed was a test of the *spelling* where the value was meant. The lambda as written is asked first, since it costs nothing; past it the binder is opened on a fresh identity, charged as the closed machine's eta probe charges the same opening, and the body reduced to weak-head form and not forced — a body whose head is a recursive call is no binder, and unfolding it to find that out would be paid at every `map`.
+/// The body is read as conversion would read it, which is what makes the test agree with what both checkers already say of the function itself: `(v) => v + 0` converts with `(v) => v`, so a `map` by one that stayed stuck while a `map` by the other collapsed was a test of the *spelling* where the value was meant. The lambda as written is asked first, since it costs nothing; past it the binder is opened on a fresh identity, charged as the closed machine's eta probe charges the same opening, and the body reduced to weak-head form and not forced — a body whose head is a recursive call is no binder, and unfolding it to find that out would be paid at every `map`. The reduction is a [`Probe`]: a body with no value at the type level is no identity the law can read.
 fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, ReduceError> {
     let Subterm::Func(Func { telescope, .. }) = &**function else {
         return Ok(false);
@@ -96,7 +104,12 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
             .saturating_add(Cost::term(1)),
     )?;
     let binder = reducer.fresh_binder(None);
-    let body = reducer.reduce(telescope.open(&[&Term::free_var(&binder)]))?;
+    let Some(body) = reducer
+        .reduce(telescope.open(&[&Term::free_var(&binder)]))
+        .probed()?
+    else {
+        return Ok(false);
+    };
 
     Ok(matches!(&*body, Subterm::Var(var) if var.unwrap() == &binder))
 }
@@ -125,7 +138,7 @@ pub fn align_comparisons(
     })
 }
 
-/// The dual of a negated comparison: an `xor` with a `true` operand whose other operand forces to an ordered or equality comparison on a total order, read as the comparison that is true exactly when it is false. `None` for anything else, the `Flt` comparisons included.
+/// The dual of a negated comparison: an `xor` with a `true` operand whose other operand forces to an ordered or equality comparison on a total order, read as the comparison that is true exactly when it is false. `None` for anything else, the `Flt` comparisons included. Each forcing is a [`Probe`]: an operand with no value at the type level is read as written.
 fn dual_of_negated(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -133,8 +146,14 @@ fn dual_of_negated(
     let Intrinsic::BoolXor(left, right) = intrinsic else {
         return Ok(None);
     };
-    let left = reducer.reduce_forced(left.clone())?;
-    let right = reducer.reduce_forced(right.clone())?;
+    let left = reducer
+        .reduce_forced(left.clone())
+        .probed()?
+        .unwrap_or_else(|| left.clone());
+    let right = reducer
+        .reduce_forced(right.clone())
+        .probed()?
+        .unwrap_or_else(|| right.clone());
     let negated = match (left.as_bool(), right.as_bool()) {
         (Some(true), _) => right,
         (_, Some(true)) => left,

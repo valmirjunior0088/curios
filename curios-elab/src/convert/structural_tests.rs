@@ -464,3 +464,20 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
 
     assert_eq!(conv(&mut context, &flexible, &rigid), Ok(true));
 }
+
+/// Reading the family an indexed match eliminates at its scrutinee is a probe: a scrutinee whose type the budget cannot afford to read propagates the refusal, where it used to answer that the two sides do not convert and let conversion go ahead on that answer.
+#[test]
+fn a_family_the_budget_cannot_read_at_its_scrutinee_propagates_the_refusal() {
+    let mut context = context();
+    let loop_ = context.fresh(Some("loop"));
+    context.define(&loop_, &Term::free_var(&loop_), None);
+    let head = context.fresh(Some("head"));
+    context.assume(&head, &Term::free_var(&loop_));
+    let index = context.fresh(Some("i"));
+    let scrutinee = context.fresh(Some("s"));
+    let motive = Scope::close(Many(2), &[&index, &scrutinee], Term::type_ground());
+
+    let read = super::family_at_head(&mut context, &motive, &Term::free_var(&head));
+
+    assert!(read.is_err_and(|spent| spent.is_exhausted()));
+}

@@ -295,8 +295,11 @@ fn classify(
         }));
     }
 
-    let sort = Sort::of_in(context, opened, type_)
-        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))?;
+    let sort = Sort::of_in(context, opened, type_).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(type_.clone(), refusal)
+        })
+    })?;
     if matches!(sort, Sort::Prop) {
         return Ok(Classified {
             position,

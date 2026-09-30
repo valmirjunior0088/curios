@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{ArgumentSite, FrozenFrame, SettleTier, callee, exhausted_bound},
-    curios_core::{Advance, CalleeId, Cursor, Spelling},
+    curios_core::{Advance, CalleeId, Cursor, Probe, Spelling},
 };
 
 pub(super) fn elaborate_func_type(
@@ -130,7 +130,7 @@ pub(super) fn insert_auto_argument(
             }
 
             // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
-            let proposition = crate::is_prop(context, type_).unwrap_or(false);
+            let proposition = crate::is_prop(context, type_).probed()?.unwrap_or(false);
             let waiting = proposition && waits_on_metavariable(context, &reduced);
             let mut refusal = None;
             if proposition && !waiting {

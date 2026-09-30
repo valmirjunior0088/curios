@@ -23,6 +23,7 @@ use {
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
+        ops::ControlFlow,
         rc::Rc,
     },
 };
@@ -34,9 +35,13 @@ use {
 /// `inherited` carries the totality of definitions `module` references but does not define — the replayed prelude prefix. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program. Classify one definition against the verdicts already recorded, and record it.
 ///
 /// The whole-module pass needs a fixpoint because it sees every item at once. Items arrive here in dependency order, so everything a definition mentions is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
-pub fn record_definition_totality(context: &mut Context, definition: &Definition, group: Totality) {
+pub fn record_definition_totality(
+    context: &mut Context,
+    definition: &Definition,
+    group: Totality,
+) -> Result<(), Error> {
     let partial = !group.is_total()
-        || definition_is_locally_partial(context, definition, &mut LocalMemo::new())
+        || definition_is_locally_partial(context, definition, &mut LocalMemo::new())?
         || definition.mentions().iter().any(|name| {
             context
                 .definition_totality(name)
@@ -47,6 +52,7 @@ pub fn record_definition_totality(context: &mut Context, definition: &Definition
         false => Totality::Total,
     };
     context.record_definition_totality(&definition.name, totality);
+    Ok(())
 }
 
 /// Obligation (T), at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
@@ -104,7 +110,7 @@ pub fn classify_module(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
-) -> BTreeMap<Global, Totality> {
+) -> Result<BTreeMap<Global, Totality>, Error> {
     let mut local: BTreeMap<Global, bool> = BTreeMap::new();
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     // One cache for the whole module: definitions share subterms heavily, and a node classified for one is classified for all.
@@ -113,15 +119,15 @@ pub fn classify_module(
     for item in &module.items {
         match item {
             Item::Let(definition) => {
-                let partial = definition_is_locally_partial(context, definition, &mut memo);
+                let partial = definition_is_locally_partial(context, definition, &mut memo)?;
                 local.insert(definition.name, partial);
                 mentions.insert(definition.name, definition.mentions());
             }
             Item::Rec(rec) => {
-                let rejected = group_totality(context, &rec.group) == Totality::Partial;
+                let rejected = group_totality(context, &rec.group)? == Totality::Partial;
                 for definition in rec.definitions() {
                     let partial =
-                        rejected || definition_is_locally_partial(context, &definition, &mut memo);
+                        rejected || definition_is_locally_partial(context, &definition, &mut memo)?;
                     local.insert(definition.name, partial);
                     mentions.insert(definition.name, definition.mentions());
                 }
@@ -161,7 +167,7 @@ pub fn classify_module(
         }
     }
 
-    local
+    Ok(local
         .keys()
         .map(|name| {
             let totality = match partial.contains(name) {
@@ -170,7 +176,7 @@ pub fn classify_module(
             };
             (*name, totality)
         })
-        .collect()
+        .collect())
 }
 
 /// Classify `module` and stamp each definition's [`Definition::totality`].
@@ -182,9 +188,9 @@ pub fn record_totality(
     context: &mut Context,
     module: &mut Module,
     inherited: &BTreeMap<Global, Totality>,
-) {
+) -> Result<(), Error> {
     curios_profile::profile!("record_totality");
-    let classified = classify_module(context, module, inherited);
+    let classified = classify_module(context, module, inherited)?;
     let of = |name: &Global| classified.get(name).copied().unwrap_or_default();
 
     for item in &mut module.items {
@@ -197,6 +203,7 @@ pub fn record_totality(
             }
         }
     }
+    Ok(())
 }
 
 /// The totality [`record_totality`] stamped onto every definition in `module`.
@@ -234,7 +241,7 @@ fn faults(
     module: &Module,
     positions: &[Position],
     inherited: &BTreeMap<Global, Totality>,
-) -> Vec<(String, Fault)> {
+) -> Result<Vec<(String, Fault)>, Error> {
     curios_profile::sample!("totality::faults_positions", positions.len());
     let seeded = seeds(positions);
     let reached = reachable(module, seeded);
@@ -246,7 +253,7 @@ fn faults(
     // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails.
     let mut memo = LocalMemo::new();
     for position in positions {
-        if locally_partial(context, &position.term, &mut memo) {
+        if locally_partial(context, &position.term, &mut memo)? {
             faults.push((position.site.to_string(), Fault::Inline));
         }
     }
@@ -266,7 +273,7 @@ fn faults(
             .unwrap_or_else(|| "a position reached from here".to_string());
         faults.push((site, Fault::Named(name)));
     }
-    faults
+    Ok(faults)
 }
 
 /// Every term either erased-half obligation has zonked, shared across both of them and across both the types they test and the terms they keep.
@@ -416,7 +423,7 @@ fn report(
     inherited: &BTreeMap<Global, Totality>,
     erased: Erased,
 ) -> Result<(), Error> {
-    match faults(context, module, positions, inherited)
+    match faults(context, module, positions, inherited)?
         .into_iter()
         .next()
     {
@@ -447,12 +454,12 @@ pub fn check_rec_totality(
     // `RecGroup::member_type` rather than the member's scope body: the body carries loose indices where it names the group, and the question is now asked of a term that reduces. It is also the spelling `curios-cert`'s own gate asks about, so the two checkers put the same question to the same term.
     let mut extractable = Vec::new();
     for index in 0..group.length() {
-        if yields_a_sort(context, &group.member_type(index)) {
+        if yields_a_sort(context, &group.member_type(index))? {
             extractable.push(index);
         }
     }
 
-    if extractable.is_empty() || group_totality(context, group).is_total() {
+    if extractable.is_empty() || group_totality(context, group)?.is_total() {
         return Ok(());
     }
 
@@ -490,26 +497,42 @@ type LocalMemo = HashMap<Term, bool>;
 /// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so the native per-node recursion this replaces cost one stack frame per byte *and* re-walked the shared tail once per position — quadratic in the literal's length. Measured on a 640-byte literal, that was 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright. Depth is not steps, so the reduction budget cannot bound either one.
 ///
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
-fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
-    // Post-order over the term's DAG on the shared `Term::walk` driver: a memo hit settles at enter, and the exit combine sees every child's verdict.
+fn locally_partial(
+    context: &mut Context,
+    term: &Term,
+    memo: &mut LocalMemo,
+) -> Result<bool, Error> {
+    // Post-order over the term's DAG on the shared `Term::try_walk` driver: a memo hit settles at enter, and the exit combine sees every child's verdict. A `rec` group is classified at enter, the one place the walk can stop, so the budget's refusal ends the walk rather than reading as a verdict; a group that does not descend settles its node there, and one that does leaves the node to its children.
     let mut state = (context, memo);
-    term.walk(
+    let walked = term.try_walk(
         &mut state,
-        |state, term| match state.1.get(term) {
-            Some(&partial) => Enter::Skip(partial),
-            None => Enter::Descend,
+        |state, term| {
+            if let Some(&partial) = state.1.get(term) {
+                return ControlFlow::Continue(Enter::Skip(partial));
+            }
+            if let Subterm::Rec(Rec { group, .. }) = &**term {
+                match group_totality(state.0, group) {
+                    Err(spent) => return ControlFlow::Break(spent),
+                    Ok(Totality::Partial) => {
+                        state.1.insert(term.clone(), true);
+                        return ControlFlow::Continue(Enter::Skip(true));
+                    }
+                    Ok(Totality::Total) => {}
+                }
+            }
+            ControlFlow::Continue(Enter::Descend)
         },
         |state, term, mut children| {
-            let mut partial =
-                matches!(&**term, Subterm::Foreign(function, _) if function.diverges());
-            if let Subterm::Rec(Rec { group, .. }) = &**term {
-                partial = partial || group_totality(state.0, group) == Totality::Partial;
-            }
-            let partial = partial || children.any(|child| child);
+            let partial = matches!(&**term, Subterm::Foreign(function, _) if function.diverges())
+                || children.any(|child| child);
             state.1.insert(term.clone(), partial);
             partial
         },
-    )
+    );
+    match walked {
+        ControlFlow::Continue(partial) => Ok(partial),
+        ControlFlow::Break(spent) => Err(spent),
+    }
 }
 
 /// Whether this definition is partial on its own account: it mentions an exit, or it contains a local `rec` group that does not descend.
@@ -517,7 +540,7 @@ fn definition_is_locally_partial(
     context: &mut Context,
     definition: &Definition,
     memo: &mut LocalMemo,
-) -> bool {
-    locally_partial(context, &definition.body, memo)
-        || locally_partial(context, &definition.type_, memo)
+) -> Result<bool, Error> {
+    Ok(locally_partial(context, &definition.body, memo)?
+        || locally_partial(context, &definition.type_, memo)?)
 }

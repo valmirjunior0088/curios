@@ -661,3 +661,23 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
 
     assert_eq!(answered, Ok(Term::intrinsic(Intrinsic::Bool(true))));
 }
+
+/// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses where it used to refuse the judgment it serves.
+#[test]
+fn an_operand_with_no_value_is_compared_as_written() {
+    let mut kernel = kernel();
+    let x = binder(1, "x");
+    kernel.assume(&x, &nat_type());
+    let undefined = Term::intrinsic(Intrinsic::NatDiv {
+        dividend: nat(1),
+        divisor: nat(0),
+        non_zero: Term::free_var(&x),
+    });
+    assert!(
+        whnf(&mut kernel, undefined.clone()).is_err_and(|error| !error.is_exhausted()),
+        "the operand has a value, so the probe is not put to the question"
+    );
+    let probe = Term::intrinsic(Intrinsic::NatEql(undefined, Term::free_var(&x)));
+
+    assert_eq!(super::canonical_operands(&mut kernel, &probe), Ok(probe));
+}

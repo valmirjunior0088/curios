@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::Kernel,
+    super::{Kernel, KernelError},
     curios_analysis::{Call, SizeContext, decide, grade, member_arities, nonzero_by},
     curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::collections::{HashMap, HashSet},
@@ -155,9 +155,13 @@ impl Kernel {
     /// Record a call to `head` with `arguments`, when `head` is a member of a group whose body is being checked.
     ///
     /// Not while a position is being classified: deciding a position's erased half types that position's *type*, which may name a member — `T(n)`, a sibling computing the type — without being a call any body makes.
-    pub(super) fn record_call(&mut self, head: &Free, arguments: &[Term]) {
+    pub(super) fn record_call(
+        &mut self,
+        head: &Free,
+        arguments: &[Term],
+    ) -> Result<(), KernelError> {
         if self.calls.frames.is_empty() || self.positions.suppressed() {
-            return;
+            return Ok(());
         }
         let Some((frame, callee)) =
             self.calls
@@ -170,10 +174,10 @@ impl Kernel {
                     Some((frame, callee))
                 })
         else {
-            return;
+            return Ok(());
         };
         let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
-            return;
+            return Ok(());
         };
         let arity = self.calls.frames[frame].arities[callee];
 
@@ -181,7 +185,8 @@ impl Kernel {
         let context = std::mem::take(&mut self.calls.context);
         let call = grade(self, &context, caller, &params, callee, arity, arguments);
         self.calls.context = context;
-        self.calls.frames[frame].calls.push(call);
+        self.calls.frames[frame].calls.push(call?);
+        Ok(())
     }
 
     /// Whether some group's body is being checked, so that what an arm establishes may grade a call — and is worth reading.
@@ -199,18 +204,19 @@ impl Kernel {
         refine: Option<(Free, &Term)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
-    ) {
+    ) -> Result<(), KernelError> {
         if !self.recording() {
-            return;
+            return Ok(());
         }
         let mut context = std::mem::take(&mut self.calls.context);
-        context.enter(self, refine, nonzero, payloads);
+        let entered = context.enter(self, refine, nonzero, payloads);
         self.calls.context = context;
+        entered
     }
 
     /// Within the current bracket, `binder` stands for `value`.
-    pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) {
-        self.enter_size(Some((*binder, value)), None, Vec::new());
+    pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) -> Result<(), KernelError> {
+        self.enter_size(Some((*binder, value)), None, Vec::new())
     }
 
     /// What an arm that scrutinizes `scrutinee` at `value` establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, and each other binder in `solutions` stands for what it was solved to.
@@ -221,9 +227,9 @@ impl Kernel {
         scrutinee: &Term,
         value: &Term,
         solutions: &[(Free, Term)],
-    ) {
+    ) -> Result<(), KernelError> {
         if !self.recording() {
-            return;
+            return Ok(());
         }
         let scrutinee_binder = match &**scrutinee {
             Subterm::Var(var) => var.as_free().cloned(),
@@ -231,36 +237,42 @@ impl Kernel {
         };
         for (binder, solved) in solutions {
             if Some(binder) != scrutinee_binder.as_ref() {
-                self.refine_size(binder, solved);
+                self.refine_size(binder, solved)?;
             }
         }
         if let Some(binder) = &scrutinee_binder {
-            self.refine_size(binder, &value.substitute(solutions));
+            self.refine_size(binder, &value.substitute(solutions))?;
         }
+        Ok(())
     }
 
     /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for.
     ///
     /// Read before the arm assumes its case equation, and it must be: that equation makes `scrutinee` reduce to `value` itself, and a comparison read through it is a literal with nothing left to compare.
-    pub(super) fn assume_guard(&mut self, scrutinee: &Term, value: &Term) {
+    pub(super) fn assume_guard(
+        &mut self,
+        scrutinee: &Term,
+        value: &Term,
+    ) -> Result<(), KernelError> {
         if !self.recording() {
-            return;
+            return Ok(());
         }
         if let Subterm::Intrinsic(Intrinsic::Bool(taken)) = &**value
-            && let Some(atom) = nonzero_by(self, scrutinee, *taken)
+            && let Some(atom) = nonzero_by(self, scrutinee, *taken)?
         {
-            self.assume_nonzero(atom);
+            self.assume_nonzero(atom)?;
         }
+        Ok(())
     }
 
     /// Within the current bracket, `binder` is not zero.
-    pub(super) fn assume_nonzero(&mut self, binder: Free) {
-        self.enter_size(None, Some(binder), Vec::new());
+    pub(super) fn assume_nonzero(&mut self, binder: Free) -> Result<(), KernelError> {
+        self.enter_size(None, Some(binder), Vec::new())
     }
 
     /// Within the current bracket, `binders` are a constructor's payloads.
-    pub(super) fn assume_payloads(&mut self, binders: &[Free]) {
-        self.enter_size(None, None, binders.to_vec());
+    pub(super) fn assume_payloads(&mut self, binders: &[Free]) -> Result<(), KernelError> {
+        self.enter_size(None, None, binders.to_vec())
     }
 
     /// The verdict `group`'s recorded calls closed to, when this walk checked it.

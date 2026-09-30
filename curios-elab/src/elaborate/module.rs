@@ -777,7 +777,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
 
     if !recursive_witness {
         // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
-        record_definition_totality(context, &definition, Totality::Total);
+        record_definition_totality(context, &definition, Totality::Total)?;
         return Ok(Item::Let(definition));
     }
 
@@ -787,9 +787,9 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     context.define(&name, &member, Some(&def.kind));
 
     // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
-    let verdict = group_totality(context, &rec.group);
+    let verdict = group_totality(context, &rec.group)?;
     for definition in rec.definitions() {
-        record_definition_totality(context, &definition, verdict);
+        record_definition_totality(context, &definition, verdict)?;
     }
 
     Ok(Item::Rec(rec))
@@ -1145,9 +1145,9 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
-    let group = group_totality(context, &rec.group);
+    let group = group_totality(context, &rec.group)?;
     for definition in rec.definitions() {
-        record_definition_totality(context, &definition, group);
+        record_definition_totality(context, &definition, group)?;
     }
 
     Ok(rec)
@@ -1538,7 +1538,7 @@ fn finalize_and_check(
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
-    record_totality(context, &mut module, inherited);
+    record_totality(context, &mut module, inherited)?;
 
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
@@ -1752,7 +1752,7 @@ fn elaborate_and_zonk_unit_over_within(
     let mut module = reassemble(&recompile, closure, &elaborated.dropped);
     context.restore_budget();
     check_positivity(context, &mut module)?;
-    record_totality(context, &mut module, &established.recorded_totality());
+    record_totality(context, &mut module, &established.recorded_totality())?;
     debug_assert!(
         agrees_with(&module, recompile.reused),
         "a reused item's verdict moved, so the closure was not closed"

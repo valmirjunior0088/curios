@@ -124,8 +124,8 @@ fn check_arm(
 
             assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
             // What the call recorder grades under within the arm: the equations just put in force, and the payload binders — an application of one reads as the payload it came from.
-            kernel.assume_arm(scrutinee, &value, &solutions);
-            kernel.assume_payloads(binders);
+            kernel.assume_arm(scrutinee, &value, &solutions)?;
+            kernel.assume_payloads(binders)?;
 
             let refs = payload.iter().collect::<Vec<_>>();
             let body = arm.open(&refs).substitute(&solutions);

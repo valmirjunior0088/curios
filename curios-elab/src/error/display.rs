@@ -243,11 +243,11 @@ impl fmt::Display for Displayed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spelling = &self.1;
         match self.0 {
-            Error::ReduceExhausted { term } => {
+            Error::ReduceExhausted { term, .. } => {
                 let term = term.spelled(spelling);
                 write!(f, "reduction ran out of steps on: {term}")
             }
-            Error::ConvertExhausted { this, that } => {
+            Error::ConvertExhausted { this, that, .. } => {
                 let that = that.spelled(spelling);
                 let this = this.spelled(spelling);
                 write!(f, "conversion ran out of steps between {this} and {that}")

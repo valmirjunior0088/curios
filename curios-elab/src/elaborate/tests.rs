@@ -504,3 +504,20 @@ fn a_num_lit_realizes_at_bool_only_for_zero_and_one() {
     let negative = Term::num_lit(Natural::from(1u32), curios_utilities::Sign::Negative);
     assert!(elaborate(&mut context, &negative, Mode::Check(bool_())).is_err());
 }
+
+/// A monad's shape reads its context arguments as probes: one the budget cannot afford propagates the refusal, where it used to key on nothing — compatible with any region — and let the `!` oracle go ahead on that reading.
+#[test]
+fn a_context_argument_the_budget_cannot_read_propagates_the_refusal() {
+    let mut context = Context::new(100_000, SYNTAX);
+    let loop_ = context.fresh(Some("loop"));
+    context.define(&loop_, &Term::free_var(&loop_), None);
+    let region = Term::from(Subterm::StructType(StructType {
+        name: nominal("Region"),
+        universes: Vec::new(),
+        params: vec![Term::free_var(&loop_), Term::type_ground()],
+    }));
+
+    let shape = monad_shape(&mut context, &region);
+
+    assert!(shape.is_err_and(|spent| spent.is_exhausted()));
+}

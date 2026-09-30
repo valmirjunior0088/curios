@@ -5,7 +5,9 @@
 use {
     super::{Call, Carriers, Guard, Matrix, Shape, Tag, spine},
     crate::{Env, forceable},
-    curios_core::{Free, FreeMonoid, Intrinsic, Layer, Nat, Struct, Subterm, Term, Tuple, Variant},
+    curios_core::{
+        Free, FreeMonoid, Intrinsic, Layer, Nat, Probe, Struct, Subterm, Term, Tuple, Variant,
+    },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -58,19 +60,23 @@ pub(super) struct Undo {
 impl SizeContext {
     /// Enter an arm that establishes `binder` is `value`, that `nonzero` cannot be zero, and that `payloads` are the constructor's payloads — each where given.
     ///
-    /// `value` is read as a shape against the context as it stands before the arm, which is where the value was built.
+    /// `value` is read as a shape against the context as it stands before the arm, which is where the value was built. A read the budget refuses opens nothing, so the refusal leaves the context as balanced as it found it.
     pub fn enter<E: Env>(
         &mut self,
         env: &mut E,
         refine: Option<(Free, &Term)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
-    ) {
-        let refine = refine.map(|(binder, value)| {
-            let shape = Grader { env, context: self }.shape_of(value);
-            (binder, shape)
-        });
+    ) -> Result<(), E::Error> {
+        let refine = match refine {
+            Some((binder, value)) => {
+                let shape = Grader { env, context: self }.shape_of(value)?;
+                Some((binder, shape))
+            }
+            None => None,
+        };
         self.open(refine, nonzero, payloads);
+        Ok(())
     }
 
     /// [`SizeContext::enter`] with the refinement already a shape — the discovery walk builds an arm's shape from the binders it opened.
@@ -150,7 +156,7 @@ pub fn grade<E: Env>(
     callee: usize,
     callee_arity: usize,
     arguments: &[Term],
-) -> Call {
+) -> Result<Call, E::Error> {
     curios_profile::profile!("grade");
     let mut grader = Grader { env, context };
     let mut matrix = Matrix::unknown(params.len(), callee_arity);
@@ -161,29 +167,30 @@ pub fn grade<E: Env>(
         .collect::<Vec<_>>();
 
     for (column, argument) in arguments.iter().enumerate().take(callee_arity) {
-        let shape = grader.shape_of(argument);
+        let shape = grader.shape_of(argument)?;
         for (row, parameter) in expanded.iter().enumerate() {
             matrix.set(row, column, shape.against(parameter));
         }
     }
 
-    Call {
+    Ok(Call {
         caller,
         callee,
         matrix,
-    }
+    })
 }
 
 /// The binder a boolean arm taken `taken` rules zero out for, when `head` compares a binder against a literal in a way that does.
-pub fn nonzero_by<E: Env>(env: &mut E, head: &Term, taken: bool) -> Option<Free> {
+pub fn nonzero_by<E: Env>(env: &mut E, head: &Term, taken: bool) -> Result<Option<Free>, E::Error> {
     let context = SizeContext::default();
-    Grader {
+    let guard = Grader {
         env,
         context: &context,
     }
-    .guard(head)
-    .filter(|guard| guard.establishes_nonzero(taken))
-    .map(|guard| guard.atom)
+    .guard(head)?;
+    Ok(guard
+        .filter(|guard| guard.establishes_nonzero(taken))
+        .map(|guard| guard.atom))
 }
 
 /// The reader of terms as sizes: a checker to force through, and the context the arms established.
@@ -238,30 +245,27 @@ impl<E: Env> Grader<'_, E> {
     /// Read a term as a constructor tree.
     ///
     /// A constructor, a free-monoid layer, and a recognised arithmetic decrease read directly; everything else goes to [`Grader::unfolded_shape`], which sees through the definitions standing between a term and its shape. That fallback carries most of what the size order knows — an operator resolves a witness, so even `n - 1` reaches here as a projection — and it is not bounded by a step count; see [`readable`] for what bounds it instead.
-    pub(super) fn shape_of(&mut self, term: &Term) -> Shape {
-        match &**term {
+    pub(super) fn shape_of(&mut self, term: &Term) -> Result<Shape, E::Error> {
+        Ok(match &**term {
             Subterm::Var(var) => {
                 if let Some(free) = var.as_free() {
-                    return self.expand(free, EXPAND_FUEL);
+                    return Ok(self.expand(free, EXPAND_FUEL));
                 }
                 Shape::Opaque
             }
 
             Subterm::Variant(Variant { tag, payload, .. }) => {
-                let kids = payload
-                    .iter()
-                    .map(|argument| self.shape_of(argument))
-                    .collect();
+                let kids = self.shapes_of(payload)?;
                 Shape::Node(Tag::Variant(tag.clone()), kids)
             }
 
             Subterm::Struct(Struct { name, fields, .. }) => {
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
+                let kids = self.shapes_of(fields)?;
                 Shape::Node(Tag::Struct(*name), kids)
             }
 
             Subterm::Tuple(Tuple { fields, .. }) => {
-                let kids = fields.iter().map(|field| self.shape_of(field)).collect();
+                let kids = self.shapes_of(fields)?;
                 Shape::Node(Tag::Tuple, kids)
             }
 
@@ -269,31 +273,31 @@ impl<E: Env> Grader<'_, E> {
                 Shape::Node(Tag::Bool(*value), Vec::new())
             }
 
-            Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term),
+            Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term)?,
 
             Subterm::Intrinsic(
                 Intrinsic::Bin(grain, _)
                 | Intrinsic::BinAppend { grain, .. }
                 | Intrinsic::BinConcat { grain, .. }
                 | Intrinsic::BinSlice { grain, .. },
-            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
+            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term)?,
 
             Subterm::Intrinsic(
                 Intrinsic::List { .. }
                 | Intrinsic::ListAppend { .. }
                 | Intrinsic::ListConcat { .. }
                 | Intrinsic::ListSlice { .. },
-            ) => self.monoid_shape(FreeMonoid::List, term),
+            ) => self.monoid_shape(FreeMonoid::List, term)?,
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Intrinsic(Intrinsic::NatDiv {
                 dividend: left,
                 divisor: right,
                 ..
-            }) => self.arithmetic_shape(left, right, &Natural::from(2usize)),
+            }) => self.arithmetic_shape(left, right, &Natural::from(2usize))?,
 
             Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
-                self.arithmetic_shape(left, right, &Natural::from(1usize))
+                self.arithmetic_shape(left, right, &Natural::from(1usize))?
             }
 
             // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding, as every application did before.
@@ -303,46 +307,56 @@ impl<E: Env> Grader<'_, E> {
                     && let Some(free) = var.as_free()
                     && self.context.payloads.contains(free)
                 {
-                    return self.expand(free, EXPAND_FUEL);
+                    return Ok(self.expand(free, EXPAND_FUEL));
                 }
-                self.unfolded_shape(term)
+                self.unfolded_shape(term)?
             }
 
-            _ => self.unfolded_shape(term),
-        }
+            _ => self.unfolded_shape(term)?,
+        })
+    }
+
+    /// Each of `terms` read as a shape, in order.
+    fn shapes_of(&mut self, terms: &[Term]) -> Result<Vec<Shape>, E::Error> {
+        terms.iter().map(|term| self.shape_of(term)).collect()
     }
 
     /// Read `left op right` as a decrease on the binder `left` stands for.
     ///
     /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread — which is what this term read as before the rule existed.
-    fn arithmetic_shape(&mut self, left: &Term, right: &Term, least: &Natural) -> Shape {
+    fn arithmetic_shape(
+        &mut self,
+        left: &Term,
+        right: &Term,
+        least: &Natural,
+    ) -> Result<Shape, E::Error> {
         let Some(divisor) = right.as_nat().and_then(|nat| nat.to_natural()) else {
-            return Shape::Opaque;
+            return Ok(Shape::Opaque);
         };
         if divisor < *least {
-            return Shape::Opaque;
+            return Ok(Shape::Opaque);
         }
-        match self.shape_of(left) {
+        Ok(match self.shape_of(left)? {
             // `n` itself, and an arm has ruled out zero.
             Shape::Atom(atom) if self.context.nonzero.contains(&atom) => Shape::Smaller(atom),
             // Already below `below`, and these operations never grow: dividing or subtracting again keeps it below.
             Shape::Smaller(below) => Shape::Smaller(below),
             _ => Shape::Opaque,
-        }
+        })
     }
 
     /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
     ///
     /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
-    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Shape {
+    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Result<Shape, E::Error> {
         let carriers = match carrier {
             FreeMonoid::Unary => {
                 return match &**term {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
-                        Shape::Node(Tag::Empty(Carriers::Unary), Vec::new())
+                        Ok(Shape::Node(Tag::Empty(Carriers::Unary), Vec::new()))
                     }
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
-                        Shape::unary_run(spine.clone(), self.shape_of(inner))
+                        Ok(Shape::unary_run(spine.clone(), self.shape_of(inner)?))
                     }
                     _ => self.unfolded_shape(term),
                 };
@@ -356,15 +370,15 @@ impl<E: Env> Grader<'_, E> {
         loop {
             match carrier.uncons(rest) {
                 Layer::Empty => {
-                    break Shape::elem_run(
+                    break Ok(Shape::elem_run(
                         carriers,
                         heads,
                         Shape::Node(Tag::Empty(carriers), Vec::new()),
-                    );
+                    ));
                 }
                 Layer::Cons { head, tail } => {
                     if let Some(head) = head {
-                        heads.push(self.shape_of(&head));
+                        heads.push(self.shape_of(&head)?);
                     }
                     rest = Term::unwrap_or_clone(tail);
                 }
@@ -372,11 +386,11 @@ impl<E: Env> Grader<'_, E> {
                     let stuck = Term::from(stuck);
                     let tail = match heads.is_empty() {
                         // Nothing peeled: the whole term is what stuck, and dispatching it back through `shape_of` would land right here again — force it instead.
-                        true => self.unfolded_shape(&stuck),
+                        true => self.unfolded_shape(&stuck)?,
                         // The remainder after a peeled prefix is an arbitrary term — a binder, another literal spelling, an application — and gets the full dispatch, exactly as the tail of every peeled layer did when the layers were nested nodes.
-                        false => self.shape_of(&stuck),
+                        false => self.shape_of(&stuck)?,
                     };
-                    break Shape::elem_run(carriers, heads, tail);
+                    break Ok(Shape::elem_run(carriers, heads, tail));
                 }
             }
         }
@@ -386,35 +400,37 @@ impl<E: Env> Grader<'_, E> {
     ///
     /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/big_nat/mul/small` and `/std/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
     ///
-    /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the kernel grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle.
+    /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the kernel grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle: the force is a [`Probe`], so a term with no reading is opaque and the budget's refusal propagates as the analysis's own.
     ///
     /// Removing the count changed no verdict in the corpus, and the reason is worth keeping: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call and the count bounded *re-entries* here rather than unfoldings. Measured, 286 of 288 load-bearing unfoldings re-entered once and none more than twice, against a bound of three. What the removal buys is a stated condition in place of a number, not reach.
-    fn unfolded_shape(&mut self, term: &Term) -> Shape {
+    fn unfolded_shape(&mut self, term: &Term) -> Result<Shape, E::Error> {
         if !readable(term) {
-            return Shape::Opaque;
+            return Ok(Shape::Opaque);
         }
-        let Ok(reduced) = self.env.force(term) else {
-            return Shape::Opaque;
+        let Some(reduced) = self.env.force(term).probed()? else {
+            return Ok(Shape::Opaque);
         };
         if reduced == *term {
-            return Shape::Opaque;
+            return Ok(Shape::Opaque);
         }
         self.shape_of(&reduced)
     }
 
     /// Read a boolean scrutinee as a comparison against a literal.
     ///
-    /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Grader::shape_of`] uses is what exposes the intrinsic under both.
-    pub(super) fn guard(&mut self, head: &Term) -> Option<Guard> {
+    /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Grader::shape_of`] uses is what exposes the intrinsic under both, and it is the same [`Probe`].
+    pub(super) fn guard(&mut self, head: &Term) -> Result<Option<Guard>, E::Error> {
         if let Some(guard) = Guard::read(head) {
-            return Some(guard);
+            return Ok(Some(guard));
         }
         if !readable(head) {
-            return None;
+            return Ok(None);
         }
-        let reduced = self.env.force(head).ok()?;
+        let Some(reduced) = self.env.force(head).probed()? else {
+            return Ok(None);
+        };
         if reduced == *head {
-            return None;
+            return Ok(None);
         }
         self.guard(&reduced)
     }

@@ -1,6 +1,8 @@
 use {
     super::*,
-    curios_core::{CalleeId, Global, Level, UniverseContext, instantiate_universe_levels_scoped},
+    curios_core::{
+        CalleeId, Global, Level, Probe, UniverseContext, instantiate_universe_levels_scoped,
+    },
 };
 
 fn instantiate_struct_decl(
@@ -65,7 +67,7 @@ pub(super) fn elaborate_struct_type(
         let mut cursor = struct_decl.arity.cursor();
         while let Some((hint, ty)) = cursor.entry() {
             let binder = binder_name(hint);
-            let proposition = crate::is_prop(context, &ty).unwrap_or(false);
+            let proposition = crate::is_prop(context, &ty).probed()?.unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
                 ty,
                 term.span(),
@@ -320,7 +322,7 @@ pub(super) fn resolve_struct_params(
             Some(arg) => check(context, arg, ty.clone())?,
             None => {
                 let binder = binder_name(hint);
-                let proposition = crate::is_prop(context, &ty).unwrap_or(false);
+                let proposition = crate::is_prop(context, &ty).probed()?.unwrap_or(false);
                 context
                     .fresh_metavar(
                         ty.clone(),

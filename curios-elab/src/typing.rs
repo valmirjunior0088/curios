@@ -27,8 +27,11 @@ pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term
 }
 
 pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce_forced(context, term.clone())
-        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(term.clone())))
+    super::reduce_forced(context, term.clone()).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(term.clone(), refusal)
+        })
+    })
 }
 
 /// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit type so proof-irrelevance and eta fire at the terms' real sort. The inverter uses it to compare a binder's competing forcings at the binder's own type.
@@ -39,17 +42,19 @@ pub(crate) fn convert_at(
     that: &Term,
 ) -> Result<bool, Error> {
     super::convert(context, type_, this, that).map_err(|error| {
-        Error::from_reduce(error, || {
-            Error::convert_exhausted(this.clone(), that.clone())
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(this.clone(), that.clone(), refusal)
         })
     })
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports as its type-of-a-type, so a proposition checks against `Prop`. Wraps `Sort::of`, mapping an exhausted budget to an error like the helpers above.
 pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
-    Sort::of(context, type_)
-        .map(Sort::term)
-        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
+    Sort::of(context, type_).map(Sort::term).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(type_.clone(), refusal)
+        })
+    })
 }
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
@@ -67,7 +72,11 @@ pub(crate) fn is_prop_in(
 ) -> Result<bool, Error> {
     Sort::of_in(context, opened, type_)
         .map(|sort| matches!(sort, Sort::Prop))
-        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(type_.clone())))
+        .map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(type_.clone(), refusal)
+            })
+        })
 }
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
@@ -118,12 +127,12 @@ pub(crate) fn display_mismatch(
     Error::type_mismatch(this, that)
 }
 
-/// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report.
+/// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report — and for one whose shapes cannot be read, exhaustion included, since the refusal this decorates is already the verdict.
 fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
     let this_whnf = super::reduce_forced(context, this.clone()).ok()?;
     let that_whnf = super::reduce_forced(context, that.clone()).ok()?;
-    let action = super::monad_shape(context, &this_whnf)?;
-    let expected = super::monad_shape(context, &that_whnf)?;
+    let action = super::monad_shape(context, &this_whnf).ok().flatten()?;
+    let expected = super::monad_shape(context, &that_whnf).ok().flatten()?;
     let differ = super::embeds(&expected, &action)
         && super::is_monad(context, &action.head)
         && super::is_monad(context, &expected.head);
@@ -228,8 +237,8 @@ fn subsume(
     }
 
     super::convert_outcome(context, &Term::type_ground(), inferred, expected).map_err(|error| {
-        Error::from_reduce(error, || {
-            Error::convert_exhausted(inferred.clone(), expected.clone())
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
         })
     })
 }
@@ -252,8 +261,8 @@ fn subsume_telescope(
             Step::Entries { left, right, .. } => {
                 let outcome = super::convert_outcome(context, &Term::type_ground(), &left, &right)
                     .map_err(|error| {
-                        Error::from_reduce(error, || {
-                            Error::convert_exhausted(left.clone(), right.clone())
+                        Error::from_reduce(error, |refusal| {
+                            Error::convert_exhausted(left.clone(), right.clone(), refusal)
                         })
                     })?;
 
@@ -448,7 +457,7 @@ pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
 impl Context {
     /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
     pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
-        // Never retry inside an oracle: re-validation swallows errors (`Err(_) => false`), so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
+        // Never retry inside an oracle: re-validation reads every failure but exhaustion as a rejected candidate, so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
         if self.parking_suppressed() {
             return Ok(());
         }
@@ -833,8 +842,8 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
     });
 
     let outcome = outcome.map_err(|error: ReduceError| {
-        Error::from_reduce(error, || {
-            Error::convert_exhausted(goal.this.clone(), goal.that.clone())
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(goal.this.clone(), goal.that.clone(), refusal)
         })
     })?;
 
@@ -864,8 +873,8 @@ pub(crate) fn fill_placeholder(
         return Ok(());
     };
     let outcome = super::convert_outcome(context, type_, &rebuilt, &existing).map_err(|error| {
-        Error::from_reduce(error, || {
-            Error::convert_exhausted(rebuilt.clone(), existing.clone())
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(rebuilt.clone(), existing.clone(), refusal)
         })
     })?;
     match outcome {

@@ -30,11 +30,12 @@ use {
     },
     curios_analysis::connectives_agree,
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Free, Func, FuncType,
-        InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
-        Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, Variant, Visit, instantiate_universe_levels_scoped,
+        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Field, Free, Func,
+        FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match,
+        MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, Variant, Visit,
+        instantiate_universe_levels_scoped,
     },
     curios_utilities::Plicity,
     std::{
@@ -727,7 +728,7 @@ impl Convert {
             }
             (MatchResult::Family(motive), MatchResult::Ambient(goal))
             | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
-                let Some(at_head) = family_at_head(context, &motive, &head) else {
+                let Some(at_head) = family_at_head(context, &motive, &head)? else {
                     return Ok(false);
                 };
                 self.enqueue(Term::type_ground(), at_head, goal);
@@ -1310,23 +1311,32 @@ impl Convert {
                 context.assume(name, ty);
             }
 
+            // A meta-free, well-scoped candidate that fails to check against the frozen type is not validly typed here — reject the solution. (Under the oracle's suppressed parking an undecided check surfaces as an error too, and likewise rejects.) The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
             context.with_oracle(&refinements, |context| {
-                match check(context, &inverted, result.clone()) {
-                    Ok(_) => Ok(true),
-                    // A meta-free, well-scoped candidate that fails to check against the frozen type is not validly typed here — reject the solution. (Under the oracle's suppressed parking an undecided check surfaces as an error too, and likewise rejects.)
-                    Err(_error) => {
+                check(context, &inverted, result.clone())
+                    .inspect_err(|error| {
                         // The oracle's verdict is a boolean, so this error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
-                        curios_profile::note!(
-                            target: "curios_elab::solve",
-                            meta = id.0,
-                            error = %_error,
-                            "re-validation rejected the candidate",
-                        );
-                        Ok(false)
-                    }
-                }
+                        if !error.is_exhausted() {
+                            curios_profile::note!(
+                                target: "curios_elab::solve",
+                                meta = id.0,
+                                error = %error,
+                                "re-validation rejected the candidate",
+                            );
+                        }
+                    })
+                    .probed_refusal()
+                    .map(|checked| checked.is_some())
             })
-        })?;
+        });
+        let revalidated = match revalidated {
+            Ok(revalidated) => revalidated,
+            Err(spent) => {
+                context.rollback_solutions(mark);
+                context.end_solutions(mark);
+                return Err(spent);
+            }
+        };
 
         if !revalidated {
             curios_profile::note!(
@@ -2065,20 +2075,28 @@ fn level_question(
     })
 }
 
-/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices the scrutinee's type carries, read by inference. `None` where that reading fails, which conversion answers as not convertible: incomplete, never unsound.
-fn family_at_head(context: &mut Context, motive: &Scope<Many>, head: &Term) -> Option<Term> {
+/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices the scrutinee's type carries, read by inference as a [`Probe`]. `None` where the scrutinee's type has no reading, which conversion answers as not convertible: incomplete, never unsound.
+fn family_at_head(
+    context: &mut Context,
+    motive: &Scope<Many>,
+    head: &Term,
+) -> Result<Option<Term>, ReduceError> {
     let mut arguments = Vec::with_capacity(motive.arity());
     if motive.arity() > 1 {
-        let head_type = infer(context, head).ok()?;
-        let head_type = reduce_forced(context, head_type).ok()?;
+        let Some(head_type) = infer(context, head).probed_refusal()? else {
+            return Ok(None);
+        };
+        let Some(head_type) = reduce_forced(context, head_type).probed()? else {
+            return Ok(None);
+        };
         if let Subterm::InductType(InductType { indices, .. }) = &*head_type {
             arguments.extend(indices.iter().cloned());
         }
     }
     arguments.push(head.clone());
     if arguments.len() != motive.arity() {
-        return None;
+        return Ok(None);
     }
     let refs = arguments.iter().collect::<Vec<_>>();
-    Some(motive.open(&refs))
+    Ok(Some(motive.open(&refs)))
 }

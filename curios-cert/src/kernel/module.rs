@@ -90,7 +90,7 @@ pub(crate) fn check_group<R>(
 
             // Erasure asks about the member as the rest of the kernel spells it, and `yields_a_sort` decides by reduction rather than inference — so it never re-enters, and reads the folded type.
             let folded = group.member_type(index);
-            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &folded)) {
+            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &folded)?) {
                 erased_member = Some(folded);
             }
         }

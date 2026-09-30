@@ -334,8 +334,8 @@ pub(crate) fn probe_match(
         Ok(outcome) => outcome,
         Err(error) => {
             context.end_solutions(mark);
-            return Err(Error::from_reduce(error, || {
-                Error::convert_exhausted(candidate.clone(), goal.clone())
+            return Err(Error::from_reduce(error, |refusal| {
+                Error::convert_exhausted(candidate.clone(), goal.clone(), refusal)
             }));
         }
     };
@@ -357,8 +357,8 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
         Ok(outcome) => outcome,
         Err(error) => {
             context.end_solutions(mark);
-            return Err(Error::from_reduce(error, || {
-                Error::convert_exhausted(candidate.clone(), goal.clone())
+            return Err(Error::from_reduce(error, |refusal| {
+                Error::convert_exhausted(candidate.clone(), goal.clone(), refusal)
             }));
         }
     };
@@ -626,7 +626,8 @@ fn instantiate(
                 let binder = hint.unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => {
-                        let proposition = crate::is_prop(context, &ty).unwrap_or(false);
+                        let proposition = curios_core::Probe::probed(crate::is_prop(context, &ty))?
+                            .unwrap_or(false);
                         let provenance = ImplicitOrigin {
                             func: CalleeId::Witness(witness.name),
                             binder,

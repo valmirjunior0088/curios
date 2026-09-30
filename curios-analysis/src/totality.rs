@@ -37,7 +37,7 @@ use {
     crate::Env,
     curios_core::{
         Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Instance,
-        Intrinsic, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope, Struct,
+        Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
@@ -47,7 +47,7 @@ use {
 /// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
 ///
 /// This is the whole of size-change termination as the elaborator applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result — [`decide`]. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
-pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
+pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality, E::Error> {
     curios_profile::profile!("group_totality");
     let mut members = Vec::new();
     for index in 0..group.length() {
@@ -67,11 +67,11 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
             entered: Vec::new(),
             calls: Vec::new(),
         };
-        walk.walk(&member.body);
+        walk.walk(&member.body)?;
         calls.extend(walk.calls);
     }
 
-    decide(calls)
+    Ok(decide(calls))
 }
 
 /// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease.
@@ -141,7 +141,7 @@ struct Walk<'a, E: Env> {
 
 impl<E: Env> Walk<'_, E> {
     /// Record a call to member `callee` with `arguments`, graded against the caller's parameters under what the enclosing arms established.
-    fn call(&mut self, callee: usize, arguments: &[Term]) {
+    fn call(&mut self, callee: usize, arguments: &[Term]) -> Result<(), E::Error> {
         let call = grade(
             self.env,
             &self.context,
@@ -150,8 +150,9 @@ impl<E: Env> Walk<'_, E> {
             callee,
             self.arities[callee],
             arguments,
-        );
+        )?;
         self.calls.push(call);
+        Ok(())
     }
 
     /// The reader of terms as sizes, under the context this walk has built so far.
@@ -199,13 +200,14 @@ impl<E: Env> Walk<'_, E> {
     /// Find the recursive calls in `body`, tracking the refinements that make their arguments comparable.
     ///
     /// Scope discipline holds by construction: an arm's refinement is taken on by [`Walk::scoped`], which walks the body and puts it back, so no path can drop a refinement or carry one out.
-    fn walk(&mut self, body: &Term) {
-        self.walk_term(body);
+    fn walk(&mut self, body: &Term) -> Result<(), E::Error> {
+        self.walk_term(body)?;
 
         assert!(
             self.context.is_balanced() && self.entered.is_empty(),
             "the walk left a scope open"
         );
+        Ok(())
     }
 
     /// Walk one term, scheduling its children by descending into them.
@@ -213,7 +215,7 @@ impl<E: Env> Walk<'_, E> {
     /// Guarded by [`recurse`] because a member body nests as deep as the source that spelled it, and a generated term is bounded by nothing this analysis controls.
     ///
     /// **Arms are reached one at a time, and that is what makes this walk faithful.** Every arm's guard read, shape read, binder minting and body materialization happens in the arm's own call, never batched ahead of it — because those are effects on the checker driving the analysis: [`Env::force`] spends a reduction budget and [`Env::fresh`] mints an identity, so the order the arms are reached in *is* the order those effects land in. A differently-ordered spend against a nearly exhausted budget reads a different shape, which would be a verdict change with no cause in the term. The recursion gives that ordering; the frame machine this replaces had to argue for it.
-    fn walk_term(&mut self, term: &Term) {
+    fn walk_term(&mut self, term: &Term) -> Result<(), E::Error> {
         recurse(|| self.step(term))
     }
 
@@ -224,31 +226,37 @@ impl<E: Env> Walk<'_, E> {
         nonzero: Option<Free>,
         payloads: Vec<Free>,
         body: &Term,
-    ) {
+    ) -> Result<(), E::Error> {
         self.context.open(refine, nonzero, payloads);
-        self.walk_term(body);
+        self.walk_term(body)?;
         self.context.exit();
+        Ok(())
     }
 
     /// Walk each of `terms`, in order.
-    fn walks<'t>(&mut self, terms: impl IntoIterator<Item = &'t Term>) {
+    fn walks<'t>(&mut self, terms: impl IntoIterator<Item = &'t Term>) -> Result<(), E::Error> {
         for term in terms {
-            self.walk_term(term);
+            self.walk_term(term)?;
         }
+        Ok(())
     }
 
     /// Open a runtime-arity scope against fresh binders and walk its body.
-    fn open_many_walk(&mut self, scope: &Scope<Many>) {
+    fn open_many_walk(&mut self, scope: &Scope<Many>) -> Result<(), E::Error> {
         let (_, body) = self.open_many(scope);
-        self.walk_term(&body);
+        self.walk_term(&body)
     }
 
     /// Walk a lambda's telescope applied to `arguments`: each entry type, then the body with every binder standing for its argument. A binder past the last argument is minted fresh as `walk_terms` would; an argument past the last binder stays applied to the body, which may be a lambda in its turn.
-    fn walk_redex(&mut self, telescope: Telescope<Term>, arguments: &[Term]) {
+    fn walk_redex(
+        &mut self,
+        telescope: Telescope<Term>,
+        arguments: &[Term],
+    ) -> Result<(), E::Error> {
         let mut remaining = arguments.iter();
         let mut cursor = telescope.cursor();
         while let Some((hint, entry)) = cursor.entry() {
-            self.walk_term(&entry);
+            self.walk_term(&entry)?;
             let argument = match remaining.next() {
                 Some(argument) => argument.clone(),
                 None => Term::free_var(&self.env.fresh(hint)),
@@ -267,10 +275,10 @@ impl<E: Env> Walk<'_, E> {
     /// Walk a `Func`/`FuncType` telescope: each entry, then the terminal.
     ///
     /// A loop rather than a recursion, because a telescope is a list and this iterates it. Each binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
-    fn walk_terms(&mut self, telescope: Telescope<Term>) {
+    fn walk_terms(&mut self, telescope: Telescope<Term>) -> Result<(), E::Error> {
         let mut cursor = telescope.cursor();
         while let Some((_, entry)) = cursor.entry() {
-            self.walk_term(&entry);
+            self.walk_term(&entry)?;
             cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
         let terminal = cursor.body().expect("a cursor past every entry");
@@ -278,18 +286,19 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// [`Walk::walk_terms`] for a `TupleType`, which has no terminal to walk — a tuple type's payload is its fields.
-    fn walk_units(&mut self, telescope: Telescope<()>) {
+    fn walk_units(&mut self, telescope: Telescope<()>) -> Result<(), E::Error> {
         let mut cursor = telescope.cursor();
         while let Some((_, entry)) = cursor.entry() {
-            self.walk_term(&entry);
+            self.walk_term(&entry)?;
             cursor.advance_fresh(|hint| self.env.fresh(hint));
         }
+        Ok(())
     }
 
     /// Walk a match's arms, in order, each under what it establishes.
     ///
     /// Nothing is read ahead: an arm's guard, shape and binders are taken in the arm's own call, which is the ordering [`Walk::walk_term`] documents.
-    fn walk_arms(&mut self, head: &Term, cases: &Cases) {
+    fn walk_arms(&mut self, head: &Term, cases: &Cases) -> Result<(), E::Error> {
         let scrutinee = match &**head {
             Subterm::Var(var) => var.as_free().cloned(),
             _ => None,
@@ -304,23 +313,23 @@ impl<E: Env> Walk<'_, E> {
                 for (taken, body) in [(false, false_case), (true, true_case)] {
                     let atom = self
                         .grader()
-                        .guard(head)
+                        .guard(head)?
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
                     let shape = Shape::Node(Tag::Bool(taken), Vec::new());
-                    self.scoped(refine(scrutinee, shape), atom, Vec::new(), body);
+                    self.scoped(refine(scrutinee, shape), atom, Vec::new(), body)?;
                 }
             }
 
             Cases::Switch { cases, default } => {
                 for (value, body) in cases {
                     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
-                    let shape = self.grader().shape_of(&literal);
-                    self.scoped(refine(scrutinee, shape), None, Vec::new(), body);
+                    let shape = self.grader().shape_of(&literal)?;
+                    self.scoped(refine(scrutinee, shape), None, Vec::new(), body)?;
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
                 let atom = scrutinee.filter(|_| cases.iter().any(|(key, _)| key.is_zero()));
-                self.scoped(None, atom, Vec::new(), default);
+                self.scoped(None, atom, Vec::new(), default)?;
             }
 
             // The arm's binders are the constructor's payloads, whether or not the scrutinee is a binder the arm can refine: what an application of one reads as is a fact about the payload, not about what it was projected from.
@@ -331,10 +340,10 @@ impl<E: Env> Walk<'_, E> {
                         Tag::Variant(tag.clone()),
                         binders.iter().map(|b| Shape::Atom(*b)).collect(),
                     );
-                    self.scoped(refine(scrutinee, shape), None, binders, &body);
+                    self.scoped(refine(scrutinee, shape), None, binders, &body)?;
                 }
                 if let Some(default) = default {
-                    self.walk_term(default);
+                    self.walk_term(default)?;
                 }
             }
 
@@ -344,53 +353,64 @@ impl<E: Env> Walk<'_, E> {
                     empty_case,
                     cons_case,
                 } => {
-                    self.empty_arm(&scrutinee, Carriers::Unary, empty_case);
+                    self.empty_arm(&scrutinee, Carriers::Unary, empty_case)?;
                     let (binders, body) = self.open_two(cons_case);
                     let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
-                    self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
+                    self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)?;
                 }
                 Carrier::Bin {
                     empty_case,
                     cons_case,
                     ..
                 } => {
-                    self.empty_arm(&scrutinee, Carriers::Bin, empty_case);
-                    self.elem_cons(scrutinee, Carriers::Bin, cons_case);
+                    self.empty_arm(&scrutinee, Carriers::Bin, empty_case)?;
+                    self.elem_cons(scrutinee, Carriers::Bin, cons_case)?;
                 }
                 Carrier::List {
                     elem,
                     empty_case,
                     cons_case,
                 } => {
-                    self.walk_term(elem);
-                    self.empty_arm(&scrutinee, Carriers::List, empty_case);
-                    self.elem_cons(scrutinee, Carriers::List, cons_case);
+                    self.walk_term(elem)?;
+                    self.empty_arm(&scrutinee, Carriers::List, empty_case)?;
+                    self.elem_cons(scrutinee, Carriers::List, cons_case)?;
                 }
             },
         }
+        Ok(())
     }
 
     /// The identity arm of a free-monoid eliminator, refining the scrutinee to that carrier's empty value — a shape stated without opening anything.
-    fn empty_arm(&mut self, scrutinee: &Option<Free>, carriers: Carriers, empty_case: &Term) {
+    fn empty_arm(
+        &mut self,
+        scrutinee: &Option<Free>,
+        carriers: Carriers,
+        empty_case: &Term,
+    ) -> Result<(), E::Error> {
         let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
-        self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case);
+        self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
 
     /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
-    fn elem_cons(&mut self, scrutinee: Option<Free>, carriers: Carriers, cons_case: &Scope<Three>) {
+    fn elem_cons(
+        &mut self,
+        scrutinee: Option<Free>,
+        carriers: Carriers,
+        cons_case: &Scope<Three>,
+    ) -> Result<(), E::Error> {
         let (binders, body) = self.open_three(cons_case);
         let shape = Shape::elem_run(
             carriers,
             vec![Shape::Atom(binders[0])],
             Shape::Atom(binders[1]),
         );
-        self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
+        self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)
     }
 
-    fn step(&mut self, term: &Term) {
+    fn step(&mut self, term: &Term) -> Result<(), E::Error> {
         match &**term {
             // Nothing here can contain a call.
-            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Metavar(_) => {}
+            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Metavar(_) => Ok(()),
 
             // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
             Subterm::Rec(_)
@@ -399,7 +419,7 @@ impl<E: Env> Walk<'_, E> {
                     .is_some_and(|(group, _)| group == self.group) =>
             {
                 let (_, index) = term.as_rec_proj().expect("a projection");
-                self.call(index, &[]);
+                self.call(index, &[])
             }
 
             Subterm::Apply(apply) => {
@@ -407,18 +427,16 @@ impl<E: Env> Walk<'_, E> {
                 if let Some((group, index)) = spine_head.as_rec_proj()
                     && group == self.group
                 {
-                    self.call(index, &arguments);
-                    self.walks(&arguments);
-                    return;
+                    self.call(index, &arguments)?;
+                    return self.walks(&arguments);
                 }
                 // A lambda at the head of a spine is graded as its contractum: the body is walked with each binder standing for the argument it was applied to, so a call inside reads its arguments as what they are rather than as fresh binders nothing is below. This is what keeps a convoy — an arm generalized over a hypothesis and applied back to it — from hiding the descent it carries. The arguments are walked on their own first, because a binder the body never uses would otherwise drop a call from the walk.
                 if let Subterm::Func(Func { telescope, .. }) = &*spine_head {
-                    self.walks(&arguments);
-                    self.walk_redex(telescope.clone(), &arguments);
-                    return;
+                    self.walks(&arguments)?;
+                    return self.walk_redex(telescope.clone(), &arguments);
                 }
-                self.walk_term(&apply.head);
-                self.walks(apply.params());
+                self.walk_term(&apply.head)?;
+                self.walks(apply.params())
             }
 
             Subterm::Match(Match {
@@ -426,12 +444,12 @@ impl<E: Env> Walk<'_, E> {
                 result,
                 cases,
             }) => {
-                self.walk_term(head);
+                self.walk_term(head)?;
                 match result {
-                    MatchResult::Family(motive) => self.open_many_walk(motive),
-                    MatchResult::Ambient(goal) => self.walk_term(goal),
+                    MatchResult::Family(motive) => self.open_many_walk(motive)?,
+                    MatchResult::Ambient(goal) => self.walk_term(goal)?,
                 }
-                self.walk_arms(head, cases);
+                self.walk_arms(head, cases)
             }
 
             Subterm::Func(Func { telescope, .. })
@@ -468,7 +486,7 @@ impl<E: Env> Walk<'_, E> {
                     terms.push(child.clone());
                     false
                 });
-                self.walks(&terms);
+                self.walks(&terms)
             }
 
             Subterm::Foreign(_, args) => self.walks(args),
@@ -477,13 +495,13 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Let(Let { bindings, tail }) => {
                 let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
                 for binding in bindings {
-                    self.walk_term(binding.type_());
-                    self.walk_term(binding.value());
+                    self.walk_term(binding.type_())?;
+                    self.walk_term(binding.value())?;
                     let refs = values.iter().collect::<Vec<_>>();
                     values.push(binding.value().release(&refs));
                 }
                 let refs = values.iter().collect::<Vec<_>>();
-                self.walk_term(&tail.open(&refs));
+                self.walk_term(&tail.open(&refs))
             }
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
@@ -494,11 +512,11 @@ impl<E: Env> Walk<'_, E> {
                     self.entered.push(group.clone());
                     // One body at a time: each materializes a projection carrying the whole group, so holding them together would hold every member at once.
                     for index in 0..group.length() {
-                        self.walk_term(&group.member_body(index));
+                        self.walk_term(&group.member_body(index))?;
                     }
                     self.entered.pop();
                 }
-                self.open_many_walk(tail);
+                self.open_many_walk(tail)
             }
         }
     }
@@ -533,18 +551,18 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
 ///
 /// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
 ///
-/// A reduction that fails answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust.
-pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> bool {
+/// A reduction with no value answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
+pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
     // Peeling to a codomain answers the same question about a smaller type, so it iterates here rather than re-entering: an arrow's spine is as long as its type is written, and the answer is the codomain's own.
     let mut type_ = type_.clone();
 
     loop {
-        let Ok(reduced) = env.force(&type_) else {
-            return true;
+        let Some(reduced) = env.force(&type_).probed()? else {
+            return Ok(true);
         };
 
         match &*reduced {
-            Subterm::Type(_) | Subterm::Prop => return true,
+            Subterm::Type(_) | Subterm::Prop => return Ok(true),
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while !cursor.is_done() {
@@ -555,14 +573,14 @@ pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> bool {
             Subterm::TupleType(tuple) => {
                 let mut cursor = tuple.telescope.cursor();
                 while let Some((_, entry)) = cursor.entry() {
-                    if yields_a_sort(env, &entry) {
-                        return true;
+                    if yields_a_sort(env, &entry)? {
+                        return Ok(true);
                     }
                     cursor.advance_fresh(|hint| env.fresh(hint));
                 }
-                return false;
+                return Ok(false);
             }
-            _ => return false,
+            _ => return Ok(false),
         }
     }
 }
