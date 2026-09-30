@@ -765,7 +765,7 @@ fn process_items(
                     .map(|u| {
                         let name = curios_core::Global::Authored(context.prefixed(&u.label));
                         context.record_import_scope(Some(&name));
-                        let lower = Lowerer::new(context, Some(name.clone()));
+                        let lower = Lowerer::new(context, Some(name));
 
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
@@ -1039,7 +1039,7 @@ fn process_items(
                 for s in group {
                     let name = curios_core::Global::Authored(context.prefixed(&s.label));
                     context.record_import_scope(Some(&name));
-                    let lower = Lowerer::new(context, Some(name.clone()));
+                    let lower = Lowerer::new(context, Some(name));
 
                     // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                     let module = context.prefixed(&s.label).without_last();
@@ -1150,7 +1150,7 @@ fn process_items(
                     let module = context.prefixed(&concept.label).without_last();
 
                     context.record_import_scope(Some(&name));
-                    let lower = Lowerer::new(context, Some(name.clone()));
+                    let lower = Lowerer::new(context, Some(name));
                     let param_binders =
                         lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
                     let param_tys = concept
@@ -1411,7 +1411,7 @@ fn process_items(
                             None => signature.type_(),
                         };
 
-                        let lower = Lowerer::new(context, Some(name.clone()));
+                        let lower = Lowerer::new(context, Some(name));
                         lower.enter_signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
