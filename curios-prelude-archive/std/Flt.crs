@@ -462,7 +462,7 @@ let layout(ds: List(Nat), k: Int) -> Str =
                 Str/flatten([
                     digits_to_str(List/take(ds, kn)),
                     ".",
-                    digits_to_str(List/drop(@Nat, ds, kn, @Nat/Le/of_lt(kn, len, inside)))])
+                    digits_to_str(List/drop(@Nat, ds, kn))])
             | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - len))
             end
         end

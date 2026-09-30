@@ -166,14 +166,7 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
-    slice(
-        b,
-        k,
-        len(b) - k,
-        @Eq/subst(
-            (x) => Nat/Le(x, len(b)),
-            Eq/sym(Nat/Le/add_sub_cancel(k, len(b), ok)),
-            Nat/Le/refl(len(b))));
+    slice(b, k, len(b) - k);
 
 --- Every bit of every byte flipped.
 ---

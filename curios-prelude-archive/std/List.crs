@@ -1,6 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map, fold};
-use /std/{Nat, Bool, Option, Eq, Str, Show, Spell, Monad, Ordering, Ord};
+use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -9,15 +9,7 @@ pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
-    slice(
-        @T,
-        a,
-        k,
-        len(a) - k,
-        @Eq/subst(
-            (x) => Nat/Le(x, len(a)),
-            Eq/sym(Nat/Le/add_sub_cancel(k, len(a), ok)),
-            Nat/Le/refl(len(a))));
+    slice(@T, a, k, len(a) - k);
 
 --- The concatenation, in order.
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =

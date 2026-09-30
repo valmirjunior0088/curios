@@ -136,10 +136,7 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 
 --- The magnitude, as a `Nat`.
 pub let abs(n: Int) -> Nat =
-    match n >= +0
-    | true => to_nat(n, @Bool/True/qed())
-    | false => to_nat(+0 - n, @Le/of_lt(n, +0, Bool/True/qed()))
-    end;
+    match n >= +0 | true => to_nat(n, @Bool/True/qed()) | false => to_nat(+0 - n) end;
 
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
