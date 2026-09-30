@@ -2,7 +2,7 @@
 
 Working specification for making the compiler principled about what one declaration may read of another. A compilation becomes a graph of items over an environment that is only ever added to; each item's output is a function of the inputs it declares, and every read of another item goes through one interface that records it. The same record schedules the work [part 6](06-item-tasks-spec.md) parallelizes, orders the kernel, and makes invalidation precise, and it is what makes a verdict independent of the order items were elaborated in. Items still run one at a time here, in source order.
 
-It needs [the rule that no memo outlives its declaration](../../design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md), [part 3](03-no-minted-identity-spec.md)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it follows the invariants campaign's change to the solver, which has landed, rather than landing beside it.
+It needs [the rule that no memo outlives its declaration](../../design/toolchain/no-memo-outlives-the-declaration-that-filled-it.md), [part 3](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)'s identities and [the certifier's record](../../../curios-cert/README.md#a-later-walk-reads-the-certifiers-own-totality-record-never-elaborations-stamp). It changes how the elaborator threads state from item to item, so it follows the invariants campaign's change to the solver, which has landed, rather than landing beside it.
 
 ## What this builds on
 
@@ -35,7 +35,7 @@ It needs [the rule that no memo outlives its declaration](../../design/toolchain
 
 | Component | Treatment |
 | --- | --- |
-| Elaboration context | Per item: its metavariables, universe solver, caches, budget and identities. Zonked when the item finishes. A witness goal an item defers is retried after each later item today, under that item's budget, so what an item can afford depends on the goals earlier items left open; a retry is charged to the item that raised it |
+| Elaboration context | Per item: its metavariables, universe solver, caches, budget and identities. Zonked when the item finishes. A witness goal an item defers is retried after each later item today, under that item's budget, so what an item can afford depends on the goals earlier items left open; a retry is charged to the item that raised it. Metavariable and universe identities are minted per unit today, since a deferred goal carries its metavariables across items; per item, each item's space starts at zero |
 | Witness resolution | Against a complete key index built from every `satisfy` head in scope before any body elaborates; choosing a witness requests its cells. The deferred-goal sweeps and the retraction of finished items are deleted |
 | Refusal recovery | An item whose request reaches a refused declaration is withheld, as today, by the graph rather than the order |
 | Registries | A structure, inductive or concept is published by the item that declares it, elaborated |
