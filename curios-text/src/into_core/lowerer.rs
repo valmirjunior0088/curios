@@ -879,7 +879,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Projects each field of a compound pattern off the (already-bound) core variable `scrutinee_name`, in field order — folded right-to-left so the first field's `let` ends up outermost, matching the order a person would hand-write (`let x = p0.0; let y = p0.1; …`) — recursing into [`Self::bind_pattern`] for nested patterns. Each field's own type is a fresh metavar hole: there is never a per-field annotation to give, exactly like a hand-written `let x = p.0;`. The chain over a compound pattern already in scope: its leaves' minted identities are pulled from the surrounding walk, which produced them in this very order.
+    /// Projects each field of a compound pattern off the (already-bound) core variable `scrutinee_name`, in field order — folded right-to-left so the first field's `let` ends up outermost, matching the order a person would hand-write (`let x = p0.0; let y = p0.1; …`) — recursing into [`Self::bind_pattern`] for nested patterns. Each field's own type is a fresh metavar hole: there is never a per-field annotation to give, exactly like a hand-written `let x = p.0;`. Each projection is located at its field's pattern ([`pattern_span`]), so a report about reading the field — a head whose type never became a tuple — points at the destructuring rather than at whatever encloses it. The chain over a compound pattern already in scope: its leaves' minted identities are pulled from the surrounding walk, which produced them in this very order.
     pub(super) fn lower_pattern_fields(
         &self,
         fields: &[PatternField],
@@ -913,6 +913,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let proj = match &field.label {
                 Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
                 None => curios_core::Term::proj(scrutinee, index),
+            };
+            let proj = match pattern_span(&field.value) {
+                Some(span) => proj.with_span(span),
+                None => proj,
             };
             let hole = curios_core::Term::hole(self.context.fresh_metavar());
             tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
@@ -1631,6 +1635,16 @@ fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
             .flat_map(|field| pattern_labels(&field.value))
             .collect(),
     }
+}
+
+/// Where `pattern` was written, as far as its leaves record it: from its first leaf's start to its last leaf's end. A compound pattern keeps no span of its own, so its brackets are not covered.
+fn pattern_span(pattern: &Pattern) -> Option<Span> {
+    let spans = pattern_labels(pattern)
+        .into_iter()
+        .filter_map(|(_, span)| span)
+        .collect::<Vec<_>>();
+    let (first, last) = (spans.first()?, spans.last()?);
+    Some(Span::new(first.source.clone(), first.start, last.end))
 }
 
 /// Every `Pattern::Binder` leaf name in `pattern`, recursing through nested tuple/struct fields in field order.

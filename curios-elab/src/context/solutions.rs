@@ -6,7 +6,7 @@ use {
     super::{FrozenFrame, ItemStamp, SharedRefinements, SharedTelescope},
     crate::Problem,
     curios_core::{
-        Bound, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
+        Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
         WitnessOrigin,
     },
     curios_utilities::Entropy,
@@ -59,12 +59,24 @@ pub(crate) enum ParkedWork {
         goal: Term,
         provenance: WitnessOrigin,
     },
+    /// A projection from a head whose type had not yet reached a tuple or a struct ([`ParkedProjection`]).
+    Projection(ParkedProjection),
     /// A decided bound nothing discharged when it was inserted, because its subject still waited on a metavariable — one a later argument or the expectation pins. `slot` is the hole standing in the bound's place, `bound` its type. Woken when a watched metavariable solves; the bound is reduced again and the hole filled if it came to truth.
     Discharge {
         slot: MetavarId,
         bound: Term,
         provenance: ImplicitOrigin,
     },
+}
+
+/// A projection parked because its head's type was stuck on an unsolved metavariable, so no field could be read off it yet: an unannotated `let p = match … | … => (a, b) end` whose tuple arms wait for the drain, destructured by `let (x, y) = p`. Refusing it refused one step before the settle that gives the head its type; the projection waits instead, as a checked-only form does for its expectation. `head` is elaborated already, since elaborating the written head again would mint its implicits a second time, and `placeholder` stands in the tree for the projection at the fresh type `result`. Woken when the head type's metavariables solve.
+#[derive(Debug)]
+pub(crate) struct ParkedProjection {
+    pub head: Term,
+    pub head_type: Term,
+    pub field: Field,
+    pub result: Term,
+    pub placeholder: MetavarId,
 }
 
 /// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
@@ -304,6 +316,12 @@ impl Solutions {
                 .filter(|id| self.solution(*id).is_none())
                 .collect(),
             ParkedWork::Witness { goal, .. } => goal
+                .metavars()
+                .into_iter()
+                .filter(|id| self.solution(*id).is_none())
+                .collect(),
+            ParkedWork::Projection(projection) => projection
+                .head_type
                 .metavars()
                 .into_iter()
                 .filter(|id| self.solution(*id).is_none())

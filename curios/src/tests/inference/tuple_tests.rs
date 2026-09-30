@@ -175,7 +175,7 @@ fn a_synthesized_labeled_product_reports_its_labels() {
     );
 }
 
-// An inferred call has no expectation to turn around, so its force tier is the only thing that can settle a tuple argument before the drain. Left to the drain, `z.0` met a bare metavariable and was refused as a projection from a non-tuple.
+// An inferred call has no expectation to turn around, so its force tier is the only thing that can settle a tuple argument before the drain. Settled there, `z.0` reads the product at once instead of waiting for the drain to settle it, which is also what commits the call to the product (below).
 #[test]
 fn a_tuple_argument_settles_inside_an_inferred_call() {
     let source = r#"

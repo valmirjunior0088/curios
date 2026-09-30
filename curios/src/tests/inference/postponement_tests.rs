@@ -240,3 +240,37 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
         "unexpected report:\n{report}"
     );
 }
+
+// A projection waits for its head's type as a checked-only form waits for its expectation. `p`'s type is the unannotated match's, which only its tuple arms decide, and those park against it until the drain settles them to their product; destructuring `p` reads its fields before then. The projection was refused there as one from a non-tuple, one step before the settle that types its head. Mutation-checked: refusing a projection whose head's type is stuck refuses the program again.
+#[test]
+fn a_projection_waits_for_the_tuple_arms_that_type_its_head() {
+    let source = r#"
+        use /std/{Str, List, Nat};
+        let joined(raw: List(Str)) -> Str =
+            let p = match raw | [] => ([], 0) | [_, .._] => ([], 1) end;
+            let (xs, n) = p;
+            Str/flatten([Nat/to_str(n), "|", Str/join(",", xs)]);
+        /std/print(joined(["a"]))
+        "#;
+
+    assert_eq!(run(source), b"1|");
+}
+
+// A projection whose head's type nothing ever decides is refused at the drain, at the field it reads: a destructuring lowers each field to a projection located at the field's pattern, where it was once located at whatever enclosed it — the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p` again.
+#[test]
+fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let g(n: Nat) -> Nat =
+            let p = ?;
+            let (a, b) = p;
+            a;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("projected from a non-tuple") && report.contains("let (a, b) = p;"),
+        "the report should point at the destructuring:\n{report}"
+    );
+}

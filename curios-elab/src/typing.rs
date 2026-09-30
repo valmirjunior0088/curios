@@ -649,6 +649,11 @@ impl Context {
                             )
                             .at_opt(parked_origin.span())
                         }
+                        // A head whose type never reached a tuple or a struct is what the projection refused before it could wait.
+                        ParkedWork::Projection(projection) => {
+                            Error::not_a_tuple(resolved_for_display(self, &projection.head_type))
+                                .at_opt(parked_origin.span())
+                        }
                         // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
                         ParkedWork::Discharge { .. } => continue,
                     });
@@ -796,6 +801,9 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
             bound,
             provenance,
         } => return super::retry_discharge(context, slot, bound, provenance, origin, frame),
+        ParkedWork::Projection(projection) => {
+            return super::retry_projection(context, projection, origin, frame);
+        }
     };
 
     enum Retry {

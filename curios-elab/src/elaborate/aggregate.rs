@@ -1,4 +1,5 @@
 use super::*;
+use crate::{FrozenFrame, Outcome, ParkedProjection};
 use curios_core::{SelfReference, stamp_declaration_instance};
 
 pub(super) fn elaborate_tuple_type(
@@ -109,14 +110,111 @@ pub(super) fn elaborate_tuple(
     Ok((Term::tuple(elaborated), expected))
 }
 
-pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
+pub(super) fn elaborate_proj(
+    context: &mut Context,
+    proj: &Proj,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
     let Proj { head, field } = proj;
 
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
+    // Not a tuple or a struct *yet*: a head type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms parked against an unannotated match's type, which the drain settles — may still be coming. The projection waits for it rather than refusing one step early.
+    if !context.parking_suppressed() && crate::stuck_on_metavar(context, &head_type) {
+        return Ok(park_projection(
+            context,
+            head,
+            head_type,
+            field.clone(),
+            term,
+        ));
+    }
+
+    project(context, head, &head_type, field)
+}
+
+/// Park a projection whose head's type is stuck ([`ParkedProjection`]): a fresh type stands for the field's, and a placeholder at it for the projection, until the head's type is known.
+fn park_projection(
+    context: &mut Context,
+    head: Term,
+    head_type: Term,
+    field: Field,
+    term: &Term,
+) -> (Term, Term) {
+    let classifier = context.fresh_classifier_type("parked projection type");
+    let result = context.fresh_hole_metavar(classifier, term.span());
+    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.span());
+    context.park(
+        ParkedWork::Projection(ParkedProjection {
+            head,
+            head_type,
+            field,
+            result: result.clone(),
+            placeholder,
+        }),
+        term.clone(),
+    );
+    (stand_in, result)
+}
+
+/// Retry a parked projection: under the frozen frame, its head's type is either still stuck (re-park) or has reached a tuple or a struct, and then the field is read off it, its type met with the stand-in type, and the placeholder solved to the projection — reconciled with a solution unification reached first, as a parked check's is.
+pub(crate) fn retry_projection(
+    context: &mut Context,
+    parked: ParkedProjection,
+    origin: Term,
+    frame: FrozenFrame,
+) -> Result<(), Error> {
+    let projected = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
+        let head_type = reduce_with(context, &parked.head_type)?;
+        if crate::stuck_on_metavar(context, &head_type) {
+            return Ok(None);
+        }
+        let (projection, field_type) =
+            project(context, parked.head.clone(), &head_type, &parked.field)
+                .map_err(|error| error.at_opt(origin.span()))?;
+        expect(context, &origin, &field_type, &parked.result)?;
+        Ok(Some(projection))
+    })?;
+
+    let Some(projection) = projected else {
+        context.repark(ParkedWork::Projection(parked), origin, frame);
+        return Ok(());
+    };
+    let Some(existing) = context.metavar_solution(parked.placeholder).cloned() else {
+        context.solve_metavar(parked.placeholder, projection);
+        return Ok(());
+    };
+    let outcome = crate::convert_outcome(context, &parked.result, &projection, &existing).map_err(
+        |error| {
+            Error::from_reduce(error, || {
+                Error::convert_exhausted(projection.clone(), existing.clone())
+            })
+        },
+    )?;
+    match outcome {
+        Outcome::Converts => Ok(()),
+        Outcome::Mismatch => Err(
+            crate::display_mismatch(context, &origin, &projection, &existing).at_opt(origin.span()),
+        ),
+        Outcome::Blocked(goals) => {
+            for goal in goals {
+                context.park(ParkedWork::Conversion(goal), origin.clone());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Read `field` off `head`, whose type has reduced to `head_type`: a tuple's field or a struct's, the struct's privacy enforced here.
+fn project(
+    context: &mut Context,
+    head: Term,
+    head_type: &Term,
+    field: &Field,
+) -> Result<(Term, Term), Error> {
     // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here.
-    let telescope = match &*head_type {
+    let telescope = match &**head_type {
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         Subterm::StructType(StructType {
             name,
@@ -159,7 +257,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                 Some(index) => index,
                 None => {
                     // A concept's superclass fields carry a minted internal label and are not projectable by name — never surface them among the available fields.
-                    let supers: Vec<usize> = match &*head_type {
+                    let supers: Vec<usize> = match &**head_type {
                         Subterm::StructType(StructType { name, .. }) => context
                             .concept(name)
                             .map(|concept| concept.supers.iter().map(|(i, _)| *i).collect())
