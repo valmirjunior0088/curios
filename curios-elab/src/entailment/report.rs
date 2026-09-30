@@ -11,7 +11,7 @@ use {
 /// Why the procedure proved nothing.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Refusal {
-    /// The facts it considered, each spelled as the comparison it states, beside where it came from. That a natural is at least zero is left out: every natural is, and naming them buries the facts a reader can act on.
+    /// The facts it considered, each spelled as the comparison it states, beside where it came from. That a natural is at least zero, and what an operation defines, are left out: they hold of every program, and naming them buries the facts a reader can act on.
     pub considered: Vec<(Origin, Term)>,
     /// The propositions in scope stating a decision the view does not read.
     pub unread: Vec<(Origin, Term)>,
@@ -76,7 +76,7 @@ impl Refusal {
         let considered = facts
             .facts
             .iter()
-            .filter(|fact| fact.origin != Origin::Natural)
+            .filter(|fact| fact.origin.is_reported())
             .map(|fact| (fact.origin.clone(), fact.stated.clone()))
             .collect();
         let outcome = match outcome {

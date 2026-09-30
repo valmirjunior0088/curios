@@ -8,10 +8,17 @@
 //!
 //! **The absurd form.** Where the goal is itself an empty proposition, the sum of the facts is the proof, its type reducing to that proposition; where the facts refute each other without the goal, the sum is eliminated by a zero-arm match in the goal's place.
 //!
+//! **A remainder lifted out of the facts** leaves their sum over the dividend, so a goal over the remainder is not met by it and is proved in the refuting form, its negation lifted as the facts were.
+//!
+//! **A certificate over case splits** is written as the split on each opened guard, `b <= a` for a truncated `a - b`, with each arm's proof over the facts that case adds.
+//!
 //! **The carrier of a sum** is `Int` where the goal or any fact it sums is at `Int`, and `Nat` otherwise. A `Nat` fact enters an `Int` sum as its sides widened, the proposition conversion aligns it with. `Nat` addition never truncates, so a `Nat` sum is exact.
 
 use {
-    super::{Fact, Target, eliminate, global, in_scope, literal, order, qed, split},
+    super::{
+        Certificate, Fact, Facts, Split, Target, eliminate, global, in_scope, literal, order, qed,
+        split,
+    },
     crate::Context,
     curios_algebra::Carrier,
     curios_core::{Intrinsic, Term},
@@ -27,60 +34,102 @@ pub(super) enum Written {
     Unwritten,
 }
 
-/// The proof `multipliers` stands for over `facts`, the goal where there is one, and its negation where it could be written — the negation's multiplier last.
+/// The proof `certificate` stands for over `facts`, the goal where there is one, and its negation where it could be written.
 pub(super) fn write(
     context: &mut Context,
-    facts: &[Fact],
+    facts: &Facts,
     goal: Option<&Target>,
     negated: Option<&Fact>,
-    multipliers: &[Natural],
+    certificate: &Certificate,
 ) -> Written {
-    let (weights, goal_weight) = multipliers.split_at(facts.len());
-    let goal_weight = goal_weight
-        .first()
-        .cloned()
-        .unwrap_or_else(|| Natural::from(0u32));
-    let used = facts
-        .iter()
-        .zip(weights)
-        .filter(|(_, weight)| !weight.is_zero())
-        .collect::<Vec<_>>();
-    let integer = goal.is_some_and(|goal| goal.carrier == Carrier::Integer)
-        || used
-            .iter()
-            .any(|(fact, _)| fact.carrier == Carrier::Integer);
-    let carrier = match integer {
-        true => Carrier::Integer,
-        false => Carrier::Natural,
+    let lifted = goal.is_some_and(|goal| facts.lifted_over(&goal.form));
+    let case = Case {
+        goal,
+        negated,
+        lifted,
     };
-    let none = Integer::from(0);
-
-    let written = match (goal, negated) {
-        // The goal is empty, and the facts' sum is a proof of it.
-        (None, _) => sum(context, carrier, &used, none),
-        // The facts refute each other without the goal.
-        (Some(_), _) if goal_weight.is_zero() => {
-            sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted))
-        }
-        (Some(goal), _) if goal_weight == Natural::from(1u32) => {
-            sum(context, carrier, &used, slack(&used, goal))
-        }
-        (Some(goal), Some(negated)) => {
-            let mut with_goal = used.clone();
-            with_goal.push((negated, &goal_weight));
-            sum(context, carrier, &with_goal, none).map(|refuted| {
-                let false_arm = eliminate(context, refuted);
-                // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
-                let true_arm = qed(context);
-                split(context, &goal.decision, false_arm, true_arm)
-            })
-        }
-        // The negation is the only row that carries the goal's weight, so a weighted goal without one cannot be.
-        (Some(_), None) => None,
-    };
-    match written {
+    match case.write(context, facts.facts.clone(), &facts.splits, certificate) {
         Some(proof) => Written::Proof(proof),
         None => Written::Unwritten,
+    }
+}
+
+/// What every case of a certificate is written against.
+struct Case<'a> {
+    goal: Option<&'a Target>,
+    negated: Option<&'a Fact>,
+    /// Whether the goal holds a remainder the facts were lifted over, which their sum does not meet.
+    lifted: bool,
+}
+
+impl Case<'_> {
+    /// The proof of one case, over `facts`, the splits its path has not opened in `splits`: a split on the next one's guard, its arms each over its own facts, where the certificate opened it.
+    fn write(
+        &self,
+        context: &mut Context,
+        facts: Vec<Fact>,
+        splits: &[Split],
+        certificate: &Certificate,
+    ) -> Option<Term> {
+        match certificate {
+            Certificate::Leaf(multipliers) => self.leaf(context, &facts, multipliers),
+            Certificate::Split { holds, fails } => {
+                let (opened, later) = splits.split_first()?;
+                let with = |extra: &[Fact]| facts.iter().chain(extra).cloned().collect::<Vec<_>>();
+                let holds = self.write(context, with(&opened.holds), later, holds)?;
+                let fails = self.write(context, with(&opened.fails), later, fails)?;
+                Some(split(context, &opened.guard, fails, holds))
+            }
+        }
+    }
+
+    /// The proof one combination stands for: `multipliers` over `facts`, the negation's last.
+    fn leaf(&self, context: &mut Context, facts: &[Fact], multipliers: &[Natural]) -> Option<Term> {
+        let (weights, goal_weight) = multipliers.split_at(facts.len());
+        let goal_weight = goal_weight
+            .first()
+            .cloned()
+            .unwrap_or_else(|| Natural::from(0u32));
+        let used = facts
+            .iter()
+            .zip(weights)
+            .filter(|(_, weight)| !weight.is_zero())
+            .collect::<Vec<_>>();
+        let integer = self
+            .goal
+            .is_some_and(|goal| goal.carrier == Carrier::Integer)
+            || used
+                .iter()
+                .any(|(fact, _)| fact.carrier == Carrier::Integer);
+        let carrier = match integer {
+            true => Carrier::Integer,
+            false => Carrier::Natural,
+        };
+        let none = Integer::from(0);
+
+        match (self.goal, self.negated) {
+            // The goal is empty, and the facts' sum is a proof of it.
+            (None, _) => sum(context, carrier, &used, none),
+            // The facts refute each other without the goal.
+            (Some(_), _) if goal_weight.is_zero() => {
+                sum(context, carrier, &used, none).map(|refuted| eliminate(context, refuted))
+            }
+            (Some(goal), _) if goal_weight == Natural::from(1u32) && !self.lifted => {
+                sum(context, carrier, &used, slack(&used, goal))
+            }
+            (Some(goal), Some(negated)) => {
+                let mut with_goal = used.clone();
+                with_goal.push((negated, &goal_weight));
+                sum(context, carrier, &with_goal, none).map(|refuted| {
+                    let false_arm = eliminate(context, refuted);
+                    // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
+                    let true_arm = qed(context);
+                    split(context, &goal.decision, false_arm, true_arm)
+                })
+            }
+            // The negation is the only row that carries the goal's weight, so a weighted goal without one cannot be.
+            (Some(_), None) => None,
+        }
     }
 }
 

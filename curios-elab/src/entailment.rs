@@ -8,6 +8,7 @@
 //!
 //! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
+//! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder by a literal through the quotient's bounds, and a truncated subtraction through the case split `omega` makes, opened only where the search needs it ([`plan`]).
 //! - An empty proposition the facts refute: how `Bool/False/refuted` reaches the procedure, and `proved` wherever its proposition is one.
 //!
 //! **What failure is.** Today's refusal, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
@@ -122,16 +123,20 @@ fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, 
     };
     let facts = reader.collect(context, target.as_ref())?;
     let negated = match &target {
-        Some(target) => negated(context, &mut views, target)?,
+        Some(target) => negated(context, &mut views, target, &facts.lifts)?,
         None => None,
     };
     let absurd = target.is_none();
 
-    let forms = facts
-        .facts
+    let forms_of = |facts: &[Fact]| facts.iter().map(|fact| fact.form.clone()).collect();
+    let forms: Vec<_> = forms_of(&facts.facts);
+    let splits = facts
+        .splits
         .iter()
-        .chain(&negated)
-        .map(|fact| fact.form.clone())
+        .map(|split| Arms {
+            holds: forms_of(&split.holds),
+            fails: forms_of(&split.fails),
+        })
         .collect::<Vec<_>>();
     let refused = |views: &LinearViews, outcome: SearchOutcome| -> Result<Entailed, Error> {
         Ok(Entailed::Refused(Refusal::of(
@@ -139,19 +144,20 @@ fn linear(context: &mut Context, goal: &Goal, bound: &Term) -> Result<Entailed, 
         )))
     };
     let mut budget = DERIVED_ROWS;
-    let multipliers = match refute(&forms, &mut budget) {
-        Search::Refuted(multipliers) => multipliers,
-        Search::Satisfied(assignment) => {
+    let negation = negated.as_ref().map(|fact| &fact.form);
+    let certificate = match plan(&forms, negation, &splits, &mut budget) {
+        Plan::Certified(certificate) => certificate,
+        Plan::Satisfied(assignment) => {
             return refused(&views, SearchOutcome::Counterexample(assignment));
         }
-        Search::Exhausted => return refused(&views, SearchOutcome::Exhausted(DERIVED_ROWS)),
+        Plan::Exhausted => return refused(&views, SearchOutcome::Exhausted(DERIVED_ROWS)),
     };
     let written = write(
         context,
-        &facts.facts,
+        &facts,
         target.as_ref(),
         negated.as_ref(),
-        &multipliers,
+        &certificate,
     );
     let candidate = match written {
         Written::Proof(candidate) => candidate,

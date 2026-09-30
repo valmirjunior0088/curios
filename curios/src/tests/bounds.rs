@@ -7,7 +7,7 @@
 use super::{core_elab, typecheck};
 
 /// The last stage of algebra part 2 that has landed.
-const LANDED: u8 = 4;
+const LANDED: u8 = 5;
 
 /// The imports every program opens with.
 const HEADER: &str = "use /std/{Nat, Int, Bool, Char, List, Eq, Io, proved};";
@@ -196,6 +196,13 @@ const ROWS: &[Row] = &[
         "c: Nat, lo: Nat, p: Nat/Le(lo, c)",
         "Nat/Le(lo - 0x80, c - 0x80)",
     ),
+    // A case the arm's guard already decides is read without a split.
+    body(
+        5,
+        "k: Nat, n: Nat",
+        "Nat",
+        "match k <= n | true => let _: Nat/Le(k + (n - k), n) = proved(); 0 | false => 0 end",
+    ),
     // Division and remainder by a literal, through the quotient and remainder they denote.
     claim(
         5,
@@ -203,6 +210,21 @@ const ROWS: &[Row] = &[
         "Nat/Lt(code / 0x40, 0x20)",
     ),
     claim(5, "x: Nat, y: Nat, p: Nat/Lt(y, 3)", "Nat/Lt(x % 5 + y, 7)"),
+    claim(5, "x: Nat", "Nat/Le(x / 64 + x / 64, x)"),
+    // A truncated subtraction of a remainder, under a guard on it: `Char/hex_digit`'s shape.
+    body(
+        5,
+        "n: Nat",
+        "Nat",
+        "match n % 16 < 10 | true => 0 | false => let _: Nat/Lt(n % 16 - 10, 6) = proved(); 0 end",
+    ),
+    // A remainder divided again, under `==` guards: `Str/Valid`'s shape, whose inner remainder is lifted away before the outer one.
+    body(
+        5,
+        "code: Nat",
+        "Nat",
+        "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match Bool/False/refuted() end end end end",
+    ),
     // Products of two facts for a variable multiplier: `Nat/div_mod`'s two proofs.
     claim(
         6,
@@ -238,6 +260,8 @@ const CONTROLS: &[Row] = &[
     ),
     // A product of three facts.
     claim(0, "x: Nat, p: Nat/Le(x * x * x, 7)", "Nat/Le(x, 1)"),
+    // A remainder by a literal at `Int`, whose bounds conversion does not decide there.
+    claim(0, "x: Int", "Int/Lt(x % +3, +3)"),
     // Rewriting under a function by an equation, which is congruence rather than arithmetic.
     claim(
         0,

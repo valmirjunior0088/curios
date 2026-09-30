@@ -172,3 +172,16 @@ pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq()(a + (b - a), b) =
         | bp + 1 => Eq/cong((x) => x + 1, add_sub_cancel(ap, bp, p))
         end
     end;
+
+--- `a <= b` gives `a - b <= 0`: `Nat` subtraction truncates where it would go below zero.
+---
+--- The case [`add_sub_cancel`] leaves out, where `a - b` is no difference: a proof the elaborator writes over a truncated subtraction splits on `b <= a` and takes this in the arm where that fails. Conversion does not decide it there, since the arm's guard is a fact about the scope and reduction reads terms.
+pub let sub_zero(a: Nat, b: Nat, p: Le(a, b)) -> Le(a - b, 0) =
+    match a
+    | 0 => Bool/True/qed()
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 => sub_zero(ap, bp, p)
+        end
+    end;

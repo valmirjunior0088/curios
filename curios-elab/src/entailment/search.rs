@@ -4,7 +4,9 @@
 //!
 //! **A monomial is an unknown.** A product of atoms is eliminated as one variable, which is what linear arithmetic over products reads and all it reads.
 //!
-//! **Deterministic, and capped in its own units.** The monomial eliminated next is the one whose elimination derives the fewest rows beyond those it removes, ties broken by the view's canonical order, and rows keep the order they were derived in — so one program gets one certificate on every machine. The cap counts derived rows ([`DERIVED_ROWS`]); exhausting it refuses, as the reduction budget does, and never selects anything. Which monomial goes first changes what a search costs, not what it can find: elimination is complete over the rationals in any order.
+//! **A case split is opened only where it is needed.** Where the facts and the negated goal are satisfied, the next split its caller read — `b <= a`, for a truncated `a - b` — is opened and each case searched with its own facts added, as `omega` splits ([`plan`]); a refutation is then one combination per case ([`Certificate`]).
+//!
+//! **Deterministic, and capped in its own units.** The monomial eliminated next is the one whose elimination derives the fewest rows beyond those it removes, ties broken by the view's canonical order, and rows keep the order they were derived in — so one program gets one certificate on every machine. The cap counts derived rows across every case ([`DERIVED_ROWS`]); exhausting it refuses, as the reduction budget does, and never selects anything. Which monomial goes first changes what a search costs, not what it can find: elimination is complete over the rationals in any order.
 
 use {
     curios_algebra::{Atom, LinearForm, Monomial},
@@ -23,6 +25,68 @@ pub(super) enum Search {
     Satisfied(Vec<(Monomial, Rational)>),
     /// The cap ran out first.
     Exhausted,
+}
+
+/// The two arms of a case split the search may open: the forms each adds to the ones it holds.
+pub(super) struct Arms {
+    /// Where the split's decision holds.
+    pub(super) holds: Vec<LinearForm>,
+    /// Where it fails.
+    pub(super) fails: Vec<LinearForm>,
+}
+
+/// A refutation, per case of the splits it opened.
+#[derive(Debug, PartialEq)]
+pub(super) enum Certificate {
+    /// One combination: a multiplier per form of its case — the forms, then each opened case's own in the order they were opened, then the negated goal.
+    Leaf(Vec<Natural>),
+    /// The next split, a refutation in each of its cases. Splits open in order along every path, so the one a `Split` opens is the first its path has not.
+    Split {
+        holds: Box<Certificate>,
+        fails: Box<Certificate>,
+    },
+}
+
+/// What a search over the facts and their case splits concluded.
+pub(super) enum Plan {
+    Certified(Certificate),
+    /// An assignment satisfying every form of a case no split refutes.
+    Satisfied(Vec<(Monomial, Rational)>),
+    Exhausted,
+}
+
+/// Search `forms` with the negated goal last for a refutation, opening the splits in `splits` in order, each only where the search without it found an assignment: an assignment that leaves a truncated subtraction free may be one its definition excludes. One budget runs across every case.
+pub(super) fn plan(
+    forms: &[LinearForm],
+    negated: Option<&LinearForm>,
+    splits: &[Arms],
+    budget: &mut usize,
+) -> Plan {
+    let with_goal = forms.iter().chain(negated).cloned().collect::<Vec<_>>();
+    let assignment = match refute(&with_goal, budget) {
+        Search::Refuted(multipliers) => return Plan::Certified(Certificate::Leaf(multipliers)),
+        Search::Exhausted => return Plan::Exhausted,
+        Search::Satisfied(assignment) => assignment,
+    };
+    let Some((cases, later)) = splits.split_first() else {
+        return Plan::Satisfied(assignment);
+    };
+    let case = |extra: &[LinearForm], budget: &mut usize| {
+        let with = forms.iter().chain(extra).cloned().collect::<Vec<_>>();
+        plan(&with, negated, later, budget)
+    };
+    let holds = match case(&cases.holds, budget) {
+        Plan::Certified(certificate) => certificate,
+        other => return other,
+    };
+    let fails = match case(&cases.fails, budget) {
+        Plan::Certified(certificate) => certificate,
+        other => return other,
+    };
+    Plan::Certified(Certificate::Split {
+        holds: Box::new(holds),
+        fails: Box::new(fails),
+    })
 }
 
 /// One row: `Σ coefficient · monomial + constant <= 0`, with the multipliers of the input rows it was derived from.

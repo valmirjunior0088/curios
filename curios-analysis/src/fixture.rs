@@ -6,9 +6,9 @@
 
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
-    OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+    OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -121,6 +121,13 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             eq_of_eql: name(&["std", "Int", "eq_of_eql"]),
             of_not_lt: name(&["std", "Int", "Le", "of_not_lt"]),
             of_not_le: name(&["std", "Int", "Lt", "of_not_le"]),
+        },
+        natural: NaturalSyntax {
+            below: name(&["std", "Nat", "Le", "add_r"]),
+            shift: name(&["std", "Nat", "Le", "add_mono_l"]),
+            difference: name(&["std", "Nat", "Le", "add_sub_cancel"]),
+            truncated: name(&["std", "Nat", "Le", "sub_zero"]),
+            loosened: name(&["std", "Nat", "Le", "of_lt"]),
         },
     },
 };

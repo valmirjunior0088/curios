@@ -1,7 +1,7 @@
-//! The search, over forms built directly: what it refutes and with which multipliers, what it satisfies and with which assignment, what it refuses to cut, what exhausts it, and that it answers alike every time; and the rationals its assignments are written in.
+//! The search, over forms built directly: what it refutes and with which multipliers, what it satisfies and with which assignment, what it refuses to cut, what exhausts it, and that it answers alike every time; where it opens a case split and what that costs; and the rationals its assignments are written in.
 
 use {
-    super::{DERIVED_ROWS, Rational, Search, refute},
+    super::{Arms, Certificate, DERIVED_ROWS, Plan, Rational, Search, plan, refute},
     curios_algebra::{Atom, LinearForm, Monomial},
     curios_num::{Integer, Natural},
 };
@@ -169,6 +169,80 @@ fn the_same_rows_give_the_same_certificate_every_time() {
         };
         assert_eq!(again, first);
     }
+}
+
+/// `b + (a - b) <= a` from `b <= a`, over `a`, `b` and the truncated difference `t`: the facts, the negated goal `a + 1 <= b + t`, and the cases `a - b` defines — `b <= a` with `b + t = a`, and `a < b` with `t <= 0`.
+fn truncated() -> (Vec<LinearForm>, LinearForm, Vec<Arms>) {
+    let facts = vec![form(&[(-1, 0), (1, 1)], 0)];
+    let negated = form(&[(1, 0), (-1, 1), (-1, 2)], 1);
+    let arms = Arms {
+        holds: vec![
+            form(&[(-1, 0), (1, 1)], 0),
+            form(&[(-1, 0), (1, 1), (1, 2)], 0),
+            form(&[(1, 0), (-1, 1), (-1, 2)], 0),
+        ],
+        fails: vec![form(&[(1, 0), (-1, 1)], 1), form(&[(1, 2)], 0)],
+    };
+    (facts, negated, vec![arms])
+}
+
+#[test]
+fn a_split_is_opened_only_where_the_search_without_it_found_an_assignment() {
+    let (facts, negated, splits) = truncated();
+    let mut budget = DERIVED_ROWS;
+    assert!(matches!(
+        plan(&facts, Some(&negated), &[], &mut budget),
+        Plan::Satisfied(_)
+    ));
+
+    let mut budget = DERIVED_ROWS;
+    let Plan::Certified(Certificate::Split { holds, fails }) =
+        plan(&facts, Some(&negated), &splits, &mut budget)
+    else {
+        panic!("each case refutes the negated goal");
+    };
+    for (certificate, arm) in [(holds, &splits[0].holds), (fails, &splits[0].fails)] {
+        let Certificate::Leaf(multipliers) = *certificate else {
+            panic!("one split is enough");
+        };
+        let forms = facts
+            .iter()
+            .chain(arm)
+            .chain([&negated])
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(is_false_constant(&forms, &multipliers));
+    }
+
+    // Facts that refute the negated goal without a case open none.
+    let refuting = vec![facts[0].clone(), form(&[(1, 0), (-1, 1)], 1)];
+    let mut budget = DERIVED_ROWS;
+    assert!(matches!(
+        plan(&refuting, Some(&negated), &splits, &mut budget),
+        Plan::Certified(Certificate::Leaf(_))
+    ));
+}
+
+#[test]
+fn a_budget_runs_across_every_case() {
+    let (facts, negated, splits) = truncated();
+    let spent = |extra: &[LinearForm]| {
+        let forms = facts
+            .iter()
+            .chain(extra)
+            .chain([&negated])
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut budget = DERIVED_ROWS;
+        refute(&forms, &mut budget);
+        DERIVED_ROWS - budget
+    };
+    let each = spent(&[]) + spent(&splits[0].holds) + spent(&splits[0].fails);
+    assert!(each > 0, "every case derives rows");
+
+    let mut budget = DERIVED_ROWS;
+    plan(&facts, Some(&negated), &splits, &mut budget);
+    assert_eq!(DERIVED_ROWS - budget, each);
 }
 
 #[test]

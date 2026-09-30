@@ -52,7 +52,8 @@ Each fact is read through part 1's view. A fact the view cannot read is not admi
 ## The fragment
 
 - Linear `Nat` and `Int` arithmetic with literal coefficients over part 1's atoms, each `Nat` atom non-negative and `Nat/to_int` read as the embedding.
-- Truncated subtraction by the case split `omega` makes, and `/` and `%` by a literal through the quotient and remainder they denote, whose defining equation and bound conversion already decides.
+- Truncated subtraction by the case split `omega` makes — `b <= a`, where `b + (a - b) = a`, and `a < b`, where `a - b <= 0` — opened only where the search without it finds an assignment, and read as facts where a guard or conversion already decides the case.
+- `/` and `%` by a literal at `Nat`, through the quotient's bounds `k * (x / k) <= x < k * (x / k) + k`. Conversion reads `k * (x / k) + x % k` as `x` wherever one side holds both, so Euclid's equation is no fact, and a sum holding a remainder beside its quotient's multiple is not the sum of the views: every fact over `x % k` is raised by the multiple on both sides, which conversion reads as one over `x`, and a goal over a remainder is proved by refuting its negation, raised the same way. At `Int`, conversion decides Euclid's identity and neither of a remainder's bounds, so a quotient by a literal is no fact there.
 - [Part 3](03-declared-operations-spec.md)'s `min`, `max`, `abs` and `sign`, by the case split their definitions state, as each is declared.
 - In stage 6, products of two facts for a variable multiplier — what Mathlib's `nlinarith` adds, and what `Nat/div_mod`'s two proofs need.
 - Outside: induction; a recursive function's value beyond the atom it is; and rewriting under a function by an equation, as `pending(r, …)` against `pending(r′, …)` with `r = r′` asks, which is congruence rather than arithmetic.
@@ -76,6 +77,8 @@ One lemma, `Le/add`, adds two of them. Conversion's cancellation does the rest: 
 
 **The refuting form.** Otherwise the proof splits on the goal's own comparison, spelled as the refinement it will be keyed on. The true arm is `Bool/True/qed()`. The refuting arm eliminates, with a zero-arm match, the sum of the facts with the negated goal, whose type reduces to `Bool/False` — `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`. Both forms check against the compiler this campaign starts from, with `Le/add` written from `Nat/Le`'s `trans` alone, whose cancellation does what `add_mono_l` would.
 
+**A case split** over a truncated subtraction is written as the match on its guard, `b <= a`, each arm's proof in either form over the facts that case adds; nested, one level per split the certificate opened.
+
 **Vocabulary.** The names the procedure writes — `Le/add`, the scaling and bridge lemmas, `Bool/holds_of_eq`, `Eq/refl`, and the entry points below — are `SyntaxRegistry` slots beside `ProofSyntax`'s, filled by `curios-prelude-archive`. Inside `/std`, the procedure stays off in an item compiled before its vocabulary is elaborated, which gets today's behavior; the scheduler gains no edge, unlike a derived witness body, whose vocabulary it must order before the witness.
 
 **Reflection** — a checker written in Curios and proved sound once, each proof then its application to a closed certificate with `Bool/True/qed()` for the check — is deferred. It trades a one-time proof for smaller terms, and Chaieb and Nipkow measured it one to two orders of magnitude faster in Isabelle (2008). A proof size or check time measured in stage 7's sweep is what reopens it.
@@ -96,7 +99,7 @@ A refused bound's report lists the facts the procedure considered, each with whe
 - **The search** is integer Fourier–Motzkin behind one interface, from the admitted facts to non-negative multipliers or a counterexample: rows scaled to integers and divided by their gcd, the multipliers tracked per derived row, the counterexample read by back-substitution. Its cap is a count of derived rows. Mathlib's `linarith` defaults to a simplex oracle and keeps Fourier–Motzkin as the one "sometimes faster on small states" that "cannot handle large problems" ([`Mathlib.Tactic.Linarith.Frontend`](https://florisvandoorn.com/carleson/docs/Mathlib/Tactic/Linarith/Frontend.html)). The census finds small states. Stage 6 measures the product rows, and a row that exhausts the cap replaces the engine with a Bland's-rule simplex over integer tableaus behind the same interface.
 - **The procedure** is `curios-elab`'s `entailment` module: `facts`, `search`, `proof` and `report`. No crate of its own, since nothing else consumes it yet.
 - **The vocabulary** is a `SyntaxRegistry` group, `EntailmentSyntax`, beside `ProofSyntax`. A proof form is written only where every name it applies is assumed in the context, which is how an item of `/std` compiled before its vocabulary keeps today's behavior.
-- **The names.** Sums are `Le/add` at `/std/Nat/Le` and `/std/Int/Le`: `a <= b` and `c <= d` give `a + c <= b + d`. The `False` producer is `/std/Bool/False/refuted`, in a `Bool/False` module that mirrors `Bool/True`. `proved` is top-level in `/std`, beside `print`. A further lemma the procedure writes is housed under the proposition it concludes: `Le/of_eq` for an equation, `Lt/of_not_le` for a `<=` guard's false arm, and `Le/mul` for stage 6's products — `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`.
+- **The names.** Sums are `Le/add` at `/std/Nat/Le` and `/std/Int/Le`: `a <= b` and `c <= d` give `a + c <= b + d`. The `False` producer is `/std/Bool/False/refuted`, in a `Bool/False` module that mirrors `Bool/True`. `proved` is top-level in `/std`, beside `print`. A further lemma the procedure writes is housed under the proposition it concludes: `Le/of_eq` for an equation, `Lt/of_not_le` for a `<=` guard's false arm, `Le/sub_zero` for a truncated subtraction's truncating case — `a <= b` gives `a - b <= 0` — and `Le/mul` for stage 6's products — `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`.
 
 ## Cost
 
@@ -109,6 +112,7 @@ Prelude elaboration and certification are read from the two profile streams `car
 | Stage 3 | 34 169.3 MB | 5 007.2 MB | 0 |
 | The rebased base, `4976ac03` | 61 795.5 MB | — | — |
 | Stage 4 | 61 893.6 MB | 5 011.4 MB | 0 |
+| Stage 5 | 61 911.4 MB | 5 012.0 MB | 0 |
 
 Stage 2 moves neither figure beyond noise. The procedure is never asked while the prelude elaborates, as the premise count said it would not be. Stage 3's growth is the six lemmas it adds to `/std` — `Le/add`, `Le/of_eq` and `Lt/of_not_le` at each carrier — elaborated and certified, and not the procedure, which is still never asked. The branch was then rebased onto `main` at `4976ac03`, whose own prelude elaboration allocates 81% more than `bb28989d` did. That rise is `main`'s, measured on its own stream, and stage 4 is compared against it: its `Bool/False` module and `proved` add 98 MB.
 

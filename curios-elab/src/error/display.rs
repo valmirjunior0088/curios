@@ -132,7 +132,7 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
         Origin::Guard(written, false) => {
             format!("a guard's false arm, {}", written.spelled(spelling))
         }
-        Origin::Natural | Origin::Negated => String::new(),
+        Origin::Natural | Origin::Definition | Origin::Negated => String::new(),
     };
     let mut lines = String::new();
     if !refusal.considered.is_empty() {

@@ -6,9 +6,9 @@ use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, OperatorSyntax, OptionSyntax,
-    OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind, SpellDerivation,
-    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
+    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+    OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind,
+    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
 };
 use std::{fs, path::Path};
 
@@ -126,6 +126,13 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             eq_of_eql: registry_name(&["std", "Int", "eq_of_eql"]),
             of_not_lt: registry_name(&["std", "Int", "Le", "of_not_lt"]),
             of_not_le: registry_name(&["std", "Int", "Lt", "of_not_le"]),
+        },
+        natural: NaturalSyntax {
+            below: registry_name(&["std", "Nat", "Le", "add_r"]),
+            shift: registry_name(&["std", "Nat", "Le", "add_mono_l"]),
+            difference: registry_name(&["std", "Nat", "Le", "add_sub_cancel"]),
+            truncated: registry_name(&["std", "Nat", "Le", "sub_zero"]),
+            loosened: registry_name(&["std", "Nat", "Le", "of_lt"]),
         },
     },
 };

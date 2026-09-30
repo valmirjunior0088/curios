@@ -359,6 +359,8 @@ pub struct EntailmentSyntax {
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
     pub int: OrderSyntax,
+    /// What `Nat` alone needs: its subtraction truncates, and its quotients and remainders by a literal are read through their bounds.
+    pub natural: NaturalSyntax,
 }
 
 impl EntailmentSyntax {
@@ -371,12 +373,43 @@ impl EntailmentSyntax {
             range,
             nat,
             int,
+            natural,
         } = self;
 
         [holds_of_eq, refl, equality, sym, range]
             .into_iter()
             .chain(nat.targets())
             .chain(int.targets())
+            .chain(natural.targets())
+    }
+}
+
+/// The lemmas only `Nat` needs, each stated over its operands as arguments.
+#[derive(Debug, Clone, Copy)]
+pub struct NaturalSyntax {
+    /// `a <= a + k`: a quotient's multiple is at most its dividend, once conversion reads `k * (x / k) + x % k` as `x`.
+    pub below: SyntaxName,
+    /// `a <= b` gives `n + a <= n + b`: a quotient's upper bound, and a fact over a remainder raised to one over its dividend.
+    pub shift: SyntaxName,
+    /// `a <= b` gives `a + (b - a) = b`: the case of a truncated subtraction that does not truncate.
+    pub difference: SyntaxName,
+    /// `a <= b` gives `a - b <= 0`: the case that does.
+    pub truncated: SyntaxName,
+    /// `a < b` gives `a <= b`: the truncating case's guard loosened to what `truncated` takes.
+    pub loosened: SyntaxName,
+}
+
+impl NaturalSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            below,
+            shift,
+            difference,
+            truncated,
+            loosened,
+        } = self;
+
+        [below, shift, difference, truncated, loosened].into_iter()
     }
 }
 
