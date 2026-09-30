@@ -2,7 +2,7 @@
 
 Working specification for the places where checking a term still costs what its tree would, where the term is a graph. A reduct shares its subterms: `Str/trim(" x ")` in a type reduces to a value whose fields name the same nodes many times over, and a pass that walks it once per path rather than once per node pays exponentially for a value built in linear time. The invariants work made the elaborator's walks graph-aware wherever the walk was pure, and made re-validation and rollbacks stop redoing work they had already done; what remains is here, with the instruments that find the next one and a harness that catches it.
 
-Its first stage needs nothing and serves part 1 and [part 2](02-unrecorded-universes-spec.md) as well, as their budget. The rest lands stage by stage; the settlement stage follows part 1's change to solving, which has landed, since both touch what solving and re-validation walk.
+Its first stage needed nothing and served parts 1 and 2 as well, as their budget. The rest lands stage by stage; the settlement stage follows part 1's change to solving, which has landed, since both touch what solving and re-validation walk.
 
 ## What this builds on
 

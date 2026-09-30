@@ -2,7 +2,7 @@
 
 Working specification for taking position out of what a compilation stores and names: identities minted in a space private to the item that mints them, names interned once per process, and sources owned by a map rather than shared by pointer. Today a unit's binder, metavariable and universe floors resume above the previous unit's, so an artifact's identities depend on everything compiled before it, and the fold must be a line to keep them apart.
 
-It needs nothing, and each of its stages makes the serial compiler better on its own. The universe-seed table it deletes is also an input [part 7](07-checked-evidence-spec.md) forbids the certifier to read, and [the invariants campaign's part 2](../invariants/02-unrecorded-universes-spec.md) asks whether the elaborator records levels at all; that table's deletion is taken with part 2's answer in hand.
+It needs nothing, and each of its stages makes the serial compiler better on its own. The universe-seed table it deletes is also an input [part 7](07-checked-evidence-spec.md) forbids the certifier to read, and the invariants campaign's part 2 answered what the elaborator records of a level: where it came from — chosen, occurrence or inferred — read for a seeded level off its seed's role ([A universe level settles by where it came from](../../design/language/a-universe-level-settles-by-where-it-came-from.md)), so deleting the table has to carry that role to the solver another way.
 
 ## What this builds on
 
