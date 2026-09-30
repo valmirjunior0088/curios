@@ -83,7 +83,6 @@ fn a_member_of_a_legal_group_is_still_accepted() {
             Term::func_type([(n, nat.clone())], nat),
             Term::rec_proj(group, 0),
         )],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

@@ -278,7 +278,6 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
         assert_eq!(expected, actual, "{} differs", expected.describe());
     }
     assert_eq!(whole.mounts, incremental.mounts);
-    assert_eq!(whole.universe_seeds, incremental.universe_seeds);
     assert_eq!(whole.induct_decls, incremental.induct_decls);
     assert_eq!(whole.struct_decls, incremental.struct_decls);
     assert_eq!(whole.concepts, incremental.concepts);

@@ -80,7 +80,6 @@ fn every_local_a_term_mentions_is_found() {
     let module = Module {
         items: vec![Item::Let(definition)],
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -108,7 +107,6 @@ fn stored(body: Term) -> Module {
             body,
         })],
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -189,7 +187,6 @@ fn a_meta_free_module_projects_as_zonked() {
     let module = Module {
         items: vec![Item::Let(definition("plain", UniverseContext::empty()))],
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
         concepts: Default::default(),
@@ -207,7 +204,6 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
     let module = Module {
         items: vec![Item::Let(holed)],
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
         concepts: Default::default(),
@@ -229,7 +225,6 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
     let module = Module {
         items: vec![Item::Let(infixed)],
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: Default::default(),
         struct_decls: Default::default(),
         concepts: Default::default(),
@@ -246,7 +241,6 @@ fn over(items: Vec<Item>) -> Module {
     Module {
         items,
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

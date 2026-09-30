@@ -44,7 +44,6 @@ fn an_unsatisfiable_universe_context_is_refused() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -86,7 +85,6 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -320,7 +318,6 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
                 Term::free_var(&Free::from(&zero)),
             ),
         ],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -398,7 +395,6 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
             declared,
             Term::intrinsic(Intrinsic::Nat(Nat::new(5usize))),
         )],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

@@ -95,7 +95,6 @@ fn project_module(module: &Module) -> Module {
             })
             .collect(),
         mounts: module.mounts.clone(),
-        universe_seeds: Vec::new(),
         induct_decls: module
             .induct_decls
             .iter()

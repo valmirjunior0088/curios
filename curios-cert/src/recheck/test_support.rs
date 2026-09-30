@@ -284,7 +284,6 @@ pub(super) fn forgery() -> Program {
         module: Module {
             mounts: Vec::new(),
             items: vec![unbox, boxes_equal, types_equal, cast, forged],
-            universe_seeds: Vec::new(),
             induct_decls: BTreeMap::from([
                 (false_name, proposition(Vec::new())),
                 (box_name, box_decl),
@@ -327,7 +326,6 @@ pub(super) fn selection_module(body: Term) -> Program {
                 absurd.clone(),
                 Term::rec_proj(group, 0),
             )],
-            universe_seeds: Vec::new(),
             induct_decls: BTreeMap::from([(name, proposition(Vec::new()))]),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -368,7 +366,6 @@ pub(super) fn indexed_module(target: Term) -> Module {
     Module {
         mounts: Vec::new(),
         items: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -392,7 +389,6 @@ pub(super) fn level_definition(level: &Level) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -417,7 +413,6 @@ pub(super) fn level_registry(level: &Level) -> Module {
     Module {
         mounts: Vec::new(),
         items: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -465,7 +460,6 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
     Module {
         mounts: Vec::new(),
         items: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -580,7 +574,6 @@ pub(super) fn aliased_sort_forgery() -> Program {
         module: Module {
             mounts: Vec::new(),
             items: vec![held, forged],
-            universe_seeds: Vec::new(),
             induct_decls: decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -636,7 +629,6 @@ pub(super) fn relevant_index_control() -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![vacuous],
-        universe_seeds: Vec::new(),
         induct_decls: decls,
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -710,7 +702,6 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![vacuous],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
             (two_name, two_decl),
             (Global::Authored(Qualifier::from(["Held"])), held_decl),
@@ -741,7 +732,6 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -769,7 +759,6 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
     Module {
         mounts: Vec::new(),
         items: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -813,7 +802,6 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -851,7 +839,6 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(*false_name, proposition(Vec::new()))]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -899,7 +886,6 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(former)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -971,7 +957,6 @@ pub(super) fn lying_motive(sort: Term) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![extract],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1054,7 +1039,6 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![all_zero],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(equality, equality_declaration())]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1123,7 +1107,6 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
     Module {
         mounts: Vec::new(),
         items: vec![held],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1185,7 +1168,6 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![held],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::from([(name, declaration)]),
         concepts: BTreeMap::new(),
@@ -1238,7 +1220,6 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![held],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1258,7 +1239,6 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let module_of = |items: Vec<Item>| Module {
         mounts: Vec::new(),
         items,
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1351,7 +1331,6 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
             declared,
             three,
         )],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1389,7 +1368,6 @@ pub(super) fn rec_apply_module() -> Module {
             Term::apply(selection, [three.clone()]),
             three,
         )],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1520,7 +1498,6 @@ pub(super) fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module 
     Module {
         mounts: Vec::new(),
         items,
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1536,7 +1513,6 @@ pub(super) fn carried_proof_module() -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![held_proof()],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(vouched_name, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1614,7 +1590,6 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
             held,
             Term::variant(held_name, Vec::<Term>::new(), "qed", [payload]),
         )],
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1668,7 +1643,6 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
             held,
             Term::variant(held_name, Vec::<Term>::new(), "mk", payload),
         )],
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -1804,7 +1778,6 @@ pub(super) fn index_forgery() -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![forged, cast, held_value, boom],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
             (true_name, true_decl),
             (false_name, false_decl),
@@ -1851,7 +1824,6 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
             type_,
             body,
         )],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -2066,7 +2038,6 @@ pub(super) fn computed_field_forgery() -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![forged, cast, held_value, boom],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([
             (false_name, false_decl),
             (equality_name, equality_declaration()),
@@ -2138,7 +2109,6 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
     Module {
         mounts: Vec::new(),
         items,
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -2301,7 +2271,6 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     Module {
         mounts: Vec::new(),
         items: vec![f_item, coerce],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(e_name, e_decl), (q_name, q_decl)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -2323,7 +2292,6 @@ pub(super) fn collision_module(
     Module {
         mounts: Vec::new(),
         items,
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

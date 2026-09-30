@@ -158,7 +158,7 @@ fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> cu
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         established,
         &program.module,
-        minted,
+        &minted,
         curios_elab::Tail::Entry(&program.entry),
     )
     .unwrap();
@@ -198,7 +198,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
-        minted,
+        &minted,
     )
     .unwrap();
 

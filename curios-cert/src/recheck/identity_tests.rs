@@ -34,7 +34,6 @@ fn holding(items: Vec<curios_core::Item>) -> Module {
     Module {
         items,
         mounts: Vec::new(),
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

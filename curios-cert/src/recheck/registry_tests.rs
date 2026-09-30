@@ -170,7 +170,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(family, declaration)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

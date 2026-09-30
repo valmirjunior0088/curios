@@ -43,7 +43,6 @@ fn reading_module() -> Module {
             ),
             authored(&global("four"), nat(), literal(4)),
         ],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

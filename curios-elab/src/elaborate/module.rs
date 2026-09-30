@@ -1250,7 +1250,7 @@ fn elaborate_module_suffix(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
@@ -1283,7 +1283,7 @@ fn elaborate_module_suffix(
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed_metavars(minted.metavariables);
     context.seed_binders(minted.binders);
-    context.seed_universes(&module.universe_seeds);
+    context.seed_universes(&minted.universes);
 
     // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip.
     //
@@ -1431,7 +1431,6 @@ fn elaborate_module_suffix(
     let module = Module {
         items,
         mounts: module.mounts.clone(),
-        universe_seeds: module.universe_seeds.clone(),
         induct_decls,
         struct_decls,
         concepts,
@@ -1584,7 +1583,7 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
@@ -1620,7 +1619,7 @@ pub fn elaborate_and_zonk_unit(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
 ) -> Result<Module, Error> {
     let finalized = elaborate_and_zonk(context, established, module, minted, None)?;
     raise(finalized).map(|(module, _)| module)
@@ -1633,7 +1632,7 @@ pub fn elaborate_and_zonk_program(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>), Error> {
     raise(elaborate_and_zonk(
@@ -1652,7 +1651,7 @@ pub fn elaborate_and_zonk_program_reporting(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
     let Finalized {
@@ -1673,7 +1672,7 @@ fn elaborate_and_zonk(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
-    minted: Minted,
+    minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
@@ -1701,7 +1700,7 @@ fn elaborate_and_zonk(
     })
 }
 
-/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering and carrying the unit's whole seed table; and that lowering, whose item order the two are reassembled in.
+/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, whose item order the two are reassembled in.
 ///
 /// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. The whole-module passes run over the reassembled module afterwards rather than believing it: every reused item's totality and every reused entry's polarities are recomputed over the whole and must come out as the baseline carried them.
 pub struct Recompile<'a> {
@@ -1719,7 +1718,7 @@ pub fn elaborate_and_zonk_unit_over(
     context: &mut Context,
     established: Established<'_>,
     recompile: Recompile<'_>,
-    minted: Minted,
+    minted: &Minted,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
     grown(|| elaborate_and_zonk_unit_over_within(context, established, recompile, minted))
@@ -1729,7 +1728,7 @@ fn elaborate_and_zonk_unit_over_within(
     context: &mut Context,
     established: Established<'_>,
     recompile: Recompile<'_>,
-    minted: Minted,
+    minted: &Minted,
 ) -> Result<Module, Error> {
     let mut scope = established.modules().to_vec();
     scope.push(recompile.reused);
@@ -1825,7 +1824,6 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, dropped: &BTreeSet<Glo
     Module {
         items,
         mounts: recompile.lowered.mounts.clone(),
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
         concepts,

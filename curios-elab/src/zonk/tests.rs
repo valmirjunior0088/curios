@@ -19,7 +19,7 @@ fn nat_lit(n: usize) -> Term {
 }
 
 /// A lowered module holding `body` as its one definition's value.
-fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
+fn lowered_module(body: Term) -> Module {
     Module {
         mounts: Vec::new(),
         items: vec![Item::Let(Definition {
@@ -31,7 +31,6 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
             type_: nat(),
             body,
         })],
-        universe_seeds,
         induct_decls: Default::default(),
         struct_decls: Default::default(),
         concepts: Default::default(),
@@ -42,10 +41,10 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
 
 #[test]
 fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
-    let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))), Vec::new());
+    let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))));
 
     assert!(matches!(
-        validate_lowered_universe_seeds(&module),
+        validate_lowered_universe_seeds(&module, &[]),
         Err(Error::UniverseInvariant(message)) if message.contains("?u0")
     ));
 }
@@ -205,7 +204,7 @@ fn two_items_with_unsolved_holes_are_both_reported() {
     };
     let module = Module {
         items: vec![item("a", Term::hole(0)), item("b", Term::hole(1))],
-        ..lowered_module(nat_lit(0), Vec::new())
+        ..lowered_module(nat_lit(0))
     };
 
     let error = zonk_module(&context, &module).unwrap_err();
@@ -243,7 +242,7 @@ fn goals_are_gathered_once_per_node() {
     for _ in 0..60 {
         body = Term::intrinsic(Intrinsic::nat_add(body.clone(), body));
     }
-    let reports = collect_goal_reports(&mut context, &lowered_module(body, Vec::new()), None);
+    let reports = collect_goal_reports(&mut context, &lowered_module(body), None);
 
     assert_eq!(reports.len(), 1);
 }

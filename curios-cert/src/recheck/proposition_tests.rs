@@ -142,7 +142,6 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![wrapped_at_true(&wrap_name, qed)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(true_name, true_decl)]),
         struct_decls: BTreeMap::from([(
             wrap_name,

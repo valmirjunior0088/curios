@@ -68,7 +68,7 @@ fn the_families_do_not_share_a_namespace() {
     );
 }
 
-/// A slot is a function of all three parts, and of the *order* of the third — which is what the universe-seed table forces: the same source lowered after a different prefix is a different unit.
+/// A slot is a function of all three parts, and of the *order* of the third — which is what the cumulative erased arena forces: the same source erased after a different prefix is a different unit.
 #[test]
 fn every_part_of_a_slot_changes_it() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];

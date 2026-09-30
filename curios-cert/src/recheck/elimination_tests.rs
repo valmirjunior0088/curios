@@ -232,7 +232,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![vacuous],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

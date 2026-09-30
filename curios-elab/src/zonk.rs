@@ -9,7 +9,7 @@ use {
         InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
         MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec, RecGroup, RecItem, RecMemberScopes,
         Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseSeed, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
         universe_metas,
     },
@@ -248,7 +248,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
     let module = Module {
         items,
         mounts: module.mounts.clone(),
-        universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
         // Witness markers carry no terms; a concept carries only its parameter telescope, zonked here — its field telescopes live in `struct_decls`, zonked above.
@@ -703,11 +702,6 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             &format!("concept {name} parameters"),
         )?;
     }
-    if !module.universe_seeds.is_empty() {
-        return Err(Error::UniverseInvariant(
-            "finalized module retained lowering-time universe seeds".into(),
-        ));
-    }
     validate_module_instance_arities(module)?;
     Ok(())
 }
@@ -724,9 +718,12 @@ pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(
     Ok(())
 }
 
-/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a seed in the unit's own table, which the lowering fills from index zero.
-pub fn validate_lowered_universe_seeds(module: &Module) -> Result<(), Error> {
-    let seeded = module.universe_seeds.len();
+/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a seed among `seeds`, the unit's own, which the lowering fills from index zero.
+pub fn validate_lowered_universe_seeds(
+    module: &Module,
+    seeds: &[UniverseSeed],
+) -> Result<(), Error> {
+    let seeded = seeds.len();
 
     let mut metas = BTreeSet::new();
     macro_rules! collect {

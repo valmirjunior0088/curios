@@ -29,7 +29,7 @@ It needs every earlier part but [part 7](07-checked-evidence-spec.md), and [Cran
 | Component | Treatment |
 | --- | --- |
 | Erasure | Per item, into an erased form addressed by global name; the back end links the items reachable from the entry into an arena of its own. The cumulative arena is deleted. This is linking by name, not the relocation of an index `curios-unit`'s README rejected |
-| Stored units | Addressed over their dependency closure's content rather than an ordered predecessor list, since the seed table and the arena that forced the order are gone |
+| Stored units | Addressed over their dependency closure's content rather than an ordered predecessor list, since the arena that forced the order is gone and the seed table is each unit's own |
 | Executor | Once-written cells on the product's pool. An item becomes ready when the declarations its lowering names are published; a request discovered while running — a chosen witness, an unfolded body — waits on the task that holds it or runs it inline if nothing has started it. A cycle is detected over who waits for whom and reported by its members in source order, which is the same report under any schedule |
 | Parsing and lowering | Per file, then per module in two phases over the possibly cyclic module graph: collect every module's exports, then lower |
 | Terms and trees | `Arc`-shared; `Cell` caches computed at construction, `OnceCell`s become `OnceLock`s |

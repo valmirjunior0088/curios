@@ -275,7 +275,7 @@ pub fn typecheck_measured(
             &mut context,
             Established::over(&cores),
             &lowered.module,
-            minted,
+            &minted,
             Tail::Entry(&lowered.entry),
         )
         .map_err(|error| {
@@ -474,7 +474,7 @@ where
             &mut context,
             Established::over(&cores),
             &lowered.module,
-            minted,
+            &minted,
             elab_tail,
         )
         .map_err(|error| {

@@ -67,7 +67,7 @@ use {
 
 /// Every prefix the compilation mounts, and which of them the unit being compiled may name.
 ///
-/// **Two lists rather than one, because a prefix a unit cannot name still exists.** It is in the fold — it minted identities, it contributed universe seeds, it holds the arena the erasure resumes over — and it owns names whose spelling decides which unit declares them. So `mounts` stays complete for every question about *what a name is*, and `visible` answers the one question about *who may write it*. Collapsing them would either hide a mount from `Mount::owning`, which decides coherence, or make an undeclared prefix indistinguishable from a prefix nobody mounted, which is the diagnostic this type exists to keep.
+/// **Two lists rather than one, because a prefix a unit cannot name still exists.** It is in the fold — it holds the arena the erasure resumes over — and it owns names whose spelling decides which unit declares them. So `mounts` stays complete for every question about *what a name is*, and `visible` answers the one question about *who may write it*. Collapsing them would either hide a mount from `Mount::owning`, which decides coherence, or make an undeclared prefix indistinguishable from a prefix nobody mounted, which is the diagnostic this type exists to keep.
 ///
 /// Carried as one value because it is threaded through the whole of resolution: the walk that follows a `use` to its provider asks both questions at every hop, and two parallel parameters through ten functions drift.
 #[derive(Clone, Copy)]
@@ -291,7 +291,7 @@ impl PreparedText {
 
     /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
     ///
-    /// The rest of a `PreparedText` is resolution metadata and counts — no terms — so the lowered module is the whole of what there is to share.
+    /// The rest of a `PreparedText` is resolution metadata and what the lowering minted — no terms — so the lowered module is the whole of what there is to share.
     pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
         Self {
             core: self.core.shared(sharing),
@@ -300,8 +300,8 @@ impl PreparedText {
     }
 
     /// What this unit's lowering minted — see the field.
-    pub fn minted(&self) -> curios_core::Minted {
-        self.minted
+    pub fn minted(&self) -> &curios_core::Minted {
+        &self.minted
     }
 
     /// What each unresolved bare name could have meant, by the binder it lowered to — the table `curios-elab`'s `unbound variable` report reads its suggestion from.
@@ -1777,7 +1777,6 @@ fn into_core_unit_within(
         core: curios_core::Module {
             items,
             mounts: own,
-            universe_seeds: universe_seeds.into_inner(),
             induct_decls,
             struct_decls,
             concepts,
@@ -1787,6 +1786,7 @@ fn into_core_unit_within(
         minted: curios_core::Minted {
             binders: binders.count(),
             metavariables: metavars.count(),
+            universes: universe_seeds.into_inner(),
         },
         unbound: unbound.into_inner(),
         spellings: curios_core::Spellings {

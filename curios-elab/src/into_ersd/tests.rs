@@ -49,7 +49,6 @@ fn module(items: Vec<Item>, body: Term) -> Program {
         module: Module {
             mounts: Vec::new(),
             items,
-            universe_seeds: vec![],
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -698,7 +697,6 @@ fn a_variant_constructs_with_its_registered_schema() {
         module: Module {
             mounts: Vec::new(),
             items: Vec::new(),
-            universe_seeds: vec![],
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -992,7 +990,6 @@ fn a_variant_match_binds_payload_without_projections() {
         module: Module {
             mounts: Vec::new(),
             items: Vec::new(),
-            universe_seeds: vec![],
             induct_decls,
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -1308,7 +1305,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         module: Module {
             mounts: Vec::new(),
             items: Vec::new(),
-            universe_seeds: vec![],
             induct_decls,
             struct_decls,
             concepts: BTreeMap::new(),

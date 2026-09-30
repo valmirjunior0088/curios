@@ -10,7 +10,7 @@ use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
         RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseError, UniverseSeed, WitnessSpelling, build_shorten,
+        UniverseContext, UniverseError, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -386,8 +386,6 @@ pub struct Module {
     ///
     /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name only ever restated the name's leading segment — and being archived, it meant something solely in the compilation that wrote it. A later stage that needs a privilege tier reads it out of this list; nothing derives one from a string.
     pub mounts: Vec<Mount>,
-    /// Lowering-time metadata for every universe metavariable id in this module. Finalized, zonked modules clear this vector.
-    pub universe_seeds: Vec<UniverseSeed>,
     /// Inductive declarations' registry entries, keyed by the type's qualified name. Carried on the module — not on a `Context` — because elaboration and erasure each run with their *own* `Context` (see `run::compile`); both seed their context's flat inductive store from here on entry.
     pub induct_decls: BTreeMap<Global, InductDecl>,
     /// Struct declarations' registry entries, keyed by the type's qualified name. Carried on the module like `induct_decls` (and for the same reason): elaboration and erasure each seed their own `Context` from here on entry.
@@ -440,7 +438,6 @@ impl Module {
                 })
                 .collect(),
             mounts: self.mounts.clone(),
-            universe_seeds: self.universe_seeds.clone(),
             induct_decls: self
                 .induct_decls
                 .iter()
@@ -606,7 +603,6 @@ impl Module {
         Module {
             items,
             mounts: self.mounts.clone(),
-            universe_seeds: self.universe_seeds.clone(),
             induct_decls: entries(&self.induct_decls),
             struct_decls: self
                 .struct_decls
@@ -1046,7 +1042,7 @@ pub fn free_locals_outside(
     found
 }
 
-/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, the lowering-time `universe_seeds` are cleared, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
+/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -1152,9 +1148,6 @@ fn zonked_refusal(module: &Module) -> Option<String> {
         value.has_metavar() || value.has_transient()
     }
 
-    if !module.universe_seeds.is_empty() {
-        return Some("the universe seeds are uncleared".to_owned());
-    }
     for item in &module.items {
         let survives = match item {
             Item::Let(definition) => unfinished(&definition.type_) || unfinished(&definition.body),

@@ -61,7 +61,6 @@ fn spent_entry_beside_an_aliased_payload() -> Program {
                 ),
                 authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
             ],
-            universe_seeds: Vec::new(),
             induct_decls: BTreeMap::from([(good(), declaration)]),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),

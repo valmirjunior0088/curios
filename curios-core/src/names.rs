@@ -10,6 +10,7 @@
 mod tests;
 
 use {
+    crate::UniverseSeed,
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
 };
@@ -160,16 +161,20 @@ pub enum CalleeId {
     Anonymous,
 }
 
-/// How many identities one unit's lowering minted in each space elaboration goes on minting in — counts within the unit, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds.
+/// What one unit's lowering minted in each space elaboration goes on minting in — the whole of what the lowering hands elaboration beside the module: counts within the unit, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds, and a seed per universe level, which the solver starts from.
 ///
-/// **Within the unit, never across units.** No stored term carries a local or a metavariable (`validate_stored_identities`), so nothing a predecessor minted can meet this unit's walk, and every unit's counters start at zero. That is what keeps a unit's stored bytes independent of what was compiled before it. Universes need no count here: the lowering's seed table is the unit's own, and its length is the count.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// **Within the unit, never across units.** No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing a predecessor minted can meet this unit's walk, and every unit's counters start at zero. That is what keeps a unit's stored bytes independent of what was compiled before it.
+///
+/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it was a field each later one had to prove empty, and one the certifier could reach.
+#[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Minted {
     /// Binder identities. A lowered scope is closed before the elaborator sees it, so the ones that survive into a lowered term are the unbound names — each lowered to a free local that elaboration must report rather than find bound.
     pub binders: usize,
     /// Term metavariables, one per hole the lowering left for elaboration to solve.
     pub metavariables: usize,
+    /// One seed per universe level the lowering minted, by its id: the role the solver reads the level's provenance off, and where it was written. Every copy of one written `Type` shares a level, so there are as many seeds as written types, not as occurrences.
+    pub universes: Vec<UniverseSeed>,
 }
 
 /// A free variable's identity: a top-level definition, or a binder some scope opened.

@@ -214,7 +214,6 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![former_def, held],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -313,7 +312,6 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![held],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(held_name, held_decl)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -361,7 +359,6 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![wrapped],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
@@ -404,7 +401,6 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     let module = Module {
         mounts: Vec::new(),
         items: vec![Item::Let(constructor)],
-        universe_seeds: Vec::new(),
         induct_decls: BTreeMap::new(),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),

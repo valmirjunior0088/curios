@@ -12,7 +12,7 @@ fn no_items_simple_tail() {
 
 #[test]
 fn written_types_get_distinct_levels_and_lexical_roles() {
-    let (program, _, _) = super::into_core(
+    let (_, minted, _) = super::into_core(
         &"let id(@A : Type, x : A) -> A = x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
@@ -22,9 +22,8 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
     .unwrap();
 
     assert_eq!(
-        program
-            .module
-            .universe_seeds
+        minted
+            .universes
             .iter()
             .map(|seed| seed.role)
             .collect::<Vec<_>>(),
@@ -33,13 +32,7 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
             curios_core::UniverseRole::Flexible,
         ],
     );
-    assert!(
-        program
-            .module
-            .universe_seeds
-            .iter()
-            .all(|seed| seed.origin.is_some())
-    );
+    assert!(minted.universes.iter().all(|seed| seed.origin.is_some()));
 }
 
 #[test]

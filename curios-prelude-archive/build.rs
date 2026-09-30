@@ -83,9 +83,9 @@ fn build() {
 fn lower(root: &str, modules: &curios_text::RootSource, scope: &[&PreparedText]) -> PreparedText {
     let prepared = prepare_prelude(modules, scope, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
-    validate_lowered_universe_seeds(prepared.core()).unwrap_or_else(|error| {
-        panic!("lowered Text universe seeds of /{root} are invalid: {error}")
-    });
+    validate_lowered_universe_seeds(prepared.core(), &prepared.minted().universes).unwrap_or_else(
+        |error| panic!("lowered Text universe seeds of /{root} are invalid: {error}"),
+    );
 
     prepared
 }

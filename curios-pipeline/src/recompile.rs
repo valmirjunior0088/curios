@@ -38,11 +38,8 @@ pub fn compile_unit_over(
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let closure = invalidated(baseline, lowered.core());
-    // A reused item is exactly as the baseline elaborated it, and the seed table is the new lowering's, which the closure module carries whole.
-    let reused = Module {
-        universe_seeds: Vec::new(),
-        ..baseline.core().restricted(|name| !closure.contains(name))
-    };
+    // A reused item is exactly as the baseline elaborated it; the seeds are the new lowering's, handed to elaboration with its counts.
+    let reused = baseline.core().restricted(|name| !closure.contains(name));
     let changed = lowered.core().restricted(|name| closure.contains(name));
 
     let mut context = Context::new(budget, *syntax);

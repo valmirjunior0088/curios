@@ -15,7 +15,6 @@ fn entry_module(entry: Entrypoint) -> Program {
         module: Module {
             mounts: Vec::new(),
             items: Vec::new(),
-            universe_seeds: Vec::new(),
             induct_decls: BTreeMap::new(),
             struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
