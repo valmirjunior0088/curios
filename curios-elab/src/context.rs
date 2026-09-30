@@ -787,9 +787,7 @@ impl Context {
         if universe_context.parameter_count == 0 {
             return Ok(Some((type_, Vec::new())));
         }
-        let levels = self
-            .universes_mut()
-            .instantiate(&universe_context, UniverseRole::Generalizable)?;
+        let levels = self.universes_mut().instantiate(&universe_context)?;
         let type_ = instantiate_universe_levels_scoped(&type_, &levels)?;
         Ok(Some((type_, levels)))
     }
@@ -846,7 +844,7 @@ impl Context {
         }
         let levels = self
             .universes_mut()
-            .instantiate(universe_context, UniverseRole::Generalizable)
+            .instantiate(universe_context)
             .map_err(Error::from)?;
         let value = instantiate_universe_levels_scoped(value, &levels).map_err(Error::from)?;
         Ok((value, levels))

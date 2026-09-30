@@ -359,12 +359,8 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
     };
     universe_context_validate(&context).unwrap();
     let mut solver = UniverseSolver::new(7);
-    let first = solver
-        .instantiate(&context, UniverseRole::Generalizable)
-        .unwrap();
-    let second = solver
-        .instantiate(&context, UniverseRole::Generalizable)
-        .unwrap();
+    let first = solver.instantiate(&context).unwrap();
+    let second = solver.instantiate(&context).unwrap();
     let first_metas = first.iter().flat_map(Level::metas).collect::<BTreeSet<_>>();
     let second_metas = second
         .iter()

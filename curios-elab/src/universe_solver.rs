@@ -32,9 +32,32 @@ pub(crate) struct UniverseStateToken {
 }
 #[derive(Debug, Clone)]
 struct UniverseMeta {
-    role: UniverseRole,
+    provenance: Provenance,
     origin: Option<UniverseConstraintOrigin>,
     solution: Option<Level>,
+}
+
+/// Where a universe meta came from, which decides which member of an identified pair represents it and how finalization settles it.
+///
+/// Rocq keeps the same three apart: minimization touches no "user-introduced universe (i.e. coming from a user-written anonymous Type) … only the fresh universes generated for each global application" (`dev/doc/universes.md`), and `choose_canonical` keeps a rigid universe as its class's representative over a flexible one. Ordered weakest first, so an identified pair keeps its greater member.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Provenance {
+    /// A classifier the elaborator invented, or a `Type` written outside an input position: minimized where finalization reaches it.
+    Inferred,
+    /// A level [`UniverseSolver::instantiate`] minted for one use's instance.
+    Occurrence,
+    /// A `Type` written in an input position — a level a caller chooses.
+    Chosen,
+}
+
+impl From<UniverseRole> for Provenance {
+    /// A seed or a fresh meta is written or invented, never an occurrence: only [`UniverseSolver::instantiate`] mints one of those.
+    fn from(role: UniverseRole) -> Self {
+        match role {
+            UniverseRole::Generalizable => Provenance::Chosen,
+            UniverseRole::Flexible => Provenance::Inferred,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -455,7 +478,7 @@ impl UniverseSolver {
         Self {
             metas: (0..meta_floor)
                 .map(|_| UniverseMeta {
-                    role: UniverseRole::Generalizable,
+                    provenance: Provenance::Chosen,
                     origin: None,
                     solution: None,
                 })
@@ -475,7 +498,7 @@ impl UniverseSolver {
         self.metas = seeds
             .iter()
             .map(|seed| UniverseMeta {
-                role: seed.role,
+                provenance: seed.role.into(),
                 origin: seed.origin.clone(),
                 solution: None,
             })
@@ -489,18 +512,26 @@ impl UniverseSolver {
         role: UniverseRole,
         origin: Option<UniverseConstraintOrigin>,
     ) -> UniverseMetaId {
+        self.mint(role.into(), origin)
+    }
+
+    fn mint(
+        &mut self,
+        provenance: Provenance,
+        origin: Option<UniverseConstraintOrigin>,
+    ) -> UniverseMetaId {
         let id = UniverseMetaId(self.next_meta);
         self.next_meta += 1;
         self.metas.push(UniverseMeta {
-            role,
+            provenance,
             origin,
             solution: None,
         });
         id
     }
 
-    pub fn role(&self, meta: UniverseMetaId) -> Option<UniverseRole> {
-        self.metas.get(meta.0).map(|entry| entry.role)
+    fn provenance(&self, meta: UniverseMetaId) -> Option<Provenance> {
+        self.metas.get(meta.0).map(|entry| entry.provenance)
     }
 
     pub fn origin(&self, meta: UniverseMetaId) -> Option<&UniverseConstraintOrigin> {
@@ -648,7 +679,7 @@ impl UniverseSolver {
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
     ///
-    /// The direction solves a flexible meta toward a generalizable one when the roles differ, so an occurrence instance keeps its identity; a same-role pair takes a fixed arbitrary direction. The commitment is deliberately incomplete — `max(1, α) = max(1, β)` also admits solutions with the metas apart below the shared constant — so a program that genuinely needs distinct shape-equal instances refuses where it previously over-generalized.
+    /// The direction solves the lesser [`Provenance`] toward the greater — an inferred level toward an occurrence's, an occurrence's toward a chosen one — so the pair keeps the member that decides how it settles; a pair of one provenance takes a fixed direction. The commitment is deliberately incomplete — `max(1, α) = max(1, β)` also admits solutions with the metas apart below the shared constant — so a program that genuinely needs distinct shape-equal instances refuses where it previously over-generalized.
     fn default_shape_equal(&mut self, left: &Level, right: &Level) -> Result<(), UniverseError> {
         let left = self.zonk(left)?;
         let right = self.zonk(right)?;
@@ -676,12 +707,14 @@ impl UniverseSolver {
         let (LevelHead::Meta(a), LevelHead::Meta(b)) = (**left_head, **right_head) else {
             return Ok(());
         };
-        let (Some(role_a), Some(_)) = (self.role(a), self.role(b)) else {
+        let (Some(of_a), Some(of_b)) = (self.provenance(a), self.provenance(b)) else {
             return Ok(());
         };
-        let (from, to) = match role_a {
-            UniverseRole::Flexible => (a, b),
-            UniverseRole::Generalizable => (b, a),
+        let (from, to) = match of_a.cmp(&of_b) {
+            std::cmp::Ordering::Less => (a, b),
+            std::cmp::Ordering::Greater => (b, a),
+            std::cmp::Ordering::Equal if of_a == Provenance::Inferred => (a, b),
+            std::cmp::Ordering::Equal => (b, a),
         };
         self.assign(from, Level::meta(to))
     }
@@ -717,9 +750,9 @@ impl UniverseSolver {
 
     /// Whether `meta` is unsolved and eligible for minimization.
     fn is_open_flexible(&self, meta: UniverseMetaId) -> bool {
-        self.metas
-            .get(meta.0)
-            .is_some_and(|entry| entry.role == UniverseRole::Flexible && entry.solution.is_none())
+        self.metas.get(meta.0).is_some_and(|entry| {
+            entry.provenance == Provenance::Inferred && entry.solution.is_none()
+        })
     }
 
     /// The bound `lower ≤ max(c, atom + k)` places on `atom`, or `None` when it places none.
@@ -951,7 +984,7 @@ impl UniverseSolver {
     ///
     /// Three shapes determine a level, and each is an equation every solution of the store satisfies — so solving it is principal, and the scheme keeps exactly the instances it had with fewer parameters to state them in:
     ///
-    /// - **Mutual atoms.** `a ≤ b` and `b ≤ a` between two bare atoms at one offset: the equality classes conversion generates, collapsed onto one representative.
+    /// - **Mutual atoms.** `a ≤ b` and `b ≤ a` between two bare atoms at one offset: the equality classes conversion generates, collapsed onto the member of greatest [`Provenance`], the lower id between two of one.
     /// - **A level bounded by zero.** `max(…, a, …) ≤ 0` holds over the naturals only with `a` at zero, so each bare meta on the lower side of a constraint whose upper side is the zero level is zero. A part at a positive offset makes the store unsatisfiable, which is the consistency check's to report.
     /// - **A lone level equal to a maximum.** `a ≤ E` and `E ≤ a` with `a` a bare meta that `E` does not mention: `a` *is* `E`. This is solving for `a`, not unifying two maxima — `max(a, b) = max(c, d)` determines none of them and stays two constraints.
     ///
@@ -999,11 +1032,13 @@ impl UniverseSolver {
                         (LevelHead::Meta(left), LevelHead::Meta(right))
                             if metas.contains(&left) && metas.contains(&right) =>
                         {
-                            let (replace, retain) = if left > right {
-                                (left, right)
-                            } else {
-                                (right, left)
-                            };
+                            let (replace, retain) =
+                                match self.provenance(left).cmp(&self.provenance(right)) {
+                                    std::cmp::Ordering::Less => (left, right),
+                                    std::cmp::Ordering::Greater => (right, left),
+                                    std::cmp::Ordering::Equal if left > right => (left, right),
+                                    std::cmp::Ordering::Equal => (right, left),
+                                };
                             Some((replace, Level::meta(retain)))
                         }
                         _ => None,
@@ -1095,14 +1130,10 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Instantiate a closed context, returning its fresh argument vector after inserting the substituted residual constraints transactionally.
-    pub fn instantiate(
-        &mut self,
-        context: &UniverseContext,
-        role: UniverseRole,
-    ) -> Result<Vec<Level>, UniverseError> {
+    /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — [`Provenance::Occurrence`].
+    pub fn instantiate(&mut self, context: &UniverseContext) -> Result<Vec<Level>, UniverseError> {
         let levels = (0..context.parameter_count)
-            .map(|_| Level::meta(self.fresh(role, None)))
+            .map(|_| Level::meta(self.mint(Provenance::Occurrence, None)))
             .collect::<Vec<_>>();
         self.instantiate_at(context, &levels)?;
         Ok(levels)
@@ -1237,14 +1268,14 @@ impl UniverseSolver {
                     .metas
                     .get_mut(meta.0)
                     .ok_or(UniverseError::UnknownMeta(*meta))?;
-                let role = entry.role;
-                entry.role = UniverseRole::Flexible;
-                Ok((*meta, role))
+                let provenance = entry.provenance;
+                entry.provenance = Provenance::Inferred;
+                Ok((*meta, provenance))
             })
             .collect::<Result<Vec<_>, UniverseError>>()?;
         let solved = self.solve_flexible_in(scope);
-        for (meta, role) in roles {
-            self.metas[meta.0].role = role;
+        for (meta, provenance) in roles {
+            self.metas[meta.0].provenance = provenance;
         }
         solved
     }
