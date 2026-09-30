@@ -108,10 +108,10 @@ fn glob_does_not_import_subtree_private_bindings() {
         Type
     "#);
 
-    // The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither. The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither.
+    // The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither.
     let dumped = format!("{term:?}");
     assert!(
-        dumped.contains("Local(Mint { index: 0, hint: Some(\"helper\") })"),
+        dumped.contains("Local(Mint { index: 0, hint: Some(\"helper\"), written: None })"),
         "unexpected term: {dumped}"
     );
     // `/Owner/helper` occurs exactly once — as the binder the declaration introduces. A second occurrence would be the reference resolving to it.
