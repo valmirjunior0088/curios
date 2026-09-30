@@ -15,7 +15,7 @@ use {
     crate::print::{between_items, print_term, print_top_item},
     curios_print::{Owed, Printer, begins, flat, hard_line, reaches, run_printer_placing},
     curios_utilities::{Source, Span},
-    std::{cell::RefCell, fmt, path::Path, rc::Rc},
+    std::{cell::RefCell, fmt, path::Path, sync::Arc},
 };
 
 /// The formatter's verdict on one source: the canonical text, tagged by whether it differs from what was read. The formatter itself is pure — whether a `Changed` result fails a check or rewrites a file is the caller's policy.
@@ -27,7 +27,7 @@ pub enum Formatted {
 
 impl Formatted {
     /// Format `source` canonically. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same program with the same comments — in which case nothing should be written.
-    pub fn from_source(source: &Rc<Source>) -> Result<Self, String> {
+    pub fn from_source(source: &Arc<Source>) -> Result<Self, String> {
         let input = parse_for_format(source).map_err(|error| error.format())?;
         let comments = classify(&source.text, input.comments.clone());
         let expected_comments = comments.len();

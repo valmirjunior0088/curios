@@ -4,7 +4,7 @@ use {
     std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
-        rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -129,7 +129,7 @@ fn constraint_identity_ignores_diagnostic_provenance() {
     let mut right = semantic();
     right.origin = origin("second");
     right.origin.span = Some(Span {
-        source: Rc::new(Source {
+        source: Arc::new(Source {
             path: None,
             text: "Type".into(),
         }),

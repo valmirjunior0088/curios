@@ -10,7 +10,7 @@ use {
     curios_utilities::{Source, digest},
     std::{
         path::{Path, PathBuf},
-        rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -30,7 +30,7 @@ pub struct Record {
 
 impl Record {
     /// The record of a unit compiled from `reads` after predecessors containing `predecessors`, whose own bytes digest to `unit`.
-    pub fn of(reads: Vec<(PathBuf, Rc<Source>)>, predecessors: Vec<String>, unit: String) -> Self {
+    pub fn of(reads: Vec<(PathBuf, Arc<Source>)>, predecessors: Vec<String>, unit: String) -> Self {
         Self {
             reads: digested(reads),
             predecessors,
@@ -48,7 +48,7 @@ pub struct Stored {
 }
 
 /// A read log as a record spells it: each file by canonical path, with the digest of the text that was parsed from it.
-pub fn digested(reads: Vec<(PathBuf, Rc<Source>)>) -> Vec<(String, String)> {
+pub fn digested(reads: Vec<(PathBuf, Arc<Source>)>) -> Vec<(String, String)> {
     reads
         .into_iter()
         .map(|(path, text)| {

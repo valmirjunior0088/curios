@@ -41,7 +41,7 @@ impl Term {
         &self.inner
     }
 
-    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         curios_profile::profile!("parse", group = "term");
         run_parser(
             parse_whitespace()

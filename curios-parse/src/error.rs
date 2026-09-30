@@ -1,7 +1,7 @@
 use {
     super::ParserState,
     curios_utilities::{Report, Source, Span},
-    std::rc::Rc,
+    std::sync::Arc,
 };
 
 /// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate the error is opaque except for [`ParserError::format`].
@@ -12,7 +12,7 @@ pub struct ParserError {
     /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `fatal` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
     from: Option<usize>,
     message: String,
-    source: Rc<Source>,
+    source: Arc<Source>,
     /// What the failure was about, when an alternative said so with [`tagging`](crate::tagging): the declaration whose head it had read. Read by a caller recovering past the failure, to say what was there; nothing else consults it.
     tag: Option<String>,
 }

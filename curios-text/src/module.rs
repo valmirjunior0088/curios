@@ -15,7 +15,7 @@ use {
     },
     curios_print::{flat, pure, run_printer},
     curios_utilities::{Plicity, Report, Source, Span},
-    std::{fmt, path::Path, rc::Rc, str::FromStr},
+    std::{fmt, path::Path, str::FromStr, sync::Arc},
 };
 
 /// A documentation comment: the `---` block written on the lines immediately above a declaration, a constructor, a field or a concept method, attached by the parser to what it documents. A plain `-- ` comment is not syntax and lives beside the module; this is syntax and lives in it, which is what lets the formatter print it back where it was written and a generator read it off the tree.
@@ -353,18 +353,18 @@ fn parse_items_end<'a>() -> Parser<'a, ()> {
 
 impl Module {
     /// The compilation's reading of a module: an item the parser could not read is kept as [`TopItem::Broken`] and parsing resumes at the next item, so one mistake costs one item's diagnosis rather than the file's. `str::parse` is the other reading — whole or nothing, refusing at the first broken item with that item's own error — for a fixture, a header a package reads to learn what it declares, and the formatter, none of which may act on a file it could not read whole.
-    pub(crate) fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    pub(crate) fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(module, _)| module)
     }
 
     /// [`Module::parse`], additionally returning every comment the parse consumed — spans into `source`, ascending. (The formatter itself goes through `parse_for_format`, whose `FormatInput` carries its own comment list; this pairing exists for the comment-visibility tests.) Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
     pub(crate) fn parse_with_comments(
-        source: &Rc<Source>,
+        source: &Arc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
         Self::parse_reading(source, false)
     }
 
-    fn parse_reading(source: &Rc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
+    fn parse_reading(source: &Arc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         curios_profile::profile!("parse", group = "module");
         let module = run_parser(
@@ -385,7 +385,7 @@ impl Module {
     }
 
     /// [`Module::from_path`], additionally handing back the [`Source`] it parsed — which costs a refcount, since the module's spans already hold it.
-    pub(crate) fn read(path: &Path) -> Result<(Self, Rc<Source>), LoadError> {
+    pub(crate) fn read(path: &Path) -> Result<(Self, Arc<Source>), LoadError> {
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
             error,
@@ -439,18 +439,18 @@ impl Entrypoint {
 
 impl Entrypoint {
     /// The compilation's reading of a program, recovering past a broken item as [`Module::parse`] does. A broken item that stands last swallows the tail, since a tail begins with no word an anchor could find; the tail's absence is then that item's fault and reported as it, rather than as a term missing at the end of the input.
-    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(entrypoint, _)| entrypoint)
     }
 
     /// The entrypoint counterpart of [`Module::parse_with_comments`]: parse plus every consumed comment as spans into `source`, ascending.
     pub(crate) fn parse_with_comments(
-        source: &Rc<Source>,
+        source: &Arc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
         Self::parse_reading(source, false)
     }
 
-    fn parse_reading(source: &Rc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
+    fn parse_reading(source: &Arc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         curios_profile::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
@@ -483,7 +483,7 @@ pub(crate) struct FormatInput {
     pub(crate) comments: Vec<Span>,
 }
 
-pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, ParserError> {
+pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, ParserError> {
     clear_comments();
     curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
@@ -529,7 +529,7 @@ impl Entrypoint {
     }
 
     /// [`from_path`](Self::from_path), handing back the text that was parsed as well as what it parsed to.
-    fn sourced(path: impl AsRef<Path>) -> Result<(Self, Rc<Source>), LoadError> {
+    fn sourced(path: impl AsRef<Path>) -> Result<(Self, Arc<Source>), LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
@@ -546,7 +546,7 @@ impl Entrypoint {
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
     ///
     /// **The source comes back because the entry's own header is the one file no loader records.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body. A cache that verifies a compilation against what it read therefore has to be handed the entry separately, and it must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale.
-    pub fn opened(path: &Path) -> Result<(Self, RootSource, Rc<Source>), LoadError> {
+    pub fn opened(path: &Path) -> Result<(Self, RootSource, Arc<Source>), LoadError> {
         let (entrypoint, source) = Self::sourced(path)?;
 
         Ok((entrypoint, RootSource::entry(path), source))
@@ -576,7 +576,7 @@ impl Entrypoint {
     pub fn supplied(
         label: &str,
         text: &str,
-    ) -> Result<(Self, RootSource, Rc<Source>), ParserError> {
+    ) -> Result<(Self, RootSource, Arc<Source>), ParserError> {
         let source = Source::labelled(label, text);
         let entrypoint = Self::parse(&source)?;
 
@@ -591,7 +591,7 @@ impl Entrypoint {
     pub fn overlaid(
         path: &Path,
         text: &str,
-    ) -> Result<(Self, RootSource, Rc<Source>), ParserError> {
+    ) -> Result<(Self, RootSource, Arc<Source>), ParserError> {
         let source = Source::held(path, text);
         let entrypoint = Self::parse(&source)?;
 

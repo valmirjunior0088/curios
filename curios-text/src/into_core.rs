@@ -1491,7 +1491,7 @@ impl<'a> UnitSource<'a> {
     }
 
     /// Every file this unit has read. See [`RootSource::reads`].
-    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::rc::Rc<curios_utilities::Source>)> {
+    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::sync::Arc<curios_utilities::Source>)> {
         self.source.reads()
     }
 

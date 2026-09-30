@@ -4,7 +4,7 @@ use {
     super::{Error, Overlay, RootSource, identity},
     crate::Entrypoint,
     curios_utilities::{Qualifier, RootKind, Source, test_support::Temporary},
-    std::{fs, path::Path, rc::Rc},
+    std::{fs, path::Path, sync::Arc},
 };
 
 /// An entry's header is the one file a loader never reads, so its `mod` chain is walked from the items the entry was parsed into: a module reached through a file module below it counts, and one nothing declares does not.
@@ -191,14 +191,14 @@ fn json(root: &Path) -> RootSource {
 }
 
 /// The one source `source` has read, after loading `/json`'s header alone.
-fn header_read(source: &RootSource) -> Rc<Source> {
+fn header_read(source: &RootSource) -> Arc<Source> {
     let mut reads = source.reads();
     assert_eq!(reads.len(), 1, "the header alone was read");
 
     reads.pop().expect("one read").1
 }
 
-/// The memo is keyed by the file's one spelling and validated by its text, so a second source over an unchanged file is handed the parse the first one took — the same `Rc<Source>`, which nothing but the memo could produce twice.
+/// The memo is keyed by the file's one spelling and validated by its text, so a second source over an unchanged file is handed the parse the first one took — the same `Arc<Source>`, which nothing but the memo could produce twice.
 #[test]
 fn an_unchanged_file_is_parsed_once_per_thread() {
     let root = tree(
@@ -213,7 +213,7 @@ fn an_unchanged_file_is_parsed_once_per_thread() {
     second.load(&qualifier).unwrap();
 
     assert!(
-        Rc::ptr_eq(&header_read(&first), &header_read(&second)),
+        Arc::ptr_eq(&header_read(&first), &header_read(&second)),
         "the second load was handed the first's parse"
     );
 }
@@ -233,7 +233,7 @@ fn a_changed_file_is_parsed_again() {
     let after = json(&root);
     let module = after.load(&qualifier).unwrap();
 
-    assert!(!Rc::ptr_eq(&header_read(&before), &header_read(&after)));
+    assert!(!Arc::ptr_eq(&header_read(&before), &header_read(&after)));
     assert_eq!(header_read(&after).text, "pub mod parse;\npub mod more;\n");
     assert_eq!(module.items.len(), 2, "and the new text is what was parsed");
 }
@@ -254,7 +254,7 @@ fn an_overlay_holding_the_disks_text_shares_the_disks_parse() {
     let held = json(&root).with_overlay(overlay);
     held.load(&qualifier).unwrap();
 
-    assert!(Rc::ptr_eq(&header_read(&disk), &header_read(&held)));
+    assert!(Arc::ptr_eq(&header_read(&disk), &header_read(&held)));
 }
 
 /// A parse failure is reported and records nothing, and it evicts nothing: the file's last good parse answers the next read of that text.
@@ -285,7 +285,7 @@ fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
     restored.load(&qualifier).unwrap();
 
     assert!(
-        Rc::ptr_eq(&header_read(&good), &header_read(&restored)),
+        Arc::ptr_eq(&header_read(&good), &header_read(&restored)),
         "the failure evicted nothing"
     );
 }

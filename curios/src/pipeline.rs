@@ -14,7 +14,7 @@ use {
     curios_verdicts::Verdicts,
     curios_wasm::Module,
     curios_wonder::STDIN_LABEL,
-    std::{fmt::Display, fs, io, path::Path, rc::Rc},
+    std::{fmt::Display, fs, io, path::Path, sync::Arc},
 };
 
 /// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
@@ -159,7 +159,7 @@ pub(crate) fn subject_of(program: &Program) -> Subject {
 /// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so `/std/read()` reports end-of-input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
 pub(crate) fn open(
     entry: Option<&Path>,
-) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
+) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     let Some(path) = entry else {
         return supplied(&drained()?);
     };
@@ -178,7 +178,7 @@ pub(crate) fn drained() -> Result<String, CompileError> {
 }
 
 /// The program `text`, arrived on standard input, parsed — and refused as [`open`] refuses a file when it is written as a module.
-pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
+pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     Entrypoint::supplied(STDIN_LABEL, text).map_err(|error| {
         match Form::of(Path::new(STDIN_LABEL), text) {
             Form::Module => written_as_a_module(STDIN_LABEL),

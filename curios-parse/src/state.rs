@@ -1,14 +1,14 @@
-use {curios_utilities::Source, std::rc::Rc};
+use {curios_utilities::Source, std::sync::Arc};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ParserState<'a> {
     pub(crate) offset: usize,
     pub(crate) string: &'a str,
-    pub(crate) source: &'a Rc<Source>,
+    pub(crate) source: &'a Arc<Source>,
 }
 
 impl<'a> ParserState<'a> {
-    pub(crate) fn new(source: &'a Rc<Source>) -> Self {
+    pub(crate) fn new(source: &'a Arc<Source>) -> Self {
         Self {
             offset: 0,
             string: &source.text,

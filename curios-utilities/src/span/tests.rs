@@ -6,7 +6,7 @@ fn line_column_is_one_based_and_counts_scalars() {
 
     // `l` of "line": line 2, after "sécond " — seven scalars in, so column 8 despite the two-byte `é`.
     let offset = source.text.find("line").unwrap();
-    let span = Span::new(Rc::clone(&source), offset, offset + 4);
+    let span = Span::new(Arc::clone(&source), offset, offset + 4);
     assert_eq!(span.line_column(), (2, 8));
 
     // The very first byte.
@@ -20,7 +20,7 @@ fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
 
     // "line" starts at byte 8 but after seven scalars — seven spaces of padding, four carets.
     let offset = source.text.find("line").unwrap();
-    let span = Span::new(Rc::clone(&source), offset, offset + 4);
+    let span = Span::new(Arc::clone(&source), offset, offset + 4);
     assert_eq!(
         span.render_snippet(),
         "    1 | sécond line\n      |        ^^^^"
@@ -38,7 +38,7 @@ fn caret_padding_reproduces_the_tabs_the_printed_line_keeps() {
 
     // The line is printed verbatim, so the padding carries the same two tabs rather than two spaces: a space each moved the caret one column where the text moved eight.
     let offset = source.text.find("value").unwrap();
-    let span = Span::new(Rc::clone(&source), offset, offset + 5);
+    let span = Span::new(Arc::clone(&source), offset, offset + 5);
     assert_eq!(
         span.render_snippet(),
         "    1 | \t\tvalue\n      | \t\t^^^^^"

@@ -3,7 +3,7 @@ use {
     curios_analysis::fixture::SYNTAX,
     curios_core::*,
     curios_utilities::{Qualifier, Source, Span},
-    std::rc::Rc,
+    std::sync::Arc,
 };
 
 fn context() -> Context {
@@ -304,7 +304,7 @@ fn a_hole_zonked_once_keeps_each_occurrence_s_span() {
     context.birth_metavar(MetavarId(0), Vec::new(), nat());
     context.solve_metavar(MetavarId(0), nat_lit(1));
     let source = Source::inline("a b");
-    let span = |start| Span::new(Rc::clone(&source), start, start + 1);
+    let span = |start| Span::new(Arc::clone(&source), start, start + 1);
     let hole = Term::hole(0);
     let term = Term::tuple([hole.clone().with_span(span(0)), hole.with_span(span(2))]);
 

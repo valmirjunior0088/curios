@@ -1,7 +1,7 @@
 use {
     super::Parser,
     curios_utilities::{Source, Span},
-    std::rc::Rc,
+    std::sync::Arc,
 };
 
 /// Pairs the parser's output with the [`Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
@@ -24,7 +24,7 @@ where
 #[derive(Debug, Clone)]
 pub struct Mark {
     offset: usize,
-    source: Rc<Source>,
+    source: Arc<Source>,
 }
 
 impl Mark {

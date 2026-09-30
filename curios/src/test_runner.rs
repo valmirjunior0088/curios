@@ -18,7 +18,7 @@ use {
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT},
-    std::{path::Path, rc::Rc},
+    std::{path::Path, sync::Arc},
 };
 
 /// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
@@ -267,7 +267,7 @@ impl Run<'_> {
     /// A loose program's tests: its entry, opened from a file or supplied from standard input, compiled against the prelude alone, filed nowhere. `invoked` is the entry as `run` passes it.
     fn loose_program(
         &mut self,
-        (entrypoint, loader, source): (Entrypoint, RootSource, Rc<Source>),
+        (entrypoint, loader, source): (Entrypoint, RootSource, Arc<Source>),
         invoked: &Path,
         subject: &Subject,
     ) -> Result<(), CompileError> {

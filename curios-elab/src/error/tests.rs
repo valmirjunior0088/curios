@@ -1,6 +1,6 @@
 //! What a batch of refusals is: one error carrying every member, flat, classified and reported member by member.
 
-use {super::*, curios_utilities::Source};
+use {super::*, curios_utilities::Source, std::sync::Arc};
 
 fn refusal() -> Error {
     Error::CannotInfer
@@ -10,8 +10,8 @@ fn goals() -> Error {
     Error::goals(Vec::new())
 }
 
-fn span(source: &Rc<Source>, start: usize, end: usize) -> Span {
-    Span::new(Rc::clone(source), start, end)
+fn span(source: &Arc<Source>, start: usize, end: usize) -> Span {
+    Span::new(Arc::clone(source), start, end)
 }
 
 #[test]

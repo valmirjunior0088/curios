@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_utilities::{Source, Span},
-    std::rc::Rc,
+    std::{rc::Rc, sync::Arc},
 };
 
 use super::test_support::*;
@@ -33,7 +33,7 @@ fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
 #[test]
 fn a_memoized_walk_keeps_each_occurrence_s_span() {
     let source = Source::inline("a b c");
-    let span = |start| Some(Span::new(Rc::clone(&source), start, start + 1));
+    let span = |start| Some(Span::new(Arc::clone(&source), start, start + 1));
     let f = Free::local(0, Some("f"));
     let x = Free::local(1, Some("x"));
     let shared = Term::apply(Term::free_var(&f), [Term::free_var(&x)]);

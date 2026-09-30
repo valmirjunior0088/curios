@@ -3,10 +3,10 @@ use std::{
     hash::{Hash, Hasher},
     io,
     path::PathBuf,
-    rc::Rc,
+    sync::Arc,
 };
 
-/// One unit of input text — a file with its path, or pathless inline text — always handed out as `Rc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text.
+/// One unit of input text — a file with its path, or pathless inline text — always handed out as `Arc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text, and so a span can cross a thread. Reference-counted rather than interned: a language server loads a new text on every edit, and a count is what frees the old one once nothing points into it.
 #[derive(Debug)]
 #[curios_archive::archived]
 pub struct Source {
@@ -16,16 +16,16 @@ pub struct Source {
 }
 
 impl Source {
-    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
-        Rc::new(Self {
+    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self {
             path: Some(path.into()),
             text: text.into(),
         })
     }
 
     /// A source with no backing file — embedded or test input handed to a parser as a bare string. Its diagnostics render the snippet without a file-location header.
-    pub fn inline(text: impl Into<String>) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn inline(text: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self {
             path: None,
             text: text.into(),
         })
@@ -34,17 +34,17 @@ impl Source {
     /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics render `label` in the `--> label:line:column` header exactly as they render a path, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
     ///
     /// The label is a display name and is never opened. Nothing reads a source back, and the only paths any consumer *records* are those of module files, which arrive through [`read`](Self::read) — so a label that no filesystem would answer for cannot be mistaken later for one that would.
-    pub fn labelled(label: &str, text: impl Into<String>) -> Rc<Self> {
+    pub fn labelled(label: &str, text: impl Into<String>) -> Arc<Self> {
         Self::new(label, text)
     }
 
     /// Text standing in for the file at `path` — an editor's unsaved buffer, consulted where the file would have been read. Diagnostics name the path exactly as they would had it been read, because to everything downstream it was.
-    pub fn held(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
+    pub fn held(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
         Self::new(path, text)
     }
 
     /// Loads the file at `path` as a source, keeping the path so diagnostics can print a `--> path:line` header.
-    pub fn read(path: impl Into<PathBuf>) -> io::Result<Rc<Self>> {
+    pub fn read(path: impl Into<PathBuf>) -> io::Result<Arc<Self>> {
         let path = path.into();
         let text = fs::read_to_string(&path)?;
 
@@ -52,18 +52,18 @@ impl Source {
     }
 }
 
-/// A half-open byte range `[start, end)` into a shared [`Source`] — how every pipeline stage points a diagnostic back at the text that caused it. Equality and hashing identify the source by `Rc` pointer rather than content, so spans from separately loaded sources never alias even when their texts match, and hashing never walks the text.
+/// A half-open byte range `[start, end)` into a shared [`Source`] — how every pipeline stage points a diagnostic back at the text that caused it. Equality and hashing identify the source by pointer rather than content, so spans from separately loaded sources never alias even when their texts match, and hashing never walks the text.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Span {
-    pub source: Rc<Source>,
+    pub source: Arc<Source>,
     pub start: usize,
     pub end: usize,
 }
 
 impl Span {
     /// Public because the thing that mints spans from byte offsets is the parser, and that now lives outside this crate as `curios-parse`. It was `pub(crate)` only while the two shared one.
-    pub fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
+    pub fn new(source: Arc<Source>, start: usize, end: usize) -> Self {
         Self { source, start, end }
     }
 
@@ -175,7 +175,7 @@ impl Report {
 
 impl PartialEq for Span {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.source, &other.source)
+        Arc::ptr_eq(&self.source, &other.source)
             && self.start == other.start
             && self.end == other.end
     }
@@ -185,7 +185,7 @@ impl Eq for Span {}
 
 impl Hash for Span {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (Rc::as_ptr(&self.source) as usize).hash(state);
+        (Arc::as_ptr(&self.source) as usize).hash(state);
         self.start.hash(state);
         self.end.hash(state);
     }

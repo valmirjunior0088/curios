@@ -21,7 +21,7 @@ use {
         collections::BTreeSet,
         env, fs,
         path::{Path, PathBuf},
-        rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -200,7 +200,7 @@ fn write_image(
     directory: &Path,
     root: &str,
     image: &Uncertified,
-    reads: Vec<(PathBuf, Rc<Source>)>,
+    reads: Vec<(PathBuf, Arc<Source>)>,
     predecessors: Vec<String>,
 ) -> String {
     let first = curios_archive::to_bytes(image)

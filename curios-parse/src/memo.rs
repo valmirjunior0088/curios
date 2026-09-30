@@ -1,7 +1,7 @@
 use {
     super::{Parser, ParserError, ParserState},
     curios_utilities::Source,
-    std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc},
+    std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc},
 };
 
 /// One cached parse at a given grammar key and start offset: either the produced value (type-erased, since the table is shared across the memoized parsers) paired with the end offset to resume at, or the verbatim error the parser failed with.
@@ -50,7 +50,7 @@ where
 }
 
 /// The entry point: runs `parser` from the start of `source`, first clearing the packrat table so [`memoize`]d results from a previous parse can never be replayed against this input. Does *not* require the input to be fully consumed — end the grammar with [`take_eof`](crate::take_eof) if trailing text should be an error.
-pub fn run_parser<'a, A>(parser: Parser<'a, A>, source: &'a Rc<Source>) -> Result<A, ParserError>
+pub fn run_parser<'a, A>(parser: Parser<'a, A>, source: &'a Arc<Source>) -> Result<A, ParserError>
 where
     A: 'a,
 {

@@ -15,6 +15,7 @@ use {
         fs,
         path::{Path, PathBuf},
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -33,8 +34,8 @@ pub struct RootSource {
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
     ///
-    /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here was ever `Send` — a module holds `Rc<Source>` spans — so this costs no bound that was not already spent.
-    reads: RefCell<BTreeMap<PathBuf, Rc<Source>>>,
+    /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` yet — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
+    reads: RefCell<BTreeMap<PathBuf, Arc<Source>>>,
 }
 
 /// Where one mount's modules are.
@@ -218,11 +219,11 @@ impl RootSource {
     /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a store.
     ///
     /// Canonical paths, so the same file reached through a relative invocation and an absolute one is one entry. The consequence is that moving a project invalidates its records, which costs one recompile and then re-records.
-    pub fn reads(&self) -> Vec<(PathBuf, Rc<Source>)> {
+    pub fn reads(&self) -> Vec<(PathBuf, Arc<Source>)> {
         self.reads
             .borrow()
             .iter()
-            .map(|(path, source)| (path.clone(), Rc::clone(source)))
+            .map(|(path, source)| (path.clone(), Arc::clone(source)))
             .collect()
     }
 
@@ -423,15 +424,15 @@ impl Default for RootSource {
 
 thread_local! {
     /// Every file this thread has parsed, by the one spelling of its path, with the text it held then. See [`parsed`].
-    static PARSED: RefCell<HashMap<PathBuf, (Rc<Source>, Module)>> = RefCell::new(HashMap::new());
+    static PARSED: RefCell<HashMap<PathBuf, (Arc<Source>, Module)>> = RefCell::new(HashMap::new());
 }
 
 /// The module at `path`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
 ///
-/// **A hit hands back the same `Rc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file, replaced when the file changes, so the memo is bounded by how many files a process reads and never by how often one is edited. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
+/// **A hit hands back the same `Arc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file, replaced when the file changes, so the memo is bounded by how many files a process reads and never by how often one is edited. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
 ///
-/// Thread-local because everything here is — a module holds `Rc<Source>` spans. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
-fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Rc<Source>), LoadError> {
+/// Thread-local because a surface module is an `Rc` tree, which cannot cross a thread; its spans could, since a source is shared by `Arc`. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
+fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
     let text = match held {
         Some(text) => text.to_owned(),
         None => fs::read_to_string(path).map_err(|error| LoadError::Read {
@@ -446,7 +447,7 @@ fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Rc<Source>), LoadE
             .borrow()
             .get(&key)
             .filter(|(source, _)| source.text == text)
-            .map(|(source, module)| (module.clone(), Rc::clone(source)))
+            .map(|(source, module)| (module.clone(), Arc::clone(source)))
     });
     if let Some(hit) = hit {
         return Ok(hit);
@@ -457,7 +458,7 @@ fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Rc<Source>), LoadE
     PARSED.with(|parsed| {
         parsed
             .borrow_mut()
-            .insert(key, (Rc::clone(&source), module.clone()));
+            .insert(key, (Arc::clone(&source), module.clone()));
     });
 
     Ok((module, source))
