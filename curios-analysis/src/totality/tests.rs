@@ -100,11 +100,7 @@ fn join_keeps_the_strongest_of_two_routes() {
 fn shapes_are_compared_by_the_proper_subterm_order() {
     let head = Free::local(1, None);
     let tail = Free::local(2, None);
-    let whole = Shape::elem_run(
-        Carriers::Bin,
-        vec![Shape::Atom(head.clone())],
-        Shape::Atom(tail.clone()),
-    );
+    let whole = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(head)], Shape::Atom(tail));
 
     assert_eq!(whole.against(&whole), Size::Same);
     assert_eq!(Shape::Atom(tail).against(&whole), Size::Less);
@@ -164,9 +160,9 @@ fn runs_merge_so_a_refined_tail_stays_one_chain() {
 fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
     // `n / 10` is below `n` and says nothing about anything else. In particular it must not grade against a parameter an enclosing arm has refined to a constructor, because that parameter no longer stands for the binder the decrease was measured from.
     let (n, other) = (Free::local(1, None), Free::local(2, None));
-    let smaller = Shape::Smaller(n.clone());
+    let smaller = Shape::Smaller(n);
 
-    assert_eq!(smaller.against(&Shape::Atom(n.clone())), Size::Less);
+    assert_eq!(smaller.against(&Shape::Atom(n)), Size::Less);
     assert_eq!(smaller.against(&Shape::Atom(other)), NONE);
     assert_eq!(smaller.against(&Shape::Opaque), NONE);
 
@@ -178,8 +174,8 @@ fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
 fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
     // It is a claim about a binder, not a value, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
     let n = Free::local(1, None);
-    let smaller = Shape::Smaller(n.clone());
-    let tree = Shape::Node(Tag::Tuple, vec![smaller.clone(), Shape::Atom(n.clone())]);
+    let smaller = Shape::Smaller(n);
+    let tree = Shape::Node(Tag::Tuple, vec![smaller.clone(), Shape::Atom(n)]);
     let run = Shape::elem_run(Carriers::List, vec![smaller.clone()], Shape::Atom(n));
 
     assert!(!smaller.same_as(&smaller));
@@ -340,11 +336,7 @@ fn a_deeply_nested_body_walks_without_native_recursion() {
     let mut kernel = Probe::default();
     let f = Free::local(1, Some("f"));
     let rec = Term::rec(
-        vec![(
-            f.clone(),
-            Term::intrinsic(Intrinsic::NatType),
-            Term::free_var(&f),
-        )],
+        vec![(f, Term::intrinsic(Intrinsic::NatType), Term::free_var(&f))],
         Term::free_var(&f),
     );
     let Subterm::Rec(Rec { group, .. }) = &*rec else {
@@ -387,10 +379,10 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     let r = Free::local(6, Some("r"));
     let intro = Shape::Node(
         Tag::Variant(Atom::from("intro")),
-        vec![Shape::Atom(w), Shape::Atom(below.clone())],
+        vec![Shape::Atom(w), Shape::Atom(below)],
     );
     let mut context = SizeContext::default();
-    context.open(Some((a.clone(), intro)), None, vec![below.clone()]);
+    context.open(Some((a, intro)), None, vec![below]);
     let applied = Term::apply(
         Term::free_var(&below),
         [Term::free_var(&y), Term::free_var(&r)],

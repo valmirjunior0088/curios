@@ -38,7 +38,7 @@ fn a_declaration_instance_is_read_once_per_node() {
     let family = nominal("Family");
     let level = Level::param(UniverseParam(0));
     let mut value = Term::induct_type_at(
-        family.clone(),
+        family,
         vec![level.clone()],
         Vec::<Term>::new(),
         Vec::<Term>::new(),

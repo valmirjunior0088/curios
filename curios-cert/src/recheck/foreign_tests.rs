@@ -23,7 +23,7 @@ use super::test_support::*;
 #[test]
 fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let verdicts = fixture_verdicts(
         &foreign_held_at(forged_row(), &false_type, &false_name),

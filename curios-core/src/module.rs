@@ -118,7 +118,7 @@ impl Certification {
     pub fn extended(mut self, other: &Certification) -> Self {
         for (name, certified) in &other.certified {
             self.certified
-                .entry(name.clone())
+                .entry(*name)
                 .or_insert_with(|| certified.clone());
         }
         self
@@ -251,10 +251,10 @@ impl RecItem {
             .iter()
             .zip(self.group.iter())
             .map(|(definition, member)| Definition {
-                name: definition.name.clone(),
+                name: definition.name,
                 kind: definition.kind.clone(),
                 universe_context: self.group.universe_context().clone(),
-                island: definition.island.clone(),
+                island: definition.island,
                 totality: definition.totality,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
@@ -265,7 +265,7 @@ impl RecItem {
     pub fn island(&self) -> Qualifier {
         self.definitions
             .first()
-            .map(|definition| definition.island.clone())
+            .map(|definition| definition.island)
             .unwrap_or_default()
     }
 }
@@ -412,10 +412,10 @@ impl Module {
     /// Pass the same [`Sharing`] to every snapshot archived together so equal structures collapse across them as well as within each.
     pub fn shared(&self, sharing: &Sharing) -> Module {
         let definition = |definition: &Definition| Definition {
-            name: definition.name.clone(),
+            name: definition.name,
             kind: definition.kind.clone(),
             universe_context: definition.universe_context.clone(),
-            island: definition.island.clone(),
+            island: definition.island,
             totality: definition.totality,
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
@@ -432,9 +432,9 @@ impl Module {
                             .definitions
                             .iter()
                             .map(|member| RecDefinition {
-                                name: member.name.clone(),
+                                name: member.name,
                                 kind: member.kind.clone(),
-                                island: member.island.clone(),
+                                island: member.island,
                                 totality: member.totality,
                             })
                             .collect(),
@@ -448,17 +448,17 @@ impl Module {
             induct_decls: self
                 .induct_decls
                 .iter()
-                .map(|(name, declaration)| (name.clone(), declaration.shared(sharing)))
+                .map(|(name, declaration)| (*name, declaration.shared(sharing)))
                 .collect(),
             struct_decls: self
                 .struct_decls
                 .iter()
-                .map(|(name, declaration)| (name.clone(), declaration.shared(sharing)))
+                .map(|(name, declaration)| (*name, declaration.shared(sharing)))
                 .collect(),
             concepts: self
                 .concepts
                 .iter()
-                .map(|(name, concept)| (name.clone(), concept.shared(sharing)))
+                .map(|(name, concept)| (*name, concept.shared(sharing)))
                 .collect(),
             witnesses: self.witnesses.clone(),
             tests: self.tests.clone(),
@@ -495,7 +495,7 @@ impl Module {
                 type_ = telescope.terminal();
             }
             if !collected.is_empty() {
-                marks.insert(def.name.clone(), collected);
+                marks.insert(def.name, collected);
             }
         };
 
@@ -518,7 +518,7 @@ impl Module {
                 Item::Let(def) => vec![def.clone()],
                 Item::Rec(rec) => rec.definitions(),
             })
-            .map(|def| (def.name.clone(), def))
+            .map(|def| (def.name, def))
             .collect::<BTreeMap<_, _>>();
 
         let mut spelling = WitnessSpelling::default();
@@ -535,7 +535,7 @@ impl Module {
                     if let Some((_, reached)) =
                         concept.supers.iter().find(|(position, _)| *position == index)
                     {
-                        return FieldSpelling::Super(reached.clone());
+                        return FieldSpelling::Super(*reached);
                     }
                     let wrapper = Global::Authored(path.with(label));
                     // A method's wrapper takes the method's parameters beside the concept's and its witness; any other field's takes those alone.
@@ -549,7 +549,7 @@ impl Module {
                     }
                 })
                 .collect();
-            spelling.concepts.insert(name.clone(), fields);
+            spelling.concepts.insert(*name, fields);
         }
 
         for def in definitions.into_values() {
@@ -604,7 +604,7 @@ impl Module {
             declarations
                 .iter()
                 .filter(|(name, _)| keep(name))
-                .map(|(name, declaration)| (name.clone(), declaration.clone()))
+                .map(|(name, declaration)| (*name, declaration.clone()))
                 .collect()
         };
 
@@ -617,13 +617,13 @@ impl Module {
                 .struct_decls
                 .iter()
                 .filter(|(name, _)| keep(name))
-                .map(|(name, declaration)| (name.clone(), declaration.clone()))
+                .map(|(name, declaration)| (*name, declaration.clone()))
                 .collect(),
             concepts: self
                 .concepts
                 .iter()
                 .filter(|(name, _)| keep(name))
-                .map(|(name, concept)| (name.clone(), concept.clone()))
+                .map(|(name, concept)| (*name, concept.clone()))
                 .collect(),
             witnesses: self
                 .witnesses
@@ -646,12 +646,10 @@ impl Module {
         let mut symbols = Vec::new();
         for item in &self.items {
             match item {
-                Item::Let(def) => symbols.push(def.name.clone()),
-                Item::Rec(rec) => symbols.extend(
-                    rec.definitions
-                        .iter()
-                        .map(|definition| definition.name.clone()),
-                ),
+                Item::Let(def) => symbols.push(def.name),
+                Item::Rec(rec) => {
+                    symbols.extend(rec.definitions.iter().map(|definition| definition.name))
+                }
             }
         }
         symbols.extend(self.induct_decls.keys().cloned());
@@ -817,16 +815,16 @@ fn construction_heads(term: &Term) -> BTreeSet<Global> {
             }
             match &**term {
                 Subterm::InductType(node) => {
-                    state.1.insert(node.name.clone());
+                    state.1.insert(node.name);
                 }
                 Subterm::Variant(node) => {
-                    state.1.insert(node.name.clone());
+                    state.1.insert(node.name);
                 }
                 Subterm::StructType(node) => {
-                    state.1.insert(node.name.clone());
+                    state.1.insert(node.name);
                 }
                 Subterm::Struct(node) => {
-                    state.1.insert(node.name.clone());
+                    state.1.insert(node.name);
                 }
                 _ => {}
             }
@@ -1023,9 +1021,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
         Global::Witness(id) => Mount::owning(&module.mounts, id.module()).is_none(),
         Global::Authored(_) => false,
     }) {
-        return Err(Positional::UnscopedWitness {
-            witness: witness.clone(),
-        });
+        return Err(Positional::UnscopedWitness { witness: *witness });
     }
 
     found.map_or(Ok(()), Err)

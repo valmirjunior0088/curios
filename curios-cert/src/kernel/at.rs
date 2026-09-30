@@ -106,7 +106,7 @@ impl Kernel {
     ) -> Result<InductAt, KernelError> {
         let declaration = self
             .induct_decl(name)
-            .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+            .ok_or_else(|| KernelError::Undeclared(*name))?;
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
@@ -125,7 +125,7 @@ impl Kernel {
     ) -> Result<StructAt, KernelError> {
         let declaration = self
             .struct_decl(name)
-            .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+            .ok_or_else(|| KernelError::Undeclared(*name))?;
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 

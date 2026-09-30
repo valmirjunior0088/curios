@@ -107,7 +107,7 @@ impl ReaderNames {
     }
 
     fn spell(&self, reader: &ReaderPosition, global: &Global) -> Option<String> {
-        let key = (reader.owner.clone(), global.clone());
+        let key = (reader.owner, *global);
         if let Some(spelled) = self.memo.borrow().get(&key) {
             return spelled.clone();
         }
@@ -169,12 +169,12 @@ impl WitnessSpelling {
     /// The concept application a type names, when it names a concept this table knows: `Show(A)` elaborated to its record, or still the concept's name applied.
     fn application(&self, type_: &Term) -> Option<(Global, Vec<Term>)> {
         let (name, arguments) = match &**type_ {
-            Subterm::StructType(StructType { name, params, .. }) => (name.clone(), params.clone()),
+            Subterm::StructType(StructType { name, params, .. }) => (*name, params.clone()),
             Subterm::Apply(_) | Subterm::Var(_) | Subterm::Instance(_) => {
                 let Free::Global(name) = type_.head_name()? else {
                     return None;
                 };
-                (name.clone(), spine_arguments(type_))
+                (*name, spine_arguments(type_))
             }
             _ => return None,
         };
@@ -445,7 +445,7 @@ fn collect_labels(term: &Term, out: &mut DisplayNames) {
     fn telescope_binders<T: Bound>(out: &mut BTreeSet<Free>, mut cur: &Telescope<T>) {
         while let Telescope::Cons(_, rest) = cur {
             if let Some(binder) = rest.binder(0) {
-                out.insert(binder.clone());
+                out.insert(*binder);
             }
             cur = rest.body();
         }
@@ -513,10 +513,10 @@ fn collect_labels(term: &Term, out: &mut DisplayNames) {
 /// A tuple label is the exception: it is part of its tuple type's identity, so it keeps the spelling it was written with before anything else is assigned, and a binder that would read like it is the one suffixed — a function's parameter `frame` beside a result field `frame` reads `frame2`, since a parameter's name is no part of its type. Two labels may therefore read alike, which is what their types say.
 pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, String> {
     // `names` is sorted, so the assignment below is deterministic.
-    let (literal, prettifiable): (Vec<_>, Vec<_>) = names
+    let (literal, prettifiable) = names
         .names
         .iter()
-        .partition(|name| name.as_global().is_some());
+        .partition::<Vec<&Free>, _>(|name| name.as_global().is_some());
 
     // Globals reserve the spelling they will display under.
     let mut used = literal
@@ -531,14 +531,14 @@ pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, 
     for label in &names.labels {
         if let Some(hint) = label.hint() {
             used.insert(hint.to_string());
-            map.insert(label.clone(), hint.to_string());
+            map.insert(*label, hint.to_string());
         }
     }
 
-    let (hinted, hintless): (Vec<_>, Vec<_>) = prettifiable
+    let (hinted, hintless) = prettifiable
         .into_iter()
         .filter(|name| !map.contains_key(*name))
-        .partition(|name| name.hint().is_some());
+        .partition::<Vec<&Free>, _>(|name| name.hint().is_some());
 
     for name in hinted.into_iter().chain(hintless) {
         let hint = name.hint().unwrap_or("x");
@@ -549,7 +549,7 @@ pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> HashMap<Free, 
             next += 1;
         }
         used.insert(candidate.clone());
-        map.insert(name.clone(), candidate);
+        map.insert(*name, candidate);
     }
     map
 }
@@ -602,7 +602,7 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
         };
 
         claimed.insert(label.clone());
-        map.insert((*name).clone(), label.clone());
+        map.insert(*(*name), label.clone());
     }
 
     for name in own.iter().chain(scope.iter()) {
@@ -616,7 +616,7 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
             .find(|suffix| count.get(suffix) == Some(&1) && !claimed.contains(suffix))
             && shortest.len() < rendered.len()
         {
-            map.insert((*name).clone(), shortest);
+            map.insert(*(*name), shortest);
         }
     }
     map
@@ -625,7 +625,7 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
 /// A scope's stored binder, or a depth-positional stand-in when it has none — a `constant` scope never had binders written. The stand-in is minted at the de Bruijn level, so one printed term's placeholders stay distinct from each other.
 fn binder_or(binder: Option<&Free>, depth: usize) -> Free {
     match binder {
-        Some(binder) => binder.clone(),
+        Some(binder) => *binder,
         None => Free::local(u32::try_from(depth).unwrap_or(u32::MAX), None),
     }
 }
@@ -706,7 +706,7 @@ fn witness_form<'a>(term: &Term, frame: Frame<'a>) -> Option<WitnessForm<'a>> {
             let node = chain(frame.witnesses).find(|node| &node.label == label)?;
             Some(WitnessForm::Local {
                 node,
-                concept: node.concept()?.clone(),
+                concept: *node.concept()?,
                 depth: 0,
             })
         }
@@ -722,7 +722,7 @@ fn witness_form<'a>(term: &Term, frame: Frame<'a>) -> Option<WitnessForm<'a>> {
                 let (_, reached) = table.supers(&concept).find(|(field, _)| field == index)?;
                 Some(WitnessForm::Local {
                     node,
-                    concept: reached.clone(),
+                    concept: *reached,
                     depth: depth + 1,
                 })
             }
@@ -781,7 +781,7 @@ fn routes<'a>(
     concept: &Global,
 ) -> Option<(usize, Vec<&'a WitnessNode<'a>>)> {
     let mut level = chain(frame.witnesses)
-        .filter_map(|node| node.concept().map(|reached| (node, reached.clone())))
+        .filter_map(|node| node.concept().map(|reached| (node, *reached)))
         .collect::<Vec<_>>();
     let mut depth = 0;
     // The superclass graph is acyclic (checked where the registries are seeded), so the walk ends once every path has run out.
@@ -792,7 +792,7 @@ fn routes<'a>(
             .flat_map(|(node, reached)| {
                 table
                     .supers(&reached)
-                    .map(move |(_, super_)| (node, super_.clone()))
+                    .map(move |(_, super_)| (node, *super_))
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -1281,15 +1281,14 @@ fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<Form
             params,
             indices,
             ..
-        }) if !indices.is_empty() => (binds_in_order(indices) && closed(params)).then(|| {
-            FormerEta::Nominal(name.clone(), params.clone(), params.len() + indices.len())
-        }),
+        }) if !indices.is_empty() => (binds_in_order(indices) && closed(params))
+            .then(|| FormerEta::Nominal(*name, params.clone(), params.len() + indices.len())),
         _ if binders != 1 => None,
         Subterm::InductType(InductType { name, params, .. })
         | Subterm::StructType(StructType { name, params, .. }) => {
             let (last, prefix) = params.split_last()?;
             (bound(last, 0) && closed(prefix))
-                .then(|| FormerEta::Nominal(name.clone(), prefix.to_vec(), params.len()))
+                .then(|| FormerEta::Nominal(*name, prefix.to_vec(), params.len()))
         }
         Subterm::Intrinsic(Intrinsic::IoType(payload)) => {
             bound(payload, 0).then_some(FormerEta::Intrinsic("Io"))
@@ -1359,7 +1358,7 @@ fn parameter_types(
     let (output, named) =
         if plicity == Some(&Plicity::Witness) && after.spelling.witnesses.is_some() {
             // A function type cannot name its witness, so the binder is spelled only where a reference resolution would not restore still names it.
-            let node = WitnessNode::new(label.clone(), &ty, after);
+            let node = WitnessNode::new(label, &ty, after);
             let output = parameter_types(
                 cursor,
                 plicities,
@@ -1858,7 +1857,7 @@ fn within_reader(term: Term, frame: Frame, binders: &[(Free, Term)]) -> Printer 
     match binders.split_first() {
         None => term_doc(term, frame),
         Some(((label, type_), rest)) => {
-            let node = WitnessNode::new(label.clone(), type_, frame);
+            let node = WitnessNode::new(*label, type_, frame);
             within_reader(term, frame.with_witness(&node), rest)
         }
     }

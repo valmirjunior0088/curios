@@ -247,7 +247,7 @@ fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifi
     let source = UnitSource::mounted(unit);
     let mut prefixes = prelude[..withheld]
         .iter()
-        .flat_map(|root| root.mounts().iter().map(|mount| mount.prefix.clone()))
+        .flat_map(|root| root.mounts().iter().map(|mount| mount.prefix))
         .collect::<Vec<_>>();
     prefixes.extend(source.declared().unwrap_or(&[]).iter().cloned());
 

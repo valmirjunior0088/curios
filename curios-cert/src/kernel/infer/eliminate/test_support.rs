@@ -160,7 +160,7 @@ pub(super) fn eliminate_at(
     let subject = binder(50, "subject");
     kernel.assume(
         &subject,
-        &Term::induct_type(family.clone(), Vec::<Term>::new(), indices.clone()),
+        &Term::induct_type(*family, Vec::<Term>::new(), indices.clone()),
     );
 
     // One motive binder per index, then the scrutinee's.
@@ -205,10 +205,10 @@ pub(super) fn scrutinee_family(kernel: &mut Kernel, name: Free, family: &Global)
         &name,
         &Term::func_type(
             [
-                (index.clone(), nat_type()),
+                (index, nat_type()),
                 (
                     binder(93, "x"),
-                    Term::induct_type(family.clone(), Vec::<Term>::new(), [Term::free_var(&index)]),
+                    Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&index)]),
                 ),
             ],
             Term::type_ground(),

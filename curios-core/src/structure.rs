@@ -57,7 +57,7 @@ impl StructDecl {
             universe_context: self.universe_context.clone(),
             arity: sharing.share(&self.arity),
             result_sort: sharing.share(&self.result_sort),
-            module: self.module.clone(),
+            module: self.module,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
         }

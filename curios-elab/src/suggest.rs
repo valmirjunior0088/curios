@@ -156,9 +156,9 @@ fn module_pool(
     let mut own = BTreeSet::new();
 
     let mut definitions = |definition: &curios_core::Definition| {
-        own.insert(definition.name.clone());
+        own.insert(definition.name);
         if Some(&definition.name) != owner {
-            pool.push((3, (definition.name.clone(), definition.type_.clone())));
+            pool.push((3, (definition.name, definition.type_.clone())));
         }
     };
     for item in &module.items {
@@ -197,9 +197,9 @@ fn module_pool(
         if own.contains(global) || Some(global) == owner {
             continue;
         }
-        let free = Free::Global(global.clone());
+        let free = Free::Global(*global);
         if let Some(type_) = context.assumption(&free) {
-            pool.push((4, (global.clone(), type_.clone())));
+            pool.push((4, (*global, type_.clone())));
         }
     }
 
@@ -210,13 +210,13 @@ fn module_pool(
         if own.contains(global)
             || referenced.contains(global)
             || Some(global) == owner
-            || !imported.insert(global.clone())
+            || !imported.insert(*global)
         {
             continue;
         }
-        let free = Free::Global(global.clone());
+        let free = Free::Global(*global);
         if let Some(type_) = context.assumption(&free) {
-            pool.push((5, (global.clone(), type_.clone())));
+            pool.push((5, (*global, type_.clone())));
         }
     }
 
@@ -475,7 +475,7 @@ fn constructor_fits(
                 let field_count = struct_decl.fields_at(params).len();
                 let fields: Vec<Term> = (0..field_count).map(|_| hole.clone()).collect();
                 candidates.push(Candidate {
-                    term: Term::struct_(name.clone(), params.iter().cloned(), fields),
+                    term: Term::struct_(*name, params.iter().cloned(), fields),
                     holes: field_count,
                     pool: 1,
                 });

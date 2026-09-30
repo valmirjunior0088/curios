@@ -71,10 +71,10 @@ impl UniverseErased<Module> {
 
 fn project_definition(definition: &Definition) -> Definition {
     Definition {
-        name: definition.name.clone(),
+        name: definition.name,
         kind: definition.kind.clone(),
         universe_context: Default::default(),
-        island: definition.island.clone(),
+        island: definition.island,
         // Carried as every field is, and read by nothing below: the erased functions' termination flags are marked from the certifier's record where the sealed program meets it (see `curios_ersd::Function::total`), never from this stamp.
         totality: definition.totality,
         type_: project_erased_universes(&definition.type_),
@@ -101,7 +101,7 @@ fn project_module(module: &Module) -> Module {
             .iter()
             .map(|(name, declaration)| {
                 (
-                    name.clone(),
+                    *name,
                     InductDecl {
                         universe_context: Default::default(),
                         arity: project_erased_universes(&declaration.arity),
@@ -119,7 +119,7 @@ fn project_module(module: &Module) -> Module {
                             })
                             .collect(),
                         result_sort: project_erased_universes(&declaration.result_sort),
-                        module: declaration.module.clone(),
+                        module: declaration.module,
                         rep_public: declaration.rep_public,
                         // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
@@ -132,12 +132,12 @@ fn project_module(module: &Module) -> Module {
             .iter()
             .map(|(name, declaration)| {
                 (
-                    name.clone(),
+                    *name,
                     StructDecl {
                         universe_context: Default::default(),
                         arity: project_erased_universes(&declaration.arity),
                         result_sort: project_erased_universes(&declaration.result_sort),
-                        module: declaration.module.clone(),
+                        module: declaration.module,
                         rep_public: declaration.rep_public,
                         // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
@@ -150,7 +150,7 @@ fn project_module(module: &Module) -> Module {
             .iter()
             .map(|(name, concept)| {
                 (
-                    name.clone(),
+                    *name,
                     ConceptDecl {
                         universe_context: Default::default(),
                         params: project_erased_universes(&concept.params),
@@ -379,7 +379,7 @@ impl Lowering {
                 match self.environment.lookup(name) {
                     Some(Binding::Atom(atom)) => Ok(Outcome::Emitted(atom)),
                     Some(Binding::Dropped) => {
-                        self.dangled.insert(name.clone());
+                        self.dangled.insert(*name);
                         Ok(Outcome::Emitted(self.unit()))
                     }
                     None => unreachable!("erase: unbound variable {name}"),

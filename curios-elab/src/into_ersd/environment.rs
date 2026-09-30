@@ -94,11 +94,11 @@ impl Environment {
     }
 
     pub(super) fn bind(&mut self, name: &Free, atom: curios_ersd::Atom) {
-        self.values.insert(name.clone(), Binding::Atom(atom));
+        self.values.insert(*name, Binding::Atom(atom));
     }
 
     pub(super) fn bind_dropped(&mut self, name: &Free) {
-        self.values.insert(name.clone(), Binding::Dropped);
+        self.values.insert(*name, Binding::Dropped);
     }
 
     pub(super) fn lookup(&self, name: &Free) -> Option<Binding> {
@@ -110,7 +110,7 @@ impl Environment {
     }
 
     pub(super) fn register_struct_row(&mut self, name: &Global, row: ProductRow) {
-        self.struct_decls.insert(name.clone(), row);
+        self.struct_decls.insert(*name, row);
     }
 
     pub(super) fn induct_row(&self, name: &Global) -> Option<&FamilyRow> {
@@ -118,7 +118,7 @@ impl Environment {
     }
 
     pub(super) fn register_induct_row(&mut self, name: &Global, row: FamilyRow) {
-        self.induct_decls.insert(name.clone(), row);
+        self.induct_decls.insert(*name, row);
     }
 
     pub(super) fn tuple_schema(&self, width: usize) -> Option<curios_ersd::ProductId> {

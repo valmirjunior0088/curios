@@ -105,7 +105,7 @@ impl InductDecl {
                 })
                 .collect(),
             result_sort: sharing.share(&self.result_sort),
-            module: self.module.clone(),
+            module: self.module,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
         }

@@ -14,10 +14,7 @@ fn beta_opens_a_function_over_its_arguments() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let term = Term::apply(
-        Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
-        [nat(7)],
-    );
+    let term = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(7)]);
 
     assert_eq!(whnf(&mut kernel, term), Ok(nat(7)));
 }
@@ -113,7 +110,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
         nat_type(),
         [
             ("none", Vec::<Free>::new(), nat(0)),
-            ("some", vec![payload.clone()], Term::free_var(&payload)),
+            ("some", vec![payload], Term::free_var(&payload)),
         ],
     );
 
@@ -224,7 +221,7 @@ fn projection_skips_a_variants_tag_but_not_a_structs() {
     let name = Global::Authored(Qualifier::from(["E"]));
 
     let variant = Term::proj(
-        Term::variant(name.clone(), Vec::<Term>::new(), "some", [nat(42)]),
+        Term::variant(name, Vec::<Term>::new(), "some", [nat(42)]),
         1,
     );
     assert_eq!(whnf(&mut kernel, variant), Ok(nat(42)));
@@ -240,7 +237,7 @@ fn eta_contracts_a_function_that_only_forwards() {
     let f = binder(1, "f");
 
     let term = Term::func(
-        [(x.clone(), nat_type())],
+        [(x, nat_type())],
         Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
     );
 
@@ -254,7 +251,7 @@ fn eta_declines_when_the_head_mentions_the_binder() {
     let x = binder(0, "x");
 
     let term = Term::func(
-        [(x.clone(), nat_type())],
+        [(x, nat_type())],
         Term::apply(Term::free_var(&x), [Term::free_var(&x)]),
     );
 
@@ -273,7 +270,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     let x = binder(5, "x");
 
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&motive),
@@ -286,8 +283,8 @@ fn a_recursive_application_stays_folded_until_forced() {
     );
 
     let group = [(
-        countdown.clone(),
-        Term::func_type([(n.clone(), nat_type())], nat_type()),
+        countdown,
+        Term::func_type([(n, nat_type())], nat_type()),
         body,
     )];
 
@@ -321,19 +318,19 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let f = binder(4, "f");
     let x = binder(5, "x");
     let y = binder(6, "y");
-    let arrow = Term::func_type([(x.clone(), nat_type())], nat_type());
+    let arrow = Term::func_type([(x, nat_type())], nat_type());
 
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&motive),
             arrow.clone(),
-            Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+            Term::func([(x, nat_type())], Term::free_var(&x)),
             &pred,
             &hypothesis,
             Term::func(
-                [(x.clone(), nat_type())],
+                [(x, nat_type())],
                 Term::apply(
                     Term::apply(Term::free_var(&f), [Term::free_var(&pred)]),
                     [Term::free_var(&x)],
@@ -343,7 +340,7 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     );
 
     let term = Term::rec(
-        [(f.clone(), Term::func_type([(n, nat_type())], arrow), body)],
+        [(f, Term::func_type([(n, nat_type())], arrow), body)],
         Term::apply(
             Term::apply(Term::free_var(&f), [nat(2)]),
             [Term::free_var(&y)],
@@ -400,7 +397,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let n = binder(0, "n");
     let unused = binder(1, "unused");
     let value = binder(2, "value");
-    let identity = Term::func([(n.clone(), nat_type())], Term::free_var(&n));
+    let identity = Term::func([(n, nat_type())], Term::free_var(&n));
 
     // The elaborator's twin, put to the kernel: a group whose member never mentions itself has no
     // fixed point to keep, so opening its tail reduces past the projection and leaves the member's

@@ -17,13 +17,8 @@ fn exposed_nominal(
     aliases: &HashMap<curios_core::Global, AliasEdge>,
     scope: NominalScope<'_>,
 ) -> Option<(curios_core::Global, Vec<AliasEdge>)> {
-    let mut current = curios_core::Global::Authored(
-        entry
-            .representation
-            .as_ref()
-            .unwrap_or(&entry.target)
-            .clone(),
-    );
+    let mut current =
+        curios_core::Global::Authored(*entry.representation.as_ref().unwrap_or(&entry.target));
     let mut seen = HashSet::new();
     let mut traversed = Vec::new();
 
@@ -31,11 +26,11 @@ fn exposed_nominal(
         if scope.declares(&current) {
             return Some((current, traversed));
         }
-        if !seen.insert(current.clone()) {
+        if !seen.insert(current) {
             return None;
         }
         let edge = aliases.get(&current)?.clone();
-        current = edge.target.clone();
+        current = edge.target;
         traversed.push(edge);
     }
 }
@@ -95,17 +90,14 @@ fn alias_sources(
     let mut sources: HashMap<curios_core::Global, HashSet<curios_core::Global>> = HashMap::new();
 
     for (name, edge) in aliases {
-        sources
-            .entry(edge.target.clone())
-            .or_default()
-            .insert(name.clone());
+        sources.entry(edge.target).or_default().insert(*name);
     }
 
     loop {
         let mut changed = false;
         let pairs: Vec<(curios_core::Global, Vec<curios_core::Global>)> = sources
             .iter()
-            .map(|(target, names)| (target.clone(), names.iter().cloned().collect()))
+            .map(|(target, names)| (*target, names.iter().cloned().collect()))
             .collect();
 
         for (target, names) in pairs {
@@ -113,7 +105,7 @@ fn alias_sources(
                 let Some(indirect) = sources.get(&name).cloned() else {
                     continue;
                 };
-                let direct = sources.entry(target.clone()).or_default();
+                let direct = sources.entry(target).or_default();
                 for hop in indirect {
                     changed |= direct.insert(hop);
                 }

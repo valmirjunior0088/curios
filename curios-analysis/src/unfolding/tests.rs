@@ -32,7 +32,7 @@ fn an_unfolding_toward_solved_variables_leaves_other_definitions_named() {
     scope.define(&u, var(&v));
 
     let term = sum(var(&t), var(&u));
-    let solutions = [(s.clone(), nat(7))];
+    let solutions = [(s, nat(7))];
 
     assert_eq!(
         Unfolding::toward(&scope, &solutions).term(&term),

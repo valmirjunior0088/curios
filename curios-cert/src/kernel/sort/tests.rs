@@ -184,7 +184,7 @@ fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
 fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     let mut kernel = kernel();
     let name = nominal("Missing");
-    let type_ = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let type_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
     assert_eq!(
         Sort::of(&mut kernel, &type_),

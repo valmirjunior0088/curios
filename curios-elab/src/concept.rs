@@ -97,8 +97,8 @@ impl HeadKey {
     /// The key of a term already in weak-head normal form, if its head is rigid and nominal, intrinsic or a tuple shape. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
-            Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
-            Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name.clone())),
+            Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name)),
+            Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name)),
             Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
             // The weak-head form of a tuple type is the node itself and its labels are structural, so keying costs a walk down the spine and reduces no field type.
             Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
@@ -109,18 +109,14 @@ impl HeadKey {
                     body = inner.telescope.terminal();
                 }
                 match &**body {
-                    Subterm::InductType(induct_decl) => {
-                        Some(HeadKey::Nominal(induct_decl.name.clone()))
-                    }
-                    Subterm::StructType(struct_decl) => {
-                        Some(HeadKey::Nominal(struct_decl.name.clone()))
-                    }
+                    Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name)),
+                    Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name)),
                     Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
                     // A constructor whose body is an anonymous product — `let Pair(A: Type) -> Type = {Nat, A};` reduces to `(A: Type) => {Nat, A}` — keys on that body's shape, so `Functor(Pair)` registers where `Monad(Option)` does. Symmetry with the nominal case, not a consumer's demand; it does not extend imitation, since `?M(?A) ≡ {Nat, Nat}` has no unique solution.
                     Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
                     // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. The head of its application spine names the former — through a curried family's calls, `(n : Nat) => Sized(T)(n)` names `Sized` — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key, and the universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
                     Subterm::Apply(_) => match body.head_name()? {
-                        Free::Global(global) => Some(HeadKey::Nominal(global.clone())),
+                        Free::Global(global) => Some(HeadKey::Nominal(*global)),
                         Free::Local(_) => None,
                     },
                     _ => None,

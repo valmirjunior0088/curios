@@ -160,7 +160,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::induct_type_at(
-            family.clone(),
+            family,
             vec![Level::param(UniverseParam(0)); 2],
             Vec::<Term>::new(),
             Vec::<Term>::new(),

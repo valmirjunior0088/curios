@@ -123,7 +123,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
             .iter()
             .any(|dead: &Qualifier| module.is_within(dead));
         if private && has_dead && !has_live && !folded {
-            dead_modules.insert(module.clone());
+            dead_modules.insert(*module);
         }
     }
 
@@ -168,31 +168,18 @@ fn is_reportable(let_: &super::FlatLet) -> bool {
 /// The target of every binding a consumer outside the unit can reach: those of every module reachable from a claimed prefix through public children, re-exports included, since that is what the public interfaces record.
 fn exported_bindings(public: &Scoped<'_, PublicInterface>, own: &[Mount]) -> Vec<Qualifier> {
     let mut seen = HashSet::new();
-    let mut pending = own
-        .iter()
-        .map(|mount| mount.prefix.clone())
-        .collect::<Vec<_>>();
+    let mut pending = own.iter().map(|mount| mount.prefix).collect::<Vec<_>>();
     let mut targets = Vec::new();
 
     while let Some(module) = pending.pop() {
-        if !seen.insert(module.clone()) {
+        if !seen.insert(module) {
             continue;
         }
         let Some(interface) = public.own().get(&module) else {
             continue;
         };
-        targets.extend(
-            interface
-                .bindings
-                .values()
-                .map(|entry| entry.target.clone()),
-        );
-        pending.extend(
-            interface
-                .children
-                .values()
-                .map(|entry| entry.target.clone()),
-        );
+        targets.extend(interface.bindings.values().map(|entry| entry.target));
+        pending.extend(interface.children.values().map(|entry| entry.target));
     }
 
     targets

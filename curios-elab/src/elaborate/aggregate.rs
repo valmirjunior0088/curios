@@ -336,12 +336,7 @@ pub(super) fn elaborate_induct_type(
     let (elaborated_indices, ()) = check_args_against(context, index_telescope, indices)?;
 
     Ok((
-        Term::induct_type_at(
-            name.clone(),
-            universes,
-            elaborated_params,
-            elaborated_indices,
-        ),
+        Term::induct_type_at(*name, universes, elaborated_params, elaborated_indices),
         result_sort,
     ))
 }
@@ -403,17 +398,17 @@ pub(super) fn elaborate_variant(
     // The constructed type, rebuilt from the targets the signature states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
     let output = stamp_declaration_instance(
         &Term::induct_type_at(
-            name.clone(),
+            *name,
             universes.clone(),
             elaborated[..params.len()].iter().cloned(),
             targets,
         ),
-        &BTreeSet::from([name.clone()]),
+        &BTreeSet::from([*name]),
         SelfReference::Free,
         &universes,
     );
     let rebuilt = Term::variant_at(
-        name.clone(),
+        *name,
         universes,
         elaborated[..params.len()].iter().cloned(),
         tag.clone(),

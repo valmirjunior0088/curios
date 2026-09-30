@@ -70,7 +70,7 @@ pub(super) fn elaborate_struct_type(
                 ty,
                 term.span(),
                 ImplicitOrigin {
-                    func: CalleeId::Function(Free::Global(name.clone())),
+                    func: CalleeId::Function(Free::Global(*name)),
                     binder,
                 },
                 proposition,
@@ -79,7 +79,7 @@ pub(super) fn elaborate_struct_type(
             cursor.advance(arg);
         }
         return Ok((
-            Term::struct_type_at(name.clone(), universes, cursor.into_args()),
+            Term::struct_type_at(*name, universes, cursor.into_args()),
             struct_decl.result_sort.clone(),
         ));
     }
@@ -95,7 +95,7 @@ pub(super) fn elaborate_struct_type(
     let (elaborated, _fields) = check_args_against(context, struct_decl.arity, params)?;
 
     Ok((
-        Term::struct_type_at(name.clone(), universes, elaborated),
+        Term::struct_type_at(*name, universes, elaborated),
         struct_decl.result_sort,
     ))
 }
@@ -281,7 +281,7 @@ pub(super) fn elaborate_struct(
                 Some(fill) => FieldSource::Written(fill),
                 // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
-                    func: CalleeId::Function(Free::Global(name.clone())),
+                    func: CalleeId::Function(Free::Global(*name)),
                     edge: edge
                         .qualifier()
                         .map(|path| path.last().to_string())
@@ -300,13 +300,8 @@ pub(super) fn elaborate_struct(
     check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
 
     Ok((
-        Term::struct_at(
-            name.clone(),
-            universes.clone(),
-            resolved.clone(),
-            elaborated,
-        ),
-        Term::struct_type_at(name.clone(), universes, resolved),
+        Term::struct_at(*name, universes.clone(), resolved.clone(), elaborated),
+        Term::struct_type_at(*name, universes, resolved),
     ))
 }
 
@@ -331,7 +326,7 @@ pub(super) fn resolve_struct_params(
                         ty.clone(),
                         term.span(),
                         ImplicitOrigin {
-                            func: CalleeId::Function(Free::Global(name.clone())),
+                            func: CalleeId::Function(Free::Global(*name)),
                             binder,
                         },
                         proposition,
@@ -359,9 +354,9 @@ pub(super) fn seed_struct_expectation(
             name: expected_name,
             ..
         }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
-        && expected_name == name.clone()
+        && expected_name == *name
     {
-        let seeded = Term::struct_type_at(name.clone(), universes.to_vec(), resolved.to_vec());
+        let seeded = Term::struct_type_at(*name, universes.to_vec(), resolved.to_vec());
         expect(context, term, &seeded, expected)?;
     }
     Ok(())
@@ -516,11 +511,11 @@ pub(super) fn elaborate_struct_spread(
         // Reduce inside the frame, where the binder is defined: occurrences of it in the result type unfold to the base before escaping the `let`.
         let result_type = reduce_with(
             context,
-            &Term::struct_type_at(name.clone(), universes.to_vec(), resolved.clone()),
+            &Term::struct_type_at(*name, universes.to_vec(), resolved.clone()),
         )?;
 
         Ok::<_, Error>((
-            Term::struct_at(name.clone(), universes.to_vec(), resolved, elaborated),
+            Term::struct_at(*name, universes.to_vec(), resolved, elaborated),
             result_type,
         ))
     })?;

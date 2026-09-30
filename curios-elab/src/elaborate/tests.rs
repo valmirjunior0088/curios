@@ -229,7 +229,7 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 
     // `\ _ -> 0` checked against `(_ : Nat) -> Nat`.
     let x = context.fresh(Some("x"));
-    let func_type = Term::func_type([(x.clone(), nat())], nat());
+    let func_type = Term::func_type([(x, nat())], nat());
     let func = Term::func([(x, Term::hole(0))], nat_lit(0));
 
     let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
@@ -257,7 +257,7 @@ fn annotated_func_infers_a_function_type() {
 
     // `(x : Nat) => x` synthesizes `(Nat) -> Nat` on its own — no expected type.
     let x = context.fresh(Some("x"));
-    let func = Term::func([(x.clone(), nat())], Term::free_var(&x));
+    let func = Term::func([(x, nat())], Term::free_var(&x));
     let (term, type_) = elaborate(&mut context, &func, Mode::Infer).unwrap();
 
     // Meta-free, and convertible (alpha-insensitive) to the expected function type; a structural `assert_eq!` would trip only on the cosmetic fresh binder label the Infer arm generates.

@@ -30,7 +30,7 @@ use {
 
 /// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-text`'s scheduler read one value rather than two lists obliged to agree.
 fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivation> {
-    let concept = concept.qualifier()?.clone();
+    let concept = *concept.qualifier()?;
     syntax
         .derivations
         .rows()
@@ -71,7 +71,7 @@ pub(crate) fn elaborate_derive(
 
     let syntax = context.syntax();
     let Some(derivation) = derivation_for(&syntax, name) else {
-        return Err(Error::no_derivation(name.clone()).at_opt(term.span()));
+        return Err(Error::no_derivation(*name).at_opt(term.span()));
     };
     let key = params
         .first()
@@ -111,7 +111,7 @@ impl Site<'_> {
     }
 
     fn refuse(&self, reason: Underivable) -> Error {
-        Error::underivable(self.concept.clone(), self.key.clone(), reason).at_opt(self.span.clone())
+        Error::underivable(*self.concept, self.key.clone(), reason).at_opt(self.span.clone())
     }
 }
 
@@ -148,7 +148,7 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 return Err(site.refuse(Underivable::Proposition));
             }
             Ok(Subject::Induct {
-                name: name.clone(),
+                name: *name,
                 decl,
                 params: params.clone(),
             })
@@ -172,7 +172,7 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 return Err(site.refuse(Underivable::Proposition));
             }
             Ok(Subject::Struct {
-                name: name.clone(),
+                name: *name,
                 decl,
                 params: params.clone(),
             })
@@ -249,10 +249,10 @@ impl Payload {
         // A constructor's own path is its type's with the tag appended; a struct is named by its declaration directly.
         let callee = match tag {
             Some(tag) => CalleeId::Constructor {
-                owner: owner.clone(),
+                owner: *owner,
                 tag: tag.to_string(),
             },
-            None => CalleeId::Function(Free::Global(owner.clone())),
+            None => CalleeId::Function(Free::Global(*owner)),
         };
         Self {
             constructor: path(owner, tag),
@@ -379,7 +379,7 @@ impl Constructor<'_> {
             .chain(binders.iter().map(Term::free_var))
             .collect::<Vec<_>>();
 
-        let mut opened = vec![(value.clone(), site.key.clone())];
+        let mut opened = vec![(*value, site.key.clone())];
         let mut parts = Vec::new();
         self.signature
             .telescope
@@ -399,7 +399,7 @@ impl Constructor<'_> {
                             type_,
                         )?);
                     }
-                    opened.push((binders[position].clone(), type_.clone()));
+                    opened.push((binders[position], type_.clone()));
                 }
                 Ok::<(), Error>(())
             })?;
@@ -426,7 +426,7 @@ fn struct_parts(
         .map(|index| Term::proj(Term::free_var(value), index))
         .collect::<Vec<_>>();
 
-    let mut opened = vec![(value.clone(), site.key.clone())];
+    let mut opened = vec![(*value, site.key.clone())];
     let mut parts = Vec::new();
     fields.walk(&projections, |index, _, type_| {
         let label = written_label(&labels[index], index);
@@ -556,11 +556,7 @@ fn spell_body(
     };
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], rendered);
-    Ok(site.at(Term::struct_(
-        site.concept.clone(),
-        Vec::<Term>::new(),
-        [method],
-    )))
+    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
 }
 
 /// The `Hash` witness record: `hash` over the derived encoding.
@@ -648,11 +644,7 @@ fn hash_body(
     };
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
-    Ok(site.at(Term::struct_(
-        site.concept.clone(),
-        Vec::<Term>::new(),
-        [method],
-    )))
+    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
 }
 
 /// The `Eql` witness record: `eql` over the derived comparison, `neq` over its negation.
@@ -686,11 +678,7 @@ fn eql_body(
 
     let eql = method(context, false)?;
     let neq = method(context, true)?;
-    Ok(site.at(Term::struct_(
-        site.concept.clone(),
-        Vec::<Term>::new(),
-        [eql, neq],
-    )))
+    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [eql, neq])))
 }
 
 /// Whether `left` and `right` are equal, as a `Bool`-valued term over the two binders.
@@ -807,11 +795,7 @@ fn ord_body(
         ordered,
     );
 
-    Ok(site.at(Term::struct_(
-        site.concept.clone(),
-        Vec::<Term>::new(),
-        [method],
-    )))
+    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
 }
 
 /// How `left` orders against `right`, as an `Ordering`-valued term over the two binders.

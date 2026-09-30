@@ -14,7 +14,7 @@ fn empty_fills_share_one_canonical_set() {
 fn nonempty_fills_keep_their_own_set() {
     let name = Free::local(0, Some("x"));
     let cache = FreeCache::default();
-    cache.fill(FreeVars::Owned(BTreeSet::from([name.clone()])));
+    cache.fill(FreeVars::Owned(BTreeSet::from([name])));
 
     assert!(cache.is_filled());
     assert!(cache.contains(&name));

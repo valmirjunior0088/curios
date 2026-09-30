@@ -193,7 +193,7 @@ impl Globals {
     ) -> bool {
         self.definitions
             .insert(
-                name.clone(),
+                *name,
                 Definition {
                     type_: type_.clone(),
                     value: value.cloned(),
@@ -204,11 +204,11 @@ impl Globals {
     }
 
     pub(super) fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) {
-        self.inducts.insert(name.clone(), declaration.clone());
+        self.inducts.insert(*name, declaration.clone());
     }
 
     pub(super) fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) {
-        self.structs.insert(name.clone(), declaration.clone());
+        self.structs.insert(*name, declaration.clone());
     }
 
     /// An `induct` registry entry, as data. See the module documentation on why a typing rule wants the checked handle instead.

@@ -98,7 +98,7 @@ fn removing_a_witness_hands_back_every_key_it_held() {
     let concept = Global::Authored(Qualifier::from(["Show"]));
     let name = Global::Authored(Qualifier::from(["show"]));
     let witness = || Witness {
-        name: name.clone(),
+        name,
         module: Qualifier::empty(),
         universe_context: UniverseContext::empty(),
         signature: Term::type_ground(),
@@ -107,12 +107,12 @@ fn removing_a_witness_hands_back_every_key_it_held() {
     let bool_ = WitnessKey(vec![HeadKey::Bool]);
     assert!(
         context
-            .insert_witness(concept.clone(), nat.clone(), witness())
+            .insert_witness(concept, nat.clone(), witness())
             .is_none()
     );
     assert!(
         context
-            .insert_witness(concept.clone(), bool_.clone(), witness())
+            .insert_witness(concept, bool_.clone(), witness())
             .is_none()
     );
 
@@ -123,10 +123,7 @@ fn removing_a_witness_hands_back_every_key_it_held() {
 
     assert_eq!(
         removed,
-        BTreeSet::from([
-            (concept.clone(), nat.clone()),
-            (concept.clone(), bool_.clone())
-        ])
+        BTreeSet::from([(concept, nat.clone()), (concept, bool_.clone())])
     );
     assert!(context.witness(&concept, &nat).is_none());
     assert!(context.witness(&concept, &bool_).is_none());
@@ -219,12 +216,9 @@ fn a_metavariable_born_in_a_retry_has_exactly_the_frozen_locals() {
         context.assume(&b, &nat());
         let names = context.with_retry_frame(&frozen, |context| {
             let (telescope, _) = context.identity_snapshot();
-            telescope
-                .iter()
-                .map(|(name, _)| name.clone())
-                .collect::<Vec<_>>()
+            telescope.iter().map(|(name, _)| *name).collect::<Vec<_>>()
         });
-        assert_eq!(names, vec![a.clone()]);
+        assert_eq!(names, vec![a]);
     });
 }
 

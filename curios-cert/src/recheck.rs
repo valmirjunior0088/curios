@@ -441,13 +441,13 @@ fn verdicts_within(
         .induct_decls
         .iter()
         .filter(|(name, _)| fresh(name))
-        .map(|(name, declaration)| (name.clone(), &declaration.universe_context))
+        .map(|(name, declaration)| (*name, &declaration.universe_context))
         .chain(
             module
                 .struct_decls
                 .iter()
                 .filter(|(name, _)| fresh(name))
-                .map(|(name, declaration)| (name.clone(), &declaration.universe_context)),
+                .map(|(name, declaration)| (*name, &declaration.universe_context)),
         )
         .collect::<Vec<_>>();
     for (name, context) in contexts {
@@ -462,7 +462,7 @@ fn verdicts_within(
         for definition in item.definitions() {
             if let Some(error) = universe_verdict(&definition.universe_context) {
                 verdicts.push(Verdict {
-                    name: Some(definition.name.clone()),
+                    name: Some(definition.name),
                     error,
                 });
             }
@@ -473,7 +473,7 @@ fn verdicts_within(
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
-                name: Some(name.clone()),
+                name: Some(*name),
                 error,
             });
         }
@@ -481,7 +481,7 @@ fn verdicts_within(
     for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = struct_residue(declaration) {
             verdicts.push(Verdict {
-                name: Some(name.clone()),
+                name: Some(*name),
                 error,
             });
         }
@@ -496,7 +496,7 @@ fn verdicts_within(
                 .or_else(|| universe_escape(&definition.body, count))
             {
                 verdicts.push(Verdict {
-                    name: Some(definition.name.clone()),
+                    name: Some(definition.name),
                     error,
                 });
             }
@@ -536,7 +536,7 @@ fn verdicts_within(
         let item = &module.items[index];
         // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the kernel is read beside its cost in the elaborator by the same key.
         curios_profile::profile!("certify_declaration", group = %item.describe());
-        let item_name = item.declared_names().first().map(|&name| name.clone());
+        let item_name = item.declared_names().first().map(|&name| *name);
 
         match item {
             Item::Let(definition) => {
@@ -555,7 +555,7 @@ fn verdicts_within(
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
-                        name: Some(definition.name.clone()),
+                        name: Some(definition.name),
                         error,
                     });
                     kernel.define(
@@ -578,7 +578,7 @@ fn verdicts_within(
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
-                        name: item_name.clone(),
+                        name: item_name,
                         error,
                     });
                     // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
@@ -597,11 +597,11 @@ fn verdicts_within(
         // A group is judged as one item, so each of its members read what the group did.
         let item_reads = kernel.take_reads();
         for name in item.declared_names() {
-            reads.insert(name.clone(), item_reads.clone());
+            reads.insert(*name, item_reads.clone());
         }
 
         let (drained, failure) = kernel.take_checked();
-        positions.push((item_name.clone(), drained));
+        positions.push((item_name, drained));
         if let Some(error) = failure {
             verdicts.push(Verdict {
                 name: item_name,
@@ -640,10 +640,7 @@ fn verdicts_within(
     let mut local_memo = HashMap::new();
     for (name, item_positions) in &positions {
         if let Err(error) = check_positions(item_positions, &partial, &mut local_memo) {
-            verdicts.push(Verdict {
-                name: name.clone(),
-                error,
-            });
+            verdicts.push(Verdict { name: *name, error });
         }
     }
 
@@ -663,7 +660,7 @@ fn verdicts_within(
     ) {
         verdicts.push(match refusal {
             PositivityRefusal::NotPositive(refusal) => Verdict {
-                name: Some(refusal.name.clone()),
+                name: Some(refusal.name),
                 error: KernelError::NotPositive {
                     name: refusal.name,
                     part: refusal.part,
@@ -688,7 +685,7 @@ fn verdicts_within(
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_induct_decl(kernel, declaration) {
             verdicts.push(Verdict {
-                name: Some(name.clone()),
+                name: Some(*name),
                 error,
             });
         }
@@ -697,7 +694,7 @@ fn verdicts_within(
     for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_struct_decl(kernel, declaration) {
             verdicts.push(Verdict {
-                name: Some(name.clone()),
+                name: Some(*name),
                 error,
             });
         }

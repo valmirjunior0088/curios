@@ -25,7 +25,7 @@ pub(super) fn nat(n: usize) -> Term {
 /// Build a lambda whose argument domains are irrelevant to conversion (which compares only bodies); each parameter gets a placeholder `Type` domain.
 pub(super) fn func<const N: usize>(binders: [&Free; N], body: impl Into<Term>) -> Term {
     Term::func(
-        binders.map(|binder| (binder.clone(), Term::type_ground())),
+        binders.map(|binder| (*binder, Term::type_ground())),
         body.into(),
     )
 }

@@ -67,7 +67,7 @@ impl Scope {
             type_.capture(&opened)
         });
         self.locals.push(Local {
-            name: name.clone(),
+            name: *name,
             type_: type_.clone(),
             keyed,
         });
@@ -167,7 +167,7 @@ impl Scope {
 
     /// The identities of the binders currently in scope, outermost first — parallel to [`Scope::local_types`]. What the conversion history renames away, so that a goal reached again on a later round of an unfolding cycle is recognized as the goal it already is.
     pub(super) fn local_names(&self) -> Vec<Free> {
-        self.locals.iter().map(|local| local.name.clone()).collect()
+        self.locals.iter().map(|local| local.name).collect()
     }
 
     /// The types of the binders currently in scope, outermost first, each with every binder renamed to its position: the context the conversion history keys a goal on, since the same goal under a different context is a different goal.

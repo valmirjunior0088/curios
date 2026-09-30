@@ -84,12 +84,12 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
+        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(
                 Telescope::build(
-                    [(t.clone(), Term::type_ground()), (x, Term::free_var(&t))],
+                    [(t, Term::type_ground()), (x, Term::free_var(&t))],
                     Vec::new(),
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
@@ -167,7 +167,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
+        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(

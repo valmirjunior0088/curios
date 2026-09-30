@@ -22,8 +22,7 @@ fn a_witness_is_not_the_definition_named_after_its_module() {
 #[test]
 fn witnesses_sharing_a_module_stay_distinct() {
     let module = Qualifier::from(["std", "Nat"]);
-    let witnesses =
-        (0..9).map(|n| Free::Global(Global::Witness(WitnessId::new(module.clone(), n))));
+    let witnesses = (0..9).map(|n| Free::Global(Global::Witness(WitnessId::new(module, n))));
 
     assert_eq!(witnesses.collect::<HashSet<_>>().len(), 9);
 }
@@ -76,7 +75,7 @@ fn a_hint_never_splits_one_identity() {
 
     assert_eq!(written, rebuilt);
     assert_eq!(
-        HashSet::from([Free::Local(written.clone()), Free::Local(rebuilt)]).len(),
+        HashSet::from([Free::Local(written), Free::Local(rebuilt)]).len(),
         1
     );
     assert_eq!(written.hint(), Some("xs"));

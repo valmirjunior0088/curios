@@ -337,7 +337,7 @@ fn standard_declarations() -> Vec<Qualifier> {
                                 written.path.is_within(&standard)
                                     && written.audience.iter().any(Qualifier::is_root)
                             })
-                            .map(|written| written.path.clone())
+                            .map(|written| written.path)
                             .min_by_key(|path| (path.segments().len(), path.join().len()))
                     })
                     .collect())

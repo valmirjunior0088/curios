@@ -796,7 +796,7 @@ impl Kernel {
             Some((type_, universes)) => match universes.parameter_count {
                 0 => Ok(Some(type_)),
                 expected => Err(KernelError::MissingUniverseInstance {
-                    name: name.clone(),
+                    name: *name,
                     expected,
                 }),
             },

@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_utilities::{InfixOp, Qualifier, name},
+    curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
 };
 
@@ -21,7 +21,7 @@ name!(Atom; archive);
 /// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-module ordinals depend on nothing but the unit itself.
 ///
 /// **The module rather than the mount, which is finer than disjointness needs.** It is what lets a witness be *placed*: `by_item` keys an import scope by `Global`, and a documentation page asks which declarations belong to the module it is rendering. A mount answers `/std` for every witness in the standard library, which is no answer at all; the declaring module answers `/std/Tuple`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct WitnessId {
     module: Qualifier,
@@ -50,26 +50,26 @@ impl fmt::Display for WitnessId {
 /// A compiler-minted binder's identity: a dense index, plus the display hint the minting site chose.
 ///
 /// The index alone is the identity. The hint is display metadata, excluded from equality, ordering, and hashing exactly as a [`Term`](crate::Term)'s span and a [`Scope`](crate::Scope)'s binder names already are — so a hint can neither make two binders collide nor split one binder in two. Carrying it on the identity rather than only at the binding site means a diagnostic can name a variable wherever the occurrence turns up, instead of recovering the written name by cutting a minted spelling apart.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[curios_archive::archived]
 pub struct Mint {
     index: u32,
-    hint: Option<String>,
+    hint: Option<Symbol>,
 }
 
 impl Mint {
     pub(crate) fn new(index: u32, hint: Option<&str>) -> Self {
         Self {
             index,
-            hint: hint.map(str::to_string),
+            hint: hint.map(Symbol::new),
         }
     }
 
     /// What this binder was called where it was written, if anything — a rendering aid with no bearing on identity.
     ///
     /// Crate-private, so no path leads from a `Free` to a spelling outside the stage that renders it. The variant itself stays public — downstream code holds and compares binders — but it cannot look inside one. The index has no accessor at all: nothing ever needed to read it, only to compare it.
-    pub(crate) fn hint(&self) -> Option<&str> {
-        self.hint.as_deref()
+    pub(crate) fn hint(&self) -> Option<&'static str> {
+        self.hint.map(|hint| hint.as_str())
     }
 
     /// The same identity under a different display hint. Used where a rebuild has to restore the source spelling of binders it re-minted.
@@ -107,7 +107,7 @@ impl hash::Hash for Mint {
 /// A top-level definition's identity: an authored path, or a compiler-generated definition that has no source name at all.
 ///
 /// The two cases are a sum rather than a qualifier with an optional disambiguator, because a witness's declaring module is not its name. Folding both into one field would make [`Qualifier`] mean "module plus the item's own name" for one case and "the declaring module alone" for the other — one field with two readings, which is the defect this vocabulary exists to remove.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Global {
     /// A name a programmer wrote, at its resolved module path.
@@ -161,7 +161,7 @@ pub enum CalleeId {
 /// A free variable's identity: a top-level definition, or a binder some scope opened.
 ///
 /// The distinction is a discriminant rather than a spelling convention. Asking "is this a local?" is a `matches!` — exact, and impossible to get wrong the way a marker character in a string could be.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Free {
     Global(Global),
@@ -227,7 +227,7 @@ impl Free {
     pub(crate) fn relabelled(&self, hint: &str) -> Self {
         match self {
             Free::Local(mint) => Free::Local(mint.with_hint((!hint.is_empty()).then_some(hint))),
-            Free::Global(_) => self.clone(),
+            Free::Global(_) => *self,
         }
     }
 }
@@ -273,7 +273,7 @@ mod archived_mint {
 
 impl From<&Global> for Free {
     fn from(global: &Global) -> Self {
-        Free::Global(global.clone())
+        Free::Global(*global)
     }
 }
 

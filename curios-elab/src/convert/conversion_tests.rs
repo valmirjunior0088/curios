@@ -22,7 +22,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     context.define(
         &partial,
         &Term::func(
-            [(ignored.clone(), Term::intrinsic(Intrinsic::NatType))],
+            [(ignored, Term::intrinsic(Intrinsic::NatType))],
             Term::intrinsic(Intrinsic::bin_get(
                 Grain::X,
                 Term::intrinsic(Intrinsic::Bin(
@@ -100,15 +100,9 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
         polarities: Vec::new(),
     };
 
-    let e_type = Term::induct_type(e.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let wrap = |level: Level| {
-        Term::variant(
-            e.clone(),
-            Vec::<Term>::new(),
-            "wrap",
-            vec![Term::type_at(level)],
-        )
-    };
+    let e_type = Term::induct_type(e, Vec::<Term>::new(), Vec::<Term>::new());
+    let wrap =
+        |level: Level| Term::variant(e, Vec::<Term>::new(), "wrap", vec![Term::type_at(level)]);
     let one = Level::zero().succ().expect("level zero has a successor");
 
     // The differential's fixed side: the kernel, handed the identical declaration and the identical goal, refuses it at the payloads.
@@ -159,9 +153,9 @@ fn func_type_is_alpha_equivalent() {
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
-    let this = Term::func_type([(x.clone(), Term::type_ground())], Term::free_var(&x));
+    let this = Term::func_type([(x, Term::type_ground())], Term::free_var(&x));
 
-    let that = Term::func_type([(y.clone(), Term::type_ground())], Term::free_var(&y));
+    let that = Term::func_type([(y, Term::type_ground())], Term::free_var(&y));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -186,13 +180,13 @@ fn func_type_distinguishes_plicity() {
     let y = context.fresh(Some("y"));
 
     // Three telescopes with identical domains and results, differing only in the one binder's plicity.
-    let explicit = Term::func_type([(x.clone(), Term::type_ground())], Term::type_ground());
+    let explicit = Term::func_type([(x, Term::type_ground())], Term::type_ground());
     let implicit = Term::func_type_marked(
-        [(Plicity::Implicit, x.clone(), Term::type_ground())],
+        [(Plicity::Implicit, x, Term::type_ground())],
         Term::type_ground(),
     );
     let witness = Term::func_type_marked(
-        [(Plicity::Witness, x.clone(), Term::type_ground())],
+        [(Plicity::Witness, x, Term::type_ground())],
         Term::type_ground(),
     );
 
@@ -203,7 +197,7 @@ fn func_type_distinguishes_plicity() {
 
     // Same plicity, alpha-renamed binder: still convertible.
     let implicit_y = Term::func_type_marked(
-        [(Plicity::Implicit, y.clone(), Term::type_ground())],
+        [(Plicity::Implicit, y, Term::type_ground())],
         Term::type_ground(),
     );
     assert_eq!(conv(&mut context, &implicit, &implicit_y), Ok(true));
@@ -219,14 +213,14 @@ fn inductive_match_compares_cases_and_motive() {
     let y = context.fresh(Some("y"));
 
     let make = |motive_label: &Free, binder: &Free| {
-        let binder = binder.clone();
+        let binder = *binder;
         Term::induct_match(
             Term::free_var(&r),
             Some(motive_label),
             Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(0)),
-                ("some", vec![binder.clone()], Term::free_var(&binder)),
+                ("some", vec![binder], Term::free_var(&binder)),
             ],
         )
     };
@@ -240,7 +234,7 @@ fn inductive_match_compares_cases_and_motive() {
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(1)),
-            ("some", vec![x.clone()], Term::free_var(&x)),
+            ("some", vec![x], Term::free_var(&x)),
         ],
     );
 
@@ -342,7 +336,7 @@ fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> T
     let motive = context.fresh(Some("m"));
     let payload = context.fresh(Some("p"));
     Term::func(
-        [(scrutinee.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(scrutinee, Term::intrinsic(Intrinsic::NatType))],
         Term::induct_match(
             Term::free_var(&scrutinee),
             Some(&motive),
@@ -351,7 +345,7 @@ fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> T
                 ("none", Vec::<Free>::new(), nat(none_value)),
                 (
                     "some",
-                    vec![payload.clone()],
+                    vec![payload],
                     Term::apply(Term::free_var(head), [Term::free_var(&payload)]),
                 ),
             ],
@@ -381,7 +375,7 @@ fn folded_recursive_call_against_its_unfolding() {
             ("none", Vec::<Free>::new(), nat(0)),
             (
                 "some",
-                vec![p.clone()],
+                vec![p],
                 Term::apply(
                     Term::free_var(&f),
                     [Term::apply(
@@ -430,8 +424,8 @@ fn structural_rec_proj(context: &mut Context, body: impl FnOnce(&Free) -> Term) 
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let rec = Term::rec(
         [(
-            member.clone(),
-            Term::func_type([(parameter.clone(), nat_type.clone())], nat_type),
+            member,
+            Term::func_type([(parameter, nat_type.clone())], nat_type),
             Term::func([(parameter, Term::intrinsic(Intrinsic::NatType))], body),
         )],
         Term::free_var(&member),
@@ -506,7 +500,7 @@ fn growing_recursive_unfolding_spends_the_budget() {
     // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs — every unfolding round's arm goal is structurally new, one more `s` on the folded argument — so no cycle exists to detect and the comparison rightly spends the budget: the accepted cost of fully general recursion. (The growth rides the match arm so each round refolds and returns to the drain queue; bare `f = λx. f(s(x))` growth would nest inside one `reduce` call instead.)
     let growing = |head: &Free| {
         Term::func(
-            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            [(x, Term::intrinsic(Intrinsic::NatType))],
             Term::induct_match(
                 Term::free_var(&x),
                 Some(&m),
@@ -520,7 +514,7 @@ fn growing_recursive_unfolding_spends_the_budget() {
                             [Term::apply(Term::free_var(&s), [Term::free_var(&x)])],
                         ),
                     ),
-                    ("some", vec![p.clone()], nat(0)),
+                    ("some", vec![p], nat(0)),
                 ],
             ),
         )
@@ -583,12 +577,12 @@ fn rec_is_alpha_equivalent() {
     let y = context.fresh(Some("y"));
 
     let this = Term::rec(
-        vec![(x.clone(), Term::type_ground(), Term::free_var(&x))],
+        vec![(x, Term::type_ground(), Term::free_var(&x))],
         Term::free_var(&x),
     );
 
     let that = Term::rec(
-        vec![(y.clone(), Term::type_ground(), Term::free_var(&y))],
+        vec![(y, Term::type_ground(), Term::free_var(&y))],
         Term::free_var(&y),
     );
 
@@ -607,11 +601,7 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
     let sort = Term::type_at(level);
 
     let body = Term::func(
-        [
-            (t.clone(), sort.clone()),
-            (x.clone(), nat_type()),
-            (y.clone(), nat_type()),
-        ],
+        [(t, sort.clone()), (x, nat_type()), (y, nat_type())],
         Term::nat_match(
             Term::free_var(&y),
             Some(&motive),
@@ -628,7 +618,7 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
 
     Term::rec(
         [(
-            f.clone(),
+            f,
             Term::func_type([(t, sort), (x, nat_type()), (y, nat_type())], nat_type()),
             body,
         )],

@@ -63,10 +63,7 @@ fn beta_equal_terms_convert() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let redex = Term::apply(
-        Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
-        [nat(4)],
-    );
+    let redex = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(4)]);
 
     assert_eq!(convert(&mut kernel, &nat_type(), &redex, &nat(4)), Ok(true));
 }
@@ -89,10 +86,10 @@ fn eta_makes_a_function_converge_with_its_expansion() {
     let mut kernel = kernel();
     let f = binder(0, "f");
     let x = binder(1, "x");
-    let arrow = Term::func_type([(x.clone(), nat_type())], nat_type());
+    let arrow = Term::func_type([(x, nat_type())], nat_type());
 
     let expanded = Term::func(
-        [(x.clone(), nat_type())],
+        [(x, nat_type())],
         Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
     );
 
@@ -143,7 +140,7 @@ fn a_short_struct_literal_does_not_convert_with_a_neutral() {
     );
 
     let type_ = Term::from(Subterm::StructType(StructType {
-        name: name.clone(),
+        name,
         universes: Vec::new(),
         params: Vec::new(),
     }));
@@ -244,7 +241,7 @@ fn plicity_distinguishes_two_function_types() {
     let mut kernel = kernel();
     let a = binder(0, "a");
 
-    let explicit = Term::func_type([(a.clone(), nat_type())], nat_type());
+    let explicit = Term::func_type([(a, nat_type())], nat_type());
     let implicit = Term::from(Subterm::FuncType(FuncType::new(
         match &*explicit {
             Subterm::FuncType(func) => func.telescope.clone(),
@@ -318,7 +315,7 @@ fn one_operation_at_two_universe_instances_is_one_number() {
         Term::intrinsic(Intrinsic::bin_len(
             Grain::X,
             Term::instance(
-                InstanceHead::Var(Var::free(operand.clone())),
+                InstanceHead::Var(Var::free(*operand)),
                 vec![Level::constant(level)],
             ),
         ))

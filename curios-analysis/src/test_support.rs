@@ -17,11 +17,11 @@ pub(crate) struct Scope {
 
 impl Scope {
     pub(crate) fn assume(&mut self, name: &Free) {
-        self.assumed.push(name.clone());
+        self.assumed.push(*name);
     }
 
     pub(crate) fn define(&mut self, name: &Free, definition: Term) {
-        self.defined.insert(name.clone(), definition);
+        self.defined.insert(*name, definition);
     }
 }
 

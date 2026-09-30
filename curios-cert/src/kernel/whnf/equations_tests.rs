@@ -311,8 +311,8 @@ fn a_local_free_term_is_never_refined() {
     let mut kernel = kernel();
     kernel.define(
         &konst,
-        &Term::func_type([(x.clone(), nat_type())], nat_type()),
-        &Term::func([(x.clone(), nat_type())], nat(7)),
+        &Term::func_type([(x, nat_type())], nat_type()),
+        &Term::func([(x, nat_type())], nat(7)),
         &monomorphic(),
     );
     kernel.assume(&n, &nat_type());
@@ -346,8 +346,8 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
         let x = binder(3, "x");
         kernel.define(
             &konst,
-            &Term::func_type([(x.clone(), nat_type())], nat_type()),
-            &Term::func([(x.clone(), nat_type())], nat(7)),
+            &Term::func_type([(x, nat_type())], nat_type()),
+            &Term::func([(x, nat_type())], nat(7)),
             &monomorphic(),
         );
         let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
@@ -393,14 +393,8 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
     let mut kernel = kernel();
     kernel.define(
         &second,
-        &Term::func_type(
-            [(x.clone(), nat_type()), (y.clone(), nat_type())],
-            nat_type(),
-        ),
-        &Term::func(
-            [(x.clone(), nat_type()), (y.clone(), nat_type())],
-            Term::free_var(&y),
-        ),
+        &Term::func_type([(x, nat_type()), (y, nat_type())], nat_type()),
+        &Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&y)),
         &monomorphic(),
     );
     kernel.assume(&n, &nat_type());
@@ -523,7 +517,7 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
     let b = binder(5, "b");
     let positive = binder(6, "positive");
 
-    let comparison = [(a.clone(), nat_type()), (b.clone(), nat_type())];
+    let comparison = [(a, nat_type()), (b, nat_type())];
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut kernel = kernel();
     kernel.define(
@@ -580,7 +574,7 @@ fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
     let a = binder(4, "a");
     let b = binder(5, "b");
 
-    let comparison = [(a.clone(), nat_type()), (b.clone(), nat_type())];
+    let comparison = [(a, nat_type()), (b, nat_type())];
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut kernel = kernel();
     // The method reads only its second operand, so the local the guard passes as the first is gone once it is opened.
@@ -631,14 +625,14 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     let a = binder(4, "a");
     let b = binder(5, "b");
 
-    let comparison = [(a.clone(), nat_type()), (b.clone(), nat_type())];
+    let comparison = [(a, nat_type()), (b, nat_type())];
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let kernel_over = |budget| {
         let mut kernel = Kernel::new(budget, SYNTAX);
         kernel.set_local_floor(1_000);
         kernel.define(
             &witness,
-            &Term::tuple_type([(method.clone(), method_type.clone())]),
+            &Term::tuple_type([(method, method_type.clone())]),
             &Term::tuple([Term::func(
                 comparison.clone(),
                 Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),

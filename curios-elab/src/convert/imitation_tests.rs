@@ -120,8 +120,8 @@ fn splits_params_and_indices() {
         Vec::new(),
         Term::func_type(
             [
-                (elem.clone(), Term::type_ground()),
-                (n.clone(), Term::intrinsic(Intrinsic::NatType)),
+                (elem, Term::type_ground()),
+                (n, Term::intrinsic(Intrinsic::NatType)),
             ],
             Term::type_ground(),
         ),
@@ -156,10 +156,7 @@ fn solves_against_struct_type() {
             StructDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::build(
-                    [
-                        (first.clone(), Term::type_ground()),
-                        (second.clone(), Term::type_ground()),
-                    ],
+                    [(first, Term::type_ground()), (second, Term::type_ground())],
                     Telescope::done(()),
                 ),
                 result_sort: Term::type_ground(),
@@ -173,10 +170,7 @@ fn solves_against_struct_type() {
         MetavarId(0),
         Vec::new(),
         Term::func_type(
-            [
-                (first.clone(), Term::type_ground()),
-                (second.clone(), Term::type_ground()),
-            ],
+            [(first, Term::type_ground()), (second, Term::type_ground())],
             Term::type_ground(),
         ),
     );

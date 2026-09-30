@@ -78,7 +78,7 @@ impl Audiences {
         for (module, info) in table.iter() {
             for (label, vis_pub) in info.children() {
                 if !vis_pub {
-                    widen(&mut modules, module.with(label), module.clone());
+                    widen(&mut modules, module.with(label), *module);
                 }
             }
         }
@@ -89,7 +89,7 @@ impl Audiences {
                 let exposure = modules.get(module).cloned().unwrap_or_default();
                 for entry in interface.children.values() {
                     for root in &exposure {
-                        changed |= widen(&mut modules, entry.target.clone(), root.clone());
+                        changed |= widen(&mut modules, entry.target, *root);
                     }
                 }
             }
@@ -104,7 +104,7 @@ impl Audiences {
         for (module, info) in table.iter() {
             for (label, vis_pub) in info.bindings() {
                 if !vis_pub {
-                    widen(&mut bindings, module.with(label), module.clone());
+                    widen(&mut bindings, module.with(label), *module);
                 }
             }
         }
@@ -113,7 +113,7 @@ impl Audiences {
             let exposure = modules.get(module).cloned().unwrap_or_default();
             for entry in interface.bindings.values() {
                 for root in &exposure {
-                    widen(&mut bindings, entry.target.clone(), root.clone());
+                    widen(&mut bindings, entry.target, *root);
                 }
             }
         }
@@ -172,7 +172,7 @@ pub(crate) fn visible_child(
     label: &str,
 ) -> Option<Qualifier> {
     if let Some(entry) = public.get(parent).and_then(|i| i.children.get(label)) {
-        return Some(entry.target.clone());
+        return Some(entry.target);
     }
 
     let within = consumer.is_within(parent);
@@ -193,7 +193,7 @@ pub(crate) fn visible_binding(
     label: &str,
 ) -> Option<Qualifier> {
     if let Some(entry) = public.get(parent).and_then(|i| i.bindings.get(label)) {
-        return Some(entry.target.clone());
+        return Some(entry.target);
     }
 
     let within = consumer.is_within(parent);
@@ -285,7 +285,7 @@ fn seed(
         );
     }
 
-    public.insert(prefix.clone(), interface);
+    public.insert(*prefix, interface);
 
     // Attach declaration provenance to directly exposed nominal bindings. The fixed point copies this bit alongside the canonical target.
     if let Some(interface) = public.get_mut(prefix) {
@@ -327,7 +327,7 @@ fn seed(
         match item {
             TopItem::Use(use_item) if use_item.vis_pub => {
                 pub_uses.push(PubUse {
-                    module: prefix.clone(),
+                    module: *prefix,
                     name: use_item.name.clone(),
                     group: use_item.group.clone(),
                 });
@@ -341,7 +341,7 @@ fn seed(
                     for case in &induct_decl.cases {
                         direct.insert_binding(&case.label, true)?;
                     }
-                    table.insert(ctor.clone(), direct);
+                    table.insert(ctor, direct);
 
                     let mut interface = PublicInterface::new();
                     for case in &induct_decl.cases {
@@ -367,7 +367,7 @@ fn seed(
                     for field in concept.fields.iter().filter(|field| !field.is_super) {
                         direct.insert_binding(&field.label, true)?;
                     }
-                    table.insert(namespace.clone(), direct);
+                    table.insert(namespace, direct);
 
                     let mut interface = PublicInterface::new();
                     for field in concept.fields.iter().filter(|field| !field.is_super) {
@@ -452,14 +452,14 @@ fn resolvable(
     match &use_.group {
         UseGroup::Glob => {
             for (label, entry) in &interface.children {
-                out.push((Ns::Module, label.clone(), entry.target.clone(), None));
+                out.push((Ns::Module, label.clone(), entry.target, None));
             }
             for (label, entry) in &interface.bindings {
                 out.push((
                     Ns::Binding,
                     label.clone(),
-                    entry.target.clone(),
-                    entry.representation.clone(),
+                    entry.target,
+                    entry.representation,
                 ));
             }
         }
@@ -468,7 +468,7 @@ fn resolvable(
                 match item {
                     GroupItem::Mod(label) => {
                         if let Some(entry) = interface.children.get(label.as_str()) {
-                            out.push((Ns::Module, label.to_string(), entry.target.clone(), None));
+                            out.push((Ns::Module, label.to_string(), entry.target, None));
                         }
                     }
                     GroupItem::Let(label) => {
@@ -476,21 +476,21 @@ fn resolvable(
                             out.push((
                                 Ns::Binding,
                                 label.to_string(),
-                                entry.target.clone(),
-                                entry.representation.clone(),
+                                entry.target,
+                                entry.representation,
                             ));
                         }
                     }
                     GroupItem::Both(label) => {
                         if let Some(entry) = interface.children.get(label.as_str()) {
-                            out.push((Ns::Module, label.to_string(), entry.target.clone(), None));
+                            out.push((Ns::Module, label.to_string(), entry.target, None));
                         }
                         if let Some(entry) = interface.bindings.get(label.as_str()) {
                             out.push((
                                 Ns::Binding,
                                 label.to_string(),
-                                entry.target.clone(),
-                                entry.representation.clone(),
+                                entry.target,
+                                entry.representation,
                             ));
                         }
                     }
@@ -599,10 +599,10 @@ fn classify_label(
     label: &str,
 ) -> Error {
     let mut visited = HashSet::new();
-    let mut current = module.clone();
+    let mut current = *module;
 
     loop {
-        if !visited.insert(current.clone()) {
+        if !visited.insert(current) {
             return Error::CyclicReExport {
                 label: label.to_string(),
             };

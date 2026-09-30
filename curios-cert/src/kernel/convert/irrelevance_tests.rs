@@ -47,7 +47,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
         }));
         kernel.define(
             &h,
-            &Term::func_type([(e.clone(), family.clone())], nat_type()),
+            &Term::func_type([(e, family.clone())], nat_type()),
             &Term::func([(e, family.clone())], eliminated),
             &UniverseContext::default(),
         );
@@ -116,16 +116,8 @@ fn a_struct_field_at_a_proposition_is_not_read() {
     kernel.assume(&p, &proposition);
     kernel.assume(&q, &proposition);
 
-    let this = Term::struct_(
-        name.clone(),
-        Vec::<Term>::new(),
-        [nat(1), Term::free_var(&p)],
-    );
-    let that = Term::struct_(
-        name.clone(),
-        Vec::<Term>::new(),
-        [nat(1), Term::free_var(&q)],
-    );
+    let this = Term::struct_(name, Vec::<Term>::new(), [nat(1), Term::free_var(&p)]);
+    let that = Term::struct_(name, Vec::<Term>::new(), [nat(1), Term::free_var(&q)]);
     assert_eq!(
         convert(&mut kernel, &Term::type_ground(), &this, &that),
         Ok(true),
@@ -176,13 +168,13 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     kernel.assume(&q, &proposition);
 
     let this = Term::variant(
-        name.clone(),
+        name,
         Vec::<Term>::new(),
         "wrap",
         [nat(1), Term::free_var(&p)],
     );
     let that = Term::variant(
-        name.clone(),
+        name,
         Vec::<Term>::new(),
         "wrap",
         [nat(1), Term::free_var(&q)],
@@ -297,10 +289,7 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
         let x = binder(72, "x");
 
         (
-            Term::apply(
-                Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
-                [nat(1)],
-            ),
+            Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(1)]),
             nat(1),
         )
     };
@@ -385,7 +374,7 @@ fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
     let carried = binder(81, "P");
     let (u, v) = (binder(82, "u"), binder(83, "v"));
 
-    let body = |index: Term| Term::induct_type(wit.clone(), [Term::free_var(&carried)], [index]);
+    let body = |index: Term| Term::induct_type(wit, [Term::free_var(&carried)], [index]);
     let elimination = |index: Term| {
         Term::bool_match(
             Term::free_var(&scrutinee),
@@ -400,7 +389,7 @@ fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
         let x = binder(84, "x");
 
         Term::apply(
-            Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+            Term::func([(x, nat_type())], Term::free_var(&x)),
             [Term::free_var(name)],
         )
     };
@@ -468,7 +457,7 @@ fn a_struct_parameter_at_a_proposition_is_not_read() {
     kernel.assume(&p, &proposition);
     kernel.assume(&q, &proposition);
 
-    let this = Term::struct_type(name.clone(), [Term::free_var(&p)]);
+    let this = Term::struct_type(name, [Term::free_var(&p)]);
     let that = Term::struct_type(name, [Term::free_var(&q)]);
 
     assert_eq!(

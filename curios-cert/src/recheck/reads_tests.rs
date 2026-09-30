@@ -30,8 +30,8 @@ fn reading_module() -> Module {
             ),
             authored(
                 &global("identity"),
-                Term::func_type([(x.clone(), nat())], nat()),
-                Term::func([(x.clone(), nat())], Term::free_var(&x)),
+                Term::func_type([(x, nat())], nat()),
+                Term::func([(x, nat())], Term::free_var(&x)),
             ),
             authored(
                 &global("five"),

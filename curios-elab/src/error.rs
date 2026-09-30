@@ -1270,7 +1270,7 @@ impl Error {
     /// The definition the innermost declaration wrapper names — where the reader of this error stands.
     fn owner(&self) -> Option<Global> {
         match self {
-            Self::InDeclaration { owner, error, .. } => error.owner().or_else(|| owner.clone()),
+            Self::InDeclaration { owner, error, .. } => error.owner().or(*owner),
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InScope { error, .. } => error.owner(),
@@ -1460,7 +1460,7 @@ impl Error {
             return goals
                 .iter()
                 .map(|goal| {
-                    let spelling = for_reader(goal.owner.clone(), Rc::clone(&goal.witnesses));
+                    let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
                     Report {
                         span: goal.span.clone(),
                         message: format!("{prefix}{}", goal_text(goal, &spelling)),

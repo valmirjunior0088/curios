@@ -41,7 +41,7 @@ fn close_open_substitutes_label_name() {
         panic!("unexpected `{term:?}`")
     };
 
-    assert_eq!(var, &Var::free(y.clone()));
+    assert_eq!(var, &Var::free(y));
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn close_open_preserves_nested_bind() {
     let term = Scope::close(
         One,
         &[&x],
-        Term::func([(y.clone(), Term::type_ground())], Term::free_var(&x)),
+        Term::func([(y, Term::type_ground())], Term::free_var(&x)),
     )
     .open(&[&Term::free_var(&z)]);
 
@@ -66,7 +66,7 @@ fn close_open_preserves_nested_bind() {
         panic!("unexpected term")
     };
 
-    assert_eq!(var, &Var::free(z.clone()));
+    assert_eq!(var, &Var::free(z));
 }
 
 #[test]
@@ -77,18 +77,15 @@ fn implicit_marks_print_and_default_to_explicit() {
     let binder_3 = Free::local(3, Some("Nat"));
     let ft = Term::func_type_marked(
         [
-            (Plicity::Implicit, binder_0.clone(), Term::type_ground()),
-            (Plicity::Explicit, x.clone(), Term::free_var(&binder_0)),
+            (Plicity::Implicit, binder_0, Term::type_ground()),
+            (Plicity::Explicit, x, Term::free_var(&binder_0)),
         ],
         Term::free_var(&binder_0),
     );
     assert_eq!(format!("{ft}"), "(@T: Type, x: T) -> T");
 
     // The unmarked builders default every slot to `Explicit`.
-    let plain = Term::func_type(
-        [(binder_0.clone(), Term::type_ground())],
-        Term::type_ground(),
-    );
+    let plain = Term::func_type([(binder_0, Term::type_ground())], Term::type_ground());
     match &*plain {
         Subterm::FuncType(FuncType { plicities, .. }) => {
             assert_eq!(plicities, &[Plicity::Explicit]);
@@ -115,7 +112,7 @@ fn inductive_match_case_binders_are_captured() {
         Term::free_var(&r),
         None,
         Term::type_ground(),
-        [("success", vec![value.clone()], Term::free_var(&value))],
+        [("success", vec![value], Term::free_var(&value))],
     );
 
     let free = term.free_vars();
@@ -159,7 +156,7 @@ fn open_shares_closed_subterm_inside_substituted_body() {
     let a = Free::local(0, Some("a"));
     let x = Free::local(1, Some("x"));
     let y = Free::local(2, Some("y"));
-    let closed = Term::func([(a.clone(), Term::type_ground())], Term::free_var(&a)); // λa.a, closed
+    let closed = Term::func([(a, Term::type_ground())], Term::free_var(&a)); // λa.a, closed
     let scope = Scope::close(One, &[&x], Term::tuple([Term::free_var(&x), closed]));
 
     let stored_field = match &**scope.body() {
@@ -184,8 +181,8 @@ fn name_hints_are_identity_irrelevant() {
     let x = Free::local(0, Some("x"));
     let y = Free::local(1, Some("y"));
 
-    let this = Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x));
-    let that = Term::func([(y.clone(), Term::type_ground())], Term::free_var(&y));
+    let this = Term::func([(x, Term::type_ground())], Term::free_var(&x));
+    let that = Term::func([(y, Term::type_ground())], Term::free_var(&y));
 
     assert_eq!(this, that);
 
@@ -199,22 +196,13 @@ fn tuple_type_field_labels_are_identity() {
     let v = Free::local(1, Some("v"));
     let r = Free::local(2, Some("r"));
     // Field labels are the target of `.label` resolution, so unlike binder hints they split identity: an α-equal twin with different labels must not be substituted for this type by any Eq-keyed cache.
-    let this = Term::tuple_type([
-        (cp.clone(), Term::type_ground()),
-        (v.clone(), Term::free_var(&cp)),
-    ]);
-    let that = Term::tuple_type([
-        (r.clone(), Term::type_ground()),
-        (v.clone(), Term::free_var(&r)),
-    ]);
+    let this = Term::tuple_type([(cp, Term::type_ground()), (v, Term::free_var(&cp))]);
+    let that = Term::tuple_type([(r, Term::type_ground()), (v, Term::free_var(&r))]);
 
     assert_ne!(this, that);
     assert_eq!(
         this,
-        Term::tuple_type([
-            (cp.clone(), Term::type_ground()),
-            (v.clone(), Term::free_var(&cp))
-        ])
+        Term::tuple_type([(cp, Term::type_ground()), (v, Term::free_var(&cp))])
     );
 }
 
@@ -234,7 +222,7 @@ fn opening_substitutes_a_projection_into_a_member_headed_instance() {
     let scope = Scope::close(Many(1), &[&f], instance);
 
     let rec = Term::rec(
-        vec![(f.clone(), Term::type_ground(), Term::type_ground())],
+        vec![(f, Term::type_ground(), Term::type_ground())],
         Term::free_var(&f),
     );
     let Subterm::Rec(Rec { group, .. }) = &*rec else {

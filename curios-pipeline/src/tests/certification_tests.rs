@@ -73,7 +73,7 @@ fn typed_mentions(term: &Term, visited: &mut HashSet<Term>, into: &mut BTreeSet<
                 }
                 Subterm::Var(var) => {
                     if let Some(global) = var.as_free().and_then(Free::as_global) {
-                        into.insert(global.clone());
+                        into.insert(*global);
                     }
                     Enter::Skip(())
                 }
@@ -149,17 +149,17 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
             for item in &unit.core().items {
                 let reaches = unit.core().reaches(item);
                 for name in item.declared_names() {
-                    graph.insert(name.clone(), reaches.clone());
+                    graph.insert(*name, reaches.clone());
                 }
             }
         }
         let reached = |name: &Global| {
             let mut reached = BTreeSet::new();
-            let mut frontier = vec![name.clone()];
+            let mut frontier = vec![*name];
             while let Some(name) = frontier.pop() {
                 for next in graph.get(&name).into_iter().flatten() {
-                    if reached.insert(next.clone()) {
-                        frontier.push(next.clone());
+                    if reached.insert(*next) {
+                        frontier.push(*next);
                     }
                 }
             }

@@ -160,7 +160,7 @@ impl Convert {
     /// Mint a fresh label for opening scopes under structural comparison, recording it for `history_key`. The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
     fn opening(&mut self, context: &mut Context, hint: Option<&str>) -> Free {
         let binder = context.fresh(hint);
-        self.minted.insert(binder.clone(), self.minted.len());
+        self.minted.insert(binder, self.minted.len());
         binder
     }
 
@@ -358,14 +358,14 @@ impl Convert {
             Subterm::Var(var) => var
                 .as_free()
                 .and_then(Free::as_global)
-                .map(|global| (global.clone(), false)),
+                .map(|global| (*global, false)),
             Subterm::Instance(Instance {
                 head: InstanceHead::Var(var),
                 ..
             }) => var
                 .as_free()
                 .and_then(Free::as_global)
-                .map(|global| (global.clone(), true)),
+                .map(|global| (*global, true)),
             _ => None,
         };
         let (Some((this_global, polymorphic)), Some((that_global, _))) =
@@ -1206,7 +1206,7 @@ impl Convert {
                     let name = (*name)?;
                     // A duplicated image name is ambiguous to invert.
                     let unique = multiplicity.get(name) == Some(&1);
-                    unique.then(|| (name.clone(), birth))
+                    unique.then_some((*name, birth))
                 })
                 .collect()
         };
@@ -1225,7 +1225,7 @@ impl Convert {
                 continue;
             }
 
-            subjects.push((entry.clone(), birth.clone()));
+            subjects.push((entry.clone(), *birth));
 
             // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling — only an exhausted budget propagates.
             let reduced = match reduce(context, entry.clone()) {
@@ -1237,7 +1237,7 @@ impl Convert {
                 || entries.contains(&reduced)
                 || subjects.iter().any(|(s, _)| *s == reduced);
             if !ambiguous {
-                subjects.push((reduced, birth.clone()));
+                subjects.push((reduced, *birth));
             }
         }
 
@@ -1249,8 +1249,8 @@ impl Convert {
         // Scope check, through the inversion: every free variable of the (abstracted) candidate must correspond to exactly one birth binder. A name that is no entry at all can never become one — out of scope; a name only reachable through a non-pattern or duplicated slot is not provably determined — postpone.
         let allowed = image
             .iter()
-            .map(|(name, _)| name.clone())
-            .chain(subjects.iter().map(|(_, birth)| birth.clone()))
+            .map(|(name, _)| *name)
+            .chain(subjects.iter().map(|(_, birth)| *birth))
             .collect::<HashSet<_>>();
         for name in abstracted.free_vars() {
             if allowed.contains(&name) {
@@ -1381,7 +1381,7 @@ impl Convert {
         type MkBody = Box<dyn Fn(&[Term]) -> Term>;
         let (rigid_args, mk_body): (Vec<Term>, MkBody) = match &*rigid {
             Subterm::InductType(induct_decl) => {
-                let name = induct_decl.name.clone();
+                let name = induct_decl.name;
                 let universes = induct_decl.universes.clone();
                 let n_params = induct_decl.params.len();
                 let args = induct_decl
@@ -1395,7 +1395,7 @@ impl Convert {
                     Box::new(move |vars| {
                         let (params, indices) = vars.split_at(n_params);
                         Term::induct_type_at(
-                            name.clone(),
+                            name,
                             universes.clone(),
                             params.iter().cloned(),
                             indices.iter().cloned(),
@@ -1405,12 +1405,12 @@ impl Convert {
             }
             // Struct types carry no indices.
             Subterm::StructType(struct_decl) => {
-                let name = struct_decl.name.clone();
+                let name = struct_decl.name;
                 let universes = struct_decl.universes.clone();
                 (
                     struct_decl.params.clone(),
                     Box::new(move |vars| {
-                        Term::struct_type_at(name.clone(), universes.clone(), vars.iter().cloned())
+                        Term::struct_type_at(name, universes.clone(), vars.iter().cloned())
                     }),
                 )
             }

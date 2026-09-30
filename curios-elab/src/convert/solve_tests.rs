@@ -40,7 +40,7 @@ fn abstraction_walks_a_shared_candidate_once_per_node() {
     for _ in 0..60 {
         candidate = Term::intrinsic(Intrinsic::nat_add(candidate.clone(), candidate));
     }
-    let abstracted = super::abstract_occurrences(&candidate, &[(subject, birth.clone())]);
+    let abstracted = super::abstract_occurrences(&candidate, &[(subject, birth)]);
 
     assert!(!abstracted.mentions_free(&f));
     assert!(abstracted.mentions_free(&birth));
@@ -57,10 +57,7 @@ fn occurs_check_rejects_cyclic_solution() {
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
-    let cyclic = Term::func_type(
-        [(x.clone(), Term::hole(0))],
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let cyclic = Term::func_type([(x, Term::hole(0))], Term::intrinsic(Intrinsic::NatType));
     assert_eq!(conv(&mut context, &Term::hole(0), &cyclic), Ok(false));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
@@ -86,7 +83,7 @@ fn scope_check_allows_in_context_variable() {
     context.assume(&x_binder, &Term::type_ground());
     context.birth_metavar(
         MetavarId(0),
-        vec![(x_binder.clone(), Term::type_ground())],
+        vec![(x_binder, Term::type_ground())],
         Term::type_ground(),
     );
 
@@ -103,8 +100,8 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     let y = context.fresh(Some("y"));
     // ?0 : (x : Nat, y : Nat) — a tuple type, born in empty Γ.
     let pair_type = Term::tuple_type([
-        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (y.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (x, Term::intrinsic(Intrinsic::NatType)),
+        (y, Term::intrinsic(Intrinsic::NatType)),
     ]);
     context.birth_metavar(MetavarId(0), Vec::new(), pair_type);
 
@@ -121,8 +118,8 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
     let y = context.fresh(Some("y"));
     // ?0 : (x : Nat, y : Nat).
     let pair_type = Term::tuple_type([
-        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (y.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (x, Term::intrinsic(Intrinsic::NatType)),
+        (y, Term::intrinsic(Intrinsic::NatType)),
     ]);
     context.birth_metavar(MetavarId(0), Vec::new(), pair_type);
 
@@ -180,10 +177,7 @@ fn embedded_metavar_within_the_target_context_commits() {
     context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
 
     // ?0 ≟ (x : ?1) -> Nat — ?1 is unsolved but its birth context is contained in ?0's, so nothing it can ever inject escapes ?0's scope: the forced solution commits with ?1 riding embedded, instead of stranding as a residual. This is what lets a settle-synthesized lambda type pin its expectation while a domain metavariable is still open.
-    let candidate = Term::func_type(
-        [(x.clone(), Term::hole(1))],
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let candidate = Term::func_type([(x, Term::hole(1))], Term::intrinsic(Intrinsic::NatType));
     assert_eq!(conv(&mut context, &Term::hole(0), &candidate), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), None);
@@ -197,15 +191,12 @@ fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
     context.birth_metavar(
         MetavarId(1),
-        vec![(y.clone(), Term::intrinsic(Intrinsic::NatType))],
+        vec![(y, Term::intrinsic(Intrinsic::NatType))],
         Term::type_ground(),
     );
 
     // ?0 ≟ (x : ?1) -> Nat — ?1's birth context holds a binder ?0's lacks, so its eventual solution could smuggle `y` past ?0's scope. This bare occurrence says nothing of what `y` is at it, so ?1 cannot be re-expressed over ?0's binders, and the candidate waits.
-    let candidate = Term::func_type(
-        [(x.clone(), Term::hole(1))],
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let candidate = Term::func_type([(x, Term::hole(1))], Term::intrinsic(Intrinsic::NatType));
     assert_eq!(conv(&mut context, &Term::hole(0), &candidate), Ok(false));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
@@ -221,14 +212,14 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
         context.assume(&b, &bool_type);
         context.birth_metavar(
             MetavarId(0),
-            vec![(b.clone(), bool_type.clone())],
+            vec![(b, bool_type.clone())],
             Term::type_ground(),
         );
         context.with_frame(|context| {
             context.refine(&b, &Term::intrinsic(Intrinsic::Bool(true)));
             context.birth_metavar(
                 MetavarId(1),
-                vec![(b.clone(), bool_type.clone())],
+                vec![(b, bool_type.clone())],
                 Term::type_ground(),
             );
         });
@@ -451,7 +442,7 @@ fn revalidation_withholds_an_arm_a_metavariable_was_not_born_in() {
     context.assume(&t_binder, &Term::type_ground());
     context.birth_metavar(
         MetavarId(0),
-        vec![(t_binder.clone(), Term::type_ground())],
+        vec![(t_binder, Term::type_ground())],
         Term::free_var(&t_binder),
     );
     context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
@@ -473,7 +464,7 @@ fn revalidation_keeps_the_arm_a_metavariable_was_born_in() {
     context.refine(&t_binder, &Term::intrinsic(Intrinsic::NatType));
     context.birth_metavar(
         MetavarId(0),
-        vec![(t_binder.clone(), Term::type_ground())],
+        vec![(t_binder, Term::type_ground())],
         Term::free_var(&t_binder),
     );
 
@@ -491,10 +482,10 @@ fn a_metavariable_born_in_an_arm_is_not_contained_in_one_born_outside_it() {
     let b = context.fresh(Some("b"));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
     context.assume(&b, &bool_type());
-    context.birth_metavar(MetavarId(0), vec![(b.clone(), bool_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(b, bool_type())], nat_type());
     context.with_frame(|context| {
         context.refine(&b, &Term::intrinsic(Intrinsic::Bool(true)));
-        context.birth_metavar(MetavarId(1), vec![(b.clone(), bool_type())], nat_type());
+        context.birth_metavar(MetavarId(1), vec![(b, bool_type())], nat_type());
     });
 
     assert!(!context.metavar_context_contained(MetavarId(1), MetavarId(0)));
@@ -509,7 +500,7 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     context.assume(&t, &Term::type_ground());
     context.birth_metavar(
         MetavarId(0),
-        vec![(t.clone(), Term::type_ground())],
+        vec![(t, Term::type_ground())],
         Term::intrinsic(Intrinsic::NatType),
     );
     context.refine(&t, &Term::intrinsic(Intrinsic::NatType));
@@ -527,7 +518,7 @@ fn inverts_a_renaming() {
     let a = context.fresh(Some("a"));
     let y = context.fresh(Some("y"));
     // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the live name `y` (the enclosing binders were re-closed and reopened).
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
     // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named form: `a`, not `y`.
@@ -545,7 +536,7 @@ fn inverts_a_renaming() {
 fn solve_through_an_identity_spine_matches_legacy() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
 
     // The identity spine behaves exactly like the empty (legacy bare-hole) spine: the candidate is stored unchanged.
@@ -561,7 +552,7 @@ fn postpones_a_duplicated_renaming() {
     let y = context.fresh(Some("y"));
     context.birth_metavar(
         MetavarId(0),
-        vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
+        vec![(a, nat_type()), (b, nat_type())],
         nat_type(),
     );
     // Both entries are the same live name: which birth binder `y` stands for is ambiguous, so a candidate mentioning it is undecided, not unequal.
@@ -590,7 +581,7 @@ fn prunes_dependence_on_a_non_pattern_entry() {
     let y = context.fresh(Some("y"));
     context.birth_metavar(
         MetavarId(0),
-        vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
+        vec![(a, nat_type()), (b, nat_type())],
         nat_type(),
     );
     // First slot a pattern variable, second a compound term: the candidate may depend on the first but not (yet) on the second.
@@ -621,7 +612,7 @@ fn postpones_a_candidate_reaching_through_a_non_pattern_entry() {
     let y = context.fresh(Some("y"));
     context.birth_metavar(
         MetavarId(0),
-        vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
+        vec![(a, nat_type()), (b, nat_type())],
         nat_type(),
     );
     let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
@@ -645,7 +636,7 @@ fn rejects_an_out_of_image_variable() {
     let a = context.fresh(Some("a"));
     let y = context.fresh(Some("y"));
     let z = context.fresh(Some("z"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
     // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard mismatch, not a postponement.
@@ -666,11 +657,11 @@ fn classifies_a_solved_metavariable_spine_entry_by_its_value() {
     let y = context.fresh(Some("y"));
     let b = context.fresh(Some("b"));
     // ?0 is already solved to its own binder, so an occurrence ?0[y] stands for `y` — a perfectly good pattern variable hiding behind a node.
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     context.solve_metavar(MetavarId(0), Term::free_var(&a));
     let entry = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
-    context.birth_metavar(MetavarId(1), vec![(b.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(1), vec![(b, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![entry]);
 
     // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
@@ -693,7 +684,7 @@ fn abstracts_a_non_pattern_occurrence() {
     let y = context.fresh(Some("y"));
     context.birth_metavar(
         MetavarId(0),
-        vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
+        vec![(a, nat_type()), (b, nat_type())],
         nat_type(),
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the raw spelling; the reduced-spelling case is the next test.
@@ -767,7 +758,7 @@ fn abstracts_a_reduced_spelling_occurrence() {
     let y = context.fresh(Some("y"));
     context.birth_metavar(
         MetavarId(0),
-        vec![(a.clone(), nat_type()), (b.clone(), nat_type())],
+        vec![(a, nat_type()), (b, nat_type())],
         nat_type(),
     );
     // `z + 1` successor-peels under reduction, and the candidate side arrives reduced — each subject contributes both spellings, so the occurrence still abstracts, and the round-trip verification accepts the pair by definitional (not syntactic) equality.
@@ -789,7 +780,7 @@ fn abstracts_a_reduced_spelling_occurrence() {
 fn flex_flex_same_id_converts_through_equal_spines() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
 
     // Two occurrences of the same unsolved metavariable whose spines differ syntactically but agree definitionally (`1 + 1` reduces to `2`): the congruence probe discharges the goal without solving anything.
     let sum: Term = Subterm::Intrinsic(Intrinsic::nat_add(nat(1), nat(1))).into();
@@ -804,7 +795,7 @@ fn flex_flex_same_id_converts_through_equal_spines() {
 fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
 
     // Disagreeing spines are not *unequal* — the solution may ignore the slot — so the pair parks rather than mismatching.
     let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![nat(1)]);
@@ -821,8 +812,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
     let x = context.fresh(Some("x"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
-    context.birth_metavar(MetavarId(1), vec![(b.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
+    context.birth_metavar(MetavarId(1), vec![(b, nat_type())], nat_type());
 
     let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
     let that = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
@@ -837,8 +828,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
 fn rollback_solutions_unwinds_to_the_mark() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
-    context.birth_metavar(MetavarId(1), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
+    context.birth_metavar(MetavarId(1), vec![(a, nat_type())], nat_type());
 
     context.solve_metavar(MetavarId(0), nat(1));
     let mark = context.solution_mark();
@@ -855,7 +846,7 @@ fn rollback_solutions_unwinds_to_the_mark() {
 fn stuck_intrinsic_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let m = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
     let stuck: Term = Subterm::Intrinsic(Intrinsic::NatSub(m.clone(), nat(1))).into();
 
@@ -875,7 +866,7 @@ fn stuck_intrinsic_on_a_metavar_parks_instead_of_mismatching() {
 fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     let mut context = context();
     let a = context.fresh(Some("a"));
-    context.birth_metavar(MetavarId(0), vec![(a.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
     let m = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
 
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes — the heads are rigid — so the mismatch stays hard (and is reported at the use site, not deferred to the drain).
@@ -894,7 +885,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     let mut context = context();
     let n = context.fresh(Some("n"));
     context.assume(&n, &nat_type());
-    context.birth_metavar(MetavarId(0), vec![(n.clone(), nat_type())], nat_type());
+    context.birth_metavar(MetavarId(0), vec![(n, nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&n)]);
 
     // Inside a frame that counterfactually refines `n := 0` (a match arm), the goal `?0[n] ≈ n` still discharges — but the *committed* solution is `n`, not the arm-local `0`: `?0` was born outside the arm, and a metavariable must not be pinned to a value that holds only inside an arm it was not born in.
@@ -940,7 +931,7 @@ fn two_goals_distinct_under_their_binder_types_share_one_history_key() {
     // `(x : domain) -> head(x)` — the walk compares the domains as a sibling goal and opens the bodies at a shared fresh binder, so the domain is exactly the part of the goal's provenance the key forgets.
     let arrow = |domain: Term, head: &Free| {
         as_func_type(Term::func_type(
-            [(x.clone(), domain)],
+            [(x, domain)],
             Term::apply(Term::free_var(head), [Term::free_var(&x)]),
         ))
     };
@@ -993,16 +984,16 @@ fn a_goal_assumed_by_key_collision_cannot_move_the_verdict() {
     let side = |d: &Term| {
         Term::tuple_type([
             (
-                p.clone(),
+                p,
                 Term::func_type(
-                    [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+                    [(x, Term::intrinsic(Intrinsic::NatType))],
                     Term::apply(Term::free_var(&c), [Term::free_var(&x), d.clone()]),
                 ),
             ),
             (
-                q.clone(),
+                q,
                 Term::func_type(
-                    [(x.clone(), Term::intrinsic(Intrinsic::BoolType))],
+                    [(x, Term::intrinsic(Intrinsic::BoolType))],
                     Term::apply(Term::free_var(&c), [Term::free_var(&x), d.clone()]),
                 ),
             ),

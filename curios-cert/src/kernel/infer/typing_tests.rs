@@ -56,7 +56,7 @@ fn a_lambda_has_the_function_type_over_its_telescope() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let identity = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
     let arrow = Term::func_type([(x, nat_type())], nat_type());
 
     assert_eq!(infer(&mut kernel, &identity), Ok(arrow));
@@ -67,7 +67,7 @@ fn an_application_substitutes_its_arguments_into_the_result() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let identity = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
 
     assert_eq!(
         infer(&mut kernel, &Term::apply(identity, [nat(4)])),
@@ -84,10 +84,7 @@ fn a_dependent_result_mentions_the_argument_supplied() {
 
     // `(A : Type, x : A) -> A` applied at `(3)` results in `Nat`.
     let f = Term::func(
-        [
-            (a.clone(), Term::type_ground()),
-            (x.clone(), Term::free_var(&a)),
-        ],
+        [(a, Term::type_ground()), (x, Term::free_var(&a))],
         Term::free_var(&x),
     );
 
@@ -102,7 +99,7 @@ fn an_argument_of_the_wrong_type_is_refused() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let f = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let f = Term::func([(x, nat_type())], Term::free_var(&x));
     let applied = Term::apply(f, [Term::intrinsic(Intrinsic::Bool(true))]);
 
     assert!(matches!(
@@ -116,7 +113,7 @@ fn an_application_of_the_wrong_arity_is_refused() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 
-    let f = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let f = Term::func([(x, nat_type())], Term::free_var(&x));
     let applied = Term::apply(f, [nat(1), nat(2)]);
 
     assert_eq!(
@@ -190,9 +187,9 @@ fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
     let pred = binder(3, "pred");
     let hypothesis = binder(4, "ih");
 
-    let signature = Term::func_type([(n.clone(), nat_type())], nat_type());
+    let signature = Term::func_type([(n, nat_type())], nat_type());
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&motive),
@@ -205,7 +202,7 @@ fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
     );
 
     let term = Term::rec(
-        [(countdown.clone(), signature.clone(), body)],
+        [(countdown, signature.clone(), body)],
         Term::apply(Term::free_var(&countdown), [nat(3)]),
     );
 
@@ -219,11 +216,11 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
     let f = binder(0, "f");
     let n = binder(1, "n");
 
-    let signature = Term::func_type([(n.clone(), nat_type())], nat_type());
+    let signature = Term::func_type([(n, nat_type())], nat_type());
     let body = Term::func([(n, nat_type())], Term::intrinsic(Intrinsic::Bool(true)));
 
     let term = Term::rec(
-        [(f.clone(), signature, body)],
+        [(f, signature, body)],
         Term::apply(Term::free_var(&f), [nat(1)]),
     );
 
@@ -258,7 +255,7 @@ fn a_shared_closed_term_is_typed_once_per_node() {
 #[test]
 fn a_shared_closed_term_mints_once_per_node() {
     let x = binder(0, "x");
-    let identity = Term::func([(x.clone(), nat_type())], Term::free_var(&x));
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
     let mut term = nat(1);
     for _ in 0..40 {
         term = Term::apply(

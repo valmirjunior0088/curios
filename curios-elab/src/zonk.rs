@@ -154,7 +154,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
             let labels = entry
                 .telescope
                 .iter()
-                .map(|(name, _)| name.clone())
+                .map(|(name, _)| *name)
                 .collect::<Vec<_>>();
             solutions.insert(id, (labels, Term::free_var(name)));
             continue;
@@ -163,11 +163,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         solutions.insert(
             id,
             (
-                entry
-                    .telescope
-                    .iter()
-                    .map(|(name, _)| name.clone())
-                    .collect(),
+                entry.telescope.iter().map(|(name, _)| *name).collect(),
                 solution.clone(),
             ),
         );
@@ -204,7 +200,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .iter()
         .map(|(name, induct_decl)| {
             Ok((
-                name.clone(),
+                *name,
                 InductDecl {
                     universe_context: induct_decl.universe_context.clone(),
                     arity: zonk_arity_within(context, &induct_decl.arity)?,
@@ -222,7 +218,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         })
                         .collect::<Result<_, Error>>()?,
                     result_sort: zonk_term(context, &induct_decl.result_sort)?,
-                    module: induct_decl.module.clone(),
+                    module: induct_decl.module,
                     rep_public: induct_decl.rep_public,
                     polarities: induct_decl.polarities.clone(),
                 },
@@ -236,12 +232,12 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .iter()
         .map(|(name, struct_decl)| {
             Ok((
-                name.clone(),
+                *name,
                 StructDecl {
                     universe_context: struct_decl.universe_context.clone(),
                     arity: zonk_arity_within(context, &struct_decl.arity)?,
                     result_sort: zonk_term(context, &struct_decl.result_sort)?,
-                    module: struct_decl.module.clone(),
+                    module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities.clone(),
                 },
@@ -261,7 +257,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             .iter()
             .map(|(name, concept)| {
                 Ok((
-                    name.clone(),
+                    *name,
                     ConceptDecl {
                         universe_context: concept.universe_context.clone(),
                         params: zonk_field_telescope(context, &concept.params)?,
@@ -478,16 +474,12 @@ impl Schemes {
             inducts: module
                 .induct_decls
                 .iter()
-                .map(|(name, declaration)| {
-                    (name.clone(), declaration.universe_context.parameter_count)
-                })
+                .map(|(name, declaration)| (*name, declaration.universe_context.parameter_count))
                 .collect(),
             structs: module
                 .struct_decls
                 .iter()
-                .map(|(name, declaration)| {
-                    (name.clone(), declaration.universe_context.parameter_count)
-                })
+                .map(|(name, declaration)| (*name, declaration.universe_context.parameter_count))
                 .collect(),
         }
     }
@@ -509,14 +501,14 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         match item {
             Item::Let(definition) => {
                 definition_schemes.insert(
-                    definition.name.clone(),
+                    definition.name,
                     (definition.kind.clone(), definition.universe_context.clone()),
                 );
             }
             Item::Rec(rec) => {
                 for definition in rec.definitions() {
                     definition_schemes.insert(
-                        definition.name.clone(),
+                        definition.name,
                         (definition.kind, definition.universe_context),
                     );
                 }
@@ -597,7 +589,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     for (name, (kind, _)) in &definition_schemes {
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
-                let owner = Global::Authored(owner.clone());
+                let owner = Global::Authored(*owner);
                 let Some(declaration) = module.induct_decls.get(&owner) else {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {name} names missing owner {owner}"
@@ -610,7 +602,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
                 }
             }
             DefinitionKind::ConceptMethod { owner } => {
-                let owner = Global::Authored(owner.clone());
+                let owner = Global::Authored(*owner);
                 if !module.concepts.contains_key(&owner) {
                     return Err(Error::UniverseInvariant(format!(
                         "concept method {name} names missing owner {owner}"
@@ -798,10 +790,10 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
     let type_ = zonk_term(context, &def.type_)?;
     let body = zonk_term(context, &def.body)?;
     Ok(Definition {
-        name: def.name.clone(),
+        name: def.name,
         kind: def.kind.clone(),
         universe_context: def.universe_context.clone(),
-        island: def.island.clone(),
+        island: def.island,
         totality: def.totality,
         type_,
         body,
@@ -845,7 +837,7 @@ pub(crate) fn collect_goal_reports(
                     match origin {
                         MetavarOrigin::Goal => {
                             if seen_goals.borrow_mut().insert(*id) {
-                                goals.borrow_mut().push((*id, term.span(), owner.clone()));
+                                goals.borrow_mut().push((*id, term.span(), owner));
                             }
                         }
                         _ => referenced.borrow_mut().push(*id),
@@ -973,7 +965,7 @@ pub(crate) fn collect_goal_reports(
                 .expect("a collected goal has a birth entry");
             GoalReport {
                 span: span.clone(),
-                owner: owner.clone(),
+                owner: *owner,
                 witnesses: entry.witnesses.clone().unwrap_or_default(),
                 scope: entry
                     .telescope
@@ -1238,7 +1230,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             params,
             indices,
         }) => Subterm::InductType(InductType {
-            name: name.clone(),
+            name: *name,
             universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             indices: zonk_terms(context, indices)?,
@@ -1251,7 +1243,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             tag,
             payload,
         }) => Subterm::Variant(Variant {
-            name: name.clone(),
+            name: *name,
             universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             tag: tag.clone(),
@@ -1263,7 +1255,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             universes,
             params,
         }) => Subterm::StructType(StructType {
-            name: name.clone(),
+            name: *name,
             universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
         }),
@@ -1275,7 +1267,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
             fields,
             entries,
         }) => Subterm::Struct(Struct {
-            name: name.clone(),
+            name: *name,
             universes: zonk_levels(context, universes)?,
             params: zonk_terms(context, params)?,
             fields: zonk_terms(context, fields)?,

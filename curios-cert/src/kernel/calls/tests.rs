@@ -41,11 +41,7 @@ fn member() -> (Free, Term) {
 /// The group `rec f(n : Nat) -> Type = body`, as the term that states it and names `f` in its tail.
 fn group(f: &Free, signature: Term, n: &Free, body: Term) -> Term {
     Term::rec(
-        [(
-            f.clone(),
-            signature,
-            Term::func([(n.clone(), nat_type())], body),
-        )],
+        [(*f, signature, Term::func([(*n, nat_type())], body))],
         Term::free_var(f),
     )
 }
@@ -113,7 +109,7 @@ fn a_descent_through_an_applied_lambda_is_read_through_its_binder() {
         &n,
         split(&n, |pred| {
             Term::apply(
-                Term::func([(m.clone(), nat_type())], call(&f, Term::free_var(&m))),
+                Term::func([(m, nat_type())], call(&f, Term::free_var(&m))),
                 [Term::free_var(pred)],
             )
         }),
@@ -130,12 +126,9 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let x = binder(11, "x");
     kernel.define(
         &is_zero,
-        &Term::func_type(
-            [(x.clone(), nat_type())],
-            Term::intrinsic(Intrinsic::BoolType),
-        ),
+        &Term::func_type([(x, nat_type())], Term::intrinsic(Intrinsic::BoolType)),
         &Term::func(
-            [(x.clone(), nat_type())],
+            [(x, nat_type())],
             Term::intrinsic(Intrinsic::NatEql(Term::free_var(&x), nat(0))),
         ),
         &UniverseContext::empty(),

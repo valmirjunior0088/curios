@@ -20,7 +20,7 @@ fn family(kernel: &mut Kernel) -> Global {
         Term::type_ground(),
         vec![
             nullary("a", nat(0)),
-            carrying("b", m.clone(), nat_type(), succ(Term::free_var(&m))),
+            carrying("b", m, nat_type(), succ(Term::free_var(&m))),
         ],
     )
 }
@@ -29,13 +29,13 @@ fn family(kernel: &mut Kernel) -> Global {
 fn dependent_family(kernel: &mut Kernel, name: Free, family: &Global, p: &Term) -> Term {
     let n = binder(94, "n");
     let x = binder(95, "x");
-    let at = Term::induct_type(family.clone(), Vec::<Term>::new(), [Term::free_var(&n)]);
+    let at = Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&n)]);
     kernel.declare(
         &name,
         &Term::func_type(
             [
-                (n.clone(), nat_type()),
-                (x.clone(), at),
+                (n, nat_type()),
+                (x, at),
                 (
                     binder(96, "p"),
                     Term::apply(p.clone(), [Term::free_var(&n), Term::free_var(&x)]),
@@ -85,7 +85,7 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
     kernel.assume(&n, &nat_type());
     kernel.assume(
         &x,
-        &Term::induct_type(family.clone(), Vec::<Term>::new(), [Term::free_var(&n)]),
+        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&n)]),
     );
     kernel.assume(
         &h,
@@ -146,7 +146,7 @@ fn a_lying_ambient_goal_is_refused() {
     kernel.assume(&n, &nat_type());
     kernel.assume(
         &x,
-        &Term::induct_type(family.clone(), Vec::<Term>::new(), [Term::free_var(&n)]),
+        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&n)]),
     );
     let goal = Term::apply(p, [Term::free_var(&n), Term::free_var(&x)]);
 
@@ -167,7 +167,7 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     // `f : (Nat) -> F(0)` applied to a parameter is an expression scrutinee typed at index `0`, so only the `a` arm is reachable, and `b`'s targets clash with the actual index.
     let f = binder(62, "f");
     let n = binder(63, "n");
-    let at_zero = Term::induct_type(family.clone(), Vec::<Term>::new(), [nat(0)]);
+    let at_zero = Term::induct_type(family, Vec::<Term>::new(), [nat(0)]);
     kernel.declare(
         &f,
         &Term::func_type([(binder(64, "k"), nat_type())], at_zero.clone()),

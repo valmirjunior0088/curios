@@ -223,7 +223,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         let mut vars = BTreeSet::new();
         self.traverse(&mut Visit::new(|_, var| {
             if let Some(name) = var.as_free() {
-                vars.insert(name.clone());
+                vars.insert(*name);
             }
             None
         }));
@@ -443,7 +443,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
         Self {
             arity,
-            names: Some(binders.as_ref().iter().map(|&name| name.clone()).collect()),
+            names: Some(binders.as_ref().iter().map(|&name| *name).collect()),
             body: body.capture(binders.as_ref()).into(),
         }
     }
@@ -555,7 +555,7 @@ impl<B: Bound> Scope<Many, B> {
         let names = self.names.as_ref().map(|names| {
             binders
                 .iter()
-                .map(|&binder| binder.clone())
+                .map(|&binder| *binder)
                 .chain(names.iter().cloned())
                 .collect()
         });

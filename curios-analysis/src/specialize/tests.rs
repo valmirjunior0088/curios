@@ -27,8 +27,8 @@ fn a_let_of_a_variable_solves_the_variable_beneath_it() {
 
     let value = nat(7);
     for (scrutinee, expected) in [
-        (Term::free_var(&s), Some((s.clone(), value.clone()))),
-        (Term::free_var(&t), Some((s.clone(), value.clone()))),
+        (Term::free_var(&s), Some((s, value.clone()))),
+        (Term::free_var(&t), Some((s, value.clone()))),
         (Term::free_var(&top), None),
         (over(&s), None),
     ] {
@@ -54,12 +54,12 @@ fn a_local_typed_through_a_let_is_retyped_with_the_let_inlined() {
 
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let locals = [
-        (s.clone(), nat_type.clone()),
-        (z.clone(), over(&s)),
-        (w.clone(), over(&t)),
-        (u.clone(), nat_type),
+        (s, nat_type.clone()),
+        (z, over(&s)),
+        (w, over(&t)),
+        (u, nat_type),
     ];
-    let solutions = [(s.clone(), nat(7))];
+    let solutions = [(s, nat(7))];
 
     let over_seven = Term::intrinsic(Intrinsic::nat_add(nat(7), nat(1)));
     assert_eq!(

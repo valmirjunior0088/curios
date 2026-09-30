@@ -25,7 +25,7 @@ fn child_results_arrive_in_child_order() {
             if let Subterm::Var(var) = &**term
                 && let Some(name) = var.as_free()
             {
-                names.push(name.clone());
+                names.push(*name);
             }
             names
         },
@@ -57,7 +57,7 @@ fn skip_prunes_the_subtree() {
             if let Subterm::Var(var) = &**term
                 && let Some(name) = var.as_free()
             {
-                names.push(name.clone());
+                names.push(*name);
             }
             names
         },
@@ -79,7 +79,7 @@ fn break_abandons_the_walk() {
             if let Subterm::Var(var) = &**term
                 && var.as_free() == Some(&target)
             {
-                return ControlFlow::Break(target.clone());
+                return ControlFlow::Break(target);
             }
             ControlFlow::Continue(Enter::Descend)
         },

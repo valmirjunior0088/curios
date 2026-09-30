@@ -268,10 +268,10 @@ pub(super) fn elaborate_apply(
     // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node reported `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
     fn innermost_reference(term: &Term) -> Option<Free> {
         match &**term {
-            Subterm::Var(var) => Some(var.unwrap().clone()),
+            Subterm::Var(var) => Some(*var.unwrap()),
             Subterm::Apply(apply) => innermost_reference(&apply.head),
             Subterm::Instance(instance) => match &instance.head {
-                InstanceHead::Var(var) => Some(var.unwrap().clone()),
+                InstanceHead::Var(var) => Some(*var.unwrap()),
                 InstanceHead::RecProj(..) => None,
             },
             _ => None,

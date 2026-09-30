@@ -107,7 +107,7 @@ pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Gl
                 .chain(definition.body.free_vars_shared())
                 .filter_map(|free| free.as_global().cloned())
                 .collect::<BTreeSet<_>>();
-            (definition.name.clone(), named)
+            (definition.name, named)
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -119,8 +119,8 @@ pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Gl
             continue;
         };
         for next in named {
-            if reached.insert(next.clone()) {
-                frontier.push(next.clone());
+            if reached.insert(*next) {
+                frontier.push(*next);
             }
         }
     }

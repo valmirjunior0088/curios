@@ -129,7 +129,7 @@ impl Kernel {
             ..
         }) = self.calls.frames.last_mut()
         {
-            params.push(binder.clone());
+            params.push(*binder);
         }
     }
 
@@ -210,7 +210,7 @@ impl Kernel {
 
     /// Within the current bracket, `binder` stands for `value`.
     pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) {
-        self.enter_size(Some((binder.clone(), value)), None, Vec::new());
+        self.enter_size(Some((*binder, value)), None, Vec::new());
     }
 
     /// What an arm that scrutinizes `scrutinee` at `value` establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, and each other binder in `solutions` stands for what it was solved to.
@@ -289,6 +289,6 @@ impl Kernel {
 
     /// The definition `name`'s check enclosed a group that does not descend.
     pub(crate) fn note_enclosing_partial(&mut self, name: &Free) {
-        self.calls.definitions_enclosing.insert(name.clone());
+        self.calls.definitions_enclosing.insert(*name);
     }
 }

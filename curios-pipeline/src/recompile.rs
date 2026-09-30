@@ -184,7 +184,7 @@ fn reverse_closure(core: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
         .flat_map(|(index, item)| {
             item.declared_names()
                 .into_iter()
-                .map(move |name| (name.clone(), index))
+                .map(move |name| (*name, index))
         })
         .collect::<BTreeMap<Global, usize>>();
     let mut dependents: BTreeMap<Global, Vec<usize>> = BTreeMap::new();
@@ -201,8 +201,8 @@ fn reverse_closure(core: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
     while let Some(name) = work.pop() {
         for &index in dependents.get(&name).map_or(&[][..], Vec::as_slice) {
             for declared in core.items[index].declared_names() {
-                if closure.insert(declared.clone()) {
-                    work.push(declared.clone());
+                if closure.insert(*declared) {
+                    work.push(*declared);
                 }
             }
         }

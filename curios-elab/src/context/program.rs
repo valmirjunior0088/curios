@@ -44,7 +44,7 @@ impl Program {
         if self.induct_decls.contains_key(name) {
             return Err(Error::duplicate_induct(name.symbol()));
         }
-        self.induct_decls.insert(name.clone(), induct_decl);
+        self.induct_decls.insert(*name, induct_decl);
         Ok(())
     }
 
@@ -54,7 +54,7 @@ impl Program {
             self.induct_decls.contains_key(name),
             "update_induct: '{name}' is not already registered"
         );
-        self.induct_decls.insert(name.clone(), induct_decl);
+        self.induct_decls.insert(*name, induct_decl);
     }
 
     /// Look up an inductive declaration by the type's qualified name.
@@ -76,7 +76,7 @@ impl Program {
         if self.struct_decls.contains_key(name) {
             return Err(Error::duplicate_struct(name.symbol()));
         }
-        self.struct_decls.insert(name.clone(), struct_decl);
+        self.struct_decls.insert(*name, struct_decl);
         Ok(())
     }
 
@@ -86,7 +86,7 @@ impl Program {
             self.struct_decls.contains_key(name),
             "update_struct: '{name}' is not already registered"
         );
-        self.struct_decls.insert(name.clone(), struct_decl);
+        self.struct_decls.insert(*name, struct_decl);
     }
 
     /// Look up a struct declaration by the type's qualified name.
@@ -108,7 +108,7 @@ impl Program {
         if self.concepts.contains_key(name) {
             return Err(Error::duplicate_concept(name.symbol()));
         }
-        self.concepts.insert(name.clone(), concept);
+        self.concepts.insert(*name, concept);
         Ok(())
     }
 
@@ -122,7 +122,7 @@ impl Program {
             self.concepts.contains_key(name),
             "update_concept: '{name}' is not already registered"
         );
-        self.concepts.insert(name.clone(), concept);
+        self.concepts.insert(*name, concept);
     }
 
     /// The registered concepts, for whole-registry validation (superclass acyclicity) at seed time.
@@ -166,7 +166,7 @@ impl Program {
 
     /// Mark a definition name as a witness declaration; when its signature elaborates, `elaborate_module_suffix` registers it into the witness table.
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
-        self.witness_declarations.insert(name.clone());
+        self.witness_declarations.insert(*name);
     }
 
     pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
@@ -175,7 +175,7 @@ impl Program {
 
     /// The witness registered under `(concept, key)`, if any.
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
-        self.witness_table.get(&(concept.clone(), key.clone()))
+        self.witness_table.get(&(*concept, key.clone()))
     }
 
     /// Every registered witness with its concept and key — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
@@ -194,8 +194,8 @@ impl Program {
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
-        match self.witness_table.get(&(concept.clone(), key.clone())) {
-            Some(existing) => Some(existing.module.clone()),
+        match self.witness_table.get(&(concept, key.clone())) {
+            Some(existing) => Some(existing.module),
             None => {
                 self.witness_table.insert((concept, key), witness);
                 None
@@ -224,8 +224,7 @@ impl Program {
     }
 
     pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.poisoned_witnesses
-            .contains(&(concept.clone(), key.clone()))
+        self.poisoned_witnesses.contains(&(*concept, key.clone()))
     }
 
     /// Rewrite a registered witness's generalized scheme once its signature finalizes. Panics if `name` was never registered. The façade stamps the write.
@@ -248,7 +247,7 @@ impl Program {
     ///
     /// The whole-module pass computes the same verdicts by a fixpoint, and needs one because it sees every item at once. Here the items arrive in dependency order, so everything a definition mentions is already classified and one pass per definition suffices.
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
-        self.totality.insert(name.clone(), totality);
+        self.totality.insert(*name, totality);
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.
@@ -258,10 +257,7 @@ impl Program {
 
     /// Seed the recorded verdicts with a replayed prefix's, which its own archive settled.
     pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
-        self.totality.extend(
-            inherited
-                .iter()
-                .map(|(name, totality)| (name.clone(), *totality)),
-        );
+        self.totality
+            .extend(inherited.iter().map(|(name, totality)| (*name, *totality)));
     }
 }

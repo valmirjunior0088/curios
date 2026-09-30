@@ -245,10 +245,7 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     else {
         return Ok(false);
     };
-    let Some(declaration) = context
-        .induct_decl(&Global::Authored(owner.clone()))
-        .cloned()
-    else {
+    let Some(declaration) = context.induct_decl(&Global::Authored(*owner)).cloned() else {
         return Ok(false);
     };
 

@@ -15,17 +15,17 @@ fn collect_ignores_index_names() {
     let z = Free::local(2, Some("z"));
     let w = Free::local(3, Some("w"));
     let term = Term::func(
-        [(x.clone(), Term::type_ground())],
+        [(x, Term::type_ground())],
         Term::tuple([
             Term::free_var(&x),
             Term::rec(
-                vec![(y.clone(), Term::type_ground(), Term::free_var(&z))],
+                vec![(y, Term::type_ground(), Term::free_var(&z))],
                 Term::tuple([Term::free_var(&y), Term::free_var(&w)]),
             ),
         ]),
     );
 
-    assert_eq!(term.free_vars(), BTreeSet::from([w.clone(), z.clone()]));
+    assert_eq!(term.free_vars(), BTreeSet::from([w, z]));
 }
 
 /// A chain-shaped term shares its single carrier child's memoized set upward instead of copying it once per link.
@@ -60,7 +60,7 @@ fn metavars_collects_ids_across_structure() {
     let x = Free::local(0, Some("x"));
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::hole(1)),
+        Term::func([(x, Term::type_ground())], Term::hole(1)),
         [
             Term::hole(2),
             Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
@@ -74,7 +74,7 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     let x = Free::local(0, Some("x"));
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::hole(1)),
+        Term::func([(x, Term::type_ground())], Term::hole(1)),
         [
             Term::hole(2),
             Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
@@ -95,7 +95,7 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     assert_eq!(visits, 1);
 
     // A metavariable-free term never fires the predicate.
-    let plain = Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x));
+    let plain = Term::func([(x, Term::type_ground())], Term::free_var(&x));
     let mut fired = false;
     assert!(!plain.any_metavar(&mut |_| {
         fired = true;
@@ -168,10 +168,7 @@ fn has_local_free_flags_locals_not_globals() {
     assert!(inner.has_local_free());
 
     // A binder whose label hint carries `#` stays clean: the hint is not an occurrence, and the captured variable is bound, not free.
-    let binder = Term::func(
-        [(binder_2.clone(), Term::type_ground())],
-        Term::free_var(&binder_2),
-    );
+    let binder = Term::func([(binder_2, Term::type_ground())], Term::free_var(&binder_2));
     assert!(!binder.has_local_free());
 }
 
@@ -181,12 +178,12 @@ fn has_metavar_flags_any_metavariable_node() {
     assert!(Term::hole(1).has_metavar());
     assert!(
         Term::apply(
-            Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
+            Term::func([(x, Term::type_ground())], Term::free_var(&x)),
             [Term::hole(2)],
         )
         .has_metavar()
     );
-    assert!(!Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)).has_metavar());
+    assert!(!Term::func([(x, Term::type_ground())], Term::free_var(&x)).has_metavar());
 }
 
 #[test]
@@ -252,7 +249,7 @@ fn reach_basic_values() {
     assert_eq!(Term::var(Var::bound(3)).reach(), 4);
     // closed identity function λx.x
     assert_eq!(
-        Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)).reach(),
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)).reach(),
         0
     );
 }

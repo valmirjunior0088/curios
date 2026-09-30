@@ -462,11 +462,7 @@ fn infix_method(
 
     // Mint the witness goal exactly like an omitted `use` argument.
     let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
-    let goal = Term::struct_type_at(
-        concept_name.clone(),
-        universes.clone(),
-        vec![operand_type.clone()],
-    );
+    let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
         binder: format!("its '{field_name}' implementation"),
@@ -794,7 +790,7 @@ fn declared_result_shape(
     let Subterm::Var(var) = &*apply.head else {
         return None;
     };
-    let base = var.as_free()?.clone();
+    let base = *var.as_free()?;
     let head = binder_key(context, &base, &explicit_binders, args)?;
     let arguments: Vec<Term> = apply.params().cloned().collect();
     let context_args = arguments

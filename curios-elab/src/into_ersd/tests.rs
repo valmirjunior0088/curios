@@ -300,8 +300,8 @@ fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_ersd::Module {
     };
     let mut items = vec![definition(
         "callee",
-        Term::func_type([(n.clone(), nat.clone())], result_type.clone()),
-        Term::func([(n.clone(), nat.clone())], result),
+        Term::func_type([(n, nat.clone())], result_type.clone()),
+        Term::func([(n, nat.clone())], result),
     )];
     let call = Term::apply(Term::free_var(&global("callee")), [nat_lit(4)]);
     let body = match binder {
@@ -330,8 +330,8 @@ fn identity_arena(stamp: Totality) -> ErasedArena {
     let nat = Term::intrinsic(Intrinsic::NatType);
     let mut items = vec![definition(
         "identity",
-        Term::func_type([(x.clone(), nat.clone())], nat.clone()),
-        Term::func([(x.clone(), nat.clone())], Term::free_var(&x)),
+        Term::func_type([(x, nat.clone())], nat.clone()),
+        Term::func([(x, nat.clone())], Term::free_var(&x)),
     )];
     let Item::Let(declared) = &mut items[0] else {
         unreachable!("the fixture declares a definition");
@@ -375,7 +375,7 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
         (
             Totality::Partial,
             Certification::of([(
-                identity.clone(),
+                identity,
                 Certified {
                     totality: Totality::Total,
                     ..Certified::default()
@@ -386,7 +386,7 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
         (
             Totality::Total,
             Certification::of([(
-                identity.clone(),
+                identity,
                 Certified {
                     totality: Totality::Partial,
                     ..Certified::default()
@@ -550,8 +550,8 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
     // (A : Type, x : A) => x — the type parameter is dropped; the runtime function takes one parameter and stores no captures.
     let func_type = Term::func_type(
         [
-            (type_param.clone(), Term::type_ground()),
-            (x.clone(), Term::free_var(&type_param)),
+            (type_param, Term::type_ground()),
+            (x, Term::free_var(&type_param)),
         ],
         Term::free_var(&type_param),
     );
@@ -559,10 +559,7 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
         "id",
         func_type,
         Term::func(
-            [
-                (type_param.clone(), Term::type_ground()),
-                (x.clone(), Term::type_ground()),
-            ],
+            [(type_param, Term::type_ground()), (x, Term::type_ground())],
             Term::free_var(&x),
         ),
     )];
@@ -596,20 +593,20 @@ fn a_capturing_closure_stores_no_capture_list() {
     let y_binder = context.fresh(Some("y"));
     // (y : Nat) => (x : Nat) => x + y — the inner closure references the outer parameter freely; analysis derives it, nothing is stored.
     let inner_type = Term::func_type(
-        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(x, Term::intrinsic(Intrinsic::NatType))],
         Term::intrinsic(Intrinsic::NatType),
     );
     let outer_type = Term::func_type(
-        [(y_binder.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(y_binder, Term::intrinsic(Intrinsic::NatType))],
         inner_type,
     );
     let items = vec![definition(
         "make",
         outer_type,
         Term::func(
-            [(y_binder.clone(), Term::type_ground())],
+            [(y_binder, Term::type_ground())],
             Term::func(
-                [(x.clone(), Term::type_ground())],
+                [(x, Term::type_ground())],
                 Term::intrinsic(Intrinsic::nat_add(
                     Term::free_var(&x),
                     Term::free_var(&y_binder),
@@ -618,9 +615,9 @@ fn a_capturing_closure_stores_no_capture_list() {
         ),
     )];
     let expected = Term::func_type(
-        [(y_binder.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(y_binder, Term::intrinsic(Intrinsic::NatType))],
         Term::func_type(
-            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            [(x, Term::intrinsic(Intrinsic::NatType))],
             Term::intrinsic(Intrinsic::NatType),
         ),
     );
@@ -675,10 +672,7 @@ fn opt_induct() -> InductDecl {
             (
                 Atom::from("some"),
                 InductParam::new(
-                    Telescope::build(
-                        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
-                        Vec::new(),
-                    ),
+                    Telescope::build([(x, Term::intrinsic(Intrinsic::NatType))], Vec::new()),
                     vec![Plicity::Explicit],
                 ),
             ),
@@ -757,8 +751,8 @@ fn a_multi_field_tuple_shares_the_width_schema() {
     let b = context.fresh(Some("b"));
     let pair = context.fresh(Some("pair"));
     let tuple_type = Term::tuple_type([
-        (a.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (b.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (a, Term::intrinsic(Intrinsic::NatType)),
+        (b, Term::intrinsic(Intrinsic::NatType)),
     ]);
     let body = Term::let_(
         &pair,
@@ -795,10 +789,8 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
     let w = context.fresh(Some("w"));
     let sub = context.fresh(Some("sub"));
     // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection vanishes.
-    let subset_type = Term::tuple_type([
-        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (w.clone(), Term::prop()),
-    ]);
+    let subset_type =
+        Term::tuple_type([(x, Term::intrinsic(Intrinsic::NatType)), (w, Term::prop())]);
     let body = Term::let_(
         &sub,
         subset_type.clone(),
@@ -995,7 +987,7 @@ fn a_variant_match_binds_payload_without_projections() {
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat_lit(0)),
-            ("some", vec![x.clone()], Term::free_var(&x)),
+            ("some", vec![x], Term::free_var(&x)),
         ],
     );
     let fixture = Program {
@@ -1039,10 +1031,10 @@ fn an_effectful_scrutinee_is_erased_once() {
     let items = vec![definition(
         "read",
         Term::func_type(
-            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            [(x, Term::intrinsic(Intrinsic::NatType))],
             Term::intrinsic(Intrinsic::NatType),
         ),
-        Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
     )];
     let body = Term::nat_match(
         io_read,
@@ -1083,15 +1075,15 @@ fn a_recursive_function_group_erases_to_functions() {
     let f = context.fresh(Some("f"));
     // rec f(x) = f(x); body f(3)
     let func_type = Term::func_type(
-        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(x, Term::intrinsic(Intrinsic::NatType))],
         Term::intrinsic(Intrinsic::NatType),
     );
     let body = Term::rec(
         vec![(
-            f.clone(),
+            f,
             func_type.clone(),
             Term::func(
-                [(x.clone(), Term::type_ground())],
+                [(x, Term::type_ground())],
                 Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
             ),
         )],
@@ -1124,21 +1116,17 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     let consume = context.fresh(Some("consume"));
     // rec { produce() = consume; consume = produce } — a dormant knot: the computed member's initializer references the function, and the function body references the computed member (dormant until applied).
     let produce_type = Term::func_type(
-        [(u.clone(), Term::tuple_type(Vec::<(Free, Term)>::new()))],
+        [(u, Term::tuple_type(Vec::<(Free, Term)>::new()))],
         Term::intrinsic(Intrinsic::NatType),
     );
     let body = Term::rec(
         vec![
             (
-                produce.clone(),
+                produce,
                 produce_type.clone(),
-                Term::func([(u.clone(), Term::type_ground())], nat_lit(5)),
+                Term::func([(u, Term::type_ground())], nat_lit(5)),
             ),
-            (
-                consume.clone(),
-                produce_type.clone(),
-                Term::free_var(&produce),
-            ),
+            (consume, produce_type.clone(), Term::free_var(&produce)),
         ],
         Term::free_var(&consume),
     );
@@ -1166,8 +1154,8 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     let type_ = Term::intrinsic(Intrinsic::NatType);
     let body = Term::rec(
         vec![
-            (a.clone(), type_.clone(), Term::free_var(&b)),
-            (b.clone(), type_.clone(), Term::free_var(&a)),
+            (a, type_.clone(), Term::free_var(&b)),
+            (b, type_.clone(), Term::free_var(&a)),
         ],
         Term::free_var(&a),
     );
@@ -1181,7 +1169,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let func_type = Term::func_type(
-        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(x, Term::intrinsic(Intrinsic::NatType))],
         Term::intrinsic(Intrinsic::NatType),
     );
     let items = vec![Item::Rec(RecItem::new(vec![Definition {
@@ -1192,7 +1180,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         totality: Totality::default(),
         type_: func_type.clone(),
         body: Term::func(
-            [(x.clone(), Term::type_ground())],
+            [(x, Term::type_ground())],
             Term::apply(Term::free_var(&global("go")), [Term::free_var(&x)]),
         ),
     }]))];

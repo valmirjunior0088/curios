@@ -36,7 +36,7 @@ fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, O
     mounts
         .iter()
         .filter(|mount| mount.kind == RootKind::Internal && &mount.prefix != documented)
-        .map(|mount| (mount.prefix.clone(), chip(&mount.prefix)))
+        .map(|mount| (mount.prefix, chip(&mount.prefix)))
         .collect()
 }
 
@@ -79,10 +79,10 @@ pub(super) fn document(
     reader.public_names = reader.exposed_names();
 
     let mut pages = Vec::new();
-    reader.visit(prefix.clone(), None, &mut pages);
+    reader.visit(*prefix, None, &mut pages);
 
     Documentation {
-        prefix: prefix.clone(),
+        prefix: *prefix,
         description,
         modules: pages,
     }
@@ -126,7 +126,7 @@ impl Reader<'_> {
                 let declaring = entry.target.without_last();
                 if !self.has_page(&declaring) && self.has_declarations(&declaring) {
                     names
-                        .entry(entry.target.clone())
+                        .entry(entry.target)
                         .or_insert_with(|| module.with(label));
                 }
             }
@@ -143,11 +143,11 @@ impl Reader<'_> {
         let declaring = referent.without_last();
         let ours = referent.is_within(self.prefix) || self.adopted_root(referent).is_some();
         if !ours || self.has_page(&declaring) {
-            return referent.clone();
+            return *referent;
         }
 
         if let Some(public) = self.public_names.get(referent) {
-            return public.clone();
+            return *public;
         }
 
         // **A member follows the declaration that holds it.** `Scan` moves to the page that exposes it, so `Scan/lead` is written under that page too — the constructor namespace is the declaration's, not a module anyone re-exports on its own.
@@ -157,7 +157,7 @@ impl Reader<'_> {
 
         // A member of a declaration that never moved is already addressed under it, and a name outside every module this unit shows is nobody here's to rename.
         if !self.has_declarations(&declaring) {
-            return referent.clone();
+            return *referent;
         }
 
         panic!(
@@ -294,7 +294,7 @@ impl Reader<'_> {
     ) {
         let imports = self.imports_of(&qualifier);
         let mut page = ModuleDocumentation {
-            path: qualifier.clone(),
+            path: qualifier,
             prose,
             children: Vec::new(),
             declarations: Vec::new(),
@@ -308,7 +308,7 @@ impl Reader<'_> {
                 TopItem::Mod(declaration) => {
                     if declaration.vis_pub {
                         let child = qualifier.with(&declaration.label);
-                        page.children.push(child.clone());
+                        page.children.push(child);
                         children.push((child, lines(&declaration.doc), &declaration.module));
                     }
                 }
@@ -417,7 +417,7 @@ impl Reader<'_> {
         };
 
         declaration.name = label.to_string();
-        declaration.home = module.clone();
+        declaration.home = *module;
         declaration.source = source;
         declaration.chip = chip;
 
@@ -521,7 +521,7 @@ impl Reader<'_> {
                     });
                     out.push(Declaration {
                         name: member.label.to_string(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Definition,
                         signature: self.signature(home, imports, &binders, print_let_head(member)),
                         prose: lines(&member.doc),
@@ -547,7 +547,7 @@ impl Reader<'_> {
                     };
                     out.push(Declaration {
                         name: member.label.to_string(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Inductive,
                         signature: self.signature(
                             home,
@@ -584,7 +584,7 @@ impl Reader<'_> {
                     };
                     out.push(Declaration {
                         name: member.label.to_string(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Structure,
                         signature: self.signature(
                             home,
@@ -612,7 +612,7 @@ impl Reader<'_> {
                         .collect();
                     out.push(Declaration {
                         name: member.label.to_string(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Concept,
                         signature: self.signature(
                             home,
@@ -634,7 +634,7 @@ impl Reader<'_> {
                     let binders = sugar_binders(&member.params);
                     out.push(Declaration {
                         name: String::new(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Witness,
                         signature: self.signature(
                             home,
@@ -655,7 +655,7 @@ impl Reader<'_> {
                 if declaration.vis_pub {
                     out.push(Declaration {
                         name: declaration.label.to_string(),
-                        home: home.clone(),
+                        home: *home,
                         kind: Kind::Foreign,
                         signature: self.signature(
                             home,
@@ -682,7 +682,7 @@ impl Reader<'_> {
         if segments.len() < prefix || segments[..prefix] != self.prefix.segments()[..] {
             return false;
         }
-        let mut current = self.prefix.clone();
+        let mut current = *self.prefix;
         for segment in &segments[prefix..] {
             match self
                 .table
@@ -832,13 +832,13 @@ impl Reader<'_> {
         }
 
         if let Some(target) = imports.get(spelling) {
-            return Some(target.clone());
+            return Some(*target);
         }
         if binders.contains(segments[0]) {
             return None;
         }
 
-        let mut current = module.clone();
+        let mut current = *module;
         for segment in parents {
             current = visible_child(self.public, self.table, module, &current, segment)?;
         }
@@ -854,7 +854,7 @@ impl Reader<'_> {
             // A witness is anonymous, so it is placed by the module its identity names rather than by a qualifier it does not have; every other declaration is placed by the module its own name lies in.
             let declaring = match owner {
                 Global::Authored(owner) => owner.without_last(),
-                Global::Witness(id) => id.module().clone(),
+                Global::Witness(id) => *id.module(),
             };
             if declaring != *module {
                 continue;
@@ -866,7 +866,7 @@ impl Reader<'_> {
                 };
                 spellings
                     .entry(import.spelling.clone())
-                    .or_insert_with(|| target.clone());
+                    .or_insert_with(|| *target);
             }
         }
         spellings

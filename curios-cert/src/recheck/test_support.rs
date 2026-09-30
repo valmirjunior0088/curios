@@ -24,7 +24,7 @@ use {
 /// A top-level definition, as `recheck_module_verdicts` binds one.
 pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
     Item::Let(Definition {
-        name: name.clone(),
+        name: *name,
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
@@ -71,17 +71,14 @@ pub(super) fn equality_declaration() -> InductDecl {
         Atom::from("refl"),
         InductParam::new(
             Telescope::build(
-                [
-                    (carrier.clone(), type_1.clone()),
-                    (value.clone(), Term::free_var(&carrier)),
-                ],
+                [(carrier, type_1.clone()), (value, Term::free_var(&carrier))],
                 vec![Term::free_var(&value), Term::free_var(&value)],
             ),
             vec![Plicity::Implicit, Plicity::Explicit],
         ),
     )]);
     declaration.arity = Telescope::build(
-        [(carrier.clone(), type_1.clone())],
+        [(carrier, type_1.clone())],
         Telescope::build(
             [
                 (left, Term::free_var(&carrier)),
@@ -102,17 +99,15 @@ pub(super) fn forgery() -> Program {
     let box_name = Global::Authored(Qualifier::from(["Box"]));
     let equality_name = Global::Authored(Qualifier::from(["Eq"]));
 
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let box_type = Term::induct_type(box_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let box_type = Term::induct_type(box_name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let boxed =
-        |carried: Term| Term::variant(box_name.clone(), Vec::<Term>::new(), "mk", [carried]);
+    let boxed = |carried: Term| Term::variant(box_name, Vec::<Term>::new(), "mk", [carried]);
     let equality = |carrier: Term, left: Term, right: Term| {
-        Term::induct_type(equality_name.clone(), [carrier], [left, right])
+        Term::induct_type(equality_name, [carrier], [left, right])
     };
-    let reflexivity = |carrier: Term, value: Term| {
-        Term::variant(equality_name.clone(), [carrier], "refl", [value])
-    };
+    let reflexivity =
+        |carrier: Term, value: Term| Term::variant(equality_name, [carrier], "refl", [value]);
 
     // induct Box : Prop | mk(a : Type 0) end
     let payload = Free::local(10, Some("a"));
@@ -138,13 +133,13 @@ pub(super) fn forgery() -> Program {
             type_0.clone(),
         ),
         Term::func(
-            [(subject.clone(), box_type.clone())],
+            [(subject, box_type.clone())],
             Term::induct_match_scoped_marked(
                 Term::free_var(&subject),
                 Scope::close(Many(1), &[&scrutinee], type_0.clone()),
                 [(
                     "mk",
-                    vec![(Plicity::Explicit, opened.clone())],
+                    vec![(Plicity::Explicit, opened)],
                     Term::free_var(&opened),
                 )],
                 None,
@@ -160,10 +155,7 @@ pub(super) fn forgery() -> Program {
     let boxes_equal = authored(
         &boxes_equal_name,
         Term::func_type(
-            [
-                (this.clone(), type_0.clone()),
-                (that.clone(), type_0.clone()),
-            ],
+            [(this, type_0.clone()), (that, type_0.clone())],
             equality(
                 box_type.clone(),
                 boxed(Term::free_var(&this)),
@@ -171,10 +163,7 @@ pub(super) fn forgery() -> Program {
             ),
         ),
         Term::func(
-            [
-                (this.clone(), type_0.clone()),
-                (that.clone(), type_0.clone()),
-            ],
+            [(this, type_0.clone()), (that, type_0.clone())],
             reflexivity(box_type.clone(), boxed(Term::free_var(&this))),
         ),
     );
@@ -192,10 +181,7 @@ pub(super) fn forgery() -> Program {
     let types_equal = authored(
         &types_equal_name,
         Term::func_type(
-            [
-                (source.clone(), type_0.clone()),
-                (target.clone(), type_0.clone()),
-            ],
+            [(source, type_0.clone()), (target, type_0.clone())],
             equality(
                 type_0.clone(),
                 Term::free_var(&source),
@@ -203,10 +189,7 @@ pub(super) fn forgery() -> Program {
             ),
         ),
         Term::func(
-            [
-                (source.clone(), type_0.clone()),
-                (target.clone(), type_0.clone()),
-            ],
+            [(source, type_0.clone()), (target, type_0.clone())],
             Term::induct_match_scoped_marked(
                 Term::apply(
                     Term::free_var(&Free::from(&boxes_equal_name)),
@@ -223,7 +206,7 @@ pub(super) fn forgery() -> Program {
                 ),
                 [(
                     "refl",
-                    vec![(Plicity::Explicit, arm_value.clone())],
+                    vec![(Plicity::Explicit, arm_value)],
                     reflexivity(type_0.clone(), unboxed(Term::free_var(&arm_value))),
                 )],
                 None,
@@ -244,9 +227,9 @@ pub(super) fn forgery() -> Program {
     let coerced = Free::local(67, Some("w"));
     let identity = Free::local(68, Some("w"));
     let cast_params = [
-        (from.clone(), type_0.clone()),
-        (into.clone(), type_0.clone()),
-        (carried.clone(), Term::free_var(&from)),
+        (from, type_0.clone()),
+        (into, type_0.clone()),
+        (carried, Term::free_var(&from)),
     ];
     let cast = authored(
         &cast_name,
@@ -269,9 +252,9 @@ pub(super) fn forgery() -> Program {
                     ),
                     [(
                         "refl",
-                        vec![(Plicity::Explicit, cast_value.clone())],
+                        vec![(Plicity::Explicit, cast_value)],
                         Term::func(
-                            [(identity.clone(), Term::free_var(&cast_value))],
+                            [(identity, Term::free_var(&cast_value))],
                             Term::free_var(&identity),
                         ),
                     )],
@@ -329,7 +312,7 @@ pub(super) fn member() -> Free {
 /// `let bad : Absurd = <the member selection of `rec f : Absurd = body`>`, with `Absurd` an empty proposition.
 pub(super) fn selection_module(body: Term) -> Program {
     let name = Global::Authored(Qualifier::from(["Absurd"]));
-    let absurd = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let absurd = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let f = member();
 
     let group = RecGroup::new(vec![RecMemberScopes {
@@ -451,20 +434,15 @@ pub(super) fn level_registry(level: &Level) -> Module {
 /// A family indexed by the proposition `Held`, whose one constructor states its index either as a diverging `rec` or as `Held/qed()`.
 pub(super) fn indexed_by_proof(diverging: bool) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
     let witness = Free::local(900, Some("p"));
 
     let target = match diverging {
         true => Term::rec(
-            [(witness.clone(), held.clone(), Term::free_var(&witness))],
+            [(witness, held.clone(), Term::free_var(&witness))],
             Term::free_var(&witness),
         ),
-        false => Term::variant(
-            held_name.clone(),
-            Vec::<Term>::new(),
-            "qed",
-            Vec::<Term>::new(),
-        ),
+        false => Term::variant(held_name, Vec::<Term>::new(), "qed", Vec::<Term>::new()),
     };
 
     let family = Global::Authored(Qualifier::from(["Indexed"]));
@@ -508,7 +486,7 @@ pub(super) fn clashing_index_decls(
 ) -> (Global, Global, BTreeMap<Global, InductDecl>) {
     let two_name = Global::Authored(Qualifier::from(["Two"]));
     let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let two = Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let two = Term::induct_type(two_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let nullary = |tag: &str| {
         (
@@ -534,7 +512,7 @@ pub(super) fn clashing_index_decls(
             Atom::from("mk"),
             InductParam::new(
                 Telescope::done(vec![Term::variant(
-                    two_name.clone(),
+                    two_name,
                     Vec::<Term>::new(),
                     "a",
                     Vec::<Term>::new(),
@@ -549,8 +527,8 @@ pub(super) fn clashing_index_decls(
     };
 
     (
-        two_name.clone(),
-        held_name.clone(),
+        two_name,
+        held_name,
         BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
     )
 }
@@ -559,17 +537,17 @@ pub(super) fn clashing_index_decls(
 pub(super) fn aliased_sort_forgery() -> Program {
     let sort = Free::local(701, Some("s"));
     let aliased = Term::apply(
-        Term::func([(sort.clone(), Term::type_ground())], Term::free_var(&sort)),
+        Term::func([(sort, Term::type_ground())], Term::free_var(&sort)),
         [Term::prop()],
     );
 
     let (two_name, held_name, mut decls) = clashing_index_decls(aliased);
     let false_name = Global::Authored(Qualifier::from(["False"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
     decls.insert(false_name, proposition(Vec::new()));
 
     let at_b = Term::induct_type(
-        held_name.clone(),
+        held_name,
         Vec::<Term>::new(),
         [Term::variant(
             two_name,
@@ -627,7 +605,7 @@ pub(super) fn aliased_sort_forgery() -> Program {
 pub(super) fn relevant_index_control() -> Module {
     let (two_name, held_name, mut decls) = clashing_index_decls(Term::type_ground());
     let false_name = Global::Authored(Qualifier::from(["False"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
     decls.insert(false_name, proposition(Vec::new()));
 
     let at_b = Term::induct_type(
@@ -646,9 +624,9 @@ pub(super) fn relevant_index_control() -> Module {
     let subject = Free::local(710, Some("h"));
     let vacuous = authored(
         &vacuous_name,
-        Term::func_type([(subject.clone(), at_b.clone())], false_type.clone()),
+        Term::func_type([(subject, at_b.clone())], false_type.clone()),
         Term::func(
-            [(subject.clone(), at_b)],
+            [(subject, at_b)],
             Term::induct_match_scoped_marked(
                 Term::free_var(&subject),
                 Scope::close(
@@ -682,17 +660,10 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
     let two_name = Global::Authored(Qualifier::from(["Two"]));
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let false_name = Global::Authored(Qualifier::from(["False"]));
-    let two = Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let two = Term::induct_type(two_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let at = |tag: &str| {
-        Term::variant(
-            two_name.clone(),
-            Vec::<Term>::new(),
-            tag,
-            Vec::<Term>::new(),
-        )
-    };
+    let at = |tag: &str| Term::variant(two_name, Vec::<Term>::new(), tag, Vec::<Term>::new());
     let nullary = |tag: &str, targets: Vec<Term>| {
         (
             Atom::from(tag),
@@ -728,9 +699,9 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
     let subject = Free::local(801, Some("x"));
     let vacuous = authored(
         &vacuous_name,
-        Term::func_type([(subject.clone(), at_b.clone())], false_type.clone()),
+        Term::func_type([(subject, at_b.clone())], false_type.clone()),
         Term::func(
-            [(subject.clone(), at_b)],
+            [(subject, at_b)],
             Term::induct_match_scoped_marked(
                 Term::free_var(&subject),
                 Scope::close(
@@ -847,12 +818,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         island: Qualifier::default(),
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(0))),
-        body: Term::induct_type_at(
-            family.clone(),
-            levels,
-            Vec::<Term>::new(),
-            Vec::<Term>::new(),
-        ),
+        body: Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new()),
     };
 
     Module {
@@ -898,7 +864,7 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         mounts: Vec::new(),
         items: vec![Item::Let(definition)],
         universe_seeds: Vec::new(),
-        induct_decls: BTreeMap::from([(false_name.clone(), proposition(Vec::new()))]),
+        induct_decls: BTreeMap::from([(*false_name, proposition(Vec::new()))]),
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
@@ -926,7 +892,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
 
     // The type-former binding, whose body is the family's own normal form at the registry's width.
     let former = Definition {
-        name: family.clone(),
+        name: family,
         kind: DefinitionKind::InductiveType,
         universe_context: UniverseContext {
             parameter_count: definition,
@@ -936,7 +902,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         totality: Totality::Total,
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
-            family.clone(),
+            family,
             vec![Level::param(UniverseParam(0)); registry],
             Vec::<Term>::new(),
             Vec::<Term>::new(),
@@ -983,7 +949,7 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         polarities: Vec::new(),
     };
 
-    let at_zero = Term::induct_type(family.clone(), Vec::<Term>::new(), [zero.clone()]);
+    let at_zero = Term::induct_type(family, Vec::<Term>::new(), [zero.clone()]);
 
     let index = Free::local(601, Some("i"));
     let scrutinee = Free::local(602, Some("s"));
@@ -999,11 +965,11 @@ pub(super) fn lying_motive(sort: Term) -> Module {
     let extract = authored(
         &Global::Authored(Qualifier::from(["extract"])),
         Term::func_type(
-            [(subject.clone(), at_zero.clone())],
+            [(subject, at_zero.clone())],
             Term::intrinsic(Intrinsic::NatType),
         ),
         Term::func(
-            [(subject.clone(), at_zero)],
+            [(subject, at_zero)],
             Term::induct_match_scoped_marked(
                 Term::free_var(&subject),
                 Scope::close(Many(2), &[&index, &scrutinee], motive_body),
@@ -1048,11 +1014,10 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
     let equality = Global::Authored(Qualifier::from(["Eq"]));
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-    let equal =
-        |left: Term, right: Term| Term::induct_type(equality.clone(), [nat()], [left, right]);
+    let equal = |left: Term, right: Term| Term::induct_type(equality, [nat()], [left, right]);
     let refl = |value: Term| {
         Term::variant_at(
-            equality.clone(),
+            equality,
             Vec::new(),
             vec![nat()],
             Atom::from("refl"),
@@ -1087,9 +1052,9 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
 
     let all_zero = authored(
         &Global::Authored(Qualifier::from(["all_zero"])),
-        Term::func_type([(n.clone(), nat())], family),
+        Term::func_type([(n, nat())], family),
         Term::func(
-            [(n.clone(), nat())],
+            [(n, nat())],
             Term::nat_match_scoped(
                 Term::free_var(&n),
                 motive,
@@ -1168,7 +1133,7 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
     let held = authored(
         &Global::Authored(Qualifier::from(["held"])),
         Term::type_ground(),
-        Term::induct_type(family.clone(), params, indices),
+        Term::induct_type(family, params, indices),
     );
 
     Module {
@@ -1208,7 +1173,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
     let declaration = StructDecl {
         universe_context: UniverseContext::empty(),
         arity: Telescope::build(
-            [(a.clone(), Term::type_ground())],
+            [(a, Term::type_ground())],
             Telescope::build([(Free::local(981, Some("f")), Term::free_var(&a))], ()),
         ),
         result_sort: Term::type_ground(),
@@ -1218,7 +1183,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
     };
 
     let declared: Term = Subterm::StructType(StructType {
-        name: name.clone(),
+        name,
         universes: Vec::new(),
         params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
@@ -1228,7 +1193,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         &Global::Authored(Qualifier::from(["held"])),
         declared,
         Term::struct_(
-            name.clone(),
+            name,
             params,
             [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
         ),
@@ -1253,13 +1218,13 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
     let a = Free::local(970, Some("A"));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
-        arity: Telescope::build([(a.clone(), Term::type_ground())], Telescope::done(())),
+        arity: Telescope::build([(a, Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(
                 Telescope::build(
                     [
-                        (a.clone(), Term::type_ground()),
+                        (a, Term::type_ground()),
                         (Free::local(971, Some("x")), Term::free_var(&a)),
                     ],
                     Vec::new(),
@@ -1276,12 +1241,12 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
     let held = authored(
         &Global::Authored(Qualifier::from(["held"])),
         Term::induct_type(
-            family.clone(),
+            family,
             [Term::intrinsic(Intrinsic::NatType)],
             Vec::<Term>::new(),
         ),
         Term::variant(
-            family.clone(),
+            family,
             params,
             "mk",
             [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
@@ -1308,9 +1273,7 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let nat = Term::intrinsic(Intrinsic::NatType);
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
-    let two_binder = |result: Term| {
-        Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], result)
-    };
+    let two_binder = |result: Term| Telescope::build([(a, nat.clone()), (b, nat.clone())], result);
     let module_of = |items: Vec<Item>| Module {
         mounts: Vec::new(),
         items,
@@ -1391,7 +1354,7 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
     };
 
     let declared = Term::induct_match_scoped_marked(
-        Term::variant(family.clone(), Vec::<Term>::new(), "mk", [three.clone()]),
+        Term::variant(family, Vec::<Term>::new(), "mk", [three.clone()]),
         Scope::close(
             Many(1),
             &[&Free::local(998, Some("s"))],
@@ -1428,20 +1391,17 @@ pub(super) fn rec_apply_module() -> Module {
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
 
     let member_type: Term = Subterm::FuncType(FuncType::new(
-        Telescope::build(
-            [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
-            Term::type_ground(),
-        ),
+        Telescope::build([(a, nat.clone()), (b, nat.clone())], Term::type_ground()),
         plicities.clone(),
     ))
     .into();
     let member_body: Term = Subterm::Func(Func::new(
-        Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], nat),
+        Telescope::build([(a, nat.clone()), (b, nat.clone())], nat),
         plicities,
     ))
     .into();
 
-    let selection = Term::rec([(f.clone(), member_type, member_body)], Term::free_var(&f));
+    let selection = Term::rec([(f, member_type, member_body)], Term::free_var(&f));
 
     Module {
         mounts: Vec::new(),
@@ -1470,13 +1430,13 @@ pub(super) fn diverging_sink() -> Item {
         type_: Scope::close(
             Many(1),
             &[&f],
-            Term::func_type([(n.clone(), nat.clone())], nat.clone()),
+            Term::func_type([(n, nat.clone())], nat.clone()),
         ),
         body: Scope::close(
             Many(1),
             &[&f],
             Term::func(
-                [(n.clone(), nat.clone())],
+                [(n, nat.clone())],
                 Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
             ),
         ),
@@ -1499,7 +1459,7 @@ pub(super) fn reaching_definition(totality: Totality) -> Item {
         &Global::Authored(Qualifier::from(["reaches"])),
         Term::func_type([(Free::local(924, Some("m")), nat.clone())], nat.clone()),
         Term::func(
-            [(m.clone(), nat)],
+            [(m, nat)],
             Term::apply(Term::free_var(&sink), [Term::free_var(&m)]),
         ),
     );
@@ -1541,7 +1501,7 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
 /// `held : Vouched = ((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` — a proof whose free variables name `reaches` and nothing else, so its verdict is exactly the stamp's.
 pub(super) fn held_proof() -> Item {
     let (vouched_name, _) = vouched_declaration();
-    let vouched = Term::induct_type(vouched_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let g = Free::local(926, Some("g"));
     let nat = Term::intrinsic(Intrinsic::NatType);
 
@@ -1622,7 +1582,7 @@ pub(super) enum Carried {
 /// `induct Held : Prop | qed(u : Io({}))`, with `bad : Held` built from what `carried` names.
 pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let declaration = InductDecl {
         universe_context: UniverseContext::empty(),
@@ -1659,7 +1619,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
             let wait = Free::local(911, Some("wait"));
             Term::rec(
                 [(
-                    wait.clone(),
+                    wait,
                     Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),
                     Term::free_var(&wait),
                 )],
@@ -1669,7 +1629,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     };
 
     let mut induct_decls = BTreeMap::new();
-    induct_decls.insert(held_name.clone(), declaration);
+    induct_decls.insert(held_name, declaration);
 
     Module {
         mounts: Vec::new(),
@@ -1691,7 +1651,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
 /// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's plicity vector either honest or empty.
 pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let held = Term::induct_type(held_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let declaration = InductDecl {
         universe_context: UniverseContext::empty(),
@@ -1724,7 +1684,7 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         .collect::<Vec<_>>();
 
     let mut induct_decls = BTreeMap::new();
-    induct_decls.insert(held_name.clone(), declaration);
+    induct_decls.insert(held_name, declaration);
 
     Module {
         mounts: Vec::new(),
@@ -1775,27 +1735,16 @@ pub(super) fn index_forgery() -> Module {
     let equality_name = Global::Authored(Qualifier::from(["Eq"]));
     let held_name = Global::Authored(Qualifier::from(["Held"]));
 
-    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(
-        true_name.clone(),
-        Vec::<Term>::new(),
-        "qed",
-        Vec::<Term>::new(),
-    );
-    let held_at = |index: Term| Term::induct_type(held_name.clone(), Vec::<Term>::new(), [index]);
-    let yes = Term::variant(
-        held_name.clone(),
-        Vec::<Term>::new(),
-        "yes",
-        Vec::<Term>::new(),
-    );
+    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
+    let held_at = |index: Term| Term::induct_type(held_name, Vec::<Term>::new(), [index]);
+    let yes = Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new());
     let equality = |carrier: Term, left: Term, right: Term| {
-        Term::induct_type(equality_name.clone(), [carrier], [left, right])
+        Term::induct_type(equality_name, [carrier], [left, right])
     };
-    let reflexivity = |carrier: Term, value: Term| {
-        Term::variant(equality_name.clone(), [carrier], "refl", [value])
-    };
+    let reflexivity =
+        |carrier: Term, value: Term| Term::variant(equality_name, [carrier], "refl", [value]);
 
     // induct True : Prop | qed() end, and the empty induct False : Prop end
     let true_decl = proposition(vec![(
@@ -1832,7 +1781,7 @@ pub(super) fn index_forgery() -> Module {
     let identity = Free::local(85, Some("w"));
     let cast = authored(
         &cast_name,
-        Term::func_type([(carried.clone(), held_at(nat(0)))], held_at(nat(1))),
+        Term::func_type([(carried, held_at(nat(0)))], held_at(nat(1))),
         Term::induct_match_scoped_marked(
             Term::free_var(&Free::from(&forged_name)),
             Scope::close(
@@ -1845,9 +1794,9 @@ pub(super) fn index_forgery() -> Module {
             ),
             [(
                 "refl",
-                vec![(Plicity::Explicit, arm_value.clone())],
+                vec![(Plicity::Explicit, arm_value)],
                 Term::func(
-                    [(identity.clone(), held_at(Term::free_var(&arm_value)))],
+                    [(identity, held_at(Term::free_var(&arm_value)))],
                     Term::free_var(&identity),
                 ),
             )],
@@ -1943,32 +1892,26 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
         (
             "a function type's domain",
             probe_module(
-                Term::func(
-                    [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
-                    unit.clone(),
-                ),
-                Term::func_type(
-                    [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
-                    unit_type.clone(),
-                ),
+                Term::func([(b, boolean.clone()), (x, lie.clone())], unit.clone()),
+                Term::func_type([(b, boolean.clone()), (x, lie.clone())], unit_type.clone()),
             ),
         ),
         // probe : (b : Bool) -> <lie> = (b) => 0
         (
             "a function type's codomain",
             probe_module(
-                Term::func([(b.clone(), boolean.clone())], zero.clone()),
-                Term::func_type([(b.clone(), boolean.clone())], lie.clone()),
+                Term::func([(b, boolean.clone())], zero.clone()),
+                Term::func_type([(b, boolean.clone())], lie.clone()),
             ),
         ),
         // probe : (b : Bool) -> {<lie>} = (b) => (0)
         (
             "a tuple type's component",
             probe_module(
-                Term::func([(b.clone(), boolean.clone())], Term::tuple([zero.clone()])),
+                Term::func([(b, boolean.clone())], Term::tuple([zero.clone()])),
                 Term::func_type(
-                    [(b.clone(), boolean.clone())],
-                    Term::tuple_type(vec![(y.clone(), lie.clone())]),
+                    [(b, boolean.clone())],
+                    Term::tuple_type(vec![(y, lie.clone())]),
                 ),
             ),
         ),
@@ -1977,10 +1920,7 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
             "a lambda's domain annotation",
             probe_module(
                 Term::apply(
-                    Term::func(
-                        [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
-                        unit.clone(),
-                    ),
+                    Term::func([(b, boolean.clone()), (x, lie.clone())], unit.clone()),
                     [truth.clone(), zero.clone()],
                 ),
                 unit_type.clone(),
@@ -1991,10 +1931,10 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
             "a let binding's declared type",
             probe_module(
                 Term::func(
-                    [(b.clone(), boolean.clone())],
+                    [(b, boolean.clone())],
                     Term::let_(&y, lie.clone(), zero.clone(), unit.clone()),
                 ),
-                Term::func_type([(b.clone(), boolean.clone())], unit_type.clone()),
+                Term::func_type([(b, boolean.clone())], unit_type.clone()),
             ),
         ),
         // probe : (b : Bool) -> {} = (b) => (rec y : <lie> = 0; ())
@@ -2002,10 +1942,10 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
             "a rec member's declared type",
             probe_module(
                 Term::func(
-                    [(b.clone(), boolean.clone())],
-                    Term::rec([(y.clone(), lie.clone(), zero.clone())], unit.clone()),
+                    [(b, boolean.clone())],
+                    Term::rec([(y, lie.clone(), zero.clone())], unit.clone()),
                 ),
-                Term::func_type([(b.clone(), boolean)], unit_type),
+                Term::func_type([(b, boolean)], unit_type),
             ),
         ),
     ]
@@ -2038,7 +1978,7 @@ pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> Struc
 /// `Wrap(true)`, the instance at which the field type above reduces to its true arm.
 pub(super) fn wrap_at_true(wrap_name: &Global) -> Term {
     Subterm::StructType(StructType {
-        name: wrap_name.clone(),
+        name: *wrap_name,
         universes: Vec::new(),
         params: vec![Term::intrinsic(Intrinsic::Bool(true))],
     })
@@ -2050,11 +1990,7 @@ pub(super) fn wrapped_at_true(wrap_name: &Global, held: Term) -> Item {
     authored(
         &Global::Authored(Qualifier::from(["wrapped"])),
         wrap_at_true(wrap_name),
-        Term::struct_(
-            wrap_name.clone(),
-            [Term::intrinsic(Intrinsic::Bool(true))],
-            [held],
-        ),
+        Term::struct_(*wrap_name, [Term::intrinsic(Intrinsic::Bool(true))], [held]),
     )
 }
 
@@ -2069,22 +2005,12 @@ pub(super) fn computed_field_forgery() -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
 
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let held_at = |index: Term| Term::induct_type(held_name.clone(), Vec::<Term>::new(), [index]);
-    let yes = Term::variant(
-        held_name.clone(),
-        Vec::<Term>::new(),
-        "yes",
-        Vec::<Term>::new(),
-    );
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let held_at = |index: Term| Term::induct_type(held_name, Vec::<Term>::new(), [index]);
+    let yes = Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new());
     let wrap = wrap_at_true(&wrap_name);
-    let wrapping = |held: Term| {
-        Term::struct_(
-            wrap_name.clone(),
-            [Term::intrinsic(Intrinsic::Bool(true))],
-            [held],
-        )
-    };
+    let wrapping =
+        |held: Term| Term::struct_(wrap_name, [Term::intrinsic(Intrinsic::Bool(true))], [held]);
 
     let false_decl = proposition(Vec::new());
     let held_decl = indexed_family(
@@ -2099,11 +2025,11 @@ pub(super) fn computed_field_forgery() -> Module {
     let forged = authored(
         &forged_name,
         Term::induct_type(
-            equality_name.clone(),
+            equality_name,
             [wrap.clone()],
             [wrapping(nat(0)), wrapping(nat(1))],
         ),
-        Term::variant(equality_name.clone(), [wrap], "refl", [wrapping(nat(0))]),
+        Term::variant(equality_name, [wrap], "refl", [wrapping(nat(0))]),
     );
 
     // cast : (Held(0)) -> Held(1)
@@ -2117,7 +2043,7 @@ pub(super) fn computed_field_forgery() -> Module {
     let identity = Free::local(85, Some("w"));
     let cast = authored(
         &cast_name,
-        Term::func_type([(carried.clone(), held_at(nat(0)))], held_at(nat(1))),
+        Term::func_type([(carried, held_at(nat(0)))], held_at(nat(1))),
         Term::induct_match_scoped_marked(
             Term::free_var(&Free::from(&forged_name)),
             Scope::close(
@@ -2133,12 +2059,9 @@ pub(super) fn computed_field_forgery() -> Module {
             ),
             [(
                 "refl",
-                vec![(Plicity::Explicit, arm_value.clone())],
+                vec![(Plicity::Explicit, arm_value)],
                 Term::func(
-                    [(
-                        identity.clone(),
-                        held_at(Term::proj(Term::free_var(&arm_value), 0)),
-                    )],
+                    [(identity, held_at(Term::proj(Term::free_var(&arm_value), 0)))],
                     Term::free_var(&identity),
                 ),
             )],
@@ -2293,7 +2216,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     let q_name = Global::Authored(Qualifier::from(["Q"]));
     let f_name = Global::Authored(Qualifier::from(["f"]));
 
-    let e_type = Term::induct_type(e_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let e_type = Term::induct_type(e_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let e_decl = InductDecl {
         universe_context: UniverseContext::default(),
@@ -2335,19 +2258,13 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
 
-    let wrap_at = |level: Level| {
-        Term::variant(
-            e_name.clone(),
-            Vec::<Term>::new(),
-            "wrap",
-            [Term::type_at(level)],
-        )
-    };
+    let wrap_at =
+        |level: Level| Term::variant(e_name, Vec::<Term>::new(), "wrap", [Term::type_at(level)]);
 
     let x = Free::local(620, Some("x"));
     let s = Free::local(621, Some("s"));
     let f_item = Item::Let(Definition {
-        name: f_name.clone(),
+        name: f_name,
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
             parameter_count: 1,
@@ -2363,7 +2280,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
             e_type.clone(),
         ),
         body: Term::func(
-            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            [(x, Term::intrinsic(Intrinsic::NatType))],
             Term::switch_scoped(
                 Term::free_var(&x),
                 Scope::close(Many(1), &[&s], e_type.clone()),
@@ -2379,7 +2296,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
             [Term::free_var(arg)],
         )
     };
-    let q_at = |index: Term| Term::induct_type(q_name.clone(), Vec::<Term>::new(), [index]);
+    let q_at = |index: Term| Term::induct_type(q_name, Vec::<Term>::new(), [index]);
 
     let cx = Free::local(630, Some("x"));
     let cq = Free::local(631, Some("q"));
@@ -2391,11 +2308,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         Term::induct_match_scoped_marked(
             f_at(Level::zero(), &cx),
             Scope::close(Many(1), &[&cs], motive),
-            [(
-                "wrap",
-                vec![(Plicity::Explicit, ct.clone())],
-                Term::free_var(&cq),
-            )],
+            [("wrap", vec![(Plicity::Explicit, ct)], Term::free_var(&cq))],
             None,
         )
     };
@@ -2406,8 +2319,8 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     };
 
     let parameters = [
-        (cx.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (cq.clone(), q_at(f_at(Level::zero(), &cx))),
+        (cx, Term::intrinsic(Intrinsic::NatType)),
+        (cq, q_at(f_at(Level::zero(), &cx))),
     ];
     let coerce = authored(
         &Global::Authored(Qualifier::from(["coerce"])),

@@ -114,16 +114,16 @@ pub fn classify_module(
         match item {
             Item::Let(definition) => {
                 let partial = definition_is_locally_partial(context, definition, &mut memo);
-                local.insert(definition.name.clone(), partial);
-                mentions.insert(definition.name.clone(), definition.mentions());
+                local.insert(definition.name, partial);
+                mentions.insert(definition.name, definition.mentions());
             }
             Item::Rec(rec) => {
                 let rejected = group_totality(context, &rec.group) == Totality::Partial;
                 for definition in rec.definitions() {
                     let partial =
                         rejected || definition_is_locally_partial(context, &definition, &mut memo);
-                    local.insert(definition.name.clone(), partial);
-                    mentions.insert(definition.name.clone(), definition.mentions());
+                    local.insert(definition.name, partial);
+                    mentions.insert(definition.name, definition.mentions());
                 }
             }
         }
@@ -132,7 +132,7 @@ pub fn classify_module(
     let mut partial: BTreeSet<Global> = local
         .iter()
         .filter(|(_, value)| **value)
-        .map(|(name, _)| name.clone())
+        .map(|(name, _)| *name)
         .collect();
 
     // A name neither defined here nor inherited is treated as total. Every `Global` a zonked module mentions is defined either in it or in one of the units it was elaborated against, and `inherited` is flattened over all of them — so that case is unreachable rather than an approximation, whatever the scope holds.
@@ -152,7 +152,7 @@ pub fn classify_module(
                 continue;
             }
             if reaches_partial(&partial, reached) {
-                partial.insert(name.clone());
+                partial.insert(*name);
                 changed = true;
             }
         }
@@ -168,7 +168,7 @@ pub fn classify_module(
                 true => Totality::Partial,
                 false => Totality::Total,
             };
-            (name.clone(), totality)
+            (*name, totality)
         })
         .collect()
 }
@@ -207,11 +207,11 @@ pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
     for item in &module.items {
         match item {
             Item::Let(definition) => {
-                recorded.insert(definition.name.clone(), definition.totality);
+                recorded.insert(definition.name, definition.totality);
             }
             Item::Rec(rec) => {
                 for member in &rec.definitions {
-                    recorded.insert(member.name.clone(), member.totality);
+                    recorded.insert(member.name, member.totality);
                 }
             }
         }

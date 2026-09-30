@@ -148,7 +148,7 @@ pub fn positivity_vectors<E: Env>(
     let names = declarations.names();
     let mut split = BTreeMap::new();
     for name in &names {
-        split.insert(name.clone(), Split::of(env, declarations, name));
+        split.insert(*name, Split::of(env, declarations, name));
     }
 
     let (vectors, closed, exhausted) = fixpoint(env, &split, coverage);
@@ -299,7 +299,7 @@ fn fixpoint<E: Env>(
     let mut vectors = Vectors {
         computed: split
             .iter()
-            .map(|(name, entry)| (name.clone(), vec![Polarity::Unused; entry.params.len()]))
+            .map(|(name, entry)| (*name, vec![Polarity::Unused; entry.params.len()]))
             .collect(),
         coverage,
     };
@@ -313,7 +313,7 @@ fn fixpoint<E: Env>(
             if exhausted.is_none()
                 && let Some(error) = refused
             {
-                exhausted = Some((name.clone(), error));
+                exhausted = Some((*name, error));
             }
 
             let mut vector = vec![Polarity::Unused; entry.params.len()];
@@ -331,11 +331,11 @@ fn fixpoint<E: Env>(
             }
 
             if vectors.computed.get(name) != Some(&vector) {
-                vectors.computed.insert(name.clone(), vector);
+                vectors.computed.insert(*name, vector);
                 changed = true;
             }
             if direct.get(name) != Some(&edges) {
-                direct.insert(name.clone(), edges);
+                direct.insert(*name, edges);
                 changed = true;
             }
         }
@@ -363,9 +363,9 @@ fn close(direct: &Occurrences) -> Occurrences {
                 for (target, second) in onward {
                     let composed = first.compose(*second);
                     let slot = closed
-                        .entry(owner.clone())
+                        .entry(*owner)
                         .or_default()
-                        .entry(target.clone())
+                        .entry(*target)
                         .or_insert(Polarity::Unused);
                     let joined = slot.join(composed);
                     if *slot != joined {
@@ -422,7 +422,7 @@ fn refusal<E: Env>(
             let through = polarity.compose(back);
             if !through.accepting() {
                 return NotPositive {
-                    name: name.clone(),
+                    name: *name,
                     part: part.label.clone(),
                     type_: part.type_.clone(),
                     polarity: through,
@@ -433,7 +433,7 @@ fn refusal<E: Env>(
 
     // The parts were re-walked under the final vectors, so one of them always reproduces the offending path. Fall back to the declaration alone rather than panicking on a diagnostic.
     NotPositive {
-        name: name.clone(),
+        name: *name,
         part: "this declaration".to_string(),
         type_: Term::type_ground(),
         polarity: diagonal,
@@ -607,7 +607,7 @@ impl<E: Env> Walk<'_, E> {
     /// Walk the body of every definition `term` names, at `Mixed`. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
     fn definitions(&mut self, term: &Term) {
         for name in term.free_vars() {
-            if !self.unfolded.insert(name.clone()) {
+            if !self.unfolded.insert(name) {
                 continue;
             }
             let Some(body) = self.env.unfold(&name).cloned() else {
@@ -670,7 +670,7 @@ impl<E: Env> Walk<'_, E> {
                 indices,
                 ..
             }) => {
-                self.record(Target::Decl(name.clone()), polarity);
+                self.record(Target::Decl(*name), polarity);
                 self.arguments(name, params, polarity);
                 // Indices are not parameters: an inductive is not uniform in them, so nothing can be composed and they stay opaque. The corpus never recurses through one.
                 for index in indices {
@@ -679,7 +679,7 @@ impl<E: Env> Walk<'_, E> {
             }
 
             Subterm::StructType(StructType { name, params, .. }) => {
-                self.record(Target::Decl(name.clone()), polarity);
+                self.record(Target::Decl(*name), polarity);
                 self.arguments(name, params, polarity);
             }
 

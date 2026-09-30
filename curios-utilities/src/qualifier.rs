@@ -1,17 +1,22 @@
 //! `Qualifier` is a canonical, resolved identity: a sequence of module segments rooted at the module root. It is what the resolution tables key on, and what `curios-elab`'s `Structure`/`Context`/`Definition` use to track a binding's declaring/use-site module without re-deriving structure from a flattened string. Lives here (not `curios-elab`, where it originated) as a foundational value type with no dependency of its own on the rest of the core calculus — `curios-utilities` is the shared leaf every pipeline crate already depends on.
 //!
-//! The segments are shared behind an `Rc` with a pointer-identity fast path, and the archive reads them back through [`Interned`], one canonical allocation per distinct path; the measurements behind both, and why no structural hash is cached on top, are `README.md`'s. The restore half of the interning figure is retaken by `curios-prelude-archive`'s `stored_prelude_measurements`, which is where a figure for it belongs.
+//! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude-archive`'s `stored_prelude_measurements`, which is where a figure for it belongs.
 //!
 //! **What a segment may spell lives here too**, as [`is_identifier`] and [`is_keyword`], rather than inside the lexer: `curios-text` refuses a keyword when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one list below both keeps those two refusals the same refusal — `README.md`'s decision.
 
 #[cfg(test)]
 mod tests;
 
-use std::{
-    cmp::Ordering,
-    fmt,
-    hash::{Hash, Hasher},
-    rc::Rc,
+use {
+    super::{Table, intern},
+    std::{
+        cmp::Ordering,
+        collections::HashMap,
+        fmt,
+        hash::{Hash, Hasher},
+        ptr,
+        sync::{LazyLock, Mutex},
+    },
 };
 
 /// The characters an identifier may spell beyond the alphanumerics.
@@ -40,15 +45,21 @@ pub fn is_keyword(word: &str) -> bool {
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
 ///
-/// The segments are shared behind an `Rc`, so cloning a qualifier is a refcount bump rather than one allocation per segment. That matters because a qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone put the cost on the kernel's hottest structure. Sharing also gives equality and ordering a pointer-identity fast path, which fires whenever two occurrences came from the same resolution — the common case, since references resolve through one table entry.
-#[derive(Clone)]
+/// **A reference to the one allocation of its path**, interned once per process. A qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone put the cost on the kernel's hottest structure, and a shared `Rc` kept every term on one thread. Interning makes a copy a pointer copy and equality a pointer comparison — exact rather than a fast path, since two equal paths are one allocation.
+#[derive(Clone, Copy)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct Qualifier {
-    /// Archived as the bare segment sequence, exactly as `rkyv::with::Unshare` would write it: putting the `Rc` in the archive would drag rkyv's `Sharing`/`Pooling` bounds into every container that holds a qualifier, and the archived form stays what it has always been, so its derived comparisons agree with the live ones by construction.
-    ///
-    /// It is read back *interned* rather than unshared — see [`Interned`].
+    /// Archived as the bare segment sequence, exactly as it always was, so its derived comparisons agree with the live ones by construction; read back through the process table — see [`Interned`].
     #[archived_with(Interned)]
-    segments: Rc<Vec<String>>,
+    segments: &'static Vec<String>,
+}
+
+/// Every path this process has named. See the `interner` module for why nothing is freed.
+static PATHS: LazyLock<Table<[String], Vec<String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The one allocation of the path `segments` spells, copied into the table only when this process has not named the path before.
+fn interned(segments: &[String]) -> &'static Vec<String> {
+    intern(&PATHS, segments, || segments.to_vec(), Vec::as_slice)
 }
 
 /// The default qualifier is the root, which is a legitimate value.
@@ -61,29 +72,30 @@ impl Default for Qualifier {
 impl Qualifier {
     fn of(segments: Vec<String>) -> Self {
         Self {
-            segments: Rc::new(segments),
+            segments: interned(&segments),
         }
     }
 
-    fn segments_slice(&self) -> &[String] {
-        &self.segments
+    fn segments_slice(&self) -> &'static [String] {
+        self.segments.as_slice()
     }
 }
 
-/// Identity is the segment sequence. The pointer is only ever a way to reach that answer sooner, never a different answer: two qualifiers with equal segments are equal whether or not they share an allocation.
+/// Identity is the segment sequence, and interning makes the allocation answer for it: two qualifiers with equal segments are one allocation.
 impl PartialEq for Qualifier {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.segments, &other.segments) || self.segments == other.segments
+        ptr::eq(self.segments, other.segments)
     }
 }
 
 impl Eq for Qualifier {}
 
+/// Ordered by segments, never by address, so every ordered map and every sorted report comes out the same in every process; the shared allocation only answers equality sooner.
 impl Ord for Qualifier {
     fn cmp(&self, other: &Self) -> Ordering {
-        match Rc::ptr_eq(&self.segments, &other.segments) {
+        match ptr::eq(self.segments, other.segments) {
             true => Ordering::Equal,
-            false => self.segments.cmp(&other.segments),
+            false => self.segments.cmp(other.segments),
         }
     }
 }
@@ -94,7 +106,7 @@ impl PartialOrd for Qualifier {
     }
 }
 
-/// Hashes the segments, not the pointer: sharing is an optimization, so two equal qualifiers must hash alike whether or not they share an allocation.
+/// Hashes the segments, not the address, so a hash is the same in every process — a term's structural hash is taken over the qualifiers it names.
 impl Hash for Qualifier {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.segments.hash(state);
@@ -163,7 +175,7 @@ impl Qualifier {
     }
 
     /// The raw segment list.
-    pub fn segments(&self) -> &[String] {
+    pub fn segments(&self) -> &'static [String] {
         self.segments_slice()
     }
 
@@ -214,11 +226,9 @@ where
     }
 }
 
-/// Reads an archived qualifier back into the *shared* segment list every other occurrence of the same path already uses, instead of giving each occurrence its own allocation the way `rkyv::with::Unshare` does.
+/// Reads an archived qualifier back into the process table every other occurrence of the same path already uses, instead of giving each occurrence its own allocation.
 ///
-/// The archived bytes are identical either way — this wrapper resolves and serializes exactly as `Unshare` does, and differs only on the way in — so switching to it is not an archive format change.
-///
-/// It matters because the archive is where qualifiers are overwhelmingly *created*: the fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, so unsharing them allocates the same few paths tens of thousands of times over. Interning collapses that to one allocation per distinct path, and restores the pointer-identity fast path in [`Qualifier`]'s `PartialEq` and `Ord` for every restored name — which unsharing defeats by construction, since no two occurrences can ever share a pointer.
+/// The archived bytes are the bare segment sequence, as they always were, so the live representation changing is not an archive format change. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table is what keeps that a couple of thousand allocations.
 #[cfg(feature = "archive")]
 pub struct Interning;
 
@@ -227,43 +237,16 @@ pub struct Interning;
 pub type Interned = curios_archive::Via<Interning>;
 
 #[cfg(feature = "archive")]
-mod interned {
-    use {
-        super::Rc,
-        curios_archive::Proxy,
-        std::{borrow::Borrow, cell::RefCell, collections::HashSet},
-    };
+impl curios_archive::Proxy<&'static Vec<String>> for Interning {
+    type Archivable = Vec<String>;
 
-    thread_local! {
-        /// One canonical allocation per distinct path, per thread.
-        ///
-        /// Thread-local rather than global because `Rc` is not `Send`, and the restored prelude is already a thread-local value. It is only ever added to, which is bounded: the entries are the distinct module paths of whatever archives this thread reads, and the fixed prelude is read once.
-        static PATHS: RefCell<HashSet<Rc<Vec<String>>>> = RefCell::new(HashSet::new());
+    /// Borrowed, never cloned: the archived form is the `Vec` the table already holds, which is why the table holds a `Vec` rather than a slice.
+    fn to_archivable(path: &&'static Vec<String>) -> impl std::borrow::Borrow<Vec<String>> {
+        *path
     }
 
-    /// The shared allocation for `segments`, adopting it if this path is new.
-    fn intern(segments: Vec<String>) -> Rc<Vec<String>> {
-        PATHS.with_borrow_mut(|paths| match paths.get(&segments) {
-            Some(shared) => Rc::clone(shared),
-            None => {
-                let shared = Rc::new(segments);
-                paths.insert(Rc::clone(&shared));
-                shared
-            }
-        })
-    }
-
-    impl Proxy<Rc<Vec<String>>> for super::Interning {
-        type Archivable = Vec<String>;
-
-        /// Borrowed, never cloned: the archived form is the `Vec` already inside the `Rc`, so serializing one occurrence costs nothing beyond writing it.
-        fn to_archivable(path: &Rc<Vec<String>>) -> impl Borrow<Vec<String>> {
-            path.as_ref()
-        }
-
-        /// The interning happens here, on the way in — which is the direction that matters, since this is where a hundred thousand occurrences become a couple of thousand allocations.
-        fn from_archivable(segments: Vec<String>) -> Result<Rc<Vec<String>>, String> {
-            Ok(intern(segments))
-        }
+    /// The interning happens here, on the way in — which is the direction that matters, since this is where a hundred thousand occurrences become a couple of thousand allocations.
+    fn from_archivable(segments: Vec<String>) -> Result<&'static Vec<String>, String> {
+        Ok(interned(&segments))
     }
 }

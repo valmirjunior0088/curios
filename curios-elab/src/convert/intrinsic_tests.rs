@@ -349,7 +349,7 @@ fn one_operation_at_two_universe_instances_is_one_number() {
         Term::intrinsic(Intrinsic::bin_len(
             Grain::X,
             Term::instance(
-                InstanceHead::Var(Var::free(operand.clone())),
+                InstanceHead::Var(Var::free(*operand)),
                 vec![Level::constant(level)],
             ),
         ))

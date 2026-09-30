@@ -64,5 +64,5 @@ pub(super) fn dependent_pair_type() -> Term {
     let t = binder(40, "t");
     let x = binder(41, "x");
 
-    Term::tuple_type([(t.clone(), Term::type_ground()), (x, Term::free_var(&t))])
+    Term::tuple_type([(t, Term::type_ground()), (x, Term::free_var(&t))])
 }

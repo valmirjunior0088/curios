@@ -175,7 +175,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
         let k = self.context.fresh_binder(None);
         let call = curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(k.clone())),
+            curios_core::Term::var(curios_core::Var::free(k)),
             Vec::<curios_core::Term>::new(),
         );
         let matrix = MatchCompiler::with_default(self.lowerer, Some(call))
@@ -419,14 +419,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     match pattern {
                         MatchPattern::Binder(name) => {
                             let bound = self.pattern_binder(name);
-                            binder_names.push((*plicity, bound.1.clone()));
+                            binder_names.push((*plicity, bound.1));
                             direct_names.push(bound);
                         }
                         other => {
                             let synthetic = self.context.fresh_binder(None);
-                            sub_columns.push(curios_core::Term::var(curios_core::Var::free(
-                                synthetic.clone(),
-                            )));
+                            sub_columns
+                                .push(curios_core::Term::var(curios_core::Var::free(synthetic)));
                             sub_patterns.push(other);
                             binder_names.push((*plicity, synthetic));
                         }
@@ -457,7 +456,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .collect::<Vec<_>>();
             let mut sub_columns = synthetic
                 .iter()
-                .map(|name| curios_core::Term::var(curios_core::Var::free(name.clone())))
+                .map(|name| curios_core::Term::var(curios_core::Var::free(*name)))
                 .collect::<Vec<_>>();
             sub_columns.extend(rest.clone());
 
@@ -625,7 +624,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(pred_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&pred_name),
-                        curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(pred_synth)),
                     ));
                     self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
@@ -722,11 +721,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(head_name, tail_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
-                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(head_synth)),
                     ));
                     row.binds.push((
                         self.pattern_binder(&tail_name),
-                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(tail_synth)),
                     ));
                     self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
@@ -841,11 +840,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 .map(|(head_name, tail_name, ih, mut row)| {
                     row.binds.push((
                         self.pattern_binder(&head_name),
-                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(head_synth)),
                     ));
                     row.binds.push((
                         self.pattern_binder(&tail_name),
-                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
+                        curios_core::Term::var(curios_core::Var::free(tail_synth)),
                     ));
                     self.push_shared_ih_binds(&mut row, &ih, &ih_synth);
                     row
@@ -946,7 +945,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             None | Some(Pattern::Binder(None)) => {}
             Some(Pattern::Binder(Some(name))) => row.binds.push((
                 self.pattern_binder(name),
-                curios_core::Term::var(curios_core::Var::free(shared.clone())),
+                curios_core::Term::var(curios_core::Var::free(*shared)),
             )),
             Some(pattern) => self.push_ih_pattern_binds(row, pattern, shared),
         }
@@ -959,7 +958,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         pattern: &Pattern,
         ih: &curios_core::Free,
     ) {
-        let base = curios_core::Term::var(curios_core::Var::free(ih.clone()));
+        let base = curios_core::Term::var(curios_core::Var::free(*ih));
         match pattern {
             Pattern::Binder(Some(name)) => row.binds.push((self.pattern_binder(name), base)),
             Pattern::Binder(None) => {}

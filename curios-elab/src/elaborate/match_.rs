@@ -92,7 +92,7 @@ fn refuse_captured_scrutinee(
         match &**term {
             Subterm::Var(var) => {
                 if let Some(name) = var.as_free() {
-                    out.insert(name.clone());
+                    out.insert(*name);
                 }
             }
             Subterm::Metavar(_) => {}
@@ -112,7 +112,7 @@ fn refuse_captured_scrutinee(
         let mut names = BTreeSet::new();
         frees(term, &mut names);
         names.iter().any(|name| {
-            seen.insert(name.clone())
+            seen.insert(*name)
                 && context
                     .var_reduct(name)
                     .is_some_and(|reduct| captures(context, reduct, head, seen))
@@ -828,12 +828,7 @@ fn elaborate_induct_match(
             universes,
             params,
             indices,
-        }) => (
-            name.clone(),
-            universes.clone(),
-            params.clone(),
-            indices.clone(),
-        ),
+        }) => (*name, universes.clone(), params.clone(), indices.clone()),
         other => return Err(Error::not_a_induct_type(other.clone())),
     };
 
@@ -988,7 +983,7 @@ fn elaborate_induct_match(
 
         // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
         let ctor_val = Term::variant_at(
-            name.clone(),
+            name,
             universes.clone(),
             params.clone(),
             tag.clone(),

@@ -22,7 +22,7 @@ use {
 ///
 /// `value` is taken as given: a caller holding index solutions substitutes them into it first, since a case value built from the payload may mention a binder they pinned.
 pub fn scrutinee_solution<E: Env>(env: &E, scrutinee: &Term, value: &Term) -> Option<(Free, Term)> {
-    beneath(env, scrutinee).map(|name| (name.clone(), value.clone()))
+    beneath(env, scrutinee).map(|name| (*name, value.clone()))
 }
 
 /// The locals one case re-types, each at its specialized type: every local whose type mentions a solved variable, reading through local definitions, at that type with those definitions inlined and `solutions` substituted.
@@ -47,7 +47,7 @@ pub fn retyped<E: Env>(
         .filter(|(name, _)| !solutions.iter().any(|(solved, _)| solved == name))
         .filter_map(|(name, type_)| {
             let unfolded = unfolding.term(type_);
-            solved(&unfolded).then(|| (name.clone(), unfolded.substitute(solutions)))
+            solved(&unfolded).then(|| (*name, unfolded.substitute(solutions)))
         })
         .collect()
 }

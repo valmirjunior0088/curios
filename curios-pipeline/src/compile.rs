@@ -265,12 +265,7 @@ pub fn typecheck_measured(
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(spellings.imports.clone());
-    context.set_broken(
-        broken
-            .iter()
-            .filter_map(|item| item.declares.clone())
-            .collect(),
-    );
+    context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let FinalizedProgram {
         module,
         entry,
@@ -359,7 +354,7 @@ fn scheduled_tests(
             });
 
             curios_elab::ScheduledTest {
-                name: test.clone(),
+                name: *test,
                 span: lambda.and_then(|func| func.telescope.terminal().span()),
             }
         })
@@ -475,12 +470,7 @@ where
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(spellings.imports.clone());
-    context.set_broken(
-        broken
-            .iter()
-            .filter_map(|item| item.declares.clone())
-            .collect(),
-    );
+    context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let (module, entry) = with_broken(
         &broken,
         elaborate_and_zonk_program(

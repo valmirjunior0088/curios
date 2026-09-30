@@ -1100,7 +1100,7 @@ impl MotiveShape<'_> {
                     cursor.advance(Term::free_var(binder));
                 }
                 Term::induct_type_at(
-                    (*name).clone(),
+                    *(*name),
                     universes.to_vec(),
                     params.to_vec(),
                     cursor.into_args(),
@@ -1129,12 +1129,7 @@ impl MotiveShape<'_> {
                     binders.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
                 }
                 let index_vars = cursor.into_args();
-                Term::induct_type_at(
-                    (*name).clone(),
-                    universes.to_vec(),
-                    params.to_vec(),
-                    index_vars,
-                )
+                Term::induct_type_at(*(*name), universes.to_vec(), params.to_vec(), index_vars)
             }
         };
 

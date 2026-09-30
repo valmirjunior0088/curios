@@ -129,7 +129,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             kernel
                 .type_of(var.unwrap())?
                 .cloned()
-                .ok_or_else(|| KernelError::Unbound(var.unwrap().clone()))
+                .ok_or_else(|| KernelError::Unbound(*var.unwrap()))
         }
 
         // A type former is a type, at the universe its parts join to — computed by the judgment role, which types those parts, rather than by the lookup, which only classifies them.
@@ -284,7 +284,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             check_along(kernel, at.parameters(), params)?;
             let signature = at
                 .signature(tag)
-                .ok_or_else(|| KernelError::Undeclared(name.clone()))?;
+                .ok_or_else(|| KernelError::Undeclared(*name))?;
 
             if signature.len() != payload.len() {
                 return Err(KernelError::Arity {
@@ -297,7 +297,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             // The constructed type, rebuilt from what the terminal states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
             let targets = check_along(kernel, signature, payload)?;
             Ok(Subterm::InductType(InductType {
-                name: name.clone(),
+                name: *name,
                 universes: universes.clone(),
                 params: params.clone(),
                 indices: targets,
@@ -328,7 +328,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             check_along(kernel, telescope, fields)?;
 
             Ok(Subterm::StructType(StructType {
-                name: name.clone(),
+                name: *name,
                 universes: universes.clone(),
                 params: params.clone(),
             })
@@ -473,7 +473,7 @@ fn check_motive(
                 }
 
                 let at_binders = Term::induct_type_at(
-                    family.name.clone(),
+                    family.name,
                     family.universes.clone(),
                     family.params.clone(),
                     opened.clone(),
@@ -595,7 +595,7 @@ fn check_cases(
                     && let Some(binder) = var.as_free()
                     && cases.iter().any(|(key, _)| key.is_zero())
                 {
-                    kernel.assume_nonzero(binder.clone());
+                    kernel.assume_nonzero(*binder);
                 }
 
                 check(kernel, default, &expected)

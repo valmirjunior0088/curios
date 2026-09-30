@@ -128,7 +128,7 @@ pub(super) fn insert_implicits_on_check(
 
     let ift = ift.clone();
     let func_label = match &**term {
-        Subterm::Var(var) => CalleeId::Function(var.unwrap().clone()),
+        Subterm::Var(var) => CalleeId::Function(*var.unwrap()),
         _ => CalleeId::Anonymous,
     };
 

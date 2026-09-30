@@ -105,7 +105,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
     ] {
         let mut kernel = kernel();
         let family = declare(&mut kernel, "Forced", sort);
-        let family_type = Term::induct_type(family.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+        let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
         let binder = Free::local(900, Some("p"));
         let opaque_function = Free::local(901, Some("g"));
         let argument = Free::local(902, Some("x"));
@@ -113,15 +113,11 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
         kernel.assume(&binder, &family_type);
         kernel.assume(
             &opaque_function,
-            &Term::func_type(
-                [(argument.clone(), family_type.clone())],
-                family_type.clone(),
-            ),
+            &Term::func_type([(argument, family_type.clone())], family_type.clone()),
         );
 
         let inhabitant = |tag| {
-            let constructed =
-                Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+            let constructed = Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new());
             match opaque {
                 true => Term::apply(Term::free_var(&opaque_function), [constructed]),
                 false => constructed,
@@ -182,8 +178,7 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
 
         // Deliberately not assumed: this is the whole of the fixture.
 
-        let inhabitant =
-            |tag| Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+        let inhabitant = |tag| Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new());
         let target = Term::free_var(&binder);
 
         let outcome = invert_indices(
@@ -215,7 +210,7 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
 #[test]
 fn a_family_the_registry_cannot_answer_for_does_not_clash() {
     let inhabitant = |family: &Global, tag: &str| {
-        Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new())
+        Term::variant(*family, Vec::<Term>::new(), tag, Vec::<Term>::new())
     };
 
     // The subject: the family was never declared, so the sort read is blind.
@@ -286,19 +281,19 @@ fn a_negative_self_occurrence_is_refused() {
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
-        false_name.clone(),
+        false_name,
         InductDecl {
             constructors: Vec::new(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
     inducts.insert(
-        bad_name.clone(),
+        bad_name,
         single_payload(
             Term::func_type([(Free::local(1, Some("x")), bad_type)], false_type),
             Term::type_ground(),
@@ -328,8 +323,8 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let alias = Free::local(1, Some("D"));
     kernel.define(
@@ -341,14 +336,14 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
-        false_name.clone(),
+        false_name,
         InductDecl {
             constructors: Vec::new(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
     inducts.insert(
-        bad_name.clone(),
+        bad_name,
         single_payload(Term::free_var(&alias), Term::type_ground()),
     );
     for (name, entry) in &inducts {
@@ -382,13 +377,13 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
         kernel.define(
             &alias,
             &Term::type_ground(),
-            &Term::induct_type(good_name.clone(), Vec::<Term>::new(), Vec::<Term>::new()),
+            &Term::induct_type(good_name, Vec::<Term>::new(), Vec::<Term>::new()),
             &UniverseContext::default(),
         );
 
         let mut inducts = BTreeMap::new();
         inducts.insert(
-            good_name.clone(),
+            good_name,
             single_payload(Term::free_var(&alias), Term::type_ground()),
         );
         for (name, entry) in &inducts {
@@ -419,9 +414,9 @@ fn a_strict_self_occurrence_is_admitted() {
     let mut kernel = kernel();
 
     let name = Global::Authored(Qualifier::from(["Chain"]));
-    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let mut inducts = BTreeMap::new();
-    inducts.insert(name.clone(), single_payload(self_type, Term::type_ground()));
+    inducts.insert(name, single_payload(self_type, Term::type_ground()));
     for (entry_name, entry) in &inducts {
         kernel.declare_induct(entry_name, entry);
     }
@@ -444,8 +439,8 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let rec = Term::rec(
         vec![(
-            f.clone(),
-            Term::func_type([(n.clone(), nat())], nat()),
+            f,
+            Term::func_type([(n, nat())], nat()),
             Term::func(
                 [(n, nat())],
                 Term::apply(
@@ -946,19 +941,19 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
-    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
-        false_name.clone(),
+        false_name,
         InductDecl {
             constructors: Vec::new(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
     inducts.insert(
-        bad_name.clone(),
+        bad_name,
         InductDecl {
             // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
             polarities: vec![Polarity::Strict],
@@ -995,7 +990,7 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
 
     let wrapper_name = Global::Authored(Qualifier::from(["Wrapper"]));
     let outer_name = Global::Authored(Qualifier::from(["Outer"]));
-    let outer_type = Term::induct_type(outer_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let outer_type = Term::induct_type(outer_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     // Registered, never analyzed: the lie rides on `polarities` and only a registry lookup can read it.
     kernel.declare_induct(
@@ -1013,7 +1008,7 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
-        outer_name.clone(),
+        outer_name,
         single_payload(
             Term::induct_type(wrapper_name, [outer_type], Vec::<Term>::new()),
             Term::type_ground(),
@@ -1058,10 +1053,10 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
 
     let rec = Term::rec(
         vec![(
-            count.clone(),
-            Term::func_type([(n.clone(), nat())], Term::type_ground()),
+            count,
+            Term::func_type([(n, nat())], Term::type_ground()),
             Term::func(
-                [(n.clone(), nat())],
+                [(n, nat())],
                 Term::tuple_type([
                     (Free::local(3, None), nat()),
                     (
@@ -1083,7 +1078,7 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
         [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
     );
     let mut inducts = BTreeMap::new();
-    inducts.insert(name.clone(), single_payload(payload, Term::type_ground()));
+    inducts.insert(name, single_payload(payload, Term::type_ground()));
     for (entry_name, entry) in &inducts {
         kernel.declare_induct(entry_name, entry);
     }
@@ -1103,7 +1098,7 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let mut kernel = kernel();
 
     let name = Global::Authored(Qualifier::from(["T"]));
-    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let function = || Term::func_type([(Free::local(1, Some("n")), nat())], self_type.clone());
@@ -1116,19 +1111,15 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
 
     let descending = Term::rec(
         vec![(
-            f.clone(),
-            Term::func_type([(a.clone(), self_type.clone())], nat()),
+            f,
+            Term::func_type([(a, self_type.clone())], nat()),
             Term::func(
-                [(a.clone(), self_type.clone())],
+                [(a, self_type.clone())],
                 Term::induct_match(
                     Term::free_var(&a),
                     None,
                     nat(),
-                    [(
-                        "c",
-                        vec![g.clone()],
-                        Term::apply(Term::free_var(&f), [applied()]),
-                    )],
+                    [("c", vec![g], Term::apply(Term::free_var(&f), [applied()]))],
                 ),
             ),
         )],
@@ -1141,13 +1132,10 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
 
     let control = Term::rec(
         vec![(
-            f.clone(),
-            Term::func_type(
-                [(a.clone(), self_type.clone()), (g.clone(), function())],
-                nat(),
-            ),
+            f,
+            Term::func_type([(a, self_type.clone()), (g, function())], nat()),
             Term::func(
-                [(a.clone(), self_type.clone()), (g.clone(), function())],
+                [(a, self_type.clone()), (g, function())],
                 Term::apply(Term::free_var(&f), [applied(), Term::free_var(&g)]),
             ),
         )],
@@ -1165,7 +1153,7 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     let mut kernel = kernel();
 
     let name = Global::Authored(Qualifier::from(["T"]));
-    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
     kernel.declare_induct(
         &name,
@@ -1181,32 +1169,18 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     let group_over = |argument: Term| {
         let redex = Term::apply(
             Term::func(
-                [(h.clone(), self_type.clone())],
+                [(h, self_type.clone())],
                 Term::apply(Term::free_var(&f), [Term::free_var(&h), Term::free_var(&b)]),
             ),
             [argument],
         );
         Term::rec(
             vec![(
-                f.clone(),
-                Term::func_type(
-                    [
-                        (a.clone(), self_type.clone()),
-                        (b.clone(), self_type.clone()),
-                    ],
-                    nat(),
-                ),
+                f,
+                Term::func_type([(a, self_type.clone()), (b, self_type.clone())], nat()),
                 Term::func(
-                    [
-                        (a.clone(), self_type.clone()),
-                        (b.clone(), self_type.clone()),
-                    ],
-                    Term::induct_match(
-                        Term::free_var(&a),
-                        None,
-                        nat(),
-                        [("c", vec![t.clone()], redex)],
-                    ),
+                    [(a, self_type.clone()), (b, self_type.clone())],
+                    Term::induct_match(Term::free_var(&a), None, nat(), [("c", vec![t], redex)]),
                 ),
             )],
             Term::free_var(&f),
@@ -1232,7 +1206,7 @@ fn a_let_alias_of_the_arm_payload_descends() {
     let mut kernel = kernel();
 
     let name = Global::Authored(Qualifier::from(["T"]));
-    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
     kernel.declare_induct(
         &name,
@@ -1254,25 +1228,11 @@ fn a_let_alias_of_the_arm_payload_descends() {
         );
         Term::rec(
             vec![(
-                f.clone(),
-                Term::func_type(
-                    [
-                        (a.clone(), self_type.clone()),
-                        (b.clone(), self_type.clone()),
-                    ],
-                    nat(),
-                ),
+                f,
+                Term::func_type([(a, self_type.clone()), (b, self_type.clone())], nat()),
                 Term::func(
-                    [
-                        (a.clone(), self_type.clone()),
-                        (b.clone(), self_type.clone()),
-                    ],
-                    Term::induct_match(
-                        Term::free_var(&a),
-                        None,
-                        nat(),
-                        [("c", vec![t.clone()], arm)],
-                    ),
+                    [(a, self_type.clone()), (b, self_type.clone())],
+                    Term::induct_match(Term::free_var(&a), None, nat(), [("c", vec![t], arm)]),
                 ),
             )],
             Term::free_var(&f),
@@ -1315,7 +1275,7 @@ fn the_outer_direction_solves_a_variable_inside_an_index() {
         };
 
         match local {
-            true => assert_eq!(solutions, vec![(n.clone(), nat(0))], "{label}"),
+            true => assert_eq!(solutions, vec![(n, nat(0))], "{label}"),
             false => assert!(solutions.is_empty(), "{label}: {solutions:?}"),
         }
     }

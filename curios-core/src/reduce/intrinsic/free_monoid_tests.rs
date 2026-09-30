@@ -296,7 +296,7 @@ fn a_map_by_a_function_whose_body_reduces_to_its_binder_is_the_list() {
             nat_type(),
             nat_type(),
             xs.clone(),
-            Term::func([(binder.clone(), nat_type())], body),
+            Term::func([(binder, nat_type())], body),
         ))
     };
     let is_map = |term: &Term| matches!(&**term, Subterm::Intrinsic(Intrinsic::ListMap { .. }));

@@ -1333,7 +1333,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                     nat_type(),
                     xs.clone(),
                     Term::func(
-                        [(binder.clone(), nat_type())],
+                        [(binder, nat_type())],
                         plus(Term::free_var(&binder), lit(0)),
                     ),
                 ))

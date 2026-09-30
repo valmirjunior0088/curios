@@ -64,13 +64,13 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         type_: Scope::close(
             Many(1),
             &[&f],
-            Term::func_type([(n.clone(), nat.clone())], nat.clone()),
+            Term::func_type([(n, nat.clone())], nat.clone()),
         ),
         body: Scope::close(
             Many(1),
             &[&f],
             Term::func(
-                [(n.clone(), nat.clone())],
+                [(n, nat.clone())],
                 Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
             ),
         ),

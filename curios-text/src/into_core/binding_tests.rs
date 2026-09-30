@@ -177,9 +177,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
         .items
         .iter()
         .filter_map(|item| match item {
-            curios_core::Item::Let(def) => {
-                Some((def.name.clone(), def.kind.clone(), def.type_.clone()))
-            }
+            curios_core::Item::Let(def) => Some((def.name, def.kind.clone(), def.type_.clone())),
             curios_core::Item::Rec(_) => None,
         })
         .collect();

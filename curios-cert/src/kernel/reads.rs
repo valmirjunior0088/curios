@@ -20,7 +20,7 @@ impl ReadRecorder {
         let mut reads = self.reads.borrow_mut();
         // Looked up before it is cloned: the same few names are read over and over within one judgment.
         if !reads.signatures.contains(name) {
-            reads.signatures.insert(name.clone());
+            reads.signatures.insert(*name);
         }
     }
 
@@ -28,7 +28,7 @@ impl ReadRecorder {
     pub(super) fn body(&self, name: &Global) {
         let mut reads = self.reads.borrow_mut();
         if !reads.bodies.contains(name) {
-            reads.bodies.insert(name.clone());
+            reads.bodies.insert(*name);
         }
     }
 

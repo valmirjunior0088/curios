@@ -177,7 +177,7 @@ fn reports_a_solved_goal() {
 
     // A written goal `?` errors even when solved — the report carries the frozen scope, the goal's type, and the committed solution.
     let x = context.fresh(Some("x"));
-    context.birth_metavar(MetavarId(0), vec![(x.clone(), nat())], nat());
+    context.birth_metavar(MetavarId(0), vec![(x, nat())], nat());
     context.solve_metavar(MetavarId(0), nat_lit(7));
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();

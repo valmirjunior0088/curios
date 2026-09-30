@@ -17,16 +17,12 @@ fn a_non_productive_recursion_exhausts_the_budget() {
     let n = binder(1, "n");
 
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::apply(Term::free_var(&loop_), [Term::free_var(&n)]),
     );
 
     let term = Term::rec(
-        [(
-            loop_.clone(),
-            Term::func_type([(n.clone(), nat_type())], nat_type()),
-            body,
-        )],
+        [(loop_, Term::func_type([(n, nat_type())], nat_type()), body)],
         Term::apply(Term::free_var(&loop_), [nat(1)]),
     );
 

@@ -7,7 +7,7 @@ use {
 fn definition(name: &str, universe_context: UniverseContext) -> Definition {
     let global = Global::Authored(Qualifier::from([name]));
     Definition {
-        name: global.clone(),
+        name: global,
         kind: DefinitionKind::Authored,
         universe_context,
         island: Qualifier::empty(),
@@ -152,7 +152,7 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
     let mut module = stored(Term::intrinsic(crate::Intrinsic::NatType));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
     let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs", "Shape"]), 0));
-    module.witnesses.insert(witness.clone());
+    module.witnesses.insert(witness);
 
     assert_eq!(
         validate_stored_identities(&module),

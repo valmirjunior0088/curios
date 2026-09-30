@@ -89,7 +89,7 @@ impl<'a> Bundle<'a> {
             let page = bundle.page_path(&module.path);
             bundle
                 .addresses
-                .entry(module.path.clone())
+                .entry(module.path)
                 .or_insert((page.clone(), None));
             for declaration in &module.declarations {
                 if declaration.name.is_empty() {

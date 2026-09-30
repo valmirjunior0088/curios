@@ -179,7 +179,7 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
     let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
 
     let body = Term::func(
-        [(acc.clone(), nat_type()), (b.clone(), bin_type())],
+        [(acc, nat_type()), (b, bin_type())],
         Term::bin_match_scoped(
             Grain::X,
             Term::free_var(&b),
@@ -200,11 +200,8 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
 
     Term::rec(
         [(
-            go.clone(),
-            Term::func_type(
-                [(acc.clone(), nat_type()), (b.clone(), bin_type())],
-                nat_type(),
-            ),
+            go,
+            Term::func_type([(acc, nat_type()), (b, bin_type())], nat_type()),
             body,
         )],
         Term::apply(Term::free_var(&go), [nat(0), bytes(data)]),
@@ -219,7 +216,7 @@ fn whnf_keeps_a_recursive_application_folded() {
     let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
 
     let body = Term::func(
-        [(b.clone(), bin_type())],
+        [(b, bin_type())],
         Term::bin_match_scoped(
             Grain::X,
             Term::free_var(&b),
@@ -231,11 +228,7 @@ fn whnf_keeps_a_recursive_application_folded() {
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
-    let group = [(
-        go.clone(),
-        Term::func_type([(b.clone(), bin_type())], nat_type()),
-        body,
-    )];
+    let group = [(go, Term::func_type([(b, bin_type())], nat_type()), body)];
 
     let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
         group.clone(),
@@ -275,7 +268,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
     let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
 
     let body = Term::func(
-        [(b.clone(), bin_type())],
+        [(b, bin_type())],
         Term::bin_match_scoped(
             Grain::X,
             Term::free_var(&b),
@@ -287,11 +280,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
-    let group = [(
-        go.clone(),
-        Term::func_type([(b.clone(), bin_type())], nat_type()),
-        body,
-    )];
+    let group = [(go, Term::func_type([(b, bin_type())], nat_type()), body)];
 
     let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
         group,
@@ -321,10 +310,9 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
 
     // The control, on the branch the fix touches rather than on a call that reaches the member through an application: a *bare* selection is the folded spelling at a plain demand and the member's value at a forced one. Answering a projection from its shape at every demand shuts the hole above and fails the second of these.
     let v = binder(7, "v");
-    let Subterm::Rec(value_rec) = Term::unwrap_or_clone(Term::rec(
-        [(v.clone(), nat_type(), nat(5))],
-        Term::free_var(&v),
-    )) else {
+    let Subterm::Rec(value_rec) =
+        Term::unwrap_or_clone(Term::rec([(v, nat_type(), nat(5))], Term::free_var(&v)))
+    else {
         unreachable!("built as a rec")
     };
     let selection = unfold_rec(value_rec);
@@ -350,10 +338,7 @@ fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {
     let (x, y) = (binder(0, "x"), binder(1, "y"));
 
     let first = Term::apply(
-        Term::func(
-            [(x.clone(), nat_type()), (y.clone(), nat_type())],
-            Term::free_var(&x),
-        ),
+        Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&x)),
         [
             nat(7),
             Term::intrinsic(Intrinsic::NatDiv {
@@ -383,15 +368,11 @@ fn a_non_productive_recursion_exhausts_the_budget() {
     let (loop_, n) = (binder(0, "loop"), binder(1, "n"));
 
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::apply(Term::free_var(&loop_), [Term::free_var(&n)]),
     );
     let term = Term::rec(
-        [(
-            loop_.clone(),
-            Term::func_type([(n.clone(), nat_type())], nat_type()),
-            body,
-        )],
+        [(loop_, Term::func_type([(n, nat_type())], nat_type()), body)],
         Term::apply(Term::free_var(&loop_), [nat(1)]),
     );
 
@@ -426,10 +407,8 @@ fn let_bindings_bind_left_to_right() {
 fn a_definition_unfolds_through_the_host() {
     let mut host = Host::new(100_000);
     let f = binder(0, "f");
-    host.definitions.insert(
-        f.clone(),
-        Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))),
-    );
+    host.definitions
+        .insert(f, Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))));
 
     assert_eq!(
         reduce_closed(&mut host, Term::free_var(&f), Demand::Forced),

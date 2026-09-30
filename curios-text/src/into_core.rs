@@ -146,7 +146,7 @@ fn writable_paths(
         }
         let own = owned(&path);
         paths
-            .entry(curios_core::Global::Authored(target.clone()))
+            .entry(curios_core::Global::Authored(*target))
             .or_default()
             .push(curios_core::WritablePath {
                 path,
@@ -158,7 +158,7 @@ fn writable_paths(
     for (module, info) in table.iter() {
         for (label, _) in info.bindings() {
             let path = module.with(label);
-            record(&path, path.clone(), audiences.binding(&path));
+            record(&path, path, audiences.binding(&path));
         }
     }
     for (module, interface) in public.iter() {
@@ -198,7 +198,7 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
     let mounts = own
         .iter()
         .filter(|mount| !mount.prefix.is_root())
-        .map(|mount| (format!("`{}`", mount.prefix.join()), mount.prefix.clone()));
+        .map(|mount| (format!("`{}`", mount.prefix.join()), mount.prefix));
 
     let modules = source.root_items().iter().filter_map(|item| match item {
         TopItem::Mod(declaration) => Some((
@@ -268,7 +268,7 @@ impl PreparedText {
     pub fn broken_names(&self) -> BTreeSet<curios_core::Global> {
         self.broken
             .iter()
-            .filter_map(|item| item.declares.clone())
+            .filter_map(|item| item.declares)
             .collect()
     }
 
@@ -360,9 +360,7 @@ impl<'a> Resolved<'a> {
 
         for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
             let header = Rc::new(source.source.load(&mount.prefix)?);
-            resolved
-                .modules
-                .insert(mount.prefix.clone(), Rc::clone(&header));
+            resolved.modules.insert(mount.prefix, Rc::clone(&header));
             resolved.discover(&header.items, &mount.prefix, source)?;
         }
 
@@ -376,7 +374,7 @@ impl<'a> Resolved<'a> {
         prefix: &Qualifier,
         source: &UnitSource<'_>,
     ) -> Result<(), Error> {
-        self.table.insert(prefix.clone(), scan_module_info(items)?);
+        self.table.insert(*prefix, scan_module_info(items)?);
         self.discover_children(items, prefix, source)
     }
 
@@ -391,7 +389,7 @@ impl<'a> Resolved<'a> {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
                 if let Some(span) = module_item.label.span() {
-                    self.mod_spans.insert(path.clone(), span.clone());
+                    self.mod_spans.insert(path, span.clone());
                 }
 
                 match &module_item.module {
@@ -404,7 +402,7 @@ impl<'a> Resolved<'a> {
                             }
                         })?);
 
-                        self.modules.insert(path.clone(), Rc::clone(&module));
+                        self.modules.insert(path, Rc::clone(&module));
                         self.discover(&module.items, &path, source)?;
                     }
                 }
@@ -516,7 +514,7 @@ fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::G
         match context.bindings().get(name.head()) {
             Some(qualifier) => {
                 context.note_binding_use(name.head());
-                qualifier.clone()
+                *qualifier
             }
             None => Qualifier::from([name.head()]),
         }
@@ -711,7 +709,7 @@ fn process_items(
                 let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
                 let body = func_sugar_lambda(&[], &test.body);
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
-                tests.push(name.clone());
+                tests.push(name);
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
                     span: None,
@@ -726,7 +724,7 @@ fn process_items(
                 let path = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, path.join());
 
-                context.record_import_scope(Some(&curios_core::Global::Authored(path.clone())));
+                context.record_import_scope(Some(&curios_core::Global::Authored(path)));
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
@@ -762,20 +760,18 @@ fn process_items(
                             .enumerate()
                             .map(|(i, (p, _, t))| {
                                 let ty = lower.bound(&head_binders[..i], || lower.input_type(t))?;
-                                Ok((*p, param_binders[i].1.clone(), ty))
+                                Ok((*p, param_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
                         // The registry and the `InductType` normal form are positional; plicity matters only on the generated type-constructor function.
                         let param_tys_unmarked = param_tys
                             .iter()
-                            .map(|(_, n, t)| (n.clone(), t.clone()))
+                            .map(|(_, n, t)| (*n, t.clone()))
                             .collect::<Vec<_>>();
 
                         let param_vars = param_binders
                             .iter()
-                            .map(|(_, id)| {
-                                curios_core::Term::var(curios_core::Var::free(id.clone()))
-                            })
+                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                             .collect::<Vec<_>>();
 
                         // The head's index telescope. Unnamed entries got a positional placeholder above — the name only matters for dependency capture among the index types.
@@ -787,15 +783,13 @@ fn process_items(
                                 let seen = u.params.len() + i;
                                 let ty =
                                     lower.bound(&head_binders[..seen], || lower.input_type(t))?;
-                                Ok((index_binders[i].1.clone(), ty))
+                                Ok((index_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
 
                         let index_vars = index_binders
                             .iter()
-                            .map(|(_, id)| {
-                                curios_core::Term::var(curios_core::Var::free(id.clone()))
-                            })
+                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                             .collect::<Vec<_>>();
 
                         // Registry entry: the parameter telescope plus each constructor's full signature `(params..., payload...) -> InductType { name, params, indices }`, where the terminal's indices are that *case's* target expressions over its payload binders. `Telescope::build` captures the parameter and payload labels in the payload types and the terminal, mirroring `func_type`.
@@ -816,7 +810,7 @@ fn process_items(
                                         let ty = lower
                                             .bound(&scope, || lower.input_type(&param.type_))?;
                                         scope.push(payload_binders[i].clone());
-                                        Ok((payload_binders[i].1.clone(), ty))
+                                        Ok((payload_binders[i].1, ty))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -854,7 +848,7 @@ fn process_items(
                         let result_sort = lower.term(&u.result_sort)?;
 
                         induct_decls.insert(
-                            name.clone(),
+                            name,
                             curios_core::InductDecl {
                                 universe_context: curios_core::UniverseContext::empty(),
                                 arity: curios_core::Telescope::build(
@@ -871,7 +865,7 @@ fn process_items(
                         );
 
                         let induct_decl =
-                            curios_core::Term::induct_type(name.clone(), param_vars, index_vars);
+                            curios_core::Term::induct_type(name, param_vars, index_vars);
 
                         // The type constructor takes its parameters and then its indices, one call each: `Vec : (T : Type) -> (n : Nat) -> Type`, applied `Vec(T)(n)`, so `Vec(T)` is the family its matches eliminate — see documentation/design/language/an-indexed-family-takes-its-indices-in-a-second-call.md. A family with only one of the two takes it in one call, and a nullary one is its normal form outright. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
                         let index_binders = index_tys
@@ -973,7 +967,7 @@ fn process_items(
                             .enumerate()
                             .map(|(i, t)| {
                                 let ty = lower.bound(&binders[..i], || lower.input_type(t))?;
-                                Ok((plicities[i], binders[i].1.clone(), ty))
+                                Ok((plicities[i], binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
                         let payload_binders = &binders[u.params.len()..];
@@ -986,15 +980,13 @@ fn process_items(
                         // Constructor body: (params..., _0, ...) => the variant's injection, an intrinsic `Variant` normal form.
                         let args: Vec<curios_core::Term> = payload_binders
                             .iter()
-                            .map(|(_, id)| {
-                                curios_core::Term::var(curios_core::Var::free(id.clone()))
-                            })
+                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                             .collect();
                         let inject = curios_core::Term::variant(
                             curios_core::Global::Authored(context.prefixed(&u.label)),
-                            param_binders.iter().map(|(_, id)| {
-                                curios_core::Term::var(curios_core::Var::free(id.clone()))
-                            }),
+                            param_binders
+                                .iter()
+                                .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id))),
                             curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
@@ -1036,16 +1028,16 @@ fn process_items(
                         .enumerate()
                         .map(|(i, (p, _, t))| {
                             let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                            Ok((*p, param_binders[i].1.clone(), ty))
+                            Ok((*p, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     let param_tys_unmarked = param_tys
                         .iter()
-                        .map(|(_, n, t)| (n.clone(), t.clone()))
+                        .map(|(_, n, t)| (*n, t.clone()))
                         .collect::<Vec<_>>();
                     let param_vars = param_binders
                         .iter()
-                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
+                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                         .collect::<Vec<_>>();
 
                     // A repeated label is refused at the one that arrived second, as a repeated declaration is. Nothing else catches it: a structure's fields are not module declarations, so they never reach `insert_binding`'s check, and the telescope below keeps both — a literal set them both and every `.label` read the first, silently. The tuple-type twin of this is `curios_elab`'s `DuplicateTupleLabel`, which a `struct` never reaches because its fields never elaborate as one.
@@ -1078,7 +1070,7 @@ fn process_items(
                                 lower.input_type(&field.param.desugared_type())
                             })?;
                             field_scope.push(field_binders[i].clone());
-                            Ok((field_binders[i].1.clone(), ty))
+                            Ok((field_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1086,7 +1078,7 @@ fn process_items(
                     let result_sort = lower.term(&s.result_sort)?;
 
                     struct_decls.insert(
-                        name.clone(),
+                        name,
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
                             arity: curios_core::Telescope::build(
@@ -1102,7 +1094,7 @@ fn process_items(
                     );
 
                     // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bin)` reduces to `StructType { Pair, [Nat, Bin] }`. No value constructor.
-                    let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
+                    let struct_type = curios_core::Term::struct_type(name, param_vars);
                     let (type_, body) = if param_tys.is_empty() {
                         (result_sort, struct_type)
                     } else {
@@ -1144,16 +1136,16 @@ fn process_items(
                         .enumerate()
                         .map(|(i, (p, _, t))| {
                             let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                            Ok((*p, param_binders[i].1.clone(), ty))
+                            Ok((*p, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     let param_tys_unmarked = param_tys
                         .iter()
-                        .map(|(_, n, t)| (n.clone(), t.clone()))
+                        .map(|(_, n, t)| (*n, t.clone()))
                         .collect::<Vec<_>>();
                     let param_vars = param_binders
                         .iter()
-                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
+                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                         .collect::<Vec<_>>();
 
                     // Superclass fields are anonymous in the surface syntax; mint a unique internal label per super so the record telescope and the registry's field list stay well-formed. The name is never surfaced — a superclass is reached by resolution, keyed by index, and never projected or wrapped by name.
@@ -1182,7 +1174,7 @@ fn process_items(
                                 lower.input_type(&field.desugared_type())
                             })?;
                             field_scope.push(field_binders[i].clone());
-                            Ok((field_binders[i].1.clone(), ty))
+                            Ok((field_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1194,7 +1186,7 @@ fn process_items(
                         curios_core::Telescope::build(field_tys, ()),
                     );
                     struct_decls.insert(
-                        name.clone(),
+                        name,
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
                             arity: arity.clone(),
@@ -1223,7 +1215,7 @@ fn process_items(
                         .collect::<Result<Vec<_>, Error>>()?;
 
                     concepts.insert(
-                        name.clone(),
+                        name,
                         curios_core::ConceptDecl {
                             universe_context: curios_core::UniverseContext::empty(),
                             params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
@@ -1233,8 +1225,7 @@ fn process_items(
                     );
 
                     // The type-former, exactly like a representation-public struct's.
-                    let struct_type =
-                        curios_core::Term::struct_type(name.clone(), param_vars.clone());
+                    let struct_type = curios_core::Term::struct_type(name, param_vars.clone());
                     let (type_, body) = if param_tys.is_empty() {
                         (result_sort, struct_type)
                     } else {
@@ -1268,18 +1259,15 @@ fn process_items(
                     {
                         // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
                         let witness_id = lower.mint(["w".to_string()]).remove(0).1;
-                        let witness =
-                            curios_core::Term::var(curios_core::Var::free(witness_id.clone()));
+                        let witness = curios_core::Term::var(curios_core::Var::free(witness_id));
 
                         let params = param_tys
                             .iter()
-                            .map(|(_, binder, type_)| {
-                                (Plicity::Implicit, binder.clone(), type_.clone())
-                            })
+                            .map(|(_, binder, type_)| (Plicity::Implicit, *binder, type_.clone()))
                             .chain(std::iter::once((
                                 Plicity::Witness,
                                 witness_id,
-                                curios_core::Term::struct_type(name.clone(), param_vars.clone()),
+                                curios_core::Term::struct_type(name, param_vars.clone()),
                             )))
                             .collect::<Vec<_>>();
 
@@ -1405,7 +1393,7 @@ fn process_items(
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
                             span: None,
-                            name: name.clone(),
+                            name,
                             island: context.island(),
                             type_: lower.term(&declared_type)?,
                             body: lower.value(&signature.body())?,
@@ -1527,7 +1515,7 @@ impl<'a> UnitSource<'a> {
     pub fn prefix(&self) -> Qualifier {
         self.mounts()
             .first()
-            .map(|mount| mount.prefix.clone())
+            .map(|mount| mount.prefix)
             .unwrap_or_default()
     }
 
@@ -1683,7 +1671,7 @@ fn into_core_unit_within(
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
     for mount in &mounts {
         if !mount.prefix.is_root() {
-            context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
+            context.insert_scope(mount.prefix.head().to_string(), mount.prefix)?;
         }
     }
 

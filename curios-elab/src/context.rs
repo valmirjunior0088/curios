@@ -950,7 +950,7 @@ impl Context {
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
     pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
-        self.define_entry(name.clone(), DefEntry::new(term.clone(), kind.cloned()));
+        self.define_entry(*name, DefEntry::new(term.clone(), kind.cloned()));
     }
 
     pub(crate) fn define_assuming(
@@ -1396,7 +1396,7 @@ impl Context {
         let refinements = self.frames.refinement_snapshot();
         self.solutions
             .birth_rec_slot(id, telescope, refinements, result);
-        self.rec_slot_names.insert(id, name.clone());
+        self.rec_slot_names.insert(id, *name);
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
@@ -1970,7 +1970,7 @@ impl Context {
             {
                 continue;
             }
-            self.define_entry(name.clone(), entry.clone());
+            self.define_entry(*name, entry.clone());
         }
 
         self.install_refinements(&frame.refinements);

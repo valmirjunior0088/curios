@@ -83,7 +83,7 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
             curios_core::Subterm::Var(var) => {
                 var.as_free().and_then(|free| free.as_global()).cloned()
             }
-            curios_core::Subterm::StructType(struct_type) => Some(struct_type.name.clone()),
+            curios_core::Subterm::StructType(struct_type) => Some(struct_type.name),
             _ => None,
         }
     }
@@ -102,9 +102,7 @@ fn wrapper_owners(items: &[FlatItem]) -> HashMap<curios_core::Global, Qualifier>
             FlatItem::Rec(lets) => lets.as_slice(),
         })
         .filter_map(|let_| match &let_.kind {
-            curios_core::DefinitionKind::ConceptMethod { owner } => {
-                Some((let_.name.clone(), owner.clone()))
-            }
+            curios_core::DefinitionKind::ConceptMethod { owner } => Some((let_.name, *owner)),
             _ => None,
         })
         .collect()
@@ -122,7 +120,7 @@ fn witness_rows(items: &[FlatItem], nodes: &[usize]) -> HashMap<Qualifier, Vec<u
             if let Some(concept) = witness_concept(let_)
                 && let Some(qualifier) = concept.qualifier()
             {
-                rows.entry(qualifier.clone()).or_default().push(node);
+                rows.entry(*qualifier).or_default().push(node);
             }
         }
     }
@@ -340,13 +338,12 @@ pub(super) fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, A
     lets.filter_map(|let_| {
         // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test now, where it used to be a leading-`/` test on the spelling.
         let direct = let_.body.direct_type_alias_target(&let_.type_);
-        let target = direct
+        let target = *direct
             .or_else(|| let_.body.transparent_alias_target())
-            .and_then(curios_core::Free::as_global)?
-            .clone();
+            .and_then(curios_core::Free::as_global)?;
 
         Some((
-            let_.name.clone(),
+            let_.name,
             AliasEdge {
                 target,
                 dependencies: direct.map(|_| {

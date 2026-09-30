@@ -210,7 +210,7 @@ impl Subterm {
                 indices,
                 ..
             }) => {
-                names.insert(name.clone());
+                names.insert(*name);
                 params
                     .iter()
                     .for_each(|p| p.collect_construction_names(names));
@@ -224,7 +224,7 @@ impl Subterm {
                 payload,
                 ..
             }) => {
-                names.insert(name.clone());
+                names.insert(*name);
                 params
                     .iter()
                     .for_each(|p| p.collect_construction_names(names));
@@ -233,7 +233,7 @@ impl Subterm {
                     .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::StructType(StructType { name, params, .. }) => {
-                names.insert(name.clone());
+                names.insert(*name);
                 params
                     .iter()
                     .for_each(|p| p.collect_construction_names(names));
@@ -244,7 +244,7 @@ impl Subterm {
                 fields,
                 ..
             }) => {
-                names.insert(name.clone());
+                names.insert(*name);
                 params
                     .iter()
                     .for_each(|p| p.collect_construction_names(names));
@@ -509,7 +509,7 @@ impl Subterm {
         }) = self
             && let Some(name) = var.as_free()
         {
-            return FreeVars::Owned(BTreeSet::from([name.clone()]));
+            return FreeVars::Owned(BTreeSet::from([*name]));
         }
         let mut carrier: Option<Rc<BTreeSet<Free>>> = None;
         let mut union: Option<BTreeSet<Free>> = None;
@@ -604,7 +604,7 @@ impl Bound for Subterm {
                 params,
                 indices,
             }) => Subterm::InductType(InductType {
-                name: name.clone(),
+                name: *name,
                 universes: if visit.erases_universes() {
                     Vec::new()
                 } else {
@@ -623,7 +623,7 @@ impl Bound for Subterm {
                 tag,
                 payload,
             }) => Subterm::Variant(Variant {
-                name: name.clone(),
+                name: *name,
                 universes: if visit.erases_universes() {
                     Vec::new()
                 } else {
@@ -641,7 +641,7 @@ impl Bound for Subterm {
                 universes,
                 params,
             }) => Subterm::StructType(StructType {
-                name: name.clone(),
+                name: *name,
                 universes: if visit.erases_universes() {
                     Vec::new()
                 } else {
@@ -659,7 +659,7 @@ impl Bound for Subterm {
                 fields,
                 entries,
             }) => Subterm::Struct(Struct {
-                name: name.clone(),
+                name: *name,
                 universes: if visit.erases_universes() {
                     Vec::new()
                 } else {

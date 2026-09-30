@@ -308,7 +308,7 @@ impl<E: Env> Walk<'_, E> {
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
                     let shape = Shape::Node(Tag::Bool(taken), Vec::new());
-                    self.scoped(refine(scrutinee.clone(), shape), atom, Vec::new(), body);
+                    self.scoped(refine(scrutinee, shape), atom, Vec::new(), body);
                 }
             }
 
@@ -316,7 +316,7 @@ impl<E: Env> Walk<'_, E> {
                 for (value, body) in cases {
                     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
                     let shape = self.grader().shape_of(&literal);
-                    self.scoped(refine(scrutinee.clone(), shape), None, Vec::new(), body);
+                    self.scoped(refine(scrutinee, shape), None, Vec::new(), body);
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
                 let atom = scrutinee.filter(|_| cases.iter().any(|(key, _)| key.is_zero()));
@@ -329,9 +329,9 @@ impl<E: Env> Walk<'_, E> {
                     let (binders, body) = self.open_many(&case.body);
                     let shape = Shape::Node(
                         Tag::Variant(tag.clone()),
-                        binders.iter().map(|b| Shape::Atom(b.clone())).collect(),
+                        binders.iter().map(|b| Shape::Atom(*b)).collect(),
                     );
-                    self.scoped(refine(scrutinee.clone(), shape), None, binders, &body);
+                    self.scoped(refine(scrutinee, shape), None, binders, &body);
                 }
                 if let Some(default) = default {
                     self.walk_term(default);
@@ -346,8 +346,7 @@ impl<E: Env> Walk<'_, E> {
                 } => {
                     self.empty_arm(&scrutinee, Carriers::Unary, empty_case);
                     let (binders, body) = self.open_two(cons_case);
-                    let shape =
-                        Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0].clone()));
+                    let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
                     self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
                 }
                 Carrier::Bin {
@@ -374,12 +373,7 @@ impl<E: Env> Walk<'_, E> {
     /// The identity arm of a free-monoid eliminator, refining the scrutinee to that carrier's empty value — a shape stated without opening anything.
     fn empty_arm(&mut self, scrutinee: &Option<Free>, carriers: Carriers, empty_case: &Term) {
         let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
-        self.scoped(
-            refine(scrutinee.clone(), shape),
-            None,
-            Vec::new(),
-            empty_case,
-        );
+        self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case);
     }
 
     /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
@@ -387,8 +381,8 @@ impl<E: Env> Walk<'_, E> {
         let (binders, body) = self.open_three(cons_case);
         let shape = Shape::elem_run(
             carriers,
-            vec![Shape::Atom(binders[0].clone())],
-            Shape::Atom(binders[1].clone()),
+            vec![Shape::Atom(binders[0])],
+            Shape::Atom(binders[1]),
         );
         self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
     }

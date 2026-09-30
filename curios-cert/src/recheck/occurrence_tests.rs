@@ -187,18 +187,12 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let former_def = authored(
         &former,
         Subterm::FuncType(FuncType::new(
-            Telescope::build(
-                [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
-                Term::type_ground(),
-            ),
+            Telescope::build([(a, nat.clone()), (b, nat.clone())], Term::type_ground()),
             plicities.clone(),
         ))
         .into(),
         Subterm::Func(Func::new(
-            Telescope::build(
-                [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
-                nat.clone(),
-            ),
+            Telescope::build([(a, nat.clone()), (b, nat.clone())], nat.clone()),
             plicities,
         ))
         .into(),
@@ -310,16 +304,11 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     let held = authored(
         &Global::Authored(Qualifier::from(["held"])),
         Term::induct_type(
-            held_name.clone(),
+            held_name,
             Vec::<Term>::new(),
             [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
         ),
-        Term::variant(
-            held_name.clone(),
-            Vec::<Term>::new(),
-            "yes",
-            Vec::<Term>::new(),
-        ),
+        Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new()),
     );
 
     let module = Module {
@@ -353,13 +342,8 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
     let equality_name = Global::Authored(Qualifier::from(["Eq"]));
-    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(
-        true_name.clone(),
-        Vec::<Term>::new(),
-        "qed",
-        Vec::<Term>::new(),
-    );
+    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
 
     let true_decl = proposition(vec![(
         Atom::from("qed"),
@@ -369,16 +353,11 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     let equality_decl = equality_declaration();
 
     // v : {Eq(True, 0, 1)} = (refl(True, qed()))
-    let bogus = Term::induct_type(equality_name.clone(), [true_type.clone()], [nat(0), nat(1)]);
+    let bogus = Term::induct_type(equality_name, [true_type.clone()], [nat(0), nat(1)]);
     let wrapped = authored(
         &Global::Authored(Qualifier::from(["v"])),
         Term::tuple_type(vec![(Free::local(30, Some("b")), bogus)]),
-        Term::tuple([Term::variant(
-            equality_name.clone(),
-            [true_type],
-            "refl",
-            [qed],
-        )]),
+        Term::tuple([Term::variant(equality_name, [true_type], "refl", [qed])]),
     );
 
     let module = Module {
@@ -413,7 +392,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
 
     // `struct Box(@A : Type)`: one implicit parameter, so a use site writes `Box(Nat)` and never supplies it positionally.
     let constructor = Definition {
-        name: name.clone(),
+        name,
         kind: DefinitionKind::StructType,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),

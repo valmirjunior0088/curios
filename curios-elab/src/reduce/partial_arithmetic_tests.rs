@@ -48,7 +48,7 @@ fn nat_div_by_zero_reports() {
     // A symbolic divisor is not a zero divisor: the term just stays stuck.
     let stuck = Term::intrinsic(Intrinsic::nat_div(
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-        Subterm::Var(Var::free(y.clone())),
+        Subterm::Var(Var::free(y)),
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     ));
     assert_eq!(reduce(&mut context, stuck.clone()), Ok(stuck));

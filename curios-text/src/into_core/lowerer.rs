@@ -146,7 +146,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 {
                     self.candidates.borrow_mut().push(Candidate {
                         name: name.clone(),
-                        id: id.clone(),
+                        id,
                         span,
                         signature,
                     });
@@ -225,7 +225,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut lowered = Vec::with_capacity(params.len());
         for (index, param) in params.iter().enumerate() {
             let domain = self.bound(&binders[..index], || self.input_type(&param.type_))?;
-            lowered.push((param.plicity, binders[index].1.clone(), domain));
+            lowered.push((param.plicity, binders[index].1, domain));
         }
         let output = self.bound(&binders, output)?;
         if let Some(signature) = telescope {
@@ -257,13 +257,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .rev()
             .find(|(bound, _)| bound == name.head())
         {
-            self.used.borrow_mut().insert(id.clone());
-            return Ok(id.clone());
+            self.used.borrow_mut().insert(*id);
+            return Ok(*id);
         }
         match self.context.bindings().get(name.head()) {
             Some(full) => {
                 self.context.note_binding_use(name.head());
-                Ok(curios_core::Free::global(full.clone()))
+                Ok(curios_core::Free::global(*full))
             }
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
@@ -357,7 +357,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 for (index, param) in tt.fields.iter().enumerate() {
                     let type_ = param.desugared_type();
                     let lowered = self.bound(&binders[..index], || self.term(&type_))?;
-                    fields.push((binders[index].1.clone(), lowered));
+                    fields.push((binders[index].1, lowered));
                 }
                 curios_core::Term::tuple_type(fields)
             }
@@ -613,7 +613,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .iter()
             .zip(types)
             .zip(values)
-            .map(|(((_, id), type_), value)| (id.clone(), type_, value));
+            .map(|(((_, id), type_), value)| (*id, type_, value));
 
         Ok((Vec::new(), curios_core::Term::rec(members, tail)))
     }
@@ -645,7 +645,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 // The action is itself desugared first, so its inner bangs evaluate before this one (left-to-right).
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);
-                let var = curios_core::Term::var(curios_core::Var::free(binder.clone()));
+                let var = curios_core::Term::var(curios_core::Var::free(binder));
                 binds.push(Hoisted {
                     binder,
                     action,
@@ -784,13 +784,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // The mark applies to the outer function slot the parameter occupies, whatever the pattern shape: a compound pattern's fresh core binder still claims a slot of the written plicity.
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
-                Pattern::Binder(Some(_)) => lowered.push((*plicity, leaves[0].1.clone(), domain)),
+                Pattern::Binder(Some(_)) => lowered.push((*plicity, leaves[0].1, domain)),
                 Pattern::Binder(None) => {
                     lowered.push((*plicity, self.context.fresh_binder(None), domain))
                 }
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder(None);
-                    chains.push((fields, synthetic.clone(), leaves));
+                    chains.push((fields, synthetic, leaves));
                     lowered.push((*plicity, synthetic, domain));
                 }
             }
@@ -835,7 +835,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A nominal head's resolved name. Only a global declares a structure, so a head resolving to a local or to nothing is refused here, where the bindings it could have meant are known — lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference.
     pub(super) fn resolve_nominal(&self, name: &Name) -> Result<curios_core::Global, Error> {
         match self.resolve_name(name)?.as_global() {
-            Some(global) => Ok(global.clone()),
+            Some(global) => Ok(*global),
             None => Err(Error::UnresolvedNominal {
                 name: name.head().to_string(),
                 candidates: self.context.binding_candidates(name.head()),
@@ -909,7 +909,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         let mut tail = tail;
         for ((index, field), taken) in fields.iter().enumerate().zip(&bound).rev() {
-            let scrutinee = curios_core::Term::var(curios_core::Var::free(scrutinee_name.clone()));
+            let scrutinee = curios_core::Term::var(curios_core::Var::free(*scrutinee_name));
             let proj = match &field.label {
                 Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
                 None => curios_core::Term::proj(scrutinee, index),

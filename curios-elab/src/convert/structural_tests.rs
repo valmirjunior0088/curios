@@ -58,8 +58,8 @@ fn eta_tuple_neutral_with_known_type() {
     let s_binder = context.fresh(Some("s"));
 
     let tuple_type: Term = Term::tuple_type([
-        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-        (y.clone(), Term::intrinsic(Intrinsic::BoolType)),
+        (x, Term::intrinsic(Intrinsic::NatType)),
+        (y, Term::intrinsic(Intrinsic::BoolType)),
     ]);
 
     let r: Term = Term::free_var(&r_binder);
@@ -81,7 +81,7 @@ fn partial_projection_tuple_at_narrow_type() {
     context.define(&p, &Term::tuple([nat(1), nat(2)]), None);
     context.define(&q, &Term::tuple([nat(1), nat(3)]), None);
 
-    let type_: Term = Term::tuple_type([(x.clone(), Term::intrinsic(Intrinsic::NatType))]);
+    let type_: Term = Term::tuple_type([(x, Term::intrinsic(Intrinsic::NatType))]);
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a), so conversion should return true.
     let this: Term = Term::tuple([Term::proj(Term::free_var(&p), 0)]);
@@ -103,16 +103,13 @@ fn times_out_on_pathological_inputs() {
 
     let this = Term::tuple_type([
         (
-            x.clone(),
+            x,
             Term::apply(func([&z], Term::free_var(&z)), [Term::free_var(&loop_)]),
         ),
-        (y.clone(), Term::free_var(&x)),
+        (y, Term::free_var(&x)),
     ]);
 
-    let that = Term::tuple_type([
-        (x.clone(), Term::free_var(&loop_)),
-        (y.clone(), Term::free_var(&x)),
-    ]);
+    let that = Term::tuple_type([(x, Term::free_var(&loop_)), (y, Term::free_var(&x))]);
 
     assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
 }
@@ -128,10 +125,7 @@ fn unit_typed_neutrals_in_type_argument() {
     // F : (()) -> Type ; r, s : ()   (all neutral assumptions). r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s. `conv` compares at `Type`, exactly as the pipeline does via `expect`.
     context.assume(
         &func,
-        &Term::func_type(
-            [(wildcard.clone(), Term::tuple_type_unit())],
-            Term::type_ground(),
-        ),
+        &Term::func_type([(wildcard, Term::tuple_type_unit())], Term::type_ground()),
     );
     context.assume(&r_binder, &Term::tuple_type_unit());
     context.assume(&s_binder, &Term::tuple_type_unit());
@@ -163,8 +157,8 @@ fn struct_unit_field_is_irrelevant() {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::build(
                     [
-                        (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-                        (u.clone(), Term::tuple_type_unit()),
+                        (x, Term::intrinsic(Intrinsic::NatType)),
+                        (u, Term::tuple_type_unit()),
                     ],
                     (),
                 )),
@@ -219,8 +213,8 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::build(
                     [
-                        (n.clone(), Term::intrinsic(Intrinsic::NatType)),
-                        (p_field.clone(), proposition.clone()),
+                        (n, Term::intrinsic(Intrinsic::NatType)),
+                        (p_field, proposition.clone()),
                     ],
                     (),
                 )),
@@ -287,8 +281,8 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                     InductParam::new(
                         Telescope::build(
                             [
-                                (n.clone(), Term::intrinsic(Intrinsic::NatType)),
-                                (p_field.clone(), proposition.clone()),
+                                (n, Term::intrinsic(Intrinsic::NatType)),
+                                (p_field, proposition.clone()),
                             ],
                             Vec::new(),
                         ),
@@ -349,8 +343,8 @@ fn variant_unit_payload_is_irrelevant() {
                     InductParam::new(
                         Telescope::build(
                             [
-                                (x.clone(), Term::intrinsic(Intrinsic::NatType)),
-                                (u.clone(), Term::tuple_type_unit()),
+                                (x, Term::intrinsic(Intrinsic::NatType)),
+                                (u, Term::tuple_type_unit()),
                             ],
                             Vec::new(),
                         ),

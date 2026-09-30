@@ -68,8 +68,8 @@ pub(super) enum FlatItem {
 impl FlatItem {
     pub(super) fn names(&self) -> Vec<curios_core::Global> {
         match self {
-            FlatItem::Let(let_) => vec![let_.name.clone()],
-            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.clone()).collect(),
+            FlatItem::Let(let_) => vec![let_.name],
+            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name).collect(),
         }
     }
 
@@ -399,7 +399,7 @@ impl<'a> Context<'a> {
     /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/std/Nat` is `pub use /sys/{Nat}`, so resolving `use /std/{Nat}` lands on `/sys/Nat` and a record of the *target* would say every program reached `/sys`. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
     fn note_spelled(&self, spelled: &Qualifier) {
         if let Some(mount) = Mount::owning(self.reach.mounts(), spelled) {
-            self.reached.borrow_mut().insert(mount.prefix.clone());
+            self.reached.borrow_mut().insert(mount.prefix);
         }
     }
 
@@ -464,10 +464,10 @@ impl<'a> Context<'a> {
     ///
     /// The module is this context's own prefix. It used to be the mount that prefix lies within, which was disjoint enough to be sound and too coarse to be *placed*: an import scope is keyed by `Global`, and a page asks which declarations belong to the module it renders, to which every witness in the standard library answered `/std`.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
-        let module = self.prefix.clone();
+        let module = self.prefix;
 
         let mut witnesses = self.witnesses.borrow_mut();
-        let ordinal = witnesses.entry(module.clone()).or_default();
+        let ordinal = witnesses.entry(module).or_default();
         let minted = curios_core::WitnessId::new(module, *ordinal);
         *ordinal += 1;
 
@@ -494,7 +494,7 @@ impl<'a> Context<'a> {
 
     /// The exact source module declarations lowered in this context belong to.
     pub(super) fn island(&self) -> Qualifier {
-        self.prefix.clone()
+        self.prefix
     }
 
     pub(super) fn bindings(&self) -> &HashMap<String, Qualifier> {
@@ -527,7 +527,7 @@ impl<'a> Context<'a> {
         let found = self.binding_candidates(label);
 
         let binder = self.fresh_binder(Some(label));
-        self.unbound.borrow_mut().insert(binder.clone(), found);
+        self.unbound.borrow_mut().insert(binder, found);
         binder
     }
 
@@ -606,14 +606,13 @@ impl<'a> Context<'a> {
             resolved
         } else {
             let head = name.head();
-            let start = self
+            let start = *self
                 .qualifiers
                 .get(head)
                 .ok_or_else(|| Error::UnresolvedQualifier {
                     qualifier: head.to_string(),
                     candidates: self.unbound_qualifier(head),
-                })?
-                .clone();
+                })?;
             self.note_qualifier_use(head);
 
             // An imported label carries the site its `use` came through; a declaration and an ambient sibling module carry none, and those are the heads a guard still answers for.
@@ -639,7 +638,7 @@ impl<'a> Context<'a> {
         match super::interface::visible_child(self.public, self.table, &self.prefix, parent, label)
         {
             Some(target) => {
-                self.insert_scope(label.to_string(), target.clone())?;
+                self.insert_scope(label.to_string(), target)?;
                 if let Some(site) = self.current_site {
                     self.qualifier_sites.insert(label.to_string(), site);
                 }
@@ -675,7 +674,7 @@ impl<'a> Context<'a> {
             label,
         ) {
             Some(target) => {
-                self.insert_binding(label.to_string(), target.clone())?;
+                self.insert_binding(label.to_string(), target)?;
                 if let Some(site) = self.current_site {
                     self.binding_sites.insert(label.to_string(), site);
                 }
@@ -711,7 +710,7 @@ impl<'a> Context<'a> {
         };
 
         if let Some(target) = module {
-            self.insert_scope(label.to_string(), target.clone())?;
+            self.insert_scope(label.to_string(), target)?;
             if let Some(site) = self.current_site {
                 self.qualifier_sites.insert(label.to_string(), site);
             }
@@ -721,7 +720,7 @@ impl<'a> Context<'a> {
         }
 
         if let Some(target) = binding {
-            self.insert_binding(label.to_string(), target.clone())?;
+            self.insert_binding(label.to_string(), target)?;
             if let Some(site) = self.current_site {
                 self.binding_sites.insert(label.to_string(), site);
             }
@@ -735,7 +734,7 @@ impl<'a> Context<'a> {
 
     // Record that `target` is in scope of this body under `spelling`, from here on. A target already in scope under a spelling no longer than this one is not recorded again — both resolve, and the shorter is the one a reader would write; a shorter spelling arriving later is a second entry, so an item between the two sees only the first.
     fn record_import(&mut self, target: &Qualifier, spelling: String) {
-        let global = curios_core::Global::Authored(target.clone());
+        let global = curios_core::Global::Authored(*target);
         let mut imports = self.imports.borrow_mut();
         let shadowed = self.in_scope.iter().any(|index| {
             let existing = &imports.entries[*index];
@@ -777,7 +776,7 @@ impl<'a> Context<'a> {
         let mut imports = self.imports.borrow_mut();
         match owner {
             Some(owner) => {
-                imports.by_item.insert(owner.clone(), self.in_scope.clone());
+                imports.by_item.insert(*owner, self.in_scope.clone());
             }
             None => imports.tail = self.in_scope.clone(),
         }

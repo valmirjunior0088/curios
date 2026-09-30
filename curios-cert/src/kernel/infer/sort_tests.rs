@@ -13,7 +13,7 @@ use super::test_support::*;
 fn a_function_types_domain_is_invariant() {
     let mut kernel = kernel();
     let x = binder(900, "x");
-    let pi = |domain: Term| Term::func_type([(x.clone(), domain)], Term::tuple_type_unit());
+    let pi = |domain: Term| Term::func_type([(x, domain)], Term::tuple_type_unit());
 
     // Neither direction: the domains are compared by conversion, and `Type 0` is not convertible with `Type 1`.
     assert_eq!(
@@ -39,7 +39,7 @@ fn a_function_types_domain_is_invariant() {
 fn a_function_types_codomain_is_cumulative() {
     let mut kernel = kernel();
     let x = binder(901, "x");
-    let pi = |codomain: Term| Term::func_type([(x.clone(), nat_type())], codomain);
+    let pi = |codomain: Term| Term::func_type([(x, nat_type())], codomain);
 
     assert_eq!(
         subsumes(
@@ -133,7 +133,7 @@ fn a_lambda_in_argument_position_reaches_the_pi_rule() {
     let call = Term::apply(
         Term::free_var(&g),
         [Term::func(
-            [(n.clone(), nat_type())],
+            [(n, nat_type())],
             Term::tuple([nat_type(), Term::free_var(&n)]),
         )],
     );

@@ -46,7 +46,7 @@ impl<B: Bound> Telescope<B> {
                 ty,
                 Scope {
                     arity: One,
-                    names: Some(vec![binder.clone()]),
+                    names: Some(vec![*binder]),
                     body: Box::new(telescope),
                 },
             );

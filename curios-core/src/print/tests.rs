@@ -8,7 +8,7 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
 
     let binder = Free::local(0, Some("helper"));
     let names = DisplayNames {
-        names: BTreeSet::from([Free::Global(global), binder.clone()]),
+        names: BTreeSet::from([Free::Global(global), binder]),
         labels: BTreeSet::new(),
     };
     let rename = build_rename(
@@ -24,8 +24,8 @@ fn a_tuple_label_keeps_its_spelling_and_a_like_named_binder_is_suffixed() {
     let parameter = Free::local(0, Some("frame"));
     let label = Free::local(1, Some("frame"));
     let names = DisplayNames {
-        names: BTreeSet::from([parameter.clone(), label.clone()]),
-        labels: BTreeSet::from([label.clone()]),
+        names: BTreeSet::from([parameter, label]),
+        labels: BTreeSet::from([label]),
     };
     let rename = build_rename(&names, &Spelling::default());
 
@@ -56,7 +56,7 @@ fn a_nested_own_declaration_does_not_claim_its_bare_label() {
     let own_ctor = Global::Authored(Qualifier::from(["Vec", "nil"]));
     let outer = Global::Authored(Qualifier::from(["std", "Vec", "nil"]));
 
-    let own = [own_type.clone(), own_ctor.clone()];
+    let own = [own_type, own_ctor];
     let shorten = build_shorten_layered(&own, std::slice::from_ref(&outer));
 
     // The type itself does sit at the unit root, so it takes its label and the environment's twin gives way.
@@ -155,10 +155,7 @@ fn a_numeral_operand_prints_bare() {
 
 /// A spelling that shortens `names` to their last segment and marks each as `marks` says, as a diagnostic's would.
 fn spelling_of(names: &[(Global, Vec<Plicity>)]) -> Rc<Spelling> {
-    let globals = names
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect::<Vec<_>>();
+    let globals = names.iter().map(|(name, _)| *name).collect::<Vec<_>>();
     Rc::new(
         Spelling::default()
             .with_short_names(Rc::new(build_shorten(&globals)))
@@ -175,7 +172,7 @@ fn numeral(value: usize) -> Term {
 fn an_indexed_family_prints_its_parameters_and_its_indices_in_two_calls() {
     let eq = Global::Authored(Qualifier::from(["std", "Eq"]));
     let spelling = spelling_of(&[(
-        eq.clone(),
+        eq,
         vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
     )]);
 
@@ -193,8 +190,8 @@ fn a_family_with_one_kind_of_argument_prints_in_one_call() {
     let option = Global::Authored(Qualifier::from(["std", "Option"]));
     let sign = Global::Authored(Qualifier::from(["std", "Sign"]));
     let spelling = spelling_of(&[
-        (option.clone(), vec![Plicity::Explicit]),
-        (sign.clone(), vec![Plicity::Explicit]),
+        (option, vec![Plicity::Explicit]),
+        (sign, vec![Plicity::Explicit]),
     ]);
 
     let parameters = Term::induct_type(
@@ -213,7 +210,7 @@ fn a_family_with_one_kind_of_argument_prints_in_one_call() {
 fn a_lambda_over_a_familys_indices_prints_as_the_family_at_its_parameters() {
     let accessible = Global::Authored(Qualifier::from(["std", "WellFounded", "Accessible"]));
     let spelling = spelling_of(&[(
-        accessible.clone(),
+        accessible,
         vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
     )]);
     let a = Free::local(0, Some("A"));
@@ -221,7 +218,7 @@ fn a_lambda_over_a_familys_indices_prints_as_the_family_at_its_parameters() {
     let x = Free::local(2, Some("x"));
 
     let lambda = Term::func(
-        [(x.clone(), Term::free_var(&a))],
+        [(x, Term::free_var(&a))],
         Term::induct_type(
             accessible,
             [Term::free_var(&a), Term::free_var(&r)],
@@ -235,11 +232,11 @@ fn a_lambda_over_a_familys_indices_prints_as_the_family_at_its_parameters() {
 #[test]
 fn a_lambda_over_a_parameterless_familys_indices_prints_as_its_name() {
     let sign = Global::Authored(Qualifier::from(["std", "Sign"]));
-    let spelling = spelling_of(&[(sign.clone(), vec![Plicity::Explicit])]);
+    let spelling = spelling_of(&[(sign, vec![Plicity::Explicit])]);
     let i = Free::local(0, Some("i"));
 
     let lambda = Term::func(
-        [(i.clone(), Term::intrinsic(Intrinsic::IntType))],
+        [(i, Term::intrinsic(Intrinsic::IntType))],
         Term::induct_type(sign, Vec::<Term>::new(), [Term::free_var(&i)]),
     );
     assert_eq!(lambda.spelled(&spelling).to_string(), "Sign");
@@ -250,13 +247,13 @@ fn a_lambda_over_a_parameterless_familys_indices_prints_as_its_name() {
 fn a_lambda_over_some_of_a_familys_indices_stays_a_lambda() {
     let eq = Global::Authored(Qualifier::from(["std", "Eq"]));
     let spelling = spelling_of(&[(
-        eq.clone(),
+        eq,
         vec![Plicity::Implicit, Plicity::Explicit, Plicity::Explicit],
     )]);
     let y = Free::local(0, Some("y"));
 
     let lambda = Term::func(
-        [(y.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(y, Term::intrinsic(Intrinsic::NatType))],
         Term::induct_type(
             eq,
             [Term::intrinsic(Intrinsic::NatType)],
@@ -274,7 +271,7 @@ fn a_lambda_over_some_of_a_familys_indices_stays_a_lambda() {
 fn a_short_lambda_body_stays_on_the_arrows_line() {
     let x = Free::local(0, Some("x"));
     let identity = Term::func(
-        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        [(x, Term::intrinsic(Intrinsic::NatType))],
         Term::free_var(&x),
     );
     assert_eq!(identity.to_string(), "(x) => x");
@@ -291,7 +288,7 @@ fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
         Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
         Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
     );
-    let lambda = Term::func([(b.clone(), Term::intrinsic(Intrinsic::BoolType))], body);
+    let lambda = Term::func([(b, Term::intrinsic(Intrinsic::BoolType))], body);
     let printed = lambda.to_string();
     assert!(printed.starts_with("(b) =>\n"), "{printed}");
 }
@@ -309,14 +306,14 @@ fn witnesses(operator: Option<InfixOp>) -> Witnesses {
     let wrap = Global::Authored(Qualifier::from(["m", "Wrap"]));
     let mut table = WitnessSpelling::default();
     table.concepts.insert(
-        show.clone(),
+        show,
         vec![FieldSpelling::Method {
-            wrapper: method.clone(),
+            wrapper: method,
             merged: true,
             operator,
         }],
     );
-    let globals = [show.clone(), method, wrap.clone()];
+    let globals = [show, method, wrap];
     Witnesses {
         show,
         wrap,
@@ -337,20 +334,20 @@ fn under_witnesses(witnesses: &Witnesses, binders: &[&str], argument: usize) -> 
         .map(|(index, hint)| Free::local(1 + index as u32, Some(*hint)))
         .collect::<Vec<_>>();
     let x = Free::local(9, Some("x"));
-    let concept = Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]);
+    let concept = Term::struct_type(witnesses.show, [Term::free_var(&a)]);
     let wrapped = Term::apply_marked(
-        Term::free_var(&Free::Global(witnesses.wrap.clone())),
+        Term::free_var(&Free::Global(witnesses.wrap)),
         [
             (Plicity::Explicit, Term::free_var(&a)),
             (Plicity::Witness, Term::free_var(&labels[argument])),
         ],
     );
     Term::func_type_marked(
-        std::iter::once((Plicity::Implicit, a.clone(), Term::type_ground()))
+        std::iter::once((Plicity::Implicit, a, Term::type_ground()))
             .chain(
                 labels
                     .iter()
-                    .map(|label| (Plicity::Witness, label.clone(), concept.clone())),
+                    .map(|label| (Plicity::Witness, *label, concept.clone())),
             )
             .chain(std::iter::once((Plicity::Explicit, x, wrapped))),
         Term::intrinsic(Intrinsic::NatType),
@@ -389,18 +386,15 @@ fn a_method_projected_off_a_witness_prints_as_its_call() {
     let call = Term::apply(Term::proj(Term::free_var(&w), 0), [Term::free_var(&x)]);
     let type_ = Term::func_type_marked(
         [
-            (Plicity::Implicit, a.clone(), Term::type_ground()),
+            (Plicity::Implicit, a, Term::type_ground()),
             (
                 Plicity::Witness,
                 w,
-                Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]),
+                Term::struct_type(witnesses.show, [Term::free_var(&a)]),
             ),
             (Plicity::Explicit, x, Term::free_var(&a)),
         ],
-        Term::apply(
-            Term::free_var(&Free::Global(witnesses.wrap.clone())),
-            [call],
-        ),
+        Term::apply(Term::free_var(&Free::Global(witnesses.wrap)), [call]),
     );
     assert_eq!(
         type_.spelled(&witnesses.spelling).to_string(),
@@ -416,17 +410,17 @@ fn a_method_off_a_shadowed_witness_keeps_the_witness() {
     let outer = Free::local(1, Some("outer"));
     let inner = Free::local(2, Some("inner"));
     let x = Free::local(3, Some("x"));
-    let concept = Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]);
+    let concept = Term::struct_type(witnesses.show, [Term::free_var(&a)]);
     let method = Term::proj(Term::free_var(&outer), 0);
     let type_ = Term::func_type_marked(
         [
-            (Plicity::Implicit, a.clone(), Term::type_ground()),
+            (Plicity::Implicit, a, Term::type_ground()),
             (Plicity::Witness, outer, concept.clone()),
             (Plicity::Witness, inner, concept),
-            (Plicity::Explicit, x.clone(), Term::free_var(&a)),
+            (Plicity::Explicit, x, Term::free_var(&a)),
         ],
         Term::apply(
-            Term::free_var(&Free::Global(witnesses.wrap.clone())),
+            Term::free_var(&Free::Global(witnesses.wrap)),
             [Term::apply(method.clone(), [Term::free_var(&x)]), method],
         ),
     );
@@ -450,18 +444,15 @@ fn an_operators_method_projected_off_a_witness_prints_as_the_operator() {
         );
         let type_ = Term::func_type_marked(
             [
-                (Plicity::Implicit, a.clone(), Term::type_ground()),
+                (Plicity::Implicit, a, Term::type_ground()),
                 (
                     Plicity::Witness,
                     w,
-                    Term::struct_type(witnesses.show.clone(), [Term::free_var(&a)]),
+                    Term::struct_type(witnesses.show, [Term::free_var(&a)]),
                 ),
                 (Plicity::Explicit, x, Term::free_var(&a)),
             ],
-            Term::apply(
-                Term::free_var(&Free::Global(witnesses.wrap.clone())),
-                [compared],
-            ),
+            Term::apply(Term::free_var(&Free::Global(witnesses.wrap)), [compared]),
         );
         assert_eq!(
             type_.spelled(&witnesses.spelling).to_string(),

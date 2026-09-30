@@ -56,7 +56,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
         let expansions = term
             .free_vars_shared()
             .iter()
-            .filter_map(|name| Some((name.clone(), self.expansion(name)?)))
+            .filter_map(|name| Some((*name, self.expansion(name)?)))
             .collect::<Vec<_>>();
 
         term.substitute(&expansions)
@@ -66,7 +66,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
         if let Some(known) = self.expansions.get(name) {
             return known.clone();
         }
-        self.expansions.insert(name.clone(), None);
+        self.expansions.insert(*name, None);
 
         let definition = match self.env.is_local(name) {
             true => self.env.unfold(name)?.clone(),
@@ -81,7 +81,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
                 .then_some(unfolded),
         };
 
-        self.expansions.insert(name.clone(), expansion.clone());
+        self.expansions.insert(*name, expansion.clone());
         expansion
     }
 }
@@ -117,7 +117,7 @@ pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
         .collect::<Vec<_>>();
 
     while let Some(name) = pending.pop() {
-        if !seen.insert(name.clone()) || !env.is_local(&name) {
+        if !seen.insert(name) || !env.is_local(&name) {
             continue;
         }
         match env.unfold(&name) {

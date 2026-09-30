@@ -63,15 +63,15 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
             .witness_keyed_entries()
             .find(|(_, _, witness)| &witness.name == name)
             .map(|(concept, key, _)| Callee::Witness {
-                concept: concept.clone(),
+                concept: *concept,
                 key: key.clone(),
             })
-            .unwrap_or_else(|| Callee::Function(Free::Global(name.clone()))),
+            .unwrap_or_else(|| Callee::Function(Free::Global(*name))),
         CalleeId::Constructor { owner, tag } => Callee::Constructor {
-            owner: owner.clone(),
+            owner: *owner,
             tag: tag.clone(),
         },
-        CalleeId::Function(name) => Callee::Function(name.clone()),
+        CalleeId::Function(name) => Callee::Function(*name),
         CalleeId::Anonymous => Callee::Anonymous,
     }
 }
@@ -261,12 +261,7 @@ fn lift_chain(
         let [m, n] = key.0.as_slice() else {
             continue;
         };
-        edges.push((
-            m.clone(),
-            n.clone(),
-            key.to_string(),
-            witness.module.clone(),
-        ));
+        edges.push((m.clone(), n.clone(), key.to_string(), witness.module));
     }
 
     let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();
@@ -287,7 +282,7 @@ fn lift_chain(
     let mut node = to.clone();
     while let Some(&index) = parents.get(&node) {
         let (m, _, pair, module) = &edges[index];
-        hops.push((pair.clone(), module.clone()));
+        hops.push((pair.clone(), *module));
         node = m.clone();
     }
     if node != *from {
@@ -318,7 +313,7 @@ fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Vec<Le
     };
     context
         .concept(name)
-        .map(|_| (name.clone(), universes.clone(), params.clone()))
+        .map(|_| (*name, universes.clone(), params.clone()))
 }
 
 pub(crate) enum Probe {
@@ -419,7 +414,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     // Retrying a parked goal restores its frozen frame's witness binders on top of whatever scope is live at retry time, so a binder that was already in scope at park time can appear twice. Binder names are globally fresh and unique, so a repeated name denotes the *same* binder; dedup by name (the retained occurrence is arbitrary but identical) to keep the superclass search from reporting a projection against itself as ambiguous.
     let mut binders = context.witness_scope().to_vec();
     let mut seen = HashSet::new();
-    binders.retain(|(name, _)| seen.insert(name.clone()));
+    binders.retain(|(name, _)| seen.insert(*name));
     for (name, type_) in binders.iter().rev() {
         match commit_match(context, type_, &goal_whnf)? {
             Probe::Yes => return Ok(Resolution::Solved(Term::free_var(name))),
@@ -633,7 +628,7 @@ fn instantiate(
                     Plicity::Implicit => {
                         let proposition = crate::is_prop(context, &ty).unwrap_or(false);
                         let provenance = ImplicitOrigin {
-                            func: CalleeId::Witness(witness.name.clone()),
+                            func: CalleeId::Witness(witness.name),
                             binder,
                         };
                         let (slot, hole) = context.fresh_metavar(
@@ -650,7 +645,7 @@ fn instantiate(
                     }
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
-                            func: CalleeId::Witness(witness.name.clone()),
+                            func: CalleeId::Witness(witness.name),
                             binder: crate::premise_label(position),
                         };
                         let (id, metavar) = context.fresh_witness_metavar(
@@ -983,7 +978,7 @@ pub(crate) fn read_witness_signature(
 
     Ok(WitnessSignature {
         binders,
-        concept: concept_name.clone(),
+        concept: *concept_name,
         params: params.clone(),
         key: WitnessKey(heads),
     })
@@ -1047,7 +1042,7 @@ pub(crate) fn register_witness(
     // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all. It used to compare `RootId`s, and every ordinary root was the one value `RootId::Entry` — so two packages compared equal and the rule went inert exactly where two independent authors could collide.
     //
     // A declaration owned by no mount matches nothing, including another unowned one: `owns` answers `false` unless both sides name a mount. That is the conservative direction — such a witness can only be refused, never admitted by an accidental `None == None`.
-    let declaring = context.mount_of(&Global::Authored(module.clone()));
+    let declaring = context.mount_of(&Global::Authored(*module));
     let owns = |other: Option<&Mount>| match (declaring, other) {
         (Some(here), Some(there)) => here.prefix == there.prefix,
         _ => false,
@@ -1055,28 +1050,24 @@ pub(crate) fn register_witness(
     if !owns(context.mount_of(&concept_name))
         && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
     {
-        return Err(Error::orphan_witness(
-            concept_name.clone(),
-            key,
-            module.clone(),
-        ));
+        return Err(Error::orphan_witness(concept_name, key, *module));
     }
 
     if let Some(first_module) = context.insert_witness(
-        concept_name.clone(),
+        concept_name,
         key.clone(),
         Witness {
-            name: name.clone(),
-            module: module.clone(),
+            name: *name,
+            module: *module,
             universe_context,
             signature: signature.clone(),
         },
     ) {
         return Err(Error::duplicate_witness(
-            concept_name.clone(),
+            concept_name,
             key,
             first_module,
-            module.clone(),
+            *module,
         ));
     }
 
@@ -1108,7 +1099,7 @@ fn measure(args: &[Term], binders: &BTreeSet<&Free>) -> (usize, BTreeMap<Free, u
                     && let Some(free) = var.as_free()
                     && binders.contains(free)
                 {
-                    *occurrences.entry(free.clone()).or_insert(0) += 1;
+                    *occurrences.entry(*free).or_insert(0) += 1;
                 }
 
                 (size, occurrences)
@@ -1153,7 +1144,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         if done.contains(name) {
             return Ok(());
         }
-        if !visiting.insert(name.clone()) {
+        if !visiting.insert(*name) {
             return Err(Error::cyclic_superclass(name.symbol()));
         }
         let concept = concepts
@@ -1163,7 +1154,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
             visit(concepts, target, visiting, done)?;
         }
         visiting.remove(name);
-        done.insert(name.clone());
+        done.insert(*name);
         Ok(())
     }
 

@@ -41,7 +41,7 @@ fn beta_agrees() {
     let x = context.fresh(Some("x"));
 
     agree(Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
         [nat(9)],
     ));
 }
@@ -101,7 +101,7 @@ fn iota_agrees_despite_different_arm_binding() {
             ("none", Vec::<Free>::new(), nat(0)),
             (
                 "some",
-                vec![payload.clone()],
+                vec![payload],
                 Term::intrinsic(Intrinsic::nat_add(Term::free_var(&payload), nat(1))),
             ),
         ],
@@ -167,7 +167,7 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     let body = Term::func(
-        [(n.clone(), nat_type.clone())],
+        [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&m),
@@ -180,8 +180,8 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
     );
 
     let group = [(
-        countdown.clone(),
-        Term::func_type([(n.clone(), nat_type.clone())], nat_type),
+        countdown,
+        Term::func_type([(n, nat_type.clone())], nat_type),
         body,
     )];
 
@@ -208,9 +208,9 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
 
-    let small_type = Term::func_type([(x.clone(), nat_type.clone())], bool_type.clone());
+    let small_type = Term::func_type([(x, nat_type.clone())], bool_type.clone());
     let small_body = Term::func(
-        [(x.clone(), nat_type.clone())],
+        [(x, nat_type.clone())],
         Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&x), nat(10))),
     );
     let guard = Term::apply(Term::free_var(&small), [Term::free_var(&n)]);

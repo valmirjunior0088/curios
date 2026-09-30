@@ -38,7 +38,7 @@ fn two_alpha_variant_recursive_groups_convert() {
 
     let countdown = |group_binder: Free, param: Free, motive: Free, pred: Free, ih: Free| {
         let body = Term::func(
-            [(param.clone(), nat_type())],
+            [(param, nat_type())],
             Term::nat_match(
                 Term::free_var(&param),
                 Some(&motive),
@@ -52,7 +52,7 @@ fn two_alpha_variant_recursive_groups_convert() {
 
         Term::rec(
             [(
-                group_binder.clone(),
+                group_binder,
                 Term::func_type([(param, nat_type())], nat_type()),
                 body,
             )],
@@ -97,7 +97,7 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
     let x = binder(5, "x");
 
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&motive),
@@ -110,8 +110,8 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
     );
 
     let group = [(
-        countdown.clone(),
-        Term::func_type([(n.clone(), nat_type())], nat_type()),
+        countdown,
+        Term::func_type([(n, nat_type())], nat_type()),
         body,
     )];
 
@@ -160,14 +160,8 @@ fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
     kernel.assume(&colliding, &nat);
 
     let parameter = Free::local(9_000, Some("x"));
-    let constant = Term::func(
-        [(parameter.clone(), nat.clone())],
-        Term::free_var(&colliding),
-    );
-    let identity = Term::func(
-        [(parameter.clone(), nat.clone())],
-        Term::free_var(&parameter),
-    );
+    let constant = Term::func([(parameter, nat.clone())], Term::free_var(&colliding));
+    let identity = Term::func([(parameter, nat.clone())], Term::free_var(&parameter));
     let function = Term::func_type([(parameter, nat.clone())], nat);
 
     assert!(
@@ -298,7 +292,7 @@ fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     let (n, p) = (binder(21, "n"), binder(22, "p"));
     let (motive, pred, ih) = (binder(23, "m"), binder(24, "pred"), binder(25, "ih"));
     let body = Term::func(
-        [(n.clone(), nat_type()), (p.clone(), proposition.clone())],
+        [(n, nat_type()), (p, proposition.clone())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&motive),
@@ -314,7 +308,7 @@ fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     );
     let group = Term::rec(
         [(
-            countdown.clone(),
+            countdown,
             Term::func_type([(n, nat_type()), (p, proposition.clone())], nat_type()),
             body,
         )],

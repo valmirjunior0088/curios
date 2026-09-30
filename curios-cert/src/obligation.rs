@@ -98,9 +98,9 @@ pub(crate) fn partial_definitions(
                 || calls_a_diverging_row(&definition.body, &mut memo)
                 || calls_a_diverging_row(&definition.type_, &mut memo)
             {
-                partial.insert(definition.name.clone());
+                partial.insert(definition.name);
             }
-            mentions.insert(definition.name.clone(), definition.mentions());
+            mentions.insert(definition.name, definition.mentions());
         }
     };
 
@@ -128,7 +128,7 @@ pub(crate) fn partial_definitions(
                 continue;
             }
             if reached.iter().any(|other| partial.contains(other)) {
-                partial.insert(name.clone());
+                partial.insert(*name);
                 changed = true;
             }
         }
@@ -176,7 +176,7 @@ pub(crate) fn check_positions(
         {
             return Err(KernelError::NotTotal {
                 erased: position.erased,
-                reached: Some(reached.clone()),
+                reached: Some(*reached),
             });
         }
         if position.encloses_partial || calls_a_diverging_row(&position.term, memo) {

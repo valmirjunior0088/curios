@@ -618,12 +618,7 @@ impl Lowering {
                 universes,
                 params,
                 indices,
-            }) => (
-                name.clone(),
-                universes.clone(),
-                params.clone(),
-                indices.clone(),
-            ),
+            }) => (*name, universes.clone(), params.clone(), indices.clone()),
             _ => unreachable!("erase: inductive match scrutinee checked by elaborate"),
         };
         let induct_decl = context
@@ -841,7 +836,7 @@ fn refine_arm(
         .expect("erase: constructor arity checked by elaborate");
 
     let constructor_value = Term::variant_at(
-        m.name.clone(),
+        *m.name,
         m.universes.to_vec(),
         m.params.to_vec(),
         tag.clone(),

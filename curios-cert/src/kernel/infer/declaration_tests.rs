@@ -20,7 +20,7 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
     let payload = binder(0, "value");
 
     // `induct Wrapped | mk(value : Nat) end`
-    let constructed = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let constructed = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     kernel.declare_induct(
         &name,
         &InductDecl {
@@ -132,11 +132,8 @@ fn a_definition_checks_under_its_own_constraints() {
     let x = binder(0, "x");
     let name = binder(1, "poly");
 
-    let type_ = Term::func_type(
-        [(x.clone(), Term::type_at(u.clone()))],
-        Term::type_at(w.clone()),
-    );
-    let body = Term::func([(x.clone(), Term::type_at(u.clone()))], Term::free_var(&x));
+    let type_ = Term::func_type([(x, Term::type_at(u.clone()))], Term::type_at(w.clone()));
+    let body = Term::func([(x, Term::type_at(u.clone()))], Term::free_var(&x));
 
     let constrained = UniverseContext {
         parameter_count: 2,
@@ -216,10 +213,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
     let false_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let f = binder(0, "f");
-    let term = Term::rec(
-        [(f.clone(), false_, Term::free_var(&f))],
-        Term::free_var(&f),
-    );
+    let term = Term::rec([(f, false_, Term::free_var(&f))], Term::free_var(&f));
 
     assert!(matches!(
         infer(&mut kernel, &term),
@@ -233,7 +227,7 @@ fn a_recursive_type_that_does_not_descend_is_refused() {
     let mut kernel = kernel();
     let bad = binder(0, "Bad");
     let term = Term::rec(
-        [(bad.clone(), Term::type_ground(), Term::free_var(&bad))],
+        [(bad, Term::type_ground(), Term::free_var(&bad))],
         Term::free_var(&bad),
     );
 
@@ -250,13 +244,13 @@ fn a_recursive_value_needs_no_descent() {
     let f = binder(0, "f");
     let n = binder(1, "n");
 
-    let signature = Term::func_type([(n.clone(), nat_type())], nat_type());
+    let signature = Term::func_type([(n, nat_type())], nat_type());
     let body = Term::func(
-        [(n.clone(), nat_type())],
+        [(n, nat_type())],
         Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
     );
     let term = Term::rec(
-        [(f.clone(), signature, body)],
+        [(f, signature, body)],
         Term::apply(Term::free_var(&f), [nat(1)]),
     );
 

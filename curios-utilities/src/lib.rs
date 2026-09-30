@@ -1,6 +1,6 @@
 //! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the SHA-256 content [`digest()`] and the [`Fingerprint`] every store key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the value types the surface (`curios-text`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-prelude-archive`, alongside the source declarations they name: this crate states the slots, never the spellings.
 //!
-//! Why names are never ordered, why every identity space has one source, why qualifiers share their segments and the archive interns them, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
+//! Why names are never ordered, why every identity space has one source, why qualifiers and symbols are interned once per process, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
 //!
 //! Two neighbours hold what this crate used to. The numeric half of the shared vocabulary — `Natural`, `Integer`, `Flt`, and the erased carriers' scalar semantics — is `curios-num`, the one crate that names `num-bigint`. The two combinator DSLs are `curios-parse` and `curios-print`, split apart because both name their unit `pure` and a crate name disambiguates them where a module namespace had to.
 //!
@@ -17,8 +17,14 @@ pub use entropy::*;
 mod span;
 pub use span::*;
 
+mod interner;
+use interner::*;
+
 mod qualifier;
 pub use qualifier::*;
+
+mod symbol;
+pub use symbol::*;
 
 mod plicity;
 pub use plicity::*;

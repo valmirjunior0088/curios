@@ -83,16 +83,16 @@ impl SizeContext {
         payloads: Vec<Free>,
     ) {
         let refined = refine.map(|(binder, shape)| {
-            let previous = self.refined.insert(binder.clone(), shape);
+            let previous = self.refined.insert(binder, shape);
             (binder, previous)
         });
         let nonzero = match nonzero {
-            Some(atom) if self.nonzero.insert(atom.clone()) => Some(atom),
+            Some(atom) if self.nonzero.insert(atom) => Some(atom),
             _ => None,
         };
         let payloads = payloads
             .into_iter()
-            .filter(|binder| self.payloads.insert(binder.clone()))
+            .filter(|binder| self.payloads.insert(*binder))
             .collect();
 
         self.scopes.push(Undo {
@@ -196,10 +196,10 @@ impl<E: Env> Grader<'_, E> {
     /// The value a binder currently stands for, following the refinements the enclosing arms established.
     pub(super) fn expand(&self, var: &Free, fuel: usize) -> Shape {
         if fuel == 0 {
-            return Shape::Atom(var.clone());
+            return Shape::Atom(*var);
         }
         match self.context.refined.get(var) {
-            None => Shape::Atom(var.clone()),
+            None => Shape::Atom(*var),
             Some(shape) => self.expand_shape(shape, fuel - 1),
         }
     }
@@ -208,7 +208,7 @@ impl<E: Env> Grader<'_, E> {
         match shape {
             Shape::Atom(var) => self.expand(var, fuel),
             // Already relative to a binder; expanding that binder would only lose the identity the claim is stated against.
-            Shape::Smaller(below) => Shape::Smaller(below.clone()),
+            Shape::Smaller(below) => Shape::Smaller(*below),
             Shape::Opaque => Shape::Opaque,
             Shape::Node(tag, kids) => Shape::Node(
                 tag.clone(),
@@ -257,7 +257,7 @@ impl<E: Env> Grader<'_, E> {
 
             Subterm::Struct(Struct { name, fields, .. }) => {
                 let kids = fields.iter().map(|field| self.shape_of(field)).collect();
-                Shape::Node(Tag::Struct(name.clone()), kids)
+                Shape::Node(Tag::Struct(*name), kids)
             }
 
             Subterm::Tuple(Tuple { fields, .. }) => {

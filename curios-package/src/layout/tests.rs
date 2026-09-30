@@ -40,7 +40,7 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
             .expect("a package with a library header")
             .mounts()
             .first()
-            .map(|mount| mount.prefix.clone()),
+            .map(|mount| mount.prefix),
         Some(Qualifier::from(["json"]))
     );
 }

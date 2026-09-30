@@ -28,7 +28,7 @@ fn a_forced_index_equation_refines_an_outer_hypothesis() {
         Term::type_ground(),
         vec![carrying(
             "s",
-            payload.clone(),
+            payload,
             nat_type(),
             succ(Term::free_var(&payload)),
         )],
@@ -128,12 +128,7 @@ fn a_clashing_absent_arm_is_legitimately_absent() {
         Term::type_ground(),
         vec![
             nullary("z", nat(0)),
-            carrying(
-                "s",
-                z_payload.clone(),
-                nat_type(),
-                succ(Term::free_var(&z_payload)),
-            ),
+            carrying("s", z_payload, nat_type(), succ(Term::free_var(&z_payload))),
         ],
     );
 
@@ -164,12 +159,7 @@ fn an_undecided_absent_arm_is_refused() {
         Term::type_ground(),
         vec![
             nullary("z", nat(0)),
-            carrying(
-                "s",
-                payload.clone(),
-                nat_type(),
-                succ(Term::free_var(&payload)),
-            ),
+            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
 
@@ -203,12 +193,7 @@ fn a_catch_all_covers_absent_arms() {
         Term::type_ground(),
         vec![
             nullary("z", nat(0)),
-            carrying(
-                "s",
-                payload.clone(),
-                nat_type(),
-                succ(Term::free_var(&payload)),
-            ),
+            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
 
@@ -250,12 +235,7 @@ fn a_catch_all_sees_its_own_scrutinee() {
         Term::type_ground(),
         vec![
             nullary("z", nat(0)),
-            carrying(
-                "s",
-                payload.clone(),
-                nat_type(),
-                succ(Term::free_var(&payload)),
-            ),
+            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
     let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
@@ -307,12 +287,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
         Term::type_ground(),
         vec![
             nullary("z", nat(0)),
-            carrying(
-                "s",
-                payload.clone(),
-                nat_type(),
-                succ(Term::free_var(&payload)),
-            ),
+            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
     let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
@@ -362,7 +337,7 @@ fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
         &mut kernel,
         "Pinned",
         Term::prop(),
-        vec![carrying("refl", z.clone(), nat_type(), Term::free_var(&z))],
+        vec![carrying("refl", z, nat_type(), Term::free_var(&z))],
     );
 
     let term = eliminate(
@@ -370,11 +345,7 @@ fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
         &family,
         nat(0),
         nat_type(),
-        vec![(
-            "refl",
-            vec![arm_binder.clone()],
-            Term::free_var(&arm_binder),
-        )],
+        vec![("refl", vec![arm_binder], Term::free_var(&arm_binder))],
     );
 
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
@@ -402,7 +373,7 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
         Term::prop(),
         vec![carrying(
             "mk",
-            a.clone(),
+            a,
             nat_type(),
             Term::apply(Term::free_var(&blur), [Term::free_var(&a)]),
         )],
@@ -413,7 +384,7 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
         &family,
         nat(0),
         nat_type(),
-        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
     );
 
     assert_eq!(
@@ -445,7 +416,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
         &family,
         nat(0),
         Term::type_ground(),
-        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
     );
 
     assert_eq!(
@@ -475,7 +446,7 @@ fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
         &family,
         nat(0),
         Term::type_ground(),
-        vec![("mk", vec![arm_binder.clone()], Term::free_var(&arm_binder))],
+        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
     );
 
     assert_eq!(
@@ -569,7 +540,7 @@ fn a_proposition_eliminates_into_a_proposition_however_many_constructors() {
         Term::prop(),
         vec![nullary("only", nat(0))],
     );
-    let target_type = Term::induct_type(target.clone(), Vec::<Term>::new(), [nat(0)]);
+    let target_type = Term::induct_type(target, Vec::<Term>::new(), [nat(0)]);
 
     let family = declare(
         &mut kernel,
@@ -676,9 +647,9 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
             Vec::new(),
             vec![nullary_at("a", Vec::new()), nullary_at("b", Vec::new())],
         );
-        let bit = Term::induct_type(carrier.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+        let bit = Term::induct_type(carrier, Vec::<Term>::new(), Vec::<Term>::new());
         let inhabitant =
-            |tag: &str| Term::variant(carrier.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+            |tag: &str| Term::variant(carrier, Vec::<Term>::new(), tag, Vec::<Term>::new());
 
         let value = binder(60, "z");
         let family = declare_at(
@@ -688,7 +659,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
             vec![bit.clone(), bit.clone()],
             vec![carrying_at(
                 "same",
-                value.clone(),
+                value,
                 bit.clone(),
                 vec![Term::free_var(&value), Term::free_var(&value)],
             )],

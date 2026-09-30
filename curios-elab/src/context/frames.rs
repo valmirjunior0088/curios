@@ -231,21 +231,21 @@ impl Frames {
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.locals_stamp.fresh();
-        self.local.push((name.clone(), type_.clone()));
+        self.local.push((*name, type_.clone()));
 
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(name.clone(), type_.clone());
+            .insert(*name, type_.clone());
         self.assumption_universes
             .last_mut()
             .unwrap()
-            .insert(name.clone(), UniverseContext::empty());
+            .insert(*name, UniverseContext::empty());
     }
 
     /// Join `name` to the witness scope (it must already be assumed).
     pub(crate) fn push_witness_binder(&mut self, name: &Free, type_: &Term) {
-        self.witness_scope.push((name.clone(), type_.clone()));
+        self.witness_scope.push((*name, type_.clone()));
     }
 
     /// The `use`-plicity binders in scope, in binding order (innermost last).
@@ -278,7 +278,7 @@ impl Frames {
             .unwrap_or_else(|| {
                 panic!("reassume: '{name}' has no assumption-frame entry to replace")
             });
-        assumptions.insert(name.clone(), type_.clone());
+        assumptions.insert(*name, type_.clone());
     }
 
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -382,7 +382,7 @@ impl Frames {
             .rev()
             .find(|contexts| contexts.contains_key(name))
             .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
-        contexts.insert(name.clone(), universe_context);
+        contexts.insert(*name, universe_context);
     }
 
     /// Per-frame `(index, parameter_count)` holders of `name`'s universe context — diagnostics for the instantiation mismatch traces.
@@ -458,7 +458,7 @@ impl Frames {
                     }
                 };
                 if let Some(slot) = names.get_mut(index) {
-                    *slot = Some(global.clone());
+                    *slot = Some(*global);
                 }
             }
         }
@@ -520,7 +520,7 @@ impl Frames {
         self.refinements
             .last_mut()
             .unwrap()
-            .insert(name.clone(), term.clone());
+            .insert(*name, term.clone());
     }
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a `Proj` scrutinee). The façade clears the caches first.

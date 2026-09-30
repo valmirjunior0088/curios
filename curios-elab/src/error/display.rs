@@ -880,7 +880,7 @@ impl fmt::Display for Displayed<'_> {
                 let reader = spelling.reader();
                 let report = GoalReport {
                     span: None,
-                    owner: reader.owner.clone(),
+                    owner: reader.owner,
                     witnesses: Rc::clone(&reader.witnesses),
                     scope: scope.clone(),
                     goal: (**goal).clone(),
@@ -897,7 +897,7 @@ impl fmt::Display for Displayed<'_> {
                         write!(f, "\n\n")?;
                     }
                     let spelling = Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
-                        owner: report.owner.clone(),
+                        owner: report.owner,
                         witnesses: Rc::clone(&report.witnesses),
                     }));
                     f.write_str(&goal_text(report, &spelling))?;

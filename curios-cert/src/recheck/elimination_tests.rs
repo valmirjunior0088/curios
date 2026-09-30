@@ -160,14 +160,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
             InductParam::new(Telescope::done(targets), Vec::new()),
         )
     };
-    let at = |tag: &str| {
-        Term::variant(
-            two_name.clone(),
-            Vec::<Term>::new(),
-            tag,
-            Vec::<Term>::new(),
-        )
-    };
+    let at = |tag: &str| Term::variant(two_name, Vec::<Term>::new(), tag, Vec::<Term>::new());
 
     // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous.
     let two_decl = InductDecl {
@@ -185,7 +178,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         arity: Telescope::done(Telescope::build(
             [(
                 Free::local(900, Some("t")),
-                Term::induct_type(two_name.clone(), Vec::<Term>::new(), Vec::<Term>::new()),
+                Term::induct_type(two_name, Vec::<Term>::new(), Vec::<Term>::new()),
             )],
             (),
         )),
@@ -196,7 +189,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         polarities: Vec::new(),
     };
 
-    let at_b = Term::induct_type(held_name.clone(), Vec::<Term>::new(), [at("b")]);
+    let at_b = Term::induct_type(held_name, Vec::<Term>::new(), [at("b")]);
     let outer = Free::local(903, Some("n"));
     let lying = || {
         Term::switch_scoped(
@@ -213,15 +206,15 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         &Global::Authored(Qualifier::from(["vacuous"])),
         Term::func_type(
             [
-                (outer.clone(), Term::intrinsic(Intrinsic::NatType)),
-                (subject.clone(), at_b.clone()),
+                (outer, Term::intrinsic(Intrinsic::NatType)),
+                (subject, at_b.clone()),
             ],
             Term::intrinsic(Intrinsic::NatType),
         ),
         Term::func(
             [
-                (outer.clone(), Term::intrinsic(Intrinsic::NatType)),
-                (subject.clone(), at_b),
+                (outer, Term::intrinsic(Intrinsic::NatType)),
+                (subject, at_b),
             ],
             Term::induct_match_scoped_marked(
                 Term::free_var(&subject),

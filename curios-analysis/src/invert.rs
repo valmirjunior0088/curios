@@ -32,7 +32,7 @@ pub fn pinned_by_targets(targets: &[Term]) -> Pinned {
         if let Subterm::Var(var) = &**target
             && !pinned.iter().any(|(binder, _)| binder == var.unwrap())
         {
-            pinned.push((var.unwrap().clone(), position));
+            pinned.push((*var.unwrap(), position));
         }
     }
     Pinned(pinned)
@@ -219,7 +219,7 @@ fn unify_index<J: Judge>(
         && var.as_bound().is_none()
         && flex.iter().any(|bound| bound == var.unwrap())
     {
-        let binder = var.unwrap().clone();
+        let binder = *var.unwrap();
 
         // At the top of a position a key-shaped actual is Rung B's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
         if (top && !solve_keys) && matches!(&*actual, Subterm::Var(_) | Subterm::Proj(_))

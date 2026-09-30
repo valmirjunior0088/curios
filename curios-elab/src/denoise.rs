@@ -50,7 +50,7 @@ fn refold_node(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Option<
     }
     let members = names
         .iter()
-        .map(|name| Term::var(Var::free(Free::Global(name.clone()))))
+        .map(|name| Term::var(Var::free(Free::Global(*name))))
         .collect::<Vec<_>>();
     let refs = members.iter().collect::<Vec<_>>();
     Some(refold_with(table, &tail.open(&refs)))

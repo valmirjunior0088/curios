@@ -115,7 +115,7 @@ fn both_checkers_decide_non_informativeness_alike() {
         .register_induct(&held, declaration.clone())
         .expect("the family registers");
     kernel.declare_induct(&held, &declaration);
-    let proof = || Term::induct_type(held.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let proof = || Term::induct_type(held, Vec::<Term>::new(), Vec::<Term>::new());
 
     let types = vec![
         ("Nat", nat()),
@@ -199,10 +199,7 @@ fn a_layer_whose_arguments_do_not_saturate_its_lambda_stops_the_walk() {
         context.fresh(Some("y")),
         context.fresh(Some("a")),
     );
-    let first = Term::func(
-        [(x.clone(), nat.clone()), (y.clone(), nat)],
-        Term::free_var(&x),
-    );
+    let first = Term::func([(x, nat.clone()), (y, nat)], Term::free_var(&x));
 
     let short = Term::apply(first.clone(), [Term::free_var(&a)]);
     let walked = super::spine_whnf(&mut context, &short).expect("the walk reduces heads only");

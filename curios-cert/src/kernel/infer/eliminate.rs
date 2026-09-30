@@ -66,7 +66,7 @@ pub(super) fn check_induct_arms(
 
         let signature = at
             .signature(tag)
-            .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
+            .ok_or_else(|| KernelError::Undeclared(family.name))?;
 
         let outcome = kernel.scoped(|kernel| {
             open_payload(kernel, signature, |kernel, binders, _payload, targets| {
@@ -76,7 +76,7 @@ pub(super) fn check_induct_arms(
 
         if !matches!(outcome?, Invert::Impossible) {
             return Err(KernelError::MissingArm {
-                family: family.name.clone(),
+                family: family.name,
                 tag: tag.clone(),
             });
         }
@@ -97,7 +97,7 @@ fn check_arm(
 ) -> Result<(), KernelError> {
     let signature = at
         .signature(tag)
-        .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
+        .ok_or_else(|| KernelError::Undeclared(family.name))?;
 
     if signature.len() != arm.arity() {
         return Err(KernelError::Arity {
@@ -114,7 +114,7 @@ fn check_arm(
 
             // The value this arm's scrutinee is: the constructor at its payload.
             let value: Term = Subterm::Variant(Variant {
-                name: family.name.clone(),
+                name: family.name,
                 universes: family.universes.clone(),
                 params: family.params.clone(),
                 tag: tag.clone(),
@@ -247,7 +247,7 @@ pub(super) fn guard_large_elimination(
         [(tag, _)] => {
             let signature = at
                 .signature(tag)
-                .ok_or_else(|| KernelError::Undeclared(family.name.clone()))?;
+                .ok_or_else(|| KernelError::Undeclared(family.name))?;
 
             let outcome = kernel.scoped(|kernel| {
                 open_payload(kernel, signature, |kernel, _binders, payload, targets| {
@@ -278,9 +278,9 @@ pub(super) fn guard_large_elimination(
 
             match outcome? {
                 true => Ok(()),
-                false => Err(KernelError::LargeElimination(family.name.clone())),
+                false => Err(KernelError::LargeElimination(family.name)),
             }
         }
-        _ => Err(KernelError::LargeElimination(family.name.clone())),
+        _ => Err(KernelError::LargeElimination(family.name)),
     }
 }

@@ -131,13 +131,8 @@ fn a_proposition_may_not_carry_a_computed_relevant_field() {
 #[test]
 fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     let true_name = Global::Authored(Qualifier::from(["True"]));
-    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(
-        true_name.clone(),
-        Vec::<Term>::new(),
-        "qed",
-        Vec::<Term>::new(),
-    );
+    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
     let true_decl = proposition(vec![(
         Atom::from("qed"),
         InductParam::new(Telescope::done(Vec::new()), Vec::new()),

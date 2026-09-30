@@ -52,7 +52,7 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
 /// `rec m : Type = (m) -> codomain; m`, optionally carrying a second unused member so that two such groups are not structurally equal and must take a delta step to be compared.
 pub(super) fn equirecursive(member: Free, param: Free, codomain: Term, padded: bool) -> Term {
     let body = Term::func_type([(param, Term::free_var(&member))], codomain);
-    let mut items = vec![(member.clone(), Term::type_ground(), body)];
+    let mut items = vec![(member, Term::type_ground(), body)];
 
     if padded {
         items.push((binder(99, "unused"), Term::type_ground(), nat_type()));
@@ -73,11 +73,7 @@ pub(super) fn polymorphic_fold(level: Level) -> Term {
     let sort = Term::type_at(level);
 
     let body = Term::func(
-        [
-            (t.clone(), sort.clone()),
-            (x.clone(), nat_type()),
-            (y.clone(), nat_type()),
-        ],
+        [(t, sort.clone()), (x, nat_type()), (y, nat_type())],
         Term::nat_match(
             Term::free_var(&y),
             Some(&motive),
@@ -94,7 +90,7 @@ pub(super) fn polymorphic_fold(level: Level) -> Term {
 
     Term::rec(
         [(
-            f.clone(),
+            f,
             Term::func_type([(t, sort), (x, nat_type()), (y, nat_type())], nat_type()),
             body,
         )],
@@ -114,7 +110,7 @@ pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term)
         &InductDecl {
             universe_context: UniverseContext::default(),
             arity: Telescope::build(
-                [(param.clone(), param_sort)],
+                [(param, param_sort)],
                 Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
             ),
             constructors: Vec::new(),

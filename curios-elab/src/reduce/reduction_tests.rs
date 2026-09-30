@@ -35,7 +35,7 @@ fn apply_beta_reduces() {
     let x = context.fresh(Some("x"));
 
     let term: Term = Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
         [nat(1)],
     );
 
@@ -53,7 +53,7 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let x = context.fresh(Some("x"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let body = Term::func(
-        [(n.clone(), nat_type.clone())],
+        [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&m),
@@ -67,8 +67,8 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
 
     let neutral = Term::rec(
         [(
-            countdown.clone(),
-            Term::func_type([(n.clone(), nat_type.clone())], nat_type.clone()),
+            countdown,
+            Term::func_type([(n, nat_type.clone())], nat_type.clone()),
             body.clone(),
         )],
         Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
@@ -85,8 +85,8 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
 
     let concrete = Term::rec(
         [(
-            countdown.clone(),
-            Term::func_type([(n.clone(), nat_type.clone())], nat_type),
+            countdown,
+            Term::func_type([(n, nat_type.clone())], nat_type),
             body,
         )],
         Term::apply(Term::free_var(&countdown), [nat(2)]),
@@ -106,7 +106,7 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let arrow = Term::func_type([(x.clone(), nat_type.clone())], nat_type.clone());
+    let arrow = Term::func_type([(x, nat_type.clone())], nat_type.clone());
     let called = |on: &Free, argument: Term| {
         Term::apply(
             Term::apply(Term::free_var(&f), [Term::free_var(on)]),
@@ -114,23 +114,20 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
         )
     };
     let body = Term::func(
-        [(n.clone(), nat_type.clone())],
+        [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
             Some(&m),
             arrow.clone(),
-            Term::func([(x.clone(), nat_type.clone())], Term::free_var(&x)),
+            Term::func([(x, nat_type.clone())], Term::free_var(&x)),
             &pred,
             &ih,
-            Term::func(
-                [(x.clone(), nat_type.clone())],
-                called(&pred, Term::free_var(&x)),
-            ),
+            Term::func([(x, nat_type.clone())], called(&pred, Term::free_var(&x))),
         ),
     );
 
     let term = Term::rec(
-        [(f.clone(), Term::func_type([(n, nat_type)], arrow), body)],
+        [(f, Term::func_type([(n, nat_type)], arrow), body)],
         Term::apply(
             Term::apply(Term::free_var(&f), [nat(2)]),
             [Term::free_var(&y)],
@@ -147,7 +144,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let unused = context.fresh(Some("unused"));
     let value = context.fresh(Some("value"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let identity = Term::func([(n.clone(), nat_type.clone())], Term::free_var(&n));
+    let identity = Term::func([(n, nat_type.clone())], Term::free_var(&n));
 
     // A group whose member never mentions itself has no fixed point to keep, so opening its tail
     // reduces past the projection to the member's own value and `expose_rec_tail` leaves a `Func`.
@@ -188,7 +185,7 @@ fn inductive_match_selects_case_and_projects_payload() {
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
-            ("some", vec![x.clone()], Term::free_var(&x)),
+            ("some", vec![x], Term::free_var(&x)),
         ],
     );
 
@@ -225,7 +222,7 @@ fn inductive_match_present_tag_ignores_default() {
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
-            ("some", vec![x.clone()], Term::free_var(&x)),
+            ("some", vec![x], Term::free_var(&x)),
         ],
         nat(99),
     );
@@ -313,7 +310,7 @@ fn let_binds_each_value_to_its_own_slot() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let pick_second = Term::apply(
         Term::func(
-            [(p.clone(), nat_type.clone()), (q.clone(), nat_type.clone())],
+            [(p, nat_type.clone()), (q, nat_type.clone())],
             Term::free_var(&q),
         ),
         [Term::free_var(&a), Term::free_var(&b)],
@@ -752,7 +749,7 @@ fn eta_reduce_func_fires() {
     let f = context.fresh(Some("f"));
 
     let term: Term = Term::func(
-        [(y.clone(), Term::type_ground())],
+        [(y, Term::type_ground())],
         Term::apply(Term::free_var(&f), [Term::free_var(&y)]),
     );
 

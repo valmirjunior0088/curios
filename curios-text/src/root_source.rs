@@ -191,7 +191,7 @@ impl RootSource {
         );
 
         let mut modules = BTreeMap::new();
-        modules.insert(prefix.clone(), module);
+        modules.insert(prefix, module);
         self.bases
             .push((Mount::new(prefix, kind), Base::Supplied(modules)));
     }
@@ -310,7 +310,7 @@ impl RootSource {
         prefix: &Qualifier,
         qualifier: &Qualifier,
     ) -> Result<bool, Error> {
-        let mut path = prefix.clone();
+        let mut path = *prefix;
         let mut segments = qualifier.segments()[prefix.segments().len()..]
             .iter()
             .peekable();

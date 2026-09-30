@@ -40,7 +40,7 @@ use {
 fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
     let found = Rc::new(RefCell::new(None));
     let sink = Rc::clone(&found);
-    let name = name.clone();
+    let name = *name;
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| {
@@ -299,7 +299,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
                 .map(|(binder, _)| Term::free_var(binder))
                 .collect::<Vec<_>>();
             let constructed =
-                crate::check_is_sort(context, &Term::induct_type(name.clone(), params, targets))?.0;
+                crate::check_is_sort(context, &Term::induct_type(*name, params, targets))?.0;
 
             match &*constructed {
                 Subterm::InductType(constructed) => {
@@ -499,7 +499,7 @@ fn finalize_definition(
 
     // A method wrapper is not independently polymorphic. Its own type mentions only a *subset* of its concept's levels — `pure` names some, `bind` others — so generalizing it alone yields fewer parameters than the concept has (`Monad` 5 against `pure` 2, `bind` 1). But the type also carries the concept applied at *all* of them, through the `use w : C(..)` binder, and the levels outside the wrapper's own generalized set then have nothing to name them: `level w escapes its universe parameter context`. So the wrapper must inherit the concept's whole context. Lean and Rocq both hand a projection its structure's universe parameters verbatim, for the same reason. The owner comes from `into_core`, which records it where the wrapper is generated; re-deriving it by splitting `name` would misread an ordinary definition that merely happens to sit under a concept's namespace. Inheriting the context is only half the work: those levels are still metas, and ordinary finalization — the one thing that would solve them — is exactly what must not run here, because it would mint the wrapper's own parameters in its own order. `finalize_at_instance` binds the concept application's arguments to the inherited parameters positionally instead.
     if let DefinitionKind::ConceptMethod { owner } = kind {
-        let owner = Global::Authored(owner.clone());
+        let owner = Global::Authored(*owner);
         let universe_context = context
             .concept(&owner)
             .ok_or_else(|| {
@@ -531,7 +531,7 @@ fn finalize_definition(
     //
     // Like `ConceptMethod`, the owner is a field `into_core` records where the constructor is generated, not something recovered from `name`.
     if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
-        let owner = Global::Authored(owner.clone());
+        let owner = Global::Authored(*owner);
         let universe_context = context
             .induct_decl(&owner)
             .ok_or_else(|| {
@@ -599,7 +599,7 @@ fn finalize_definition(
 
     let universe_context = context.finalize_universe_metas(interface, internal)?;
     let levels = universe_context.identity_instance();
-    let owned = BTreeSet::from([name.clone()]);
+    let owned = BTreeSet::from([*name]);
     // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself. A definition whose body names *itself* is about to be captured by a single-member group instead, and its occurrences reach that binder — see [`elaborate_module_let`].
     let free = self_reference;
     let type_ = stamp_declaration_instance(
@@ -766,10 +766,10 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     context.restore_checked_site(outer_site);
 
     let definition = Definition {
-        name: def.name.clone(),
+        name: def.name,
         kind: def.kind.clone(),
         universe_context,
-        island: def.island.clone(),
+        island: def.island,
         totality: def.totality,
         type_,
         body,
@@ -998,10 +998,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
     // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
-    let owned = defs
-        .iter()
-        .map(|def| def.name.clone())
-        .collect::<BTreeSet<_>>();
+    let owned = defs.iter().map(|def| def.name).collect::<BTreeSet<_>>();
     fn stamp<B: Bound>(
         context: &Context,
         value: &B,
@@ -1115,10 +1112,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .zip(types)
         .zip(bodies)
         .map(|((def, type_), body)| Definition {
-            name: def.name.clone(),
+            name: def.name,
             kind: def.kind.clone(),
             universe_context: universe_context.clone(),
-            island: def.island.clone(),
+            island: def.island,
             totality: def.totality,
             type_,
             body,
@@ -1164,7 +1161,7 @@ fn elaborate_module_item(
 ) -> Result<(Item, Vec<DeferredRefusal>), Error> {
     curios_profile::profile!("elaborate_module_item");
     let item_module = match item {
-        Item::Let(definition) => definition.island.clone(),
+        Item::Let(definition) => definition.island,
         Item::Rec(rec) => rec.island(),
     };
     context.set_island(item_module);
@@ -1416,7 +1413,7 @@ fn elaborate_module_suffix(
     let concepts = module
         .concepts
         .keys()
-        .filter_map(|name| Some((name.clone(), context.concept(name)?.clone())))
+        .filter_map(|name| Some((*name, context.concept(name)?.clone())))
         .collect();
     let witnesses = module
         .witnesses

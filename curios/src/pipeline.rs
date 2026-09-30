@@ -238,10 +238,7 @@ pub(crate) fn report(
     match progress {
         // A recompile over a baseline reads as a compile: what the line reports is that the unit is being worked on and how long it took, and the store this product hands the fold never offers a baseline anyway.
         Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
-            *line = Some(Line::nested(
-                Heading::Compiling,
-                &Subject::Mounted(prefix.clone()),
-            ));
+            *line = Some(Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)));
         }
         // The entry program *is* the target the header named, so among unit steps its compile adds none of its own. With no units there is no other step, and this is it.
         Progress::Entry => {
@@ -250,7 +247,7 @@ pub(crate) fn report(
             }
         }
         Progress::Reused(prefix) => {
-            Line::nested(Heading::Compiling, &Subject::Mounted(prefix.clone())).outcome("reused");
+            Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)).outcome("reused");
             eprintln!();
         }
         Progress::Compiled => {

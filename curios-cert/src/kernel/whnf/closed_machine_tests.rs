@@ -16,25 +16,25 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     let g = Free::global(Qualifier::from(["g"]));
     let twice = Free::global(Qualifier::from(["twice"]));
     let (x, f) = (binder(0, "x"), binder(1, "f"));
-    let unary = Term::func_type([(x.clone(), nat_type())], nat_type());
+    let unary = Term::func_type([(x, nat_type())], nat_type());
 
     let define = |kernel: &mut Kernel| {
         kernel.define(
             &g,
             &unary,
             &Term::func(
-                [(x.clone(), nat_type())],
+                [(x, nat_type())],
                 Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
             ),
             &monomorphic(),
         );
         kernel.define(
             &twice,
-            &Term::func_type([(f.clone(), unary.clone())], unary.clone()),
+            &Term::func_type([(f, unary.clone())], unary.clone()),
             &Term::func(
-                [(f.clone(), unary.clone())],
+                [(f, unary.clone())],
                 Term::func(
-                    [(x.clone(), nat_type())],
+                    [(x, nat_type())],
                     Term::apply(
                         Term::free_var(&f),
                         [Term::apply(Term::free_var(&f), [Term::free_var(&x)])],
@@ -94,7 +94,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
         let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
         let body = Term::func(
-            [(acc.clone(), nat_type()), (b.clone(), bin_type.clone())],
+            [(acc, nat_type()), (b, bin_type.clone())],
             Term::bin_match_scoped(
                 Grain::X,
                 Term::free_var(&b),
@@ -117,11 +117,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         );
         Term::rec(
             [(
-                go.clone(),
-                Term::func_type(
-                    [(acc.clone(), nat_type()), (b.clone(), bin_type.clone())],
-                    nat_type(),
-                ),
+                go,
+                Term::func_type([(acc, nat_type()), (b, bin_type.clone())], nat_type()),
                 body,
             )],
             Term::apply(Term::free_var(&go), [nat(0), bytes(vec![3; 40])]),
@@ -132,7 +129,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (n, motive_b) = (binder(0, "n"), binder(1, "m"));
         let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
         let body = Term::func(
-            [(n.clone(), nat_type())],
+            [(n, nat_type())],
             Term::nat_match(
                 Term::free_var(&n),
                 Some(&motive_b),
@@ -144,11 +141,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
             ),
         );
         Term::rec(
-            [(
-                member.clone(),
-                Term::func_type([(n.clone(), nat_type())], nat_type()),
-                body,
-            )],
+            [(member, Term::func_type([(n, nat_type())], nat_type()), body)],
             Term::apply(Term::free_var(&member), [nat(9)]),
         )
     };
@@ -157,7 +150,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (x, y) = (binder(0, "x"), binder(1, "y"));
         Term::apply(
             Term::func(
-                [(x.clone(), nat_type()), (y.clone(), nat_type())],
+                [(x, nat_type()), (y, nat_type())],
                 Term::let_(
                     &y,
                     nat_type(),
@@ -195,7 +188,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
             nat_type(),
             [
                 ("none", Vec::<Free>::new(), nat(0)),
-                ("some", vec![payload.clone()], Term::free_var(&payload)),
+                ("some", vec![payload], Term::free_var(&payload)),
             ],
         )
     };
@@ -205,7 +198,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
         let body = Term::func(
-            [(b.clone(), bin_type.clone())],
+            [(b, bin_type.clone())],
             Term::bin_match_scoped(
                 Grain::X,
                 Term::free_var(&b),
@@ -219,8 +212,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         );
         let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
             [(
-                go.clone(),
-                Term::func_type([(b.clone(), bin_type.clone())], nat_type()),
+                go,
+                Term::func_type([(b, bin_type.clone())], nat_type()),
                 body,
             )],
             Term::let_(
@@ -242,7 +235,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
         let motive_b = binder(7, "m");
         let body = Term::func(
-            [(b.clone(), bin_type.clone())],
+            [(b, bin_type.clone())],
             Term::bin_match_scoped(
                 Grain::X,
                 Term::free_var(&b),
@@ -267,8 +260,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         };
         let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
             [(
-                go.clone(),
-                Term::func_type([(b.clone(), bin_type.clone())], nat_type()),
+                go,
+                Term::func_type([(b, bin_type.clone())], nat_type()),
                 body,
             )],
             Term::let_(
@@ -290,7 +283,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
     // used to demand a projection and decline everything else.
     let dissolved_group = {
         let (n, unused) = (binder(0, "n"), binder(1, "unused"));
-        let identity = Term::func([(n.clone(), nat_type())], Term::free_var(&n));
+        let identity = Term::func([(n, nat_type())], Term::free_var(&n));
 
         Term::apply(
             Term::rec(
@@ -309,18 +302,18 @@ fn the_closed_machine_agrees_with_the_strategy() {
     let past_parameters = {
         let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
         let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
-        let arrow = Term::func_type([(x.clone(), nat_type())], nat_type());
+        let arrow = Term::func_type([(x, nat_type())], nat_type());
         let body = Term::func(
-            [(n.clone(), nat_type())],
+            [(n, nat_type())],
             Term::nat_match(
                 Term::free_var(&n),
                 Some(&motive_b),
                 arrow.clone(),
-                Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+                Term::func([(x, nat_type())], Term::free_var(&x)),
                 &pred,
                 &hypothesis,
                 Term::func(
-                    [(x.clone(), nat_type())],
+                    [(x, nat_type())],
                     Term::apply(
                         Term::apply(Term::free_var(&member), [Term::free_var(&pred)]),
                         [Term::free_var(&x)],
@@ -329,11 +322,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
             ),
         );
         let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
-            [(
-                member.clone(),
-                Term::func_type([(n.clone(), nat_type())], arrow),
-                body,
-            )],
+            [(member, Term::func_type([(n, nat_type())], arrow), body)],
             Term::apply(Term::apply(Term::free_var(&member), [nat(2)]), [nat(3)]),
         )) else {
             unreachable!("built as a rec")

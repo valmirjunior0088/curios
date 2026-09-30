@@ -294,7 +294,7 @@ impl Term {
         let subterm = match &**self {
             Subterm::InductType(induct) if names.contains(&induct.name) => {
                 Subterm::InductType(InductType {
-                    name: induct.name.clone(),
+                    name: induct.name,
                     universes: levels.to_vec(),
                     params: stamp(&induct.params, names, self_reference, levels),
                     indices: stamp(&induct.indices, names, self_reference, levels),
@@ -302,7 +302,7 @@ impl Term {
             }
             Subterm::Variant(variant) if names.contains(&variant.name) => {
                 Subterm::Variant(Variant {
-                    name: variant.name.clone(),
+                    name: variant.name,
                     universes: levels.to_vec(),
                     params: stamp(&variant.params, names, self_reference, levels),
                     tag: variant.tag.clone(),
@@ -311,13 +311,13 @@ impl Term {
             }
             Subterm::StructType(struct_type) if names.contains(&struct_type.name) => {
                 Subterm::StructType(StructType {
-                    name: struct_type.name.clone(),
+                    name: struct_type.name,
                     universes: levels.to_vec(),
                     params: stamp(&struct_type.params, names, self_reference, levels),
                 })
             }
             Subterm::Struct(struct_) if names.contains(&struct_.name) => Subterm::Struct(Struct {
-                name: struct_.name.clone(),
+                name: struct_.name,
                 universes: levels.to_vec(),
                 params: stamp(&struct_.params, names, self_reference, levels),
                 fields: stamp(&struct_.fields, names, self_reference, levels),
@@ -705,12 +705,12 @@ impl Term {
     }
 
     pub fn free_var(name: &Free) -> Self {
-        Self::var(Var::free(name.clone()))
+        Self::var(Var::free(*name))
     }
 
     /// An instance whose head references `name` — the shape elaboration mints for every occurrence of a universe-polymorphic binding.
     pub fn instance_of(name: &Free, levels: Vec<Level>) -> Self {
-        Self::instance(InstanceHead::Var(Var::free(name.clone())), levels)
+        Self::instance(InstanceHead::Var(Var::free(*name)), levels)
     }
 
     /// Instantiate a generalized binding at occurrence-specific levels. The result is span-less; a call site holding the occurrence lifts its span onto the wrapper, since the typed head carries none.
@@ -1935,7 +1935,7 @@ impl Term {
                             };
                             let params = children.by_ref().take(params.len()).collect();
                             Subterm::Variant(Variant {
-                                name: name.clone(),
+                                name: *name,
                                 universes,
                                 params,
                                 tag: tag.clone(),
