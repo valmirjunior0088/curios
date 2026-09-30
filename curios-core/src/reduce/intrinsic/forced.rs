@@ -61,16 +61,20 @@ fn read_through(intrinsic: &Intrinsic) -> bool {
     )
 }
 
-/// One pair's forcing: every argument forced once, keyed on the node's identity and holding the node alive beside its answer, since an identity is an address — a reduct is a graph, and a walk that forced it once per path would expand it.
+/// One pair's forcing: every node of the spine walked once and every argument forced once, each keyed on the node's identity and holding the node alive beside its answer, since an identity is an address — a reduct is a graph, and a sum whose summands share their subterms, walked once per path, costs what its tree would (`tests::unfolding`'s symbolic web against zero is the measure).
 #[derive(Default)]
 struct Forcing {
+    spines: HashMap<usize, (Term, Term)>,
     arguments: HashMap<usize, (Term, Term)>,
 }
 
 impl Forcing {
     /// A node the readers read through with its operands walked in turn, and an atom with its arguments forced and put in order.
     fn spine<R: Reducer>(&mut self, reducer: &mut R, term: &Term) -> Result<Term, ReduceError> {
-        recurse(|| match &**term {
+        if let Some((_, done)) = self.spines.get(&term.identity()) {
+            return Ok(done.clone());
+        }
+        let forced = recurse(|| match &**term {
             Subterm::Intrinsic(intrinsic) if read_through(intrinsic) => {
                 self.operands(reducer, term, intrinsic, Self::spine)
             }
@@ -79,7 +83,10 @@ impl Forcing {
                 self.operands(reducer, term, intrinsic, Self::atom_argument)
             }
             _ => Ok(term.clone()),
-        })
+        })?;
+        self.spines
+            .insert(term.identity(), (term.clone(), forced.clone()));
+        Ok(forced)
     }
 
     /// One argument of an atom: forced, then with every sum and product in it put in order.
