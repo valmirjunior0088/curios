@@ -1379,3 +1379,40 @@ fn a_connective_leaf_with_no_value_is_compared_as_written() {
 
     assert_eq!(kernel.convert_at(&boolean, &this, &that), Ok(true));
 }
+
+/// Conversion's readers key atoms on spelling, so two sums of atoms that commute a sum inside their arguments met only where the positional congruence paired them, and an `Int` sum keeps the order it was written in: `h(i + j) + e(k + l)` against `e(l + k) + h(j + i)` paired `h` with `e` and was refused, whichever identities the heads held. A pair the chain decides nothing about is read once more with every atom's arguments forced, and the cancellation then pairs them. The control keeps one argument genuinely different, and stays apart.
+#[test]
+fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_them() {
+    let int = || Term::intrinsic(Intrinsic::IntType);
+    let [i, j, k, l] = [1, 2, 3, 4].map(|index| Free::local(index, None));
+    let sum = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let of = |left: &Free, right: &Free| sum(Term::free_var(left), Term::free_var(right));
+
+    for (h_index, e_index) in [(10, 11), (11, 10)] {
+        let mut kernel = kernel();
+        let h = Free::local(h_index, Some("h"));
+        let e = Free::local(e_index, Some("e"));
+        for name in [i, j, k, l] {
+            kernel.assume(&name, &int());
+        }
+        let function = Term::func_type([(Free::local(99, None), int())], int());
+        kernel.assume(&h, &function);
+        kernel.assume(&e, &function);
+        let at = |head: &Free, argument: Term| Term::apply(Term::free_var(head), [argument]);
+
+        let this = sum(at(&h, of(&i, &j)), at(&e, of(&k, &l)));
+        let that = sum(at(&e, of(&l, &k)), at(&h, of(&j, &i)));
+        let apart = sum(at(&e, of(&l, &k)), at(&h, of(&j, &j)));
+
+        assert_eq!(
+            kernel.convert_at(&int(), &this, &that),
+            Ok(true),
+            "h at {h_index}, e at {e_index}"
+        );
+        assert_eq!(
+            kernel.convert_at(&int(), &this, &apart),
+            Ok(false),
+            "h at {h_index}, e at {e_index}"
+        );
+    }
+}

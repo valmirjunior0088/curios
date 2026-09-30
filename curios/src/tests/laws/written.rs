@@ -10,6 +10,41 @@ struct Carrier {
     refused: &'static [&'static str],
 }
 
+/// Every reader of the carriers' algebra keys an atom on its spelling, so two atoms equal only once their arguments are forced — `f(a + b)` and `f(b + a)` — met only where the positional congruence's hash order happened to pair them, and a verdict turned on the order the binders were declared in. Conversion reads a pair it decided nothing about once more with every atom's arguments forced (`force_atoms`), so each row below is stated under both orders.
+const ATOM_BINDERS: &str = "a: Nat, b: Nat, c: Nat, d: Nat, n: Nat, m: Nat, f: (Nat) -> Nat, g: (Nat) -> Nat, i: Int, j: Int, k: Int, l: Int, h: (Int) -> Int, e: (Int) -> Int, p: (Nat) -> Bool, q: (Nat) -> Bool";
+
+/// [`ATOM_BINDERS`] declared the other way round, which mints every binder's identity in the opposite order.
+const ATOM_BINDERS_REVERSED: &str = "q: (Nat) -> Bool, p: (Nat) -> Bool, e: (Int) -> Int, h: (Int) -> Int, l: Int, k: Int, j: Int, i: Int, g: (Nat) -> Nat, f: (Nat) -> Nat, m: Nat, n: Nat, d: Nat, c: Nat, b: Nat, a: Nat";
+
+const ATOMS_HELD: &[&str] = &[
+    // A product's factors, commuted or not: the factor pairing reads them by identity.
+    "Eq()(f(a + b) * g(c + d), g(d + c) * f(b + a))",
+    "Eq()(f(a + b) * g(c + d), f(b + a) * g(d + c))",
+    // A product inside a sum, and an atom whose argument's own application holds the sum.
+    "Eq()(f(a + b) * g(c + d) + 1, 1 + g(d + c) * f(b + a))",
+    "Eq()(f(g(a + b)) + g(f(c + d)), g(f(d + c)) + f(g(b + a)))",
+    // A comparison's sides, paired by identity where the comparison is symmetric and read through the linear views where it is ordered.
+    "Eq()(f(a + b) == g(c + d), g(d + c) == f(b + a))",
+    "Eq()(f(a + b) != g(c + d), g(d + c) != f(b + a))",
+    "Eq()(f(a + b) * g(c + d) < n, g(d + c) * f(b + a) < n)",
+    // The group's cancellation, its monomials and its comparisons.
+    "Eq()(h(i + j) + e(k + l), e(l + k) + h(j + i))",
+    "Eq()(h(i + j) * e(k + l), e(l + k) * h(j + i))",
+    "Eq()(h(i + j) == e(k + l), e(l + k) == h(j + i))",
+    "Eq()(h(i + j) + e(k + l) <= i, e(l + k) + h(j + i) <= i)",
+    // A connective's leaves as a set, and the truth table's laws over them.
+    "Eq()(p(a + b) && q(c), q(c) && p(b + a))",
+    "Eq()(p(a + b) || q(c + d), q(d + c) || p(b + a))",
+    "Eq()(Bool/xor(p(a + b), q(c)), Bool/xor(q(c), p(b + a)))",
+    "Eq()(Bool/not(p(a + b) && q(c)), Bool/not(q(c)) || Bool/not(p(b + a)))",
+    "Eq()(p(a + b) || (p(b + a) && q(c)), p(a + b))",
+];
+
+// A candidate, and the gap forcing leaves: an atom that is no application keeps its insides as written, so two stuck `match`es whose branches commute a sum are two atoms, and the congruence pairs them by position. `documentation/roadmap/algebra/05-decided-by-spelling-or-cap-spec.md` holds what would take it.
+const ATOMS_REFUSED: &[&str] = &[
+    "Eq()((match n | 0 => a + b | _ => c end) + (match m | 0 => c + d | _ => a end), (match m | 0 => d + c | _ => a end) + (match n | 0 => b + a | _ => c end))",
+];
+
 const CARRIERS: &[Carrier] = &[
     Carrier {
         name: "Nat under +",
@@ -23,6 +58,18 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(f(x + y) + g(y + z), g(z + y) + f(y + x))",
         ],
         refused: &[],
+    },
+    Carrier {
+        name: "Atoms up to their arguments",
+        binders: ATOM_BINDERS,
+        held: ATOMS_HELD,
+        refused: ATOMS_REFUSED,
+    },
+    Carrier {
+        name: "Atoms up to their arguments, their binders declared the other way round",
+        binders: ATOM_BINDERS_REVERSED,
+        held: ATOMS_HELD,
+        refused: ATOMS_REFUSED,
     },
     Carrier {
         name: "Nat under *",

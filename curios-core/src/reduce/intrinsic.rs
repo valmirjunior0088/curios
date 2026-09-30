@@ -2130,6 +2130,8 @@ mod compare_tests;
 #[cfg(test)]
 mod cost_tests;
 #[cfg(test)]
+mod forced_tests;
+#[cfg(test)]
 mod free_monoid_tests;
 #[cfg(test)]
 mod laws_tests;
