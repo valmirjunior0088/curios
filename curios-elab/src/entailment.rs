@@ -1,4 +1,4 @@
-//! The procedure that proves a bound from the facts in scope, where the fill ([`trivially_inhabited`](crate::elaborate)) has no answer.
+//! The procedure that proves a bound from the facts in scope, where the fill, `trivially_inhabited`, has no answer.
 //!
 //! **It writes a proof and elaborates it as written code is.** Both checkers recheck what it wrote, so a wrong proof is a term that does not check and the procedure's mistakes are refusals: nothing it adds is trusted. It changes no conversion rule, no refinement and no solving choice, and assigns only the hole it was asked about, with a term whose type is the hole's.
 //!
