@@ -511,8 +511,16 @@ impl fmt::Display for Displayed<'_> {
                     "function parameter {position} is {requirement}, but was {written}"
                 )
             }
-            Error::UnknownMatchConstructor { type_name, tag } => {
-                write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")
+            Error::UnknownMatchConstructor {
+                type_name,
+                tag,
+                constructors,
+            } => {
+                write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")?;
+                match constructors.is_empty() {
+                    true => write!(f, "\n  it has no constructors"),
+                    false => write!(f, "\n  its constructors are {}", constructors.join(", ")),
+                }
             }
             Error::MatchCaseMissing { type_name, tag } => {
                 write!(

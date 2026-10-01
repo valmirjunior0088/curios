@@ -13,6 +13,7 @@ use {
         Term, Three, Two,
     },
     curios_num::{Binary, Grain, Natural},
+    curios_utilities::Plicity,
     std::collections::BTreeSet,
 };
 
@@ -904,6 +905,23 @@ fn elaborate_induct_match(
     }
 
     // Built by walking the *declaration* order, not the written order, so the elaborated arm sequence is canonical: two matches differing only in how their arms were written produce the same term.
+        // Each constructor as a pattern writes it, one placeholder per payload under the mark its position takes, so the report shows what the arm could have named.
+        let constructors = induct_decl
+            .constructor_order()
+            .map(|constructor| {
+                let payload = induct_decl
+                    .payload_plicities(constructor)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|plicity| match plicity {
+                        Plicity::Implicit => "@_",
+                        Plicity::Explicit | Plicity::Witness => "_",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{constructor}({payload})")
+            })
+            .collect();
     let mut cases_elaborated = Vec::new();
     for tag in induct_decl.constructor_order() {
         let Some((_, scope)) = cases.iter().find(|(candidate, _)| candidate == tag) else {

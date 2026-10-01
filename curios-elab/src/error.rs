@@ -280,9 +280,11 @@ pub enum Error {
         expected: Plicity,
         written: Plicity,
     },
+    /// A `match` arm naming no constructor of `type_name`, with the constructors it has, each spelled as a pattern writes it.
     UnknownMatchConstructor {
         type_name: String,
         tag: String,
+        constructors: Vec<String>,
     },
     /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it would repeat that snippet in a vocabulary the surface language does not have.
     MatchCaseMissing {
@@ -834,8 +836,16 @@ impl Error {
         Self::SurplusFuncBinders { surplus, slots }
     }
 
-    pub(crate) fn unknown_match_constructor(type_name: String, tag: String) -> Self {
-        Self::UnknownMatchConstructor { type_name, tag }
+    pub(crate) fn unknown_match_constructor(
+        type_name: String,
+        tag: String,
+        constructors: Vec<String>,
+    ) -> Self {
+        Self::UnknownMatchConstructor {
+            type_name,
+            tag,
+            constructors,
+        }
     }
 
     pub(crate) fn match_case_missing(type_name: String, tag: String) -> Self {

@@ -137,3 +137,36 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
     // some(5) → 15 via its arm; none() → 99 via the catch-all; 15 + 99 = 114.
     assert_eq!(run(source), b"114");
 }
+
+// An arm naming no constructor of the scrutinee's type is told which it has, each as a pattern writes it — a payload as `_`, an implicit one as `@_`.
+#[test]
+fn an_arm_naming_no_constructor_is_told_which_there_are() {
+    let nullary = error(
+        r#"
+        use /std/{Nat, Ordering};
+        let f(o : Ordering) -> Nat = match o | less() => 0 end;
+        /std/print(Nat/to_str(f(Ordering/lt())))
+        "#,
+    );
+    assert!(
+        nullary.contains("match arm 'less' is not a constructor of")
+            && nullary.contains("its constructors are lt(), eq(), gt()"),
+        "unexpected error: {nullary}"
+    );
+
+    let payloads = error(
+        r#"
+        use /std/{Nat};
+        induct Sized(T : Type) : (length : Nat) -> pub Type
+        | empty() : (0)
+        | push(@n : Nat, head : T, tail : Sized(T)(n)) : (n + 1)
+        end
+        let f(@n : Nat, s : Sized(Nat)(n)) -> Nat = match s | cons(@m, h, t) => h end;
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        payloads.contains("its constructors are empty(), push(@_, _, _)"),
+        "unexpected error: {payloads}"
+    );
+}
