@@ -33,7 +33,7 @@ mod recursion_tests;
 mod test_support;
 
 use {
-    super::{Counted, Kernel, KernelError, Sort, infer, synth_neutral, unfold_spelling},
+    super::{Counted, Kernel, KernelError, Sort, synth_neutral, unfold_spelling},
     curios_analysis::connectives_agree,
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
@@ -727,15 +727,16 @@ fn applied_head(term: &Term) -> &Term {
     term
 }
 
-/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices its scrutinee's type carries, read by inference, which the head's own typing has already paid for.
+/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices its scrutinee's type carries, read by the lookup a neutral spine has, since conversion looks a type up and never infers one. A scrutinee the lookup does not type — a stuck match of its own — leaves the indices unread, and the binder count below refuses the pair.
 fn family_at_head(
     kernel: &mut Kernel,
     motive: &Scope<Many>,
     head: &Term,
 ) -> Result<Term, KernelError> {
     let mut arguments = Vec::with_capacity(motive.arity());
-    if motive.arity() > 1 {
-        let head_type = infer(kernel, head)?;
+    if motive.arity() > 1
+        && let Some(head_type) = synth_neutral(kernel, head)?
+    {
         let head_type = kernel.reduce_forced(head_type)?;
         if let Subterm::InductType(InductType { indices, .. }) = &*head_type {
             arguments.extend(indices.iter().cloned());
