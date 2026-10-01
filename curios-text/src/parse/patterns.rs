@@ -90,14 +90,33 @@ pub(super) fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
 
 // A struct pattern `Name { p1, p2, … }` / `Name { label = p, … }` — mirrors `parse_struct_lit`, but with no `(args)` head-parameter form: the written head name is descriptive only, never resolved or validated (see `Pattern`).
 pub(super) fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
+    struct_pattern(false)
+}
+
+/// What refuses a `let`'s struct pattern that reaches something other than its closing brace.
+const UNCLOSED_STRUCT_PATTERN: &str =
+    "a struct pattern closes with `}`; a `let` reads `Name { … }` as its binder";
+
+// [`parse_struct_pattern`], committed past `Name {` where `committed` says the brace discriminates it. Uncommitted it keeps the token's own refusal, since it is then one guess among the alternatives a sibling may improve on.
+fn struct_pattern<'a>(committed: bool) -> Parser<'a, Pattern> {
+    let fields = || sep_by0_trailing(parse_pattern_field, || parse_literal(","));
+    let rest = match committed {
+        true => commit(fields().and_drop(parse_literal("}").map_err(UNCLOSED_STRUCT_PATTERN))),
+        false => fields().and_drop(parse_literal("}")),
+    };
+
     parse_name()
         .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_pattern_field, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
+        .and(rest)
         .map(|(head, fields)| Pattern::Struct {
             head: head.join(),
             fields,
         })
+}
+
+// A `let`'s binder: [`parse_pattern`], with a struct pattern committed once `Name {` is read. Nothing but a pattern follows `let`, so the brace discriminates it and an unclosed one is reported as itself rather than as the signature the plain binder `Name` would have opened. A lambda's parameters, and the definition sugar's, share the prefix with a struct literal a term may hold there — `(Name { x = 1 })`, `f(Name { x = 1 })` — and go on backtracking.
+pub(super) fn parse_let_binder<'a>() -> Parser<'a, Pattern> {
+    struct_pattern(true).or(parse_pattern())
 }
 
 // A binder pattern at `let`, lambda-parameter, and function-definition-sugar-parameter position (see `Pattern`): a plain name, a tuple pattern, a struct pattern, or a parenthesized pattern (pure grouping, mirroring `parse_parens`). Struct and tuple forms are tried before the bare-name case — not after, as a plain identifier prefix (e.g. `Point` in `Point { z, w = ww }`) would otherwise be consumed by the binder case before the disambiguating `{`/`,`/`=` is ever seen, exactly like `parse_struct_lit` is tried before a bare name at the term level.

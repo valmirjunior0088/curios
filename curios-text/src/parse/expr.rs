@@ -8,7 +8,7 @@ pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
     parse_keyword("let")
-        .and_keep(parse_pattern())
+        .and_keep(parse_let_binder())
         .and(parse_local_let_signature())
         .map(|(binder, signature)| LetBinding { binder, signature })
         .and(many0(|| {

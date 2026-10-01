@@ -115,6 +115,24 @@ fn pattern_binders_round_trip() {
     }
 }
 
+/// A `let`'s struct pattern left open is reported as the pattern it is: once `Name {` follows `let`, nothing but a pattern can stand there, so the refusal is not handed to the signature a plain binder `Name` would have opened. Where a term may hold a struct literal under the same prefix, the pattern still backtracks.
+#[test]
+fn an_unclosed_struct_pattern_after_let_is_reported_as_one() {
+    let report = "let Pt { x, y = p; x".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("a struct pattern closes with `}`"),
+        "reported {report}"
+    );
+
+    for source in [
+        "(Pt { x = 1, y = 2 })",
+        "f(Pt { x = 1, y = 2 })",
+        "(base = 3, bump(x) = Pt { x = x, y = 2 })",
+    ] {
+        assert!(source.parse::<Term>().is_ok(), "{source}");
+    }
+}
+
 #[test]
 fn inductive_match_round_trips() {
     // Constructor-arm rows survive print → re-parse: distinct tags, a nullary `nil()`, and a wildcard payload binder.
