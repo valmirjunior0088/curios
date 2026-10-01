@@ -73,7 +73,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Effects
 
-- [ ] [Findings](roadmap/05-effects/00-findings.md) — a channel's nonblocking faces merge the outcomes the concurrency decision keeps apart
+- [ ] [Findings](roadmap/05-effects/00-findings.md) — none open
 - [ ] [Foreign calls past scalars and byte strings](roadmap/05-effects/01-foreign-calls-past-scalars.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
 - [x] [Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
 - [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad

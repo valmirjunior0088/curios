@@ -1,4 +1,5 @@
-pub use /sys/{Channel};
+pub use /sys/{let Channel};
+pub use /sys/Channel/{Push, Take};
 use /std/{Nat, Bool, Option, Io, Async};
 use /std/Async/{Offer};
 
@@ -21,20 +22,13 @@ pub let new(
     let c = /sys/Channel/new(@A, capacity, @positive)!;
     Io/pure((Sender { c }, Receiver { c }));
 
---- Put `a` in without parking: `true` when it was taken, `false` when the channel is full or closed.
-pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Bool) =
-    let outcome = /sys/Channel/push(s.0, a)!;
-    Io/pure(match outcome | taken() => true | full() => false | closed() => false end);
+--- Put `a` in without parking, answering this attempt's own outcome: `taken`, `full` while the channel is open and at capacity, or `closed`.
+pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Push) =
+    /sys/Channel/push(s.0, a);
 
---- Take the next value without parking: `none` when nothing is queued.
-pub let try_recv(@A: Type, r: Receiver(A)) -> Io(Option(A)) =
-    let outcome = /sys/Channel/take(r.0)!;
-    Io/pure(
-        match outcome
-        | item(a) => Option/some(a)
-        | empty() => Option/none()
-        | ended() => Option/none()
-        end);
+--- Take the next value without parking, answering this attempt's own outcome: an `item`, `empty` while the channel is open with nothing queued, or `ended` once it is closed and drained.
+pub let try_recv(@A: Type, r: Receiver(A)) -> Io(Take(A)) =
+    /sys/Channel/take(r.0);
 
 --- A wait satisfied while an item is queued or the channel is closed.
 pub let readable(@A: Type, r: Receiver(A)) -> Async/Wait =

@@ -437,6 +437,8 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
         use /std/Async/{Channel};
         let shown(o: Option(Nat)) -> Str =
             match o | some(n) => Nat/to_str(n) | none() => "none" end;
+        let left(t: Channel/Take(Nat)) -> Str =
+            match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
         let fiber: Async({}) =
             let a = Channel/new(@Nat, 4)!;
             let b = Channel/new(@Nat, 4)!;
@@ -447,10 +449,10 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
             let rest_b = Async/lift(Channel/try_recv(b.1))!;
             /std/print(
                 Str/flatten(
-                    [Nat/to_str(w.0), " ", shown(w.1), " ", shown(rest_a), " ", shown(rest_b)]));
+                    [Nat/to_str(w.0), " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
         Async/run(fiber)
         "#),
-        b"0 10 none 20"
+        b"0 10 empty 20"
     );
 }
 
@@ -487,7 +489,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     );
 }
 
-// Closing hands back what is already queued before it ends the stream, so a reader drains rather than losing the tail. Beside it: a send at capacity is refused without parking, and one after the close is refused for good.
+// Closing hands back what is already queued before it ends the stream, so a reader drains rather than losing the tail. Beside it, each nonblocking face answers its own attempt's outcome: a send at capacity is `full` and one after the close `closed`, and a take from an open channel with nothing queued is `empty` where one from a closed and drained channel is `ended`.
 #[test]
 fn a_closed_channel_drains_before_it_ends() {
     assert_eq!(
@@ -498,20 +500,31 @@ fn a_closed_channel_drains_before_it_ends() {
             match o | some(n) => Nat/to_str(n) | none() => "end" end;
         let said(b: Bool) -> Str =
             match b | true => "true" | false => "false" end;
+        let pushed(p: Channel/Push) -> Str =
+            match p | taken() => "taken" | full() => "full" | closed() => "closed" end;
+        let left(t: Channel/Take(Nat)) -> Str =
+            match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
         let fiber: Async({}) =
             let c = Channel/new(@Nat, 2)!;
+            let nothing_yet = Async/lift(Channel/try_recv(c.1))!;
             let _ = Channel/send(c.0, 1)!;
             let _ = Channel/send(c.0, 2)!;
             let full = Async/lift(Channel/try_send(c.0, 3))!;
             let _ = Async/lift(Channel/close(c.0))!;
+            let refused = Async/lift(Channel/try_send(c.0, 3))!;
             let first = Channel/recv(c.1)!;
             let second = Channel/recv(c.1)!;
             let ended = Channel/recv(c.1)!;
+            let drained = Async/lift(Channel/try_recv(c.1))!;
             let after = Channel/send(c.0, 4)!;
             /std/print(
                 Str/flatten(
                     [
-                        said(full),
+                        left(nothing_yet),
+                        " ",
+                        pushed(full),
+                        " ",
+                        pushed(refused),
                         " ",
                         shown(first),
                         " ",
@@ -519,9 +532,28 @@ fn a_closed_channel_drains_before_it_ends() {
                         " ",
                         shown(ended),
                         " ",
+                        left(drained),
+                        " ",
                         said(after)]));
         Async/run(fiber)
         "#),
-        b"false 1 2 end false"
+        b"empty full closed 1 2 end ended false"
     );
+}
+
+// The channel a program reaches is the one behind its two ends: the operations `/sys` declares over the bare channel are no part of `/std/Async/Channel`, so no program holds a channel the parking faces refuse.
+#[test]
+fn the_bare_channel_operations_are_not_reachable() {
+    let (system, _io) = MockHost::builder().build();
+    let refusal = run_text(
+        r#"
+        use /std/{Nat, Io};
+        use /std/Async/{Channel};
+        let c = Channel/Channel/new(@Nat, 1)!;
+        Io/pure(())
+        "#,
+        system,
+    )
+    .expect_err("the bare channel has no public constructor");
+    assert!(refusal.contains("Channel"), "{refusal}");
 }

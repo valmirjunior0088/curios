@@ -162,7 +162,11 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
         -- Everything queued behind the event that woke the loop, so a burst still draws once.
         let burst(acc: List(Event(E))) -> Async(List(Event(E))) =
             let more = Async/lift(Channel/try_recv(queue.1))!;
-            match more | none() => Async/pure(acc) | some(e) => burst([..acc, e]) end;
+            match more
+            | item(e) => burst([..acc, e])
+            | empty() => Async/pure(acc)
+            | ended() => Async/pure(acc)
+            end;
         let loop(session: Session, m: M) -> Async(M) =
             let woke = Channel/recv(queue.1)!;
             match woke

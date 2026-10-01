@@ -1,4 +1,4 @@
-use /std/{Io, Async};
+use /std/{Io, Option, Async};
 use /std/Async/{Channel};
 
 --- A flag one fiber raises and another parks on. Notifications coalesce while its one slot is full.
@@ -19,7 +19,17 @@ pub let notify(s: Signal) -> Io({}) =
 
 --- An offer that yields once the flag is raised, lowering it.
 pub let offer(s: Signal) -> Async/Offer({}) =
-    Async/Offer/new(Channel/try_recv(s.receiver), Io/pure(Async/Wait/readable(s.receiver)));
+    Async/Offer/new(
+        Io/bind(
+            Channel/try_recv(s.receiver),
+            (outcome) =>
+                Io/pure(
+                    match outcome
+                    | item(raised) => Option/some(raised)
+                    | empty() => Option/none()
+                    | ended() => Option/none()
+                    end)),
+        Io/pure(Async/Wait/readable(s.receiver)));
 
 --- Park until the flag is raised, then lower it. A flag already raised is lowered at once.
 pub let wait(s: Signal) -> Async({}) =
