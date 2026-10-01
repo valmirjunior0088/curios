@@ -121,26 +121,37 @@ fn a_field_holding_a_tab_or_a_newline_is_escaped() {
     assert_eq!(rows.lines().count(), 6, "{rows}");
 }
 
-// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count.
+// An entry and an exit carry the allocator's four readings, which is what a fold differences into a duration and a byte count. The counters are the process's, so what the span took shows as at least its own allocation between the two cumulative readings, whatever another test allocated beside it.
 #[test]
 fn a_boundary_carries_the_allocator_readings() {
+    const HELD: usize = 4 * 1024 * 1024;
+
     let buffer = Buffer::default();
     trace(buffer.destination(), || {
         let _span = tracing::trace_span!("holds").entered();
-        let held = vec![0_u8; 4 * 1024 * 1024];
+        let held = vec![0_u8; HELD];
 
         drop(held);
     })
     .expect("a stream destination opens");
 
     let rows = buffer.rows();
-    for kind in ['E', 'X'] {
+    let allocated = ['E', 'X'].map(|kind| {
         let row = rows
             .lines()
             .find(|row| row.starts_with(kind))
             .unwrap_or_else(|| panic!("a {kind} row"));
-        assert_eq!(row.split('\t').count(), 8, "{row}");
-    }
+        let columns = row.split('\t').collect::<Vec<_>>();
+        assert_eq!(columns.len(), 8, "{row}");
+
+        columns[5]
+            .parse::<usize>()
+            .unwrap_or_else(|_| panic!("a cumulative byte count: {row}"))
+    });
+    assert!(
+        allocated[1] - allocated[0] >= HELD,
+        "the exit reads what the span allocated: {allocated:?}"
+    );
 }
 
 // The file that survives a rotation opens with the header and the whole callsite table, so it is readable without the one that was discarded. That is the property that makes rotation preferable to a cap: a hang's tail is what names the loop it is stuck in.
