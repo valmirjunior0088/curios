@@ -46,10 +46,22 @@ fn the_families_do_not_share_a_namespace() {
     let store = Store::at(root.clone());
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
+    let module = FileHash::parse(&format!("f1:{}", "b".repeat(64))).unwrap();
+
     let binary = store.executable("c1", "tool");
     let tree = store.source(&hash);
+    let fetched = store.foreign(&module);
 
     assert!(!binary.starts_with(tree.parent().unwrap()));
+    assert_eq!(
+        fetched,
+        PathBuf::from(format!("/w/u/.curios/foreign/f1/{}", "b".repeat(64))),
+        "a fetched module sits in a family of its own"
+    );
+    assert!(
+        !fetched.starts_with(root.join(STORE).join("sources")),
+        "one digest, a tree and a module, two places"
+    );
     assert!(!tree.starts_with(root.join(STORE).join("executables")));
     assert!(
         !store
