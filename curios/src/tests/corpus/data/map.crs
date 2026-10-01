@@ -1,5 +1,5 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Bytes, Nat, Bool, Option, List, Map, Set, Test};
+use /std/{Str, Bytes, Nat, Int, Bool, Option, List, Map, Set, Test};
 
 test get_on_empty_is_none =
     let m: Map(Str) = Map/empty();
@@ -12,6 +12,12 @@ test roundtrips_prefix_related_keys =
     Test/equal(
         Str/join(",", [at(""), at("a"), at("ab"), at("abc"), at("b"), at("c")]),
         "nil,A,AB,ABC,B,?");
+
+-- An integer key encodes its sign before its magnitude, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
+test integer_keys_keep_their_signs_apart =
+    let m: Map(Str) = Map/of([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
+    let at(k: Int) -> Str = Option/unwrap_or(Map/get(m, k), "?");
+    Test/equal(Str/join(",", [at(-2), at(+0), at(+2), at(-1)]), "minus two,zero,two,?");
 
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =

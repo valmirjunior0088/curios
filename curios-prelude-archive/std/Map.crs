@@ -1,4 +1,4 @@
-use /std/{Bytes, Bits, Byte, Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell};
+use /std/{Bytes, Bits, Byte, Nat, Int, Bool, Str, List, Option, Eq, Hash, Show, Spell};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
 
@@ -107,6 +107,38 @@ let bits_injective(a: Bits, b: Bits, same: Eq()(Hash/hash(a), Hash/hash(b))) -> 
 --- One byte per bit, so a run's length is its encoding's and no two runs share one.
 satisfy Key(Bits) {
     injective = bits_injective,
+}
+
+-- The two sign bytes are no one byte: the comparison deciding them refutes it.
+let signs_differ(e: Eq(@Byte)(0x0, 0x1)) -> False =
+    Eq/subst((m: Byte) => Holds(Byte/eql(0x0, m)), e, True/qed());
+
+-- Distinct integers encode distinctly.
+--
+-- `Hash(Int)` writes a sign byte before the magnitude, so an encoding is a cons and `/std/Bytes`'s cons injections take it apart. Where the signs differ the heads do, which no equation of the encodings allows; where they agree the tails are the magnitudes' encodings, `Bytes/of_nat` is injective, and an integer is its magnitude widened, or that negated.
+let int_injective(a: Int, b: Int, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b) =
+    match a >= +0
+    | true =>
+        match b >= +0
+        | true =>
+            Eq/cong(
+                (n: Nat) => Nat/to_int(n),
+                Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)))
+        | false => match signs_differ(Bytes/cons_inj_head(same)) end
+        end
+    | false =>
+        match b >= +0
+        | true => match signs_differ(Eq/sym(Bytes/cons_inj_head(same))) end
+        | false =>
+            Eq/cong(
+                (n: Nat) => +0 - Nat/to_int(n),
+                Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)))
+        end
+    end;
+
+--- A sign byte before the magnitude, so an integer and its negation never share an encoding.
+satisfy Key(Int) {
+    injective = int_injective,
 }
 
 let bit(k: Bytes, j: Nat) -> Nat =
