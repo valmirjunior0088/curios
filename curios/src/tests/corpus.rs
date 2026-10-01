@@ -8,7 +8,7 @@ use {
     crate::to_cwasm,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
     curios_runtime::{ForeignBindings, MockHost, run_bytes},
-    curios_text::{Entrypoint, RootSource},
+    curios_text::{Entrypoint, Formatted, RootSource},
     curios_utilities::RootKind,
     std::{
         fs,
@@ -123,4 +123,52 @@ fn every_corpus_unit_is_mounted() {
     mounted.sort();
 
     assert_eq!(headers, mounted);
+}
+
+/// Every `.crs` file under `directory`, at any depth, in path order.
+fn sources_under(directory: PathBuf) -> Vec<PathBuf> {
+    let mut sources = Vec::new();
+    let mut pending = vec![directory];
+
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory).expect("a directory of this workspace") {
+            let path = entry.expect("a readable entry").path();
+
+            match path.is_dir() {
+                true => pending.push(path),
+                false if path.extension().is_some_and(|kind| kind == "crs") => sources.push(path),
+                false => {}
+            }
+        }
+    }
+
+    sources.sort();
+    sources
+}
+
+/// **The corpus and the programs are written in the canonical form `curios format` produces**, as `curios-prelude-archive`'s `every_authored_source_is_canonically_formatted` holds `/std`: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
+///
+/// Here rather than beside `/std`'s, because these are the sources this crate's tests and measurements read: the corpus under this module, and `programs/` at the workspace root.
+#[test]
+fn every_corpus_and_program_source_is_canonically_formatted() {
+    let programs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../programs");
+    let mut wrong = Vec::new();
+
+    for path in sources_under(root())
+        .into_iter()
+        .chain(sources_under(programs))
+    {
+        match Formatted::from_path(&path) {
+            Ok(Formatted::Unchanged(_)) => {}
+            Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
+            Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),
+        }
+    }
+
+    assert!(
+        wrong.is_empty(),
+        "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
+        wrong.len(),
+        wrong.join("\n  ")
+    );
 }
