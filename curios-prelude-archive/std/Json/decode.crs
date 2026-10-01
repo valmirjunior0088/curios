@@ -27,8 +27,9 @@ let parse_num: Parse(Bytes, Json) =
     | none() => Parse/fail("expected number")
     end;
 
-let is_not_string_special(byte: Byte) -> Bool =
-    match Byte/to_nat(byte) | 34 => false | 92 => false | _ => true end;
+--- Whether `byte` may stand in a string as written: any but the quote, the backslash and the control characters below `0x20`, which the grammar has escaped.
+let is_unescaped(byte: Byte) -> Bool =
+    match Byte/to_nat(byte) | 34 => false | 92 => false | _ => Byte/to_nat(byte) >= 0x20 end;
 
 let hex_digit: Parse(Bytes, Nat) =
     let byte = Parse/bytes/byte!;
@@ -85,10 +86,22 @@ let parse_str_escape: Parse(Bytes, Bytes) =
     Parse/commit(escape_fields);
 
 let parse_str_segment: Parse(Bytes, Bytes) =
-    Parse/bytes/take_while(is_not_string_special);
+    Parse/bytes/take_while(is_unescaped);
+
+--- A raw control character, refused where it stands: declining here would end the string's body, and the report would name the closing quote the string never reached.
+let parse_str_control: Parse(Bytes, Bytes) =
+    let next = Parse/bytes/peek!;
+    match next
+    | some(byte) =>
+        match Byte/to_nat(byte) < 0x20
+        | true => Parse/commit(Parse/fail("unescaped control character"))
+        | false => Parse/fail("no control character")
+        end
+    | none() => Parse/fail("no control character")
+    end;
 
 let parse_str_body: Parse(Bytes, List(Bytes)) =
-    Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
+    Parse/many0(Parse/or(parse_str_escape, Parse/or(parse_str_control, parse_str_segment)));
 
 let parse_raw_str: Parse(Bytes, Str) =
     let _ = Parse/bytes/expect(0x22)!;

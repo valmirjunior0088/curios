@@ -47,6 +47,17 @@ test structural_refusals_name_what_was_expected =
             "expected ',' or ']'|expected ':'|expected '\"'|expected '\"'|",
             "expected \"true\"|unexpected end of input|unexpected end of input"]));
 
+-- A control character stands in a string only escaped: raw, it is refused where it stands rather than at the closing quote the string never reached, and its escape reads. U+007F is no control character to the grammar.
+test a_raw_control_character_in_a_string_is_refused =
+    Test/equal(
+        Str/join("|", [
+            decoded("\"a\tb\""),
+            decoded("\"a\nb\""),
+            decoded("\"a\u{0}b\""),
+            decoded("\"a\\tb\""),
+            decoded_str("\"a\u{7F}b\"")]),
+        "unescaped control character|unescaped control character|unescaped control character|\"a\\tb\"|a\u{7F}b");
+
 -- A document is the whole input: a value followed by anything is refused, not read as its prefix. The last two rows are the control — trivia on either side of a document is still trivia, since the value parsers consume only what precedes them.
 test a_document_is_refused_when_anything_follows_the_value =
     Test/equal(
