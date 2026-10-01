@@ -620,7 +620,9 @@ pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
         Cases::FreeMonoid {
             carrier: Carrier::Bin { grain, .. },
         } => Error::not_bin_type(*grain, type_),
-        Cases::Induct { .. } => Error::not_a_induct_type(type_),
+        Cases::Induct { cases, default } => {
+            Error::not_a_induct_type(type_, cases.is_empty() && default.is_none())
+        }
     }
 }
 
@@ -830,7 +832,12 @@ fn elaborate_induct_match(
             params,
             indices,
         }) => (*name, universes.clone(), params.clone(), indices.clone()),
-        other => return Err(Error::not_a_induct_type(other.clone())),
+        other => {
+            return Err(Error::not_a_induct_type(
+                other.clone(),
+                cases.is_empty() && default.is_none(),
+            ));
+        }
     };
 
     // Reducing the scrutinee type to weak-head normal form leaves its index *arguments* untouched, so an index that is an outer-arm key (`s` refined to `Scan/bad()` by an enclosing match) still reads as the bare variable. Reduce each index in the current (refined) context so inversion sees the forced value and pins arm binders against it, rather than refusing it as a key-shaped index, which refinement handles.
@@ -898,13 +905,6 @@ fn elaborate_induct_match(
         .map(|(tag, _)| tag)
         .find(|tag| !induct_decl.declares(tag))
     {
-        return Err(Error::unknown_match_constructor(
-            name.symbol(),
-            tag.to_string(),
-        ));
-    }
-
-    // Built by walking the *declaration* order, not the written order, so the elaborated arm sequence is canonical: two matches differing only in how their arms were written produce the same term.
         // Each constructor as a pattern writes it, one placeholder per payload under the mark its position takes, so the report shows what the arm could have named.
         let constructors = induct_decl
             .constructor_order()
@@ -922,6 +922,14 @@ fn elaborate_induct_match(
                 format!("{constructor}({payload})")
             })
             .collect();
+        return Err(Error::unknown_match_constructor(
+            name.symbol(),
+            tag.to_string(),
+            constructors,
+        ));
+    }
+
+    // Built by walking the *declaration* order, not the written order, so the elaborated arm sequence is canonical: two matches differing only in how their arms were written produce the same term.
     let mut cases_elaborated = Vec::new();
     for tag in induct_decl.constructor_order() {
         let Some((_, scope)) = cases.iter().find(|(candidate, _)| candidate == tag) else {

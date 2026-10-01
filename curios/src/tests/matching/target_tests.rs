@@ -170,3 +170,20 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
         "unexpected error: {payloads}"
     );
 }
+
+// A match with no arms eliminates a type with no constructors and nothing else, so over a carrier it says that rather than naming constructors nobody wrote.
+#[test]
+fn a_match_with_no_arms_over_a_carrier_says_what_it_eliminates() {
+    let error = error(
+        r#"
+        use /std/{Nat};
+        let f(n : Nat) -> Nat = match n end;
+        /std/print(Nat/to_str(f(1)))
+        "#,
+    );
+    assert!(
+        error.contains("a match with no arms eliminates only a type with no constructors")
+            && error.contains("head has type: Nat"),
+        "unexpected error: {error}"
+    );
+}

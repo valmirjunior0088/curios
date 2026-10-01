@@ -528,12 +528,18 @@ impl fmt::Display for Displayed<'_> {
                     "missing match case for constructor '{tag}' of '{type_name}'"
                 )
             }
-            Error::NotAInductType { head_type } => {
+            Error::NotAInductType { head_type, no_arms } => {
                 let head_type = head_type.spelled(spelling);
-                write!(
-                    f,
-                    "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
-                )
+                match no_arms {
+                    true => write!(
+                        f,
+                        "a match with no arms eliminates only a type with no constructors\n  head has type: {head_type}"
+                    ),
+                    false => write!(
+                        f,
+                        "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
+                    ),
+                }
             }
             Error::LargeElimOfProp { name } => {
                 write!(

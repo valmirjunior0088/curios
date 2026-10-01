@@ -296,8 +296,10 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// A match over constructors — or, where `no_arms`, one with none, which eliminates only an empty type — whose scrutinee's type is no inductive.
     NotAInductType {
         head_type: Box<Term>,
+        no_arms: bool,
     },
     /// A strict proposition was eliminated into a relevant (data) result — a large elimination that would observe which inhabitant it was, breaking proof irrelevance. Permitted only for an empty or singleton proposition.
     LargeElimOfProp {
@@ -852,11 +854,12 @@ impl Error {
         Self::MatchCaseMissing { type_name, tag }
     }
 
-    pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U, no_arms: bool) -> Self {
         Self::NotAInductType {
             head_type: Box::new(head_type.into()),
         }
     }
+            no_arms,
 
     pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
@@ -1615,7 +1618,7 @@ impl Error {
             | Self::NotBoolType { head_type }
             | Self::NotListType { head_type }
             | Self::NotBinType { head_type, .. }
-            | Self::NotAInductType { head_type } => out.push(head_type),
+            | Self::NotAInductType { head_type, .. } => out.push(head_type),
             Self::NotAFunctionType { expected, .. } | Self::NotATupleType { expected } => {
                 out.push(expected)
             }
