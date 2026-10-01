@@ -82,7 +82,16 @@ pub(crate) fn cargo_in(directory: &Path, arguments: &[&str]) -> Result<(), Strin
 
 /// What cargo answers at the workspace root: [`ask`] put to the cargo [`cargo`] runs, so a question about a subcommand is answered by the cargo that would run it.
 pub(crate) fn ask_cargo(arguments: &[&str]) -> Result<String, String> {
-    ask(toolchain_cargo(), arguments)
+    ask(asked_cargo(), arguments)
+}
+
+/// [`toolchain_cargo`] for a question: told to answer without colour, whatever the environment asks for. An answer is read rather than shown, and under `CARGO_TERM_COLOR=always` — the check workflow's setting — cargo wraps each word of one in escapes, so a name read out of it is no longer the name.
+fn asked_cargo() -> Command {
+    let mut cargo = toolchain_cargo();
+
+    cargo.env("CARGO_TERM_COLOR", "never");
+
+    cargo
 }
 
 /// The cargo that launched this tool, which is the one every recipe runs and asks: `cargo x` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.

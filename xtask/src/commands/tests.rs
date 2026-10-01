@@ -1,12 +1,23 @@
-//! What a question gets back, and what either kind of spawn does with a command that fails or is not there.
+//! What a question gets back, how cargo is asked one, and what either kind of spawn does with a command that fails or is not there.
 //!
 //! The subjects are `echo` and `false`, which every platform this crate builds for has, so what is under test is this module rather than a tool.
 
-use super::*;
+use {super::*, std::ffi::OsStr};
 
 #[test]
 fn asking_a_command_returns_what_it_printed() {
     assert_eq!(ask(Command::new("echo"), &["hello"]), Ok("hello\n".into()));
+}
+
+#[test]
+fn cargo_is_asked_without_colour_whatever_the_environment_says() {
+    let cargo = asked_cargo();
+    let colour = cargo
+        .get_envs()
+        .find(|(name, _)| *name == "CARGO_TERM_COLOR")
+        .and_then(|(_, value)| value);
+
+    assert_eq!(colour, Some(OsStr::new("never")));
 }
 
 #[test]
