@@ -443,7 +443,7 @@ fn stored_prelude_measurements() {
         }
 
         println!(
-            "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory B1 needs, which is a term walk.\n"
+            "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory, which is a term walk.\n"
         );
     });
 }

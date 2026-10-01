@@ -1017,38 +1017,35 @@ fn aggregate_flow_census() {
 
     println!("== aggregate");
     println!("  buckets: {buckets:?}");
-    println!("  needs-workers owners (M3 admission gate): {worker_owners:?}");
+    println!("  needs-workers owners: {worker_owners:?}");
     println!("  reachable-region owners outside /std: {reachable_outside:?}");
     println!("== variant-width");
     println!("  variant regions: {variants}");
     println!("  by flow class: {variant_flows:?}");
     println!("  by (roster size, class-merged width): {variant_shapes:?}");
     println!(
-        "  known-call owners (M3 admission gate): {:?}",
+        "  known-call owners: {:?}",
         variant_owners
             .get("known-call")
             .cloned()
             .unwrap_or_default(),
     );
     println!(
-        "  continuation-only owners (M1): {:?}",
+        "  continuation-only owners: {:?}",
         variant_owners
             .get("continuation-only")
             .cloned()
             .unwrap_or_default(),
     );
     println!(
-        "  return owners (M2): {:?}",
+        "  return owners: {:?}",
         variant_owners.get("return").cloned().unwrap_or_default(),
     );
     println!("  populations that never rest (uniform-width gate): {restless:?}");
     println!(
         "  tag-led constructions: {tagged_constructions}, of them never read back: {unread_tags}"
     );
-    println!(
-        "  variant-width return components (M2 admission gate): {}",
-        mixed_returns.len()
-    );
+    println!("  variant-width return components: {}", mixed_returns.len());
     for (owner, (shapes, escapes)) in &mixed_returns {
         println!(
             "    {owner}: {shapes:?}{}",
