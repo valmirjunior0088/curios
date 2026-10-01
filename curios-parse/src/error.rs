@@ -4,12 +4,12 @@ use {
     std::sync::Arc,
 };
 
-/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate its fields are private: a report is read through [`ParserError::report`] or [`ParserError::format`], and a recovering caller reads its offset, commitment and tag.
+/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate its fields are private: a report is read through [`ParserError::report`] or [`ParserError::format`], and a caller recovering past the failure reads what it was about through [`ParserError::tagged`].
 #[derive(Debug, Clone)]
 pub struct ParserError {
-    fatal: bool,
+    committed: bool,
     pub(crate) offset: usize,
-    /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `fatal` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
+    /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `committed` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
     from: Option<usize>,
     message: String,
     source: Arc<Source>,
@@ -23,7 +23,7 @@ impl ParserError {
         M: Into<String>,
     {
         Self {
-            fatal: false,
+            committed: false,
             offset: state.offset,
             from: None,
             message: message.into(),
@@ -32,14 +32,9 @@ impl ParserError {
         }
     }
 
-    /// Where the parser stopped, as a byte offset into its source.
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    /// Whether an alternative [`commit`](crate::commit)ted to this failure — the diagnosis, rather than a guess a sibling may still improve on.
-    pub fn is_committed(&self) -> bool {
-        self.fatal
+    /// Whether an alternative [`commit`](crate::commit)ted to this failure — the diagnosis, rather than a guess a sibling may still improve on. What [`Parser::or`](crate::Parser::or) and the repetition combinators stop at.
+    pub(crate) fn is_committed(&self) -> bool {
+        self.committed
     }
 
     pub(crate) fn tag(self, tag: Option<String>) -> Self {
@@ -60,14 +55,14 @@ impl ParserError {
 
     pub(crate) fn uncommit(self) -> Self {
         Self {
-            fatal: false,
+            committed: false,
             ..self
         }
     }
 
     pub(crate) fn commit(self) -> Self {
         Self {
-            fatal: true,
+            committed: true,
             ..self
         }
     }
@@ -77,10 +72,6 @@ impl ParserError {
             message: message.into(),
             ..self
         }
-    }
-
-    pub(crate) fn is_uncaught(&self) -> bool {
-        self.fatal
     }
 
     /// The error as data: its message at a span ending at the failure offset — empty, at the point the parser stopped, unless the failure named the run of text it is about — which is what the caret of [`format`](Self::format) points at, so a consumer reading the span sees exactly where the rendering does.

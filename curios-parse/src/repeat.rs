@@ -31,7 +31,7 @@ where
                     items.push(Recovered::Item(item));
                     state = next_state;
                 }
-                Err(error) if error.is_uncaught() => {
+                Err(error) if error.is_committed() => {
                     let text = &state.source.text;
                     let past_start = start + text[start..].chars().next().map_or(0, char::len_utf8);
                     let from = error.offset.max(past_start);
@@ -72,7 +72,7 @@ where
             }
         };
 
-        if (require_first && items.is_empty()) || error.is_uncaught() {
+        if (require_first && items.is_empty()) || error.is_committed() {
             return Err(error);
         }
 
@@ -112,7 +112,7 @@ where
             panic!("Infinite repetition")
         }
         Ok((_, next_state)) => Ok(Some(next_state)),
-        Err(error) if error.is_uncaught() => Err(error),
+        Err(error) if error.is_committed() => Err(error),
         Err(_) => Ok(None),
     }
 }
@@ -135,7 +135,7 @@ where
 
         let (item, mut state) = match f().parse(state) {
             Ok(output) => output,
-            Err(error) if require_first || error.is_uncaught() => return Err(error),
+            Err(error) if require_first || error.is_committed() => return Err(error),
             Err(_) => return Ok((Vec::new(), state)),
         };
 
@@ -156,7 +156,7 @@ where
                     items.push(item);
                     state = next_state;
                 }
-                Err(error) if !trailing || error.is_uncaught() => return Err(error),
+                Err(error) if !trailing || error.is_committed() => return Err(error),
                 // The separator was trailing: keep it consumed, end the list.
                 Err(_) => {
                     state = next_state;

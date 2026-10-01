@@ -27,13 +27,13 @@ where
         Parser::new(move |state| {
             let first = match self.parse(state) {
                 Ok((item, state)) => return Ok((item, state)),
-                Err(error) if error.is_uncaught() => return Err(error),
+                Err(error) if error.is_committed() => return Err(error),
                 Err(error) => error,
             };
 
             let second = match parser.parse(state) {
                 Ok((item, state)) => return Ok((item, state)),
-                Err(error) if error.is_uncaught() => return Err(error),
+                Err(error) if error.is_committed() => return Err(error),
                 Err(error) => error,
             };
 
@@ -97,7 +97,7 @@ where
         })
     }
 
-    /// Replaces the failure's message while keeping its offset and fatality, so a low-level token error ("Expected '('...") can be reworded as a domain-level one without changing where the caret points or how [`Parser::or`] commitment behaves.
+    /// Replaces the failure's message while keeping its offset and commitment, so a low-level token error ("Expected '('...") can be reworded as a domain-level one without changing where the caret points or how [`Parser::or`] commitment behaves.
     pub fn map_err<M>(self, message: M) -> Parser<'a, A>
     where
         M: Into<String> + 'a,

@@ -41,7 +41,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Surface
 
-- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and the parser naming commitment twice and overstating its public surface
+- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character
 - [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
