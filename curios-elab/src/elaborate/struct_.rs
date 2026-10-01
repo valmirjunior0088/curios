@@ -249,10 +249,47 @@ pub(super) fn elaborate_struct(
         .collect();
 
     if plain.len() != plain_labels.len() {
+        // Where every written entry carries its label, the labels say which fields are absent and which are no field of the struct; a positional literal says only how many it wrote, so what it lacks is the declared tail.
+        let written = plain
+            .iter()
+            .map(|(label, _)| *label)
+            .collect::<Option<Vec<_>>>();
+        let named = |labels: Vec<&str>| {
+            labels
+                .into_iter()
+                .filter(|label| !label.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        let (missing, surplus) = match &written {
+            Some(written) => (
+                named(
+                    plain_labels
+                        .iter()
+                        .copied()
+                        .filter(|label| !written.contains(label))
+                        .collect(),
+                ),
+                named(
+                    written
+                        .iter()
+                        .copied()
+                        .filter(|label| !plain_labels.contains(label))
+                        .collect(),
+                ),
+            ),
+            None => (
+                named(plain_labels.iter().copied().skip(plain.len()).collect()),
+                Vec::new(),
+            ),
+        };
+
         return Err(Error::wrong_number_of_fields(
             name.symbol(),
             plain_labels.len(),
             plain.len(),
+            missing,
+            surplus,
         ));
     }
 

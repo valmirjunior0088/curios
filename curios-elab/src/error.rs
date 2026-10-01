@@ -340,11 +340,13 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    /// A struct literal supplies the wrong number of fields.
+    /// A struct literal supplies the wrong number of fields: the declared labels it leaves out and the written ones the declaration lacks, where the literal's labels say which.
     WrongNumberOfFields {
         name: String,
         expected: usize,
         got: usize,
+        missing: Vec<String>,
+        surplus: Vec<String>,
     },
     /// A nominal type whose declaration is absent from the registry.
     UnknownDeclaration {
@@ -857,9 +859,9 @@ impl Error {
     pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U, no_arms: bool) -> Self {
         Self::NotAInductType {
             head_type: Box::new(head_type.into()),
+            no_arms,
         }
     }
-            no_arms,
 
     pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
@@ -913,11 +915,15 @@ impl Error {
         name: N,
         expected: usize,
         got: usize,
+        missing: Vec<String>,
+        surplus: Vec<String>,
     ) -> Self {
         Self::WrongNumberOfFields {
             name: name.into(),
             expected,
             got,
+            missing,
+            surplus,
         }
     }
 

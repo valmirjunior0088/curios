@@ -612,11 +612,20 @@ impl fmt::Display for Displayed<'_> {
                 name,
                 expected,
                 got,
+                missing,
+                surplus,
             } => {
                 write!(
                     f,
                     "struct '{name}' has {expected} field(s) but the literal supplies {got}"
-                )
+                )?;
+                if !missing.is_empty() {
+                    write!(f, "\n  missing: {}", missing.join(", "))?;
+                }
+                if !surplus.is_empty() {
+                    write!(f, "\n  no such field: {}", surplus.join(", "))?;
+                }
+                Ok(())
             }
             Error::UnknownDeclaration { name } => {
                 write!(f, "no declaration for '{name}'")

@@ -114,17 +114,36 @@ fn struct_is_not_a_tuple() {
     error(source);
 }
 
-// A struct literal must supply exactly the declared fields, in order.
+// A struct literal must supply exactly the declared fields, in order, and a wrong count says which: the declared labels a labeled literal leaves out, and the written ones the struct has no field for.
 #[test]
 fn struct_wrong_field_count_rejected() {
-    let source = r#"
+    let short = error(
+        r#"
         use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
         /std/print("no")
-        "#;
+        "#,
+    );
+    assert!(
+        short.contains("has 2 field(s) but the literal supplies 1")
+            && short.contains("missing: snd"),
+        "unexpected error: {short}"
+    );
 
-    error(source);
+    let long = error(
+        r#"
+        use /std/{Nat};
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2, third = 3 };
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        long.contains("has 2 field(s) but the literal supplies 3")
+            && long.contains("no such field: third"),
+        "unexpected error: {long}"
+    );
 }
 
 // Written field labels are validated positionally — no reordering.
