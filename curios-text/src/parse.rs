@@ -124,6 +124,11 @@ const DOC_TWICE: &str = "two documentation comments precede one declaration; joi
 /// What refuses a `---` block followed by anything but what it may document.
 pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
 
+/// The end of a program: its input exhausted past the final term. A documentation block standing there documents nothing and is refused as one, rather than left for `take_eof` to report as a token the grammar did not expect.
+pub(crate) fn parse_program_end<'a>() -> Parser<'a, ()> {
+    take_eof().or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
+}
+
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner would otherwise nest N native frames.
     take_while(|char| char.is_whitespace())
@@ -211,8 +216,9 @@ pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
         .and(many0(parse_doc_line))
         .flat_map(|(start, lines)| match lines.is_empty() {
             true => pure(None),
+            // Committed: a block has been read, so a second one before the head is the diagnosis, and backtracking would hand the first to the term grammar, whose decimal reader takes `---` for a literal's head.
             false => parse_whitespace()
-                .and_keep(not_ahead("---").map_err(DOC_TWICE))
+                .and_keep(commit(not_ahead("---").map_err(DOC_TWICE)))
                 .and_keep(mark())
                 .map(move |end| {
                     Some(Doc {

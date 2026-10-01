@@ -5,8 +5,8 @@ use {
         print_term,
     },
     crate::parse::{
-        clear_comments, parse_optional_term, parse_term, parse_top_item, parse_whitespace,
-        take_comments,
+        clear_comments, parse_optional_term, parse_program_end, parse_term, parse_top_item,
+        parse_whitespace, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{
@@ -462,7 +462,7 @@ impl Entrypoint {
                         None => fail("Expected a program's final term"),
                     };
                     lazy(parse_term)
-                        .and_drop(take_eof())
+                        .and_drop(parse_program_end())
                         .map(move |tail| Entrypoint::new(into_items(items), tail))
                         .or(swallowed)
                 }),
@@ -490,7 +490,7 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
         parse_whitespace()
             .and_keep(many0(|| spanned(parse_top_item())))
             .and(parse_optional_term())
-            .and_drop(take_eof())
+            .and_drop(parse_program_end())
             .map(|(items, tail)| {
                 let (spans, items): (Vec<_>, Vec<_>) = items.into_iter().unzip();
                 (Module { items }, spans, tail)

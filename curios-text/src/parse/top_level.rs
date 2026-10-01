@@ -737,7 +737,7 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     parse_doc().flat_map(|doc| {
         let head = parse_pub().and(parse_identifier_raw());
         let head = match &doc {
-            Some(_) => head.map_err(DOC_BEFORE_NOTHING),
+            Some(_) => commit(head.map_err(DOC_BEFORE_NOTHING)),
             None => head,
         };
 

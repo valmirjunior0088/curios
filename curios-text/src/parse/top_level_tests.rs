@@ -907,11 +907,18 @@ fn a_documentation_comment_before_nothing_is_refused() {
         );
     }
 
-    let error = "let x: Nat = 1;\n--- lost\nx"
-        .parse::<Entrypoint>()
-        .unwrap_err()
-        .format();
-    assert!(error.contains("must immediately precede"), "{error}");
+    // A program refuses the same three places: before its tail, after it, and where the block is all that follows its items — the last read as a program by a command that tries one first.
+    for source in [
+        "let x: Nat = 1;\n--- lost\nx",
+        "let x: Nat = 1;\nx\n--- lost\n",
+        "let x: Nat = 1;\n--- lost\n",
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err().format();
+        assert!(
+            error.contains("must immediately precede"),
+            "{source}: {error}"
+        );
+    }
 }
 
 /// An import has no page and a test is not part of the interface, so a block before either is refused by name.
@@ -938,6 +945,16 @@ fn two_documentation_comments_before_one_declaration_are_refused() {
         "--- one\n-- plain\n--- two\nlet x: Nat = 1;",
     ] {
         let error = source.parse::<Module>().unwrap_err().format();
+        assert!(
+            error.contains("two documentation comments"),
+            "{source}: {error}"
+        );
+
+        // Read as a program, whose item loop backtracks where a module's does not, the refusal is the same one rather than the term grammar's reading of the first block.
+        let error = format!("{source}\nx")
+            .parse::<Entrypoint>()
+            .unwrap_err()
+            .format();
         assert!(
             error.contains("two documentation comments"),
             "{source}: {error}"
