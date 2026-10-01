@@ -7,7 +7,7 @@ The hand-off gate for code. It runs once, after the last step of an effort, and 
 
 ## The steps
 
-`runtime`, `fmt-check`, `clippy`, `test`, `doctest`, `docs`, `js-test`, `zed-fmt-check`, `zed-clippy`, `zed-build` and `zed-test`, each `cargo x <step>`; and two npm chains, each in order: `grammar-install` → `grammar-test`, and `vscode-install` → `vscode-test` → `vscode-package`. The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets and Node 22 or later with `npm`.
+`runtime`, `fmt-check`, `clippy`, `test`, `doctest`, `docs`, `js-test`, `zed-fmt-check`, `zed-clippy`, `zed-build` and `zed-test`, each `cargo x <step>`; and two npm chains, each in order: `grammar-install` → `grammar-test`, and `vscode-install` → `vscode-test` → `vscode-package`. The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets and Node 22 or later with `npm`, and `test` needs `cargo-nextest`.
 
 Add the checks the change calls for, read off `git diff --name-only` against the effort's base:
 

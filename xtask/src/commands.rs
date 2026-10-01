@@ -76,14 +76,18 @@ pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
 }
 
 /// [`cargo`] in `directory` instead of the workspace root — the Zed extension, whose tree is its own workspace.
-///
-/// The cargo that launched this tool is the one every recipe runs: `cargo x` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
 pub(crate) fn cargo_in(directory: &Path, arguments: &[&str]) -> Result<(), String> {
-    run_in(
-        directory,
-        Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into())),
-        arguments,
-    )
+    run_in(directory, toolchain_cargo(), arguments)
+}
+
+/// What cargo answers at the workspace root: [`ask`] put to the cargo [`cargo`] runs, so a question about a subcommand is answered by the cargo that would run it.
+pub(crate) fn ask_cargo(arguments: &[&str]) -> Result<String, String> {
+    ask(toolchain_cargo(), arguments)
+}
+
+/// The cargo that launched this tool, which is the one every recipe runs and asks: `cargo x` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
+fn toolchain_cargo() -> Command {
+    Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
 }
 
 /// Run one command from the workspace root, echoing it first as a recipe would, and fail with its status.

@@ -52,9 +52,33 @@ jobs:
         run: cargo x clippy
 
   tests:
-    name: Tests
+    name: Tests (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.146
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+      - name: Build runtime launcher
+        run: cargo x runtime
+      - name: Run tests
+        run: cargo x test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+
+  doctests:
+    name: Doctests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -65,8 +89,6 @@ jobs:
             curios-binaryen/.artifacts
       - name: Build runtime launcher
         run: cargo x runtime
-      - name: Run tests
-        run: cargo x test
       - name: Run doctests
         run: cargo x doctest
 

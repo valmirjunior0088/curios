@@ -2,13 +2,15 @@
 //!
 //! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
-//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by — but never a tail it hands to the tool unread. Every recipe's command line is written here, so `/full-gate`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
+//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by, a shard of one to run — but never a tail it hands to the tool unread. Every recipe's command line is written here, so `/full-gate`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
 //! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile` and `docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
+//!
+//! **The test runner is a tool a contributor installs.** `test` runs the suite under `cargo-nextest` and refuses before building when it is absent or too old, naming the command that fixes it; why nextest, and what a shard is, is the README's decision.
 //!
 //! **The installer is a template.** `installer` renders `templates/install.sh` with a release's version through Askama and files the script under `xtask/.artifacts/`, the one recipe that spawns no tool at all: the release workflow calls it with the tag's version and attaches what it filed. What it is and why it is rendered here rather than by the workflow is [`installer`](mod@installer)'s own documentation.
 //!
@@ -18,9 +20,12 @@
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
 //!
-//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`] and [`filing`]. Every step `/full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
+//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`], [`filing`] and [`constants`]. Every step `/full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
 
 mod places;
+
+mod constants;
+use constants::*;
 
 mod commands;
 use commands::*;
@@ -99,6 +104,13 @@ enum Recipe {
             help = "Run only the tests whose path contains this; every test when omitted"
         )]
         filter: Option<String>,
+
+        #[arg(
+            long,
+            value_name = "M/N",
+            help = "Run only the Mth of N even slices of the tests selected; all of them when omitted"
+        )]
+        shard: Option<Shard>,
     },
 
     #[command(
@@ -227,13 +239,11 @@ fn main() -> ExitCode {
             &["clippy"],
             &["--all-targets", "--all-features", "--", "-Dwarnings"],
         ),
-        Recipe::Test { package, filter } => {
-            // The filter rides where cargo's own `TESTNAME` does, which is what makes it one narrowing rather than a tail: `--no-fail-fast` still reports every failure among the tests it selects, and a filter matching nothing in a target is that target reporting no tests rather than an error.
-            let mut after = vec!["--all-targets", "--all-features", "--no-fail-fast"];
-            after.extend(filter.as_deref());
-
-            scoped(package.as_deref(), &["test"], &after)
-        }
+        Recipe::Test {
+            package,
+            filter,
+            shard,
+        } => test(package.as_deref(), filter.as_deref(), shard),
         Recipe::Doctest { package } => {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
         }

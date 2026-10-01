@@ -142,6 +142,8 @@ cargo x build
 
 The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo x build` runs both in order. The documentation a release ships is built the same way: `cargo x docs` renders the crates' own under `target/doc`. The standard library's pages come from the compiler itself: `curios document --std site` writes them under `site`, read off the prelude it embeds.
 
+Running the tests, `cargo x test`, also needs [cargo-nextest](https://nexte.st); the recipe names the command that installs it when it is missing.
+
 ## Go deeper
 
 - [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
