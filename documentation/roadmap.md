@@ -131,7 +131,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Standard library
 
-- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — a URL's port, `query_pairs` and `Flt`'s `div_mod` answer what their standard or contract does not; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Html`'s documentation overstates what it reads; and one definition could say more with what the elaborator proves
+- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Flt`'s `div_mod` answers a zero divisor its callers never pass; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Html`'s documentation overstates what it reads; and one definition could say more with what the elaborator proves
 - [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
 - [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings

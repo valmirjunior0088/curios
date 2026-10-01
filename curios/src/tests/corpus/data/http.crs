@@ -14,7 +14,7 @@ test a_url_reads_into_its_parts =
             Test/equal(u.path, "/a/b"),
             Test/equal(u.query, Option/some("x=1&y=two+words")),
             Test/equal(Url/segments(u), ["a", "b"]),
-            Test/equal(Url/query_pairs(u), [("x", "1"), ("y", "two words")])])
+            Test/equal(Url/query_pairs(u), Option/some([("x", "1"), ("y", "two words")]))])
     end;
 
 -- The default port is the scheme's, and is not written back.
@@ -47,7 +47,13 @@ test components_encode_and_decode =
         Test/equal(Url/decode("%zz"), Option/none()),
         Test/equal(
             Url/query_pairs(Url/with_query(Url/lit("http://h/"), [("q", "a b"), ("n", "1")])),
-            [("q", "a b"), ("n", "1")])]);
+            Option/some([("q", "a b"), ("n", "1")])),
+        Test/equal(
+            Url/query_pairs(Url/lit("http://h/?a=1&&b=2&c")),
+            Option/some([("a", "1"), ("b", "2"), ("c", "")])),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?")), Option/some([])),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?a=%zz&b=2")), Option/none()),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?a=%C3&b=2")), Option/none())]);
 
 -- A method spells as the wire does and reads back.
 test a_method_spells_and_reads =

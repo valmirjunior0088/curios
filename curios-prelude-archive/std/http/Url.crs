@@ -237,20 +237,18 @@ pub let decode(component: Str) -> Option(Str) =
     let b = Str/to_bytes(component);
     Option/bind(decode_at(b, 0, x[], Bytes/len(b) + 1), Str/of_bytes);
 
---- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value, as the form encoding reads it, and a pair that does not decode is dropped.
-pub let query_pairs(u: Url) -> List({Str, Str}) =
+--- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value and an empty piece — `a=1&&b=2`, or a query that is empty — is no pair, as the form encoding reads them; `none` where a name or a value does not decode, since a query read short of a pair is not the query that was sent.
+pub let query_pairs(u: Url) -> Option(List({Str, Str})) =
     match u.query
-    | none() => []
+    | none() => Option/some([])
     | some(q) =>
-        List/filter_map(
-            Str/split(q, "&"),
+        List/traverse(
+            List/filter(Str/split(q, "&"), (pair) => Bool/not(Str/is_empty(pair))),
             (pair) =>
                 let (name, value) = Option/unwrap_or(Str/split_once(pair, "="), (pair, ""));
-                match (decode(name), decode(value))
-                | (some(n), some(v)) => Option/some((n, v))
-                | (some(_), none()) => Option/none()
-                | (none(), _) => Option/none()
-                end)
+                let n = decode(name)!;
+                let v = decode(value)!;
+                Option/some((n, v)))
     end;
 
 --- `u` with `pairs` as its query, each name and value encoded.
