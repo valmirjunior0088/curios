@@ -598,18 +598,18 @@ fn embeddings_do_not_chain_through_a_middle_monad() {
     );
 }
 
-/// Strict postponement: a bang in an inference-position region is refused rather than letting the action elect the monad.
+/// Strict postponement: a bang in an inference-position region is refused rather than letting the action elect the monad. The parameter is annotated, so the region's monad is the one thing left undetermined.
 #[test]
 fn a_bang_in_an_inference_position_region_is_refused() {
     let source = r#"
-        use /std/{Io, print};
-        let f = (s) => print(s)!;
+        use /std/{Str, print};
+        let f = (s: Str) => print(s)!;
         f("never")
         "#;
 
     let error = typecheck(source).expect_err("an inference-position bang must refuse");
     assert!(
-        error.contains("cannot infer") || error.contains("monad of this region"),
+        error.contains("the monad of this region was never determined"),
         "expected an inference refusal, got: {error}"
     );
 }

@@ -333,7 +333,7 @@ fn closure_annotation_must_match_the_expected_domain() {
 
 #[test]
 fn bare_typeless_let_closure_cannot_be_inferred() {
-    // Without an annotation there is nothing to infer the domain from, so a typeless `let` binding a bare closure is a `cannot`-infer error.
+    // Without an annotation there is nothing to infer the domain from, so a typeless `let` binding a bare closure is refused, naming the parameter whose type nothing determines.
     let source = r#"
         let f = (x) => x;
         f
@@ -341,7 +341,10 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 
     let error = compile(source, None).unwrap_err();
 
-    assert!(error.contains("cannot"), "unexpected error: {error}");
+    assert!(
+        error.contains("the type of parameter 'x' was never determined"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
