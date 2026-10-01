@@ -146,7 +146,7 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
 /// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
 ///
 /// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. A dependency fetched with no revision to pin, which `requires` already refuses for `--url`, is `curios_package::pin`'s to refuse for a caller that reaches it another way.
-fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
+fn asked(row: Pinned) -> (PinSubject, String, Repoint, bool) {
     let repoint = |path: Option<PathBuf>,
                    url: Option<String>,
                    rev: Option<String>,
@@ -157,7 +157,7 @@ fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
         (None, None, None, _) => Repoint::Refresh,
     };
 
-    Ok(match row {
+    match row {
         Pinned::Foreign {
             name,
             path,
@@ -185,7 +185,7 @@ fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
             repoint(path, url, rev, refresh),
             check.check,
         ),
-    })
+    }
 }
 
 /// The `ffi`-tier bindings a program needs, linking each declared module in this process.
@@ -410,7 +410,7 @@ fn dispatch() -> Result<(), Failure> {
         }
         Mode::Pin { row } => {
             let governing = Governing::found(manifest, &here()?)?;
-            let (subject, name, repoint, check) = asked(row)?;
+            let (subject, name, repoint, check) = asked(row);
             let pinned = pin(&governing, subject, &name, &repoint, check)?;
             let named = Subject::Module(name);
 
