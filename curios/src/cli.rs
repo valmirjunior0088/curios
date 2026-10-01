@@ -1,5 +1,7 @@
 //! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
 
+#[cfg(feature = "profile")]
+use curios_profile::ROTATION_CAP;
 use {
     crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
     clap::{ArgGroup, Args, Parser, Subcommand},
@@ -394,7 +396,10 @@ pub(crate) struct Cli {
         long = "profile",
         value_name = "PATH",
         global = true,
-        help = "Write one record per span and event to PATH, rotating at 512 MiB"
+        help = format!(
+            "Write one record per span and event to PATH, rotating at {} MiB",
+            ROTATION_CAP / (1024 * 1024)
+        )
     )]
     pub(crate) profile: Option<PathBuf>,
 
