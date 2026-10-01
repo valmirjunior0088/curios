@@ -24,14 +24,20 @@ test a_url_takes_and_omits_its_default_port =
         Test/equal(Url/lit("http://example.com").port, 80),
         Test/equal(Url/lit("https://example.com").port, 443),
         Test/equal(Url/lit("https://example.com").path, "/"),
-        Test/equal(Url/to_str(Url/lit("http://h:8080/p?q=1")), "http://h:8080/p?q=1")]);
+        Test/equal(Url/to_str(Url/lit("http://h:8080/p?q=1")), "http://h:8080/p?q=1"),
+        Test/equal(Url/lit("http://h:/").port, 80),
+        Test/equal(Url/lit("https://h:/").port, 443),
+        Test/equal(Url/to_str(Url/lit("http://h:/p")), "http://h/p"),
+        Test/equal(Url/lit("http://h:65535/").port, 65535)]);
 
 -- A literal that does not read is refused where it is written; a string that does not read says why.
 test a_url_that_does_not_read_says_why =
     Test/all([
         Test/assert(Result/is_failure(Url/of_str("ftp://example.com/"))),
         Test/assert(Result/is_failure(Url/of_str("http:///nohost"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h:port/")))]);
+        Test/assert(Result/is_failure(Url/of_str("http://h:port/"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h:65536/"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h:80x/")))]);
 
 -- Percent-encoding leaves the unreserved characters and spells every other byte; decoding reads `+` as a space and refuses a broken escape.
 test components_encode_and_decode =

@@ -52,19 +52,46 @@ let scheme: Parse(Bytes, Scheme) =
 let is_digit(byte: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), '0', '9');
 
-let port_number: Parse(Bytes, Nat) =
+-- Whether the authority ends here: at the path, the query, the fragment, or the end of the text.
+let ends_authority(next: Option(Byte)) -> Bool =
+    match next
+    | some(b) =>
+        match Byte/to_nat(b)
+        | '/' => true
+        | '?' => true
+        | '#' => true
+        | _ => false
+        end
+    | none() => true
+    end;
+
+-- The port after a `:`: its digits up to where the authority ends. None is the scheme's, as RFC 3986 §3.2.3 reads an empty port, and a number no port holds is refused here rather than at the connection.
+let port_number(s: Scheme) -> Parse(Bytes, Nat) =
     let _ = Parse/bytes/expect(':')!;
     let digits = Parse/bytes/take_while(is_digit)!;
-    let spelled = text(digits)!;
-    match Nat/of_str(spelled)
-    | some(n) => Parse/pure(n)
-    | none() => Parse/fail("a port is a number")
+    let next = Parse/bytes/peek!;
+    match ends_authority(next)
+    | false => Parse/fail("a port is a number")
+    | true =>
+        match Bytes/len(digits) == 0
+        | true => Parse/pure(default_port(s))
+        | false =>
+            let spelled = text(digits)!;
+            match Nat/of_str(spelled)
+            | some(n) =>
+                match n <= 65535
+                | true => Parse/pure(n)
+                | false => Parse/fail("a port is at most 65535")
+                end
+            | none() => Parse/fail("a port is a number")
+            end
+        end
     end;
 
 let port_of(s: Scheme) -> Parse(Bytes, Nat) =
     let next = Parse/bytes/peek!;
     match next
-    | some(b) => match Byte/to_nat(b) | ':' => port_number | _ => Parse/pure(default_port(s)) end
+    | some(b) => match Byte/to_nat(b) | ':' => port_number(s) | _ => Parse/pure(default_port(s)) end
     | none() => Parse/pure(default_port(s))
     end;
 
@@ -99,7 +126,7 @@ let url: Parse(Bytes, Url) =
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })
     end;
 
---- `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is not a number.
+--- `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is no number of at most 65535. A port left empty, as in `http://h:/`, is the scheme's.
 pub let of_str(s: Str) -> Result(Parse/Error, Url) =
     Parse/run(url, Str/to_bytes(s));
 
