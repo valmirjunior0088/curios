@@ -1130,7 +1130,11 @@ pub(super) fn elaborate_func_infer(
             let reduced = reduce_with(context, &domain)?;
             let domain = match &*reduced {
                 Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
-                    None => return Err(Error::CannotInfer),
+                    None => {
+                        return Err(Error::domain_never_determined(
+                            hint.unwrap_or("_").to_string(),
+                        ));
+                    }
                     Some((lambda, scope)) => {
                         let result = context
                             .metavar_entry(metavar.id)

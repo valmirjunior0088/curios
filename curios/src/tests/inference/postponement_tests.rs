@@ -139,6 +139,21 @@ fn a_domain_nothing_pins_is_reported_as_its_parameter() {
     );
 }
 
+// The same refusal where nothing settles at all: a lambda bound by a `let` that states no type is synthesized on the spot, and its unannotated parameter is named there too rather than reported as an expression whose type cannot be inferred.
+#[test]
+fn an_unannotated_parameter_of_a_let_bound_lambda_is_reported_by_name() {
+    let source = r#"
+        use /std/{Nat};
+        let g = (x) => x;
+        /std/print(Nat/to_str(g(1)))
+        "#;
+    let error = error(source);
+    assert!(
+        error.contains("the type of parameter 'x' was never determined"),
+        "{error}"
+    );
+}
+
 // The settle in action, annotated: the lambda's own annotation is the type nothing else could supply, so the bare implicit pins to `(Nat) -> Nat` and the call compiles.
 #[test]
 fn an_annotated_lambda_settles_a_bare_implicit() {
