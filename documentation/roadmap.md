@@ -10,7 +10,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Soundness
 
-- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, and four spellings the strict-positivity entry calls attacked have no fixture
+- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, the two checkers part on unit eta where a program reaches it, and seven spellings the strict-positivity entry calls attacked have no fixture
 - [ ] [The two checkers' conversion held to each other](roadmap/01-soundness/01-conversion-held-across-checkers.md) — not refined yet; their conversion meets only where the corpus sends both, and their recurrence keys and untyped child positions differ
 - [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — not refined yet; an item under a name already in scope is not judged, and the mount disjointness that keeps one from arriving is checked in `curios-text`
 - [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [the relational layer](roadmap/04-arithmetic/08-relational-layer.md) has a consumer
@@ -41,7 +41,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Surface
 
-- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and the parser naming commitment twice and misstating its public surface
+- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and the parser naming commitment twice and overstating its public surface
 - [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
@@ -85,7 +85,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Lowering
 
-- [ ] [Findings](roadmap/06-lowering/00-findings.md) — a `Nat` shift by a count of `2³²` or more computing a different number, a sequence that long stopping on a bare trap, a flag licensing a deletion no pass performs, a merge path perhaps unreachable, a specialization key that reads any literal as a tag, and an assertion restating the verifier
+- [ ] [Findings](roadmap/06-lowering/00-findings.md) — a `Nat` shift by a count of `2³²` or more computing a different number, a sequence that long answering a wrong length or stopping on a bare trap, a flag licensing a deletion no pass performs while dead calls stand, a merge path perhaps unreachable, a specialization key that reads any literal as a tag, and an assertion restating the verifier
 - [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/06-lowering/01-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand
 - [ ] [Contification of a function with several return contexts](roadmap/06-lowering/02-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
 - [x] [WebAssembly-GC is the only target](design/lowering/webassembly-gc-is-the-only-target.md), serialized by `curios-wasm` with text round-tripped against the binary writer, and optimized closed-world by Binaryen
@@ -131,7 +131,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Standard library
 
-- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Json` accepts a raw control character; a URL's port, `query_pairs` and `Flt`'s `div_mod` answer what their standard or contract does not; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Html`'s documentation overstates what it reads; `Int` may now be a `Map` key; and two definitions could say more with what the elaborator proves
+- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Json` accepts a raw control character; a URL's port, `query_pairs` and `Flt`'s `div_mod` answer what their standard or contract does not; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Html`'s documentation overstates what it reads; `Int` has no `Map` key and nothing keeps it out; and two definitions could say more with what the elaborator proves
 - [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
 - [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
