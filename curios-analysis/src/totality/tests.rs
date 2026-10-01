@@ -331,7 +331,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
 const DEEP: usize = 100_000;
 
 #[test]
-fn a_deeply_nested_body_walks_without_native_recursion() {
+fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     // `(((… f(n) …)))`: a program-generated tuple nest, the mild sibling of a packed literal — bounded by the size of the source that spelled it rather than by a value, and unbounded by anything the walk controls. The nest is inert to the size order (no arm, no refinement, nothing to force), so what it measures is the traversal's own depth, and the graded call at the bottom is the evidence the walk arrived there.
     let mut kernel = Probe::default();
     let f = Free::local(1, Some("f"));
