@@ -327,6 +327,13 @@ fn dispatch() -> Result<(), Failure> {
                     entry.display()
                 )));
             }
+            // A directory takes no executable's place, and the write would say so only after the whole compilation.
+            if output.is_dir() {
+                return Err(Failure::Error(format!(
+                    "{} is a directory; `--output` names the file to write",
+                    output.display()
+                )));
+            }
 
             let started = Instant::now();
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
