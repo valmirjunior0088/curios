@@ -2,13 +2,9 @@
 //!
 //! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, as `documentation/design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md` states.
 
-use {
-    super::test_support::{
-        assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body,
-        unit_of, written,
-    },
-    curios_text::LintKind,
-    curios_unit::Unit,
+use super::test_support::{
+    assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body, unit_of,
+    unused_binders, written,
 };
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
@@ -191,16 +187,6 @@ pub let idle(i: Nat, q: Nat/Lt(i, 3)) -> Nat = i;
 
 pub let unrelated: Nat = 7;
 ";
-
-/// The binders a unit's `unused-binder` lints name.
-fn unused_binders(unit: &Unit) -> Vec<String> {
-    unit.text()
-        .lints()
-        .iter()
-        .filter(|lint| lint.kind == LintKind::UnusedBinder)
-        .map(|lint| lint.report.message.clone())
-        .collect()
-}
 
 #[test]
 fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {

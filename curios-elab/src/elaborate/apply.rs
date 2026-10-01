@@ -14,7 +14,9 @@ pub(super) fn elaborate_func_type(
         let mut cursor = ft.telescope.cursor();
         while let Some((_, ty)) = cursor.entry() {
             let domain = crate::check_is_sort(context, &ty)?.0;
-            let name = cursor.advance_fresh(|hint| context.fresh(hint));
+            // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
+            let written = cursor.written();
+            let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
             // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
             match ft.plicities().get(domains.len()) {
                 Some(Plicity::Witness) => {

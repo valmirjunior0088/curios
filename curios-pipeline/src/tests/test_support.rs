@@ -7,7 +7,7 @@ use {
     curios_core::{Item, Module},
     curios_elab::{Context, Resumed, erase_program},
     curios_prelude::{SYNTAX, with_prelude},
-    curios_text::{Entrypoint, RootSource, UnitSource},
+    curios_text::{Entrypoint, LintKind, RootSource, UnitSource},
     curios_unit::{Prefix, Unit},
     curios_utilities::{RootKind, test_support::Temporary},
     std::fs,
@@ -207,6 +207,16 @@ pub(super) fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
 /// `source` compiled whole as the unit `/lib`, against the prelude.
 pub(super) fn unit_of(source: &str) -> Unit {
     compile_modules(&mounted("lib", source)).expect("the unit compiles")
+}
+
+/// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
+pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
+    unit.text()
+        .lints()
+        .iter()
+        .filter(|lint| lint.kind == LintKind::UnusedBinder)
+        .map(|lint| lint.report.message.clone())
+        .collect()
 }
 
 /// `source` compiled as the unit `/lib` over `baseline`, against the prelude.

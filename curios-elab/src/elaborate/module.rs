@@ -812,6 +812,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     let mut types = Vec::with_capacity(defs.len());
     for def in &defs {
         check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
+        // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
+        context.enter_declaration(Some(def.name));
         types.push(crate::check_is_sort(context, &def.type_)?.0);
     }
 
