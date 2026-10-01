@@ -637,7 +637,6 @@ name = "curios-cert"
 version = "0.15.3"
 dependencies = [
  "curios-abi",
- "curios-algebra",
  "curios-analysis",
  "curios-archive",
  "curios-core",
