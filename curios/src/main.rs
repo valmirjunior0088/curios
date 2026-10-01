@@ -387,6 +387,12 @@ fn dispatch() -> Result<(), Failure> {
 
             write_documentation(&record, &directory)
                 .map_err(|error| format!("{}: {error}", directory.display()))?;
+
+            // Where the pages landed, as `compile` ends on where its executable did: by default that is under the store, where nobody would look, and the landing page is the one file a reader opens.
+            fact(
+                Heading::Finished,
+                Subject::File(directory.join("index.html")),
+            );
         }
         Mode::New { directory } => {
             for written in scaffold(&directory)? {

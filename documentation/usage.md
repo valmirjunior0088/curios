@@ -134,7 +134,7 @@ The pages are the library's consumers' view: a private declaration or module is 
 
 What is written is `index.html`, one page per other module at its source path with the suffix `.crs.html` — `/json/parse/lexer` is `parse/lexer.crs.html`, so a module named `index` never lands on the landing page — and, under `static/`, the stylesheet, the three brand fonts with their licenses, the mark, the search index as one script, and the script that runs the rail and the field. Files are overwritten by name and nothing else in the directory is touched. How the pages themselves are built, and why the search index is a script rather than a file to fetch, is [`curios-document`'s](../curios-document/README.md).
 
-A library that does not compile is not documented: its diagnostics are reported as `run` reports them, no page is written, and the exit is non-zero. Success prints nothing.
+A library that does not compile is not documented: its diagnostics are reported as `run` reports them, no page is written, and the exit is non-zero. Success ends with `Finished` naming the landing page, `<directory>/index.html`, under `--std` as well.
 
 ## `test`
 

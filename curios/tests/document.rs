@@ -69,7 +69,12 @@ fn document_writes_the_bundle_under_the_store() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stdout.is_empty(), "success prints nothing");
+    assert!(output.stdout.is_empty(), "the status line is stderr's");
+    let status = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        status.contains("Finished") && status.contains(".curios/documentation/shapes/index.html"),
+        "success names the landing page: {status}"
+    );
 
     let bundle = root.join(".curios/documentation/shapes");
     // The landing page is the root module's page: the description, the module cards, then the root's own declarations.
