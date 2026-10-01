@@ -143,14 +143,17 @@ fn not_ahead_word<'a>() -> Parser<'a, ()> {
 
 /// A finite `Flt` literal: a decimal with a dot and at least one digit after it, optionally signed and scaled by an exponent.
 fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
-    take_exact("-")
-        .map(|()| "-".to_string())
-        .or(take_exact("+").map(|()| "+".to_string()))
-        .or(pure(String::new()))
+    mark()
+        .and(
+            take_exact("-")
+                .map(|()| "-".to_string())
+                .or(take_exact("+").map(|()| "+".to_string()))
+                .or(pure(String::new())),
+        )
         .and(take_while(|char| {
             ".-+eE".contains(char) || char.is_ascii_digit()
         }))
-        .flat_map::<Floating, _>(|(sign, digits)| {
+        .flat_map::<Floating, _>(|((start, sign), digits)| {
             let has_dot = digits.contains('.');
 
             let has_decimal = digits
@@ -168,20 +171,21 @@ fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
             }
 
             // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
-            match decimal_parts(digits) {
-                Some((value, scale)) => pure(Floating::of_decimal(sign == "-", &value, scale)),
-                None => fail("Expected float literal"),
+            let value = match decimal_parts(digits) {
+                Some((value, scale)) => Floating::of_decimal(sign == "-", &value, scale),
+                None => return fail("Expected float literal"),
+            };
+
+            // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, and the infinity has literals of its own. Committed, since a dot between digits is the prefix that discriminates the literal: uncommitted, the refusal loses to the numeral, which reads the integer part and takes the `.0` after it for a projection.
+            match value.is_finite() {
+                true => pure(value),
+                false => commit(fail_from(
+                    &start,
+                    "Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`",
+                )),
             }
         })
         .and_drop(parse_whitespace())
-        .flat_map::<Floating, _>(|value: Floating| {
-            // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, the infinity has literals of its own, and the digits that committed this branch as a float literal cannot silently reparse as something else.
-            if value.is_finite() {
-                pure(value)
-            } else {
-                fail("Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`")
-            }
-        })
 }
 
 /// Split a float literal's digits into the numeral they spell and the power of ten scaling it: `12.5e3` is `125` scaled by `2`. The grammar has already established a dot with at least one digit after it, so what is left to refuse is a malformed exponent or a stray character the character class admitted.

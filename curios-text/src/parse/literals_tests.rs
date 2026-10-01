@@ -47,6 +47,23 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The model rounds an overflowing magnitude to the infinity of its sign, which is refused rather than taken — an infinity has literals of its own — and refused outright rather than backtracked into a different parse of the same digits.
     assert!("1.0e999".parse::<Term>().is_err());
     assert!("-1.0e999".parse::<Term>().is_err());
+    // The refusal is the literal's own, spanning it, whether the exponent or the digit count carries it past the range: neither is left for the numeral to reread as an integer and a `.0` projection.
+    let exponent = "1.0e309".parse::<Term>().unwrap_err().format();
+    assert!(
+        exponent.contains("Float literal overflows Flt"),
+        "reported {exponent}"
+    );
+    assert!(
+        exponent.ends_with("1 | 1.0e309\n      | ^^^^^^^"),
+        "reported {exponent}"
+    );
+    let digits = format!("1{}.0", "0".repeat(309));
+    let report = digits.parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("Float literal overflows Flt"),
+        "reported {report}"
+    );
+    assert!(format!("{digits}e-10").parse::<Term>().is_ok());
     // An exponent too large to be a decimal exponent at all is refused before any narrowing, rather than overflowing the count it is read into.
     assert!("1.0e99999999999".parse::<Term>().is_err());
     // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^1024 − 2^970`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f64>`, not from arithmetic done in prose.
