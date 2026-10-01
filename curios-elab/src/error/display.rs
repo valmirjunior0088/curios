@@ -1200,10 +1200,13 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "Nat/to_byte of {value}, a value no Byte holds")
             }
             Error::ByteLiteralOutOfRange { value } => {
-                write!(f, "Byte literal {value} is out of range (expected 0..=255)")
+                write!(
+                    f,
+                    "Byte literal {value} is out of range: a Byte is 0 through 255"
+                )
             }
             Error::BoolLiteralOutOfRange { value } => {
-                write!(f, "Bool literal {value} is out of range (expected 0..=1)")
+                write!(f, "Bool literal {value} is out of range: a Bool is 0 or 1")
             }
             Error::FltLiteralOutOfRange { value } => {
                 write!(f, "Flt literal {value} overflows the finite range")
