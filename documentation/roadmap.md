@@ -10,7 +10,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Soundness
 
-- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, the two checkers part on unit eta where a program reaches it, and seven spellings the strict-positivity entry calls attacked have no fixture
+- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, and the two checkers part on unit eta where a program reaches it
 - [ ] [The two checkers' conversion held to each other](roadmap/01-soundness/01-conversion-held-across-checkers.md) — not refined yet; their conversion meets only where the corpus sends both, and their recurrence keys and untyped child positions differ
 - [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — not refined yet; an item under a name already in scope is not judged, and the mount disjointness that keeps one from arriving is checked in `curios-text`
 - [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [the relational layer](roadmap/04-arithmetic/08-relational-layer.md) has a consumer
