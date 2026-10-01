@@ -370,7 +370,7 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
     );
 }
 
-/// A reduct that *drops* a local is still reached, which is the direction `Scope::could_reduce_to` must not be strict in.
+/// A reduct that *drops* a local is still reached, which is the direction `curios_analysis::could_reduce_to` must not be strict in.
 ///
 /// The filter deciding whether a settlement is worth performing tests that the candidate's locals are a *subset* of the key's, and subset rather than equality is the whole of what it can afford to claim: reduction may drop a local — the second projection of two, an argument a body ignores — while it can never introduce one, since it substitutes only closed definition bodies and subterms of the term it is reducing. Reading the test as equality, or as "the candidate mentions every local the key does", loses exactly this equation, and loses it silently: the arm simply stops refining.
 ///

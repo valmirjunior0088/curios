@@ -24,6 +24,7 @@ use {
     super::{decision_of, global, in_scope, is_empty},
     crate::{Context, Error, open_layer, reduce_with},
     curios_algebra::{Carrier, LinearForm, Monomial, Operation},
+    curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
         Apply, Cases, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat, StructType,
         Subterm, Term, TupleType,
@@ -1272,7 +1273,7 @@ fn open_until<T>(
     found: impl Fn(&Term) -> Option<T>,
 ) -> Result<Option<T>, Error> {
     let mut current = term.clone();
-    for _ in 0..16 {
+    for _ in 0..RESOLVED_SPELLING_LAYERS {
         if let Some(answer) = found(&current) {
             return Ok(Some(answer));
         }

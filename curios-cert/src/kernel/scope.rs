@@ -5,7 +5,7 @@
 //! `mark` and `retract` are `pub(super)` and `Kernel::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    curios_analysis::records_case_equation,
+    curios_analysis::{could_reduce_to, records_case_equation},
     curios_core::{Bound, Free, Term},
 };
 
@@ -231,23 +231,4 @@ impl Scope {
     fn in_force_innermost_first(&self) -> impl Iterator<Item = &Refinement> {
         self.refinements[..self.in_force()].iter().rev()
     }
-}
-
-/// Whether reducing `key` could possibly produce `candidate` — a necessary condition, tested without reducing anything.
-///
-/// Reduction substitutes only closed definition bodies and subterms of the term it is reducing, so it can introduce a *global* name and can drop a local, but can never introduce a local the term did not already mention. A candidate naming a binder the key does not is therefore one no reduct of the key will ever equal, whatever the key reduces to.
-///
-/// That makes this a filter and not a rule: every candidate an eager key would match still passes it, because such a candidate *is* a reduct of the key. What it excludes is the traffic — every stuck form produced under a binder some other judgment opened, which is most of what a probe at a stuck reduct sees.
-///
-/// Globals are deliberately not tested, and the asymmetry is the point: a reduct's globals are not bounded by the key's, so testing them would exclude exactly the unfoldings a settlement exists to perform.
-///
-/// Being a filter, relaxing it to admit everything changes no verdict and moves no fixture — what it moves is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `whnf::equations_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
-fn could_reduce_to(key: &Term, candidate: &Term) -> bool {
-    let allowed = key.free_vars_shared();
-
-    candidate
-        .free_vars_shared()
-        .iter()
-        .filter(|name| name.is_local())
-        .all(|name| allowed.contains(name))
 }

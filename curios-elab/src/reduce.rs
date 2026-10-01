@@ -11,6 +11,7 @@ pub(crate) mod test_support;
 
 use {
     super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    curios_analysis::could_reduce_to,
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
         FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
@@ -919,17 +920,6 @@ fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceErr
     };
 
     Ok(zonk_solved_term_metas(context, &spelled))
-}
-
-/// Whether reducing `key` could possibly produce `candidate`: every local `candidate` names, `key` names too. A filter and not a rule — see `curios-cert`'s `could_reduce_to`, which this is, for why reduction can drop a local and never introduce one, and why globals are not tested.
-fn could_reduce_to(key: &Term, candidate: &Term) -> bool {
-    let allowed = key.free_vars_shared();
-
-    candidate
-        .free_vars_shared()
-        .iter()
-        .filter(|name| name.is_local())
-        .all(|name| allowed.contains(name))
 }
 
 /// Reduce `term` until its head constructor is stable.

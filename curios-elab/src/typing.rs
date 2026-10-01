@@ -2,7 +2,7 @@
 mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
-use curios_analysis::{Unfolding, records_case_equation};
+use curios_analysis::{RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation};
 use curios_core::{
     Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
     IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
@@ -1033,7 +1033,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
     let mut current = term.clone();
 
     // Bounded: each step consumes one application layer of an elaborated dispatch, and a runaway is a bug rather than something to spin on.
-    for step in 0..16 {
+    for step in 0..RESOLVED_SPELLING_LAYERS {
         let Some(opened) = open_layer(context, &current)? else {
             return Ok((step > 0).then_some(current));
         };

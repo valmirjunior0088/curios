@@ -21,6 +21,7 @@ mod test_support;
 
 use {
     super::Kernel,
+    curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
@@ -323,7 +324,7 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
     })
 }
 
-/// The spelling a dispatched scrutinee resolves to: its application spine opened a layer at a time through heads that reduce to functions — the intrinsic a concept method elaborates to, `(?w).1(a, hi)` reaching `NatLe(a, hi)` — or `None` where nothing opened, where what it reached carries no head a probe can present, or where sixteen layers did not settle it.
+/// The spelling a dispatched scrutinee resolves to: its application spine opened a layer at a time through heads that reduce to functions — the intrinsic a concept method elaborates to, `(?w).1(a, hi)` reaching `NatLe(a, hi)` — or `None` where nothing opened, where what it reached carries no head a probe can present, or where [`RESOLVED_SPELLING_LAYERS`] did not settle it.
 ///
 /// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: met only through its lazily settled reduct — after the decision procedure has already folded the probe, and as that fold's result — a dispatched guard's intrinsic shape would be answered from the procedure in an arm whose guard the procedure decides against, where the elaborator answers the dual spelling from the arm's equation.
 pub(crate) fn resolved_spelling(
@@ -332,8 +333,8 @@ pub(crate) fn resolved_spelling(
 ) -> Result<Option<Term>, ReduceError> {
     let mut current = scrutinee.clone();
 
-    // Bounded: each step consumes one application layer of an elaborated dispatch, and a spine that has not settled in sixteen is not a dispatch.
-    for _ in 0..16 {
+    // Bounded: each step consumes one application layer of an elaborated dispatch, and a spine that has not settled in the layers both checkers open is not a dispatch.
+    for _ in 0..RESOLVED_SPELLING_LAYERS {
         let Subterm::Apply(Apply { head, arguments }) = &*current else {
             return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
         };
