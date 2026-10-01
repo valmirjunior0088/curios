@@ -638,7 +638,7 @@ impl Kernel {
         self.insert(name, type_, Some(value), universes);
     }
 
-    /// Record a top-level name with a type and no body — a `foreign` declaration, or one kept opaque. It never unfolds, so it is a permanent neutral.
+    /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. No walk records one — a module's items are defined with their bodies, and a `foreign` is a term `infer` types rather than a name — so its callers are the fixtures that need an opaque head.
     pub fn declare(&mut self, name: &Free, type_: &Term, universes: &UniverseContext) {
         self.insert(name, type_, None, universes);
     }

@@ -23,7 +23,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Types
 
-- [ ] [Findings](roadmap/02-types/00-findings.md) — the kernel refuses to classify a universe instance over a bodiless scheme
+- [ ] [Findings](roadmap/02-types/00-findings.md) — none open
 - [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-types/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
 - [ ] [A universe level settled before its evidence is in](roadmap/02-types/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
 - [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-types/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits

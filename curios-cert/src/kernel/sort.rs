@@ -131,8 +131,8 @@ impl Sort {
                 MatchResult::Ambient(goal) => as_sort(kernel, goal),
             },
 
-            // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable.
-            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
+            // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable. A universe instance reduction left standing is one too, read at the levels the occurrence states: a local head, whose binder answers whatever they are, or a scheme declared without a body, instantiated at them.
+            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::Instance(_) => {
                 sort_of_neutral(kernel, &reduced)
             }
 
@@ -142,8 +142,6 @@ impl Sort {
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
             Subterm::Prop => Ok(Sort::Type(Level::zero())),
-
-            Subterm::Instance(instance) => Sort::of(kernel, &instance.head.to_term()),
 
             _ => Err(KernelError::Unclassified(reduced.clone())),
         }
