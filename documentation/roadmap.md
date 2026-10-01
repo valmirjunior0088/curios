@@ -41,7 +41,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Surface
 
-- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character
+- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and whitespace wider than the reference names
 - [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
@@ -96,7 +96,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Tools
 
-- [ ] [Findings](roadmap/07-tools/00-findings.md) — a test that exits early counted by its exit code, a formatter that moves comments onto the wrong line, refusals that print internal paths, lack a location, read one fault five ways or point elsewhere, a report spelling names through imported modules in full, test instruments that pass with their defect present, measurement readings the code has moved past, a benchmark cross-check that compares nothing, and CLI migration shims
+- [ ] [Findings](roadmap/07-tools/00-findings.md) — a test that exits early counted by its exit code, a formatter that moves comments onto the wrong line, refusals that print internal paths, lack a location, read one fault five ways or point elsewhere, a report spelling names through imported modules in full, test instruments that pass with their defect present, measurement readings the code has moved past, a benchmark cross-check that compares nothing, a sign with no literal reported as a missing `inf.0`, a module file with no name for a stem checked as a program, and CLI migration shims
 - [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold
 - [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
 - [ ] [A binary reader for `curios-wasm`](roadmap/07-tools/03-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
@@ -114,7 +114,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Architecture
 
-- [ ] [Findings](roadmap/08-architecture/00-findings.md) — two printers that hand-roll their frames, an error path nothing reaches, a test-only constructor in production, and history in a build script an edit would rebuild
+- [ ] [Findings](roadmap/08-architecture/00-findings.md) — a truth table that reads a shared term once per path, two printers that hand-roll their frames, an error path nothing reaches, a test-only constructor in production, and history in a build script an edit would rebuild
 - [ ] [A shared term costs its size](roadmap/08-architecture/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
 - [ ] [One environment, and every read recorded](roadmap/08-architecture/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
 - [ ] [A compilation is a graph of item tasks](roadmap/08-architecture/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
@@ -131,7 +131,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Standard library
 
-- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Flt`'s `div_mod` answers a zero divisor its callers never pass; a terminal session reads a failed read as silence; no inventory says which defaults are specified; and one definition could say more with what the elaborator proves
+- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Flt`'s `div_mod` answers a zero divisor its callers never pass; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Hash/digest` bounds its lanes one bit past the unboxed range; and one definition could say more with what the elaborator proves
 - [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
 - [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
