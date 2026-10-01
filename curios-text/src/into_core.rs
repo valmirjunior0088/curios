@@ -709,15 +709,16 @@ fn process_items(
                         let name = curios_core::Global::Authored(context.prefixed(&let_item.label));
                         context.record_import_scope(Some(&name));
                         let lower = Lowerer::new(context, Some(name));
-                        lower.enter_signature(&let_item.signature);
-                        let type_ = lower.term(&let_item.signature.type_())?;
+                        let sugar = lower.sugar(&let_item.signature);
+                        let type_ =
+                            lower.half(sugar, || lower.term(&let_item.signature.type_()))?;
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::Authored,
                             span: let_item.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             type_,
-                            body: lower.value(&let_item.signature.body())?,
+                            body: lower.half(sugar, || lower.value(&let_item.signature.body()))?,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -733,7 +734,6 @@ fn process_items(
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
-                lower.enter_sugar();
                 let output = curios_core::Term::var(curios_core::Var::free(
                     curios_core::Free::global(context.syntax().test.test_type.qualifier()),
                 ));
@@ -1423,14 +1423,14 @@ fn process_items(
                         };
 
                         let lower = Lowerer::new(context, Some(name));
-                        lower.enter_signature(&signature);
+                        let sugar = lower.sugar(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
                             span: None,
                             name,
                             island: context.island(),
-                            type_: lower.term(&declared_type)?,
-                            body: lower.value(&signature.body())?,
+                            type_: lower.half(sugar, || lower.term(&declared_type))?,
+                            body: lower.half(sugar, || lower.value(&signature.body()))?,
                         };
                         witnesses.insert(name);
                         Ok(item)

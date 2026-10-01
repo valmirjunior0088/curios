@@ -557,7 +557,7 @@ fn an_underscore_prefixed_declaration_and_a_public_one_are_kept() {
     );
 }
 
-/// The sugar's telescope is the Π-type entered first, not the first one finished: a parameter whose own type is a function type is lowered before the result, and must not stand in for the telescope.
+/// The sugar's telescope is the Π-type at the root of its type, not the first one finished: a parameter whose own type is a function type is lowered before the result, and must not stand in for the telescope.
 #[test]
 fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_function_type() {
     assert_eq!(
@@ -581,5 +581,51 @@ fn a_named_use_lambda_binder_is_never_reported() {
     "#
         ),
         Vec::<String>::new()
+    );
+}
+
+/// The sugar's lambda is the one its body lowers to, not the first one lowered: a lambda written in the result type is lowered before it, and must not stand in for the parameters.
+#[test]
+fn a_parameter_only_the_result_type_mentions_is_used_when_the_result_type_holds_a_lambda() {
+    assert_eq!(
+        lints(
+            r#"
+        let f(n : Type) -> ((m) => m)(n) = Type;
+        f
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// A local definition's value is lowered before its type, and its parameters' own types with it: a parameter whose type is a function type must not stand in for the telescope.
+#[test]
+fn a_local_parameter_only_the_result_type_mentions_is_used_beside_a_function_typed_one() {
+    assert_eq!(
+        lints(
+            r#"
+        let g : Type =
+            let f(h : (Type) -> Type, x : Type) -> h(x) = Type;
+            f;
+        g
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// A function type written in a parameter's own type binds its own names, and what its result mentions exempts nothing of the sugar's.
+#[test]
+fn a_local_parameter_nothing_mentions_is_reported_when_a_later_type_binds_its_name() {
+    assert_eq!(
+        lints(
+            r#"
+        let g : Type =
+            let f(x : Type, _k : (x : Type) -> x) -> Type = Type;
+            f;
+        g
+    "#
+        ),
+        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
     );
 }

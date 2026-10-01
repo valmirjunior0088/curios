@@ -43,7 +43,7 @@ pub(super) struct Lowerer<'a, 'b> {
     used: RefCell<HashSet<curios_core::Free>>,
     /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
     saw_goal: Cell<bool>,
-    /// The function-definition sugar being lowered, when one is — see [`Self::enter_signature`].
+    /// The function-definition sugar whose half is about to be lowered, until that half's root takes it — see [`Self::half`].
     signature: Cell<Option<usize>>,
     signatures: RefCell<Vec<Signature>>,
 }
@@ -60,8 +60,6 @@ struct Candidate {
 #[derive(Default)]
 struct Signature {
     output_mentions: HashSet<String>,
-    telescope_seen: bool,
-    lambda_seen: bool,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
@@ -78,22 +76,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Lower a declaration's type and body as the function-definition sugar they came from, when they did: the first Π-type met is its telescope and the first lambda its parameters, and the two are read together by [`Self::flush`]. A plain `let x : T = e` enters nothing. Returns what was current, for a local `let` to restore.
-    pub(super) fn enter_signature(&self, signature: &LetSignature) -> Option<usize> {
+    /// The function-definition sugar a signature is, when it is one: what its type and its body are lowered as, each through [`Self::half`], and read together by [`Self::flush`]. A plain `let x : T = e` is none.
+    pub(super) fn sugar(&self, signature: &LetSignature) -> Option<usize> {
         match signature {
-            LetSignature::Func { .. } => self.enter_sugar(),
-            LetSignature::Name { .. } => self.signature.replace(None),
+            LetSignature::Func { .. } => {
+                let mut signatures = self.signatures.borrow_mut();
+                signatures.push(Signature::default());
+                Some(signatures.len() - 1)
+            }
+            LetSignature::Name { .. } => None,
         }
     }
 
-    pub(super) fn enter_sugar(&self) -> Option<usize> {
-        let mut signatures = self.signatures.borrow_mut();
-        signatures.push(Signature::default());
-        self.signature.replace(Some(signatures.len() - 1))
-    }
-
-    pub(super) fn leave_signature(&self, previous: Option<usize>) {
-        self.signature.set(previous);
+    /// Lower one half of a sugar, its Π-type or its lambda. The half's root is the first thing lowered and takes the sugar, so nothing written beneath either half can stand in for it: a lambda in the result type is not the parameters, and a function type in the body or in a parameter's own type is not the telescope.
+    pub(super) fn half<T>(
+        &self,
+        sugar: Option<usize>,
+        lower: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        self.signature.set(sugar);
+        let lowered = lower();
+        self.signature.set(None);
+        lowered
     }
 
     /// The lints of the declaration this lowered, decided now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal reports none: its binders are what the goal's report lists for the author to use next.
@@ -171,13 +175,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// The binders of a lambda's parameters. The first lambda lowered under a signature is its sugar's, and its parameters are decided together with the telescope — see [`Signature`].
+    /// The binders of a lambda's parameters. The lambda at the root of a sugar's body is its sugar's, and its parameters are decided together with the telescope — see [`Signature`].
     fn mint_params(&self, params: &[FuncParam]) -> Vec<Binder> {
-        let signature = self.signature.get().filter(|&signature| {
-            let mut signatures = self.signatures.borrow_mut();
-            !std::mem::replace(&mut signatures[signature].lambda_seen, true)
-        });
-        self.mint_written(param_labels(params), signature)
+        self.mint_written(param_labels(params), self.signature.take())
     }
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
@@ -231,11 +231,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         params: &[FuncTypeParam],
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        // The first Π-type entered under a signature is its sugar's telescope, claimed before its domains are lowered: a parameter's own type may be a Π-type, and it is not the telescope. The parameters the result mentions are used by the declaration — see [`Signature`].
-        let telescope = self.signature.get().filter(|&signature| {
-            let mut signatures = self.signatures.borrow_mut();
-            !std::mem::replace(&mut signatures[signature].telescope_seen, true)
-        });
+        // The Π-type at the root of a sugar's type is its telescope, taken before its domains are lowered: a parameter's own type may be a Π-type, and it is not the telescope. The parameters the result mentions are used by the declaration — see [`Signature`].
+        let telescope = self.signature.take();
         let binders = self.mint(params.iter().map(|p| p.label.clone().unwrap_or_default()));
         let mut lowered = Vec::with_capacity(params.len());
         for (index, param) in params.iter().enumerate() {
@@ -573,10 +570,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let mut types = Vec::with_capacity(group.members.len());
             let mut values = Vec::with_capacity(group.members.len());
             for member in &group.members {
-                let enclosing = self.enter_signature(&member.signature);
-                values.push(lower_value(&member.signature.body(), &mut binds)?);
-                types.push(self.term(&member.signature.type_())?);
-                self.leave_signature(enclosing);
+                let sugar = self.sugar(&member.signature);
+                let body = member.signature.body();
+                values.push(self.half(sugar, || lower_value(&body, &mut binds))?);
+                types.push(self.half(sugar, || self.term(&member.signature.type_()))?);
             }
             Ok((types, values))
         })?;
