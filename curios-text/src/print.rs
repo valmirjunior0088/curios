@@ -1514,7 +1514,9 @@ fn braced_escape(character: char) -> String {
 fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
     let bound = |body: Term| {
         if top {
-            flat([pure(" ="), hard_line(), indent(print_term(body))])
+            // The body's start is reported before the break, as `attached_body` reports it: a comment riding the `=` line is owed on that line, and paid after the break it would ride the body's.
+            let reached = reached_before(body.span().map(|span| span.start));
+            flat([pure(" ="), reached, hard_line(), indent(print_term(body))])
         } else {
             attached_body(" =", body)
         }
@@ -1579,6 +1581,7 @@ fn print_top_test(test: TopTest) -> Printer {
         pure("test "),
         pure(test.label),
         pure(" ="),
+        reached_before(test.body.span().map(|span| span.start)),
         hard_line(),
         indent(print_term(test.body)),
         pure(";"),

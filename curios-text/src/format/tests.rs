@@ -78,6 +78,17 @@ fn a_trailing_comment_rides_its_line() {
     );
 }
 
+/// A comment riding a top-level definition's `=` line, or a test's, stays on it: the body's start is reported before the break below the `=`, so the comment is owed while that line is still open rather than carried onto the body's.
+#[test]
+fn a_comment_riding_a_definitions_equals_stays_on_its_line() {
+    for source in [
+        "pub let f(n: /std/Nat) -> /std/Nat = -- trailing\n    n;\n",
+        "test holds = -- trailing\n    /std/Test/assert(true);\n",
+    ] {
+        assert_eq!(formatted(source), source);
+    }
+}
+
 #[test]
 fn a_comment_above_a_later_let_binding_stays_above_it() {
     // The let-chain tail must not claim comments leading later bindings, as a tail built ahead of the binding documents would, and a binding-leading comment claims at the binding head, so this shape is a fixed point.
