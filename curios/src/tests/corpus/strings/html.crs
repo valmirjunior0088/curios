@@ -1,4 +1,4 @@
--- The HTML tree: what renders, what escapes, and what a browser-shaped read gives back.
+-- The HTML tree: what renders, what escapes, and what a read that consults no element name gives back.
 use /std/{Str, List, Option, Result, Test, Html};
 use /std/Html/{Attr};
 
@@ -61,6 +61,18 @@ test several_trees_read_as_a_fragment =
     Test/equal(
         Html/of_str("a &zzz; b &#; c<hr/>"),
         Result/success(Html/fragment([Html/text("a &zzz; b &#; c"), Html/void("hr", [])])));
+
+-- No name is consulted and none is rewritten: an element keeps the case it was written in and is void only by its slash, so `<img>` holds what follows it; and a reference is one only with its semicolon.
+test a_read_consults_no_element_name =
+    Test/equal(
+        Html/of_str("<P>a &lt b<img src=x>after</P>"),
+        Result/success(
+            Html/element(
+                "P",
+                [],
+                [
+                    Html/text("a &lt b"),
+                    Html/element("img", [Attr/attr("src", "x")], [Html/text("after")])])));
 
 -- Queries walk the tree in document order.
 test queries_walk_the_tree =

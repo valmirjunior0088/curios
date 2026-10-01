@@ -225,6 +225,6 @@ let content: Parse(Bytes, Html) =
         | [one, ..rest] => match rest | [] => one | _ => Html/fragment(read) end
         end);
 
---- The tree `s` spells, read as a browser reads it: an unclosed element ends where its parent does, a stray closing tag is skipped, a declaration is dropped, and a reference that names nothing known is kept. A single tree is returned as itself, several as a fragment, so what `render` writes reads back equal. The grammar declines nothing today; the refusal is the parser's to report should it ever.
+--- The tree `s` spells, read as the markup `render` writes rather than as a browser reads a page: what `render` writes reads back equal. No element name is consulted, so an element is void only where it is written `<name/>`, and any other holds the trees up to the next closing tag, whichever name it bears, or to its parent's end — `<br>` written without the slash holds what follows it, and a second `<li>` or `<p>` nests in the first. A name keeps the case it was written in, a stray closing tag is skipped, a declaration is dropped, and a reference decodes as `decode` reads it, one that names nothing known kept as written. A single tree is returned as itself, several as a fragment. The grammar declines nothing today; the refusal is the parser's to report should it ever.
 pub let of_str(s: Str) -> Result(Parse/Error, Html) =
     Parse/run(content, Str/to_bytes(s));
