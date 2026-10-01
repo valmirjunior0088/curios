@@ -143,8 +143,8 @@ pub struct Context {
     entailing: bool,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
     declaration: Option<Global>,
-    /// The declaration each local opened from a written binder was opened in, kept while one item elaborates: whose written binders the place the local carries counts among. Read from the local rather than from what is current when a proof reads it, since a group's parked bounds are retried once every member has elaborated.
-    opened: BTreeMap<Free, Option<Global>>,
+    /// The written binder each local was opened from, kept while one item elaborates: the declaration it was opened in, and the binder's place among that declaration's written binders. The declaration is read from here rather than from what is current when a proof reads the local, since a group's parked bounds are retried once every member has elaborated. The place is kept here rather than on the local, so a scope rebuilt over the local remembers none: a term that reaches another declaration is credited nothing there.
+    opened: BTreeMap<Free, (Option<Global>, u32)>,
     /// The written binders a proof the elaborator wrote reads, each by its declaration and its place among that declaration's written binders, in the order they were credited ([`Context::credit`]): each is used though no written reference reaches it, so `unused-binder` does not report it. A list rather than a set so a rollback truncates it with the solutions it was credited beside.
     credited: Vec<(Option<Global>, u32)>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
@@ -402,13 +402,13 @@ impl Context {
         self.fresh_for(hint, None)
     }
 
-    /// [`Context::fresh`] for a local opened from a scope's binder, which carries where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
+    /// [`Context::fresh`] for a local opened from a scope's binder, recording where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
     pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
         let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
 
-        let local = Free::local_written(index, hint, written);
-        if written.is_some() {
-            self.opened.insert(local, self.declaration);
+        let local = Free::local(index, hint);
+        if let Some(written) = written {
+            self.opened.insert(local, (self.declaration, written));
         }
         local
     }
@@ -429,7 +429,7 @@ impl Context {
         let read = proof
             .free_vars_shared()
             .iter()
-            .filter_map(|local| Some((*self.opened.get(local)?, local.written()?)))
+            .filter_map(|local| self.opened.get(local).copied())
             .collect::<Vec<_>>();
         self.credited.extend(read);
     }

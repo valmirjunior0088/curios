@@ -493,7 +493,7 @@ impl<'a> Context<'a> {
         curios_core::Free::local_written(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),
             hint,
-            Some(written),
+            written,
         )
     }
 

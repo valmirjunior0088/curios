@@ -58,7 +58,7 @@ impl fmt::Display for WitnessId {
 pub struct Mint {
     index: u32,
     hint: Option<Symbol>,
-    /// Where the binder sits among its declaration's written binders, when the lowering wrote it — diagnostic metadata excluded from identity as the hint is, which a local opened from its scope inherits so a lint can be credited with a proof's reads.
+    /// Where the binder sits among its declaration's written binders, when the lowering wrote it — diagnostic metadata excluded from identity as the hint is, which the scope closing over the binder remembers so a lint can be credited with a proof's reads.
     written: Option<u32>,
 }
 
@@ -203,10 +203,10 @@ impl Free {
         Free::Local(Mint::new(index, hint))
     }
 
-    /// [`Free::local`] for a binder written in source, at `written` among its declaration's written binders — or for a local opened from one, which inherits the place so a lint can trace a read of it back.
-    pub fn local_written(index: u32, hint: Option<&str>, written: Option<u32>) -> Self {
+    /// [`Free::local`] for a binder written in source, at `written` among its declaration's written binders. A local opened from its scope is no such binder: the place stays with the scope, for whoever opens it to read.
+    pub fn local_written(index: u32, hint: Option<&str>, written: u32) -> Self {
         Free::Local(Mint {
-            written,
+            written: Some(written),
             ..Mint::new(index, hint)
         })
     }
@@ -268,11 +268,6 @@ impl Free {
     /// [`Free::hint`] as the interned symbol it is kept as.
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
         self.as_local().and_then(Mint::hint_symbol)
-    }
-
-    /// Where a local's binder sits among its declaration's written binders: see [`Free::local_written`].
-    pub fn written(&self) -> Option<u32> {
-        self.as_local().and_then(Mint::written)
     }
 }
 

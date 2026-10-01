@@ -572,7 +572,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         self.label(index)?.hint()
     }
 
-    /// Where the binder at position `index` sits among its declaration's written binders, when the lowering wrote it: what a local opened from it carries, so a proof reading the local credits the binder a lint names.
+    /// Where the binder at position `index` sits among its declaration's written binders, when the lowering wrote it: what the elaborator records of the local it opens from it, so a proof reading the local credits the binder a lint names.
     pub fn written(&self, index: usize) -> Option<u32> {
         self.label(index)?.written()
     }
