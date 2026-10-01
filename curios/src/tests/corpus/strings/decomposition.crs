@@ -102,7 +102,9 @@ test escape_replaces_chosen_characters_and_copies_the_runs_between =
 let _splits_in_a_type: Eq()(Str/split("a€€b€c", "€"), ["a", "", "b", "c"]) =
     Eq/refl();
 
-let _splits_once_in_a_type: Eq()(Str/split_once("key=value=x", "="), Option/some(("key", "value=x"))) =
+let _splits_once_in_a_type: Eq()(
+    Str/split_once("key=value=x", "="),
+    Option/some(("key", "value=x"))) =
     Eq/refl();
 
 let _reads_lines_in_a_type: Eq()(Str/lines("a\r\nb\n"), ["a", "b"]) =

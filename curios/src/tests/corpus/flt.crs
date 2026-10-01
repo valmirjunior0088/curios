@@ -1,70 +1,192 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
-use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash, Show, Dyadic, Vec};
+use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash,
+    Show, Dyadic, Vec};
 use /std/Bool/{True};
 use /std/Flt/{Rounding, rounded, signals, Exceptions, Env, Class};
 
 -- What a type can already compute: the shortest decimal, the total order, and the special spellings read back.
-let _renders_in_a_type: Eq()(Flt/to_str(0.1), "+0.1") = Eq/refl();
-let _renders_a_large_value_in_a_type: Eq()(Flt/to_str(1.0e300), Flt/to_str(1.0e300)) = Eq/refl();
-let _orders_the_zeros_in_a_type: Eq()(Flt/ord(-0.0, +0.0), Ordering/lt()) = Eq/refl();
+let _renders_in_a_type: Eq()(Flt/to_str(+0.1), "+0.1") =
+    Eq/refl();
+
+let _renders_a_large_value_in_a_type: Eq()(
+    Flt/to_str(
+        +1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0),
+    Flt/to_str(
+        +1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0)) =
+    Eq/refl();
+
+let _orders_the_zeros_in_a_type: Eq()(Flt/ord(-0.0, +0.0), Ordering/lt()) =
+    Eq/refl();
+
 let _orders_nan_after_infinity_in_a_type: Eq()(Flt/ord(+nan.0, +inf.0), Ordering/gt()) =
     Eq/refl();
-let _reads_infinity_in_a_type: Eq()(Flt/of_str("-Infinity"), Option/some(-inf.0)) = Eq/refl();
+
+let _reads_infinity_in_a_type: Eq()(Flt/of_str("-Infinity"), Option/some(-inf.0)) =
+    Eq/refl();
 
 -- Every direction folds in a type, and each operation rounds its exact result exactly as `of_dyadic` rounds that result written out: `0.1 + 0.2` is `21617278211378382 · 2^-56`, `0.1 · 0.1` is `m² · 2^-112` for the tenth's significand `m`, `(1/3) · 3` is `18014398509481983 · 2^-54`, and `0.1 · 10 - 1` is `4 · 2^-56` exactly, which only a fused operation sees.
-let _sum_rounds_its_exact_value_ties_to_even: Eq()(rounded/add(Rounding/ties_to_even(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
+let _sum_rounds_its_exact_value_ties_to_even: Eq()(
+    rounded/add(Rounding/ties_to_even(), +0.1, +0.2),
+    rounded/of_dyadic(
+        Rounding/ties_to_even(),
+        Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_ties_to_even: Eq()(rounded/mul(Rounding/ties_to_even(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
+
+let _product_rounds_its_exact_value_ties_to_even: Eq()(
+    rounded/mul(Rounding/ties_to_even(), +0.1, +0.1),
+    rounded/of_dyadic(
+        Rounding/ties_to_even(),
+        Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_ties_to_even: Eq()(rounded/mul(Rounding/ties_to_even(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
+
+let _third_times_three_rounds_its_exact_value_ties_to_even: Eq()(
+    rounded/mul(Rounding/ties_to_even(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/of_dyadic(
+        Rounding/ties_to_even(),
+        Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_ties_to_even: Eq()(rounded/fma(Rounding/ties_to_even(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +4, exponent = -56 })) =
+
+let _fma_rounds_its_exact_value_ties_to_even: Eq()(
+    rounded/fma(Rounding/ties_to_even(), +0.1, +10.0, -1.0),
+    rounded/of_dyadic(Rounding/ties_to_even(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_ties_to_away: Eq()(rounded/add(Rounding/ties_to_away(), 0.1, 0.2), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
+
+let _sum_rounds_its_exact_value_ties_to_away: Eq()(
+    rounded/add(Rounding/ties_to_away(), +0.1, +0.2),
+    rounded/of_dyadic(
+        Rounding/ties_to_away(),
+        Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_ties_to_away: Eq()(rounded/mul(Rounding/ties_to_away(), 0.1, 0.1), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
+
+let _product_rounds_its_exact_value_ties_to_away: Eq()(
+    rounded/mul(Rounding/ties_to_away(), +0.1, +0.1),
+    rounded/of_dyadic(
+        Rounding/ties_to_away(),
+        Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_ties_to_away: Eq()(rounded/mul(Rounding/ties_to_away(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
+
+let _third_times_three_rounds_its_exact_value_ties_to_away: Eq()(
+    rounded/mul(Rounding/ties_to_away(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/of_dyadic(
+        Rounding/ties_to_away(),
+        Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_ties_to_away: Eq()(rounded/fma(Rounding/ties_to_away(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +4, exponent = -56 })) =
+
+let _fma_rounds_its_exact_value_ties_to_away: Eq()(
+    rounded/fma(Rounding/ties_to_away(), +0.1, +10.0, -1.0),
+    rounded/of_dyadic(Rounding/ties_to_away(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_zero: Eq()(rounded/add(Rounding/toward_zero(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
+
+let _sum_rounds_its_exact_value_toward_zero: Eq()(
+    rounded/add(Rounding/toward_zero(), +0.1, +0.2),
+    rounded/of_dyadic(
+        Rounding/toward_zero(),
+        Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_zero: Eq()(rounded/mul(Rounding/toward_zero(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
+
+let _product_rounds_its_exact_value_toward_zero: Eq()(
+    rounded/mul(Rounding/toward_zero(), +0.1, +0.1),
+    rounded/of_dyadic(
+        Rounding/toward_zero(),
+        Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_zero: Eq()(rounded/mul(Rounding/toward_zero(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
+
+let _third_times_three_rounds_its_exact_value_toward_zero: Eq()(
+    rounded/mul(Rounding/toward_zero(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/of_dyadic(
+        Rounding/toward_zero(),
+        Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_zero: Eq()(rounded/fma(Rounding/toward_zero(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +4, exponent = -56 })) =
+
+let _fma_rounds_its_exact_value_toward_zero: Eq()(
+    rounded/fma(Rounding/toward_zero(), +0.1, +10.0, -1.0),
+    rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_positive: Eq()(rounded/add(Rounding/toward_positive(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
+
+let _sum_rounds_its_exact_value_toward_positive: Eq()(
+    rounded/add(Rounding/toward_positive(), +0.1, +0.2),
+    rounded/of_dyadic(
+        Rounding/toward_positive(),
+        Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_positive: Eq()(rounded/mul(Rounding/toward_positive(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
+
+let _product_rounds_its_exact_value_toward_positive: Eq()(
+    rounded/mul(Rounding/toward_positive(), +0.1, +0.1),
+    rounded/of_dyadic(
+        Rounding/toward_positive(),
+        Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_positive: Eq()(rounded/mul(Rounding/toward_positive(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
+
+let _third_times_three_rounds_its_exact_value_toward_positive: Eq()(
+    rounded/mul(Rounding/toward_positive(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/of_dyadic(
+        Rounding/toward_positive(),
+        Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_positive: Eq()(rounded/fma(Rounding/toward_positive(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +4, exponent = -56 })) =
+
+let _fma_rounds_its_exact_value_toward_positive: Eq()(
+    rounded/fma(Rounding/toward_positive(), +0.1, +10.0, -1.0),
+    rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
-let _sum_rounds_its_exact_value_toward_negative: Eq()(rounded/add(Rounding/toward_negative(), 0.1, 0.2), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
+
+let _sum_rounds_its_exact_value_toward_negative: Eq()(
+    rounded/add(Rounding/toward_negative(), +0.1, +0.2),
+    rounded/of_dyadic(
+        Rounding/toward_negative(),
+        Dyadic { mantissa = +21617278211378382, exponent = -56 })) =
     Eq/refl();
-let _product_rounds_its_exact_value_toward_negative: Eq()(rounded/mul(Rounding/toward_negative(), 0.1, 0.1), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
+
+let _product_rounds_its_exact_value_toward_negative: Eq()(
+    rounded/mul(Rounding/toward_negative(), +0.1, +0.1),
+    rounded/of_dyadic(
+        Rounding/toward_negative(),
+        Dyadic { mantissa = +51922968585348282049912486326436, exponent = -112 })) =
     Eq/refl();
-let _third_times_three_rounds_its_exact_value_toward_negative: Eq()(rounded/mul(Rounding/toward_negative(), Flt/div(1.0, 3.0), 3.0), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
+
+let _third_times_three_rounds_its_exact_value_toward_negative: Eq()(
+    rounded/mul(Rounding/toward_negative(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/of_dyadic(
+        Rounding/toward_negative(),
+        Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
     Eq/refl();
-let _fma_rounds_its_exact_value_toward_negative: Eq()(rounded/fma(Rounding/toward_negative(), 0.1, 10.0, -1.0), rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +4, exponent = -56 })) =
+
+let _fma_rounds_its_exact_value_toward_negative: Eq()(
+    rounded/fma(Rounding/toward_negative(), +0.1, +10.0, -1.0),
+    rounded/of_dyadic(Rounding/toward_negative(), Dyadic { mantissa = +4, exponent = -56 })) =
     Eq/refl();
 
 -- The directions part where the exact value falls between two floats, and meet where it doesn't.
-let _a_third_below_and_above: Eq()(Flt/lt(rounded/div(Rounding/toward_negative(), 1.0, 3.0), rounded/div(Rounding/toward_positive(), 1.0, 3.0)), true) =
+let _a_third_below_and_above: Eq()(
+    Flt/lt(
+        rounded/div(Rounding/toward_negative(), +1.0, +3.0),
+        rounded/div(Rounding/toward_positive(), +1.0, +3.0)),
+    true) =
     Eq/refl();
-let _an_exact_quotient_is_every_direction_s: Eq()(rounded/div(Rounding/toward_negative(), 1.0, 4.0), rounded/div(Rounding/toward_positive(), 1.0, 4.0)) =
+
+let _an_exact_quotient_is_every_direction_s: Eq()(
+    rounded/div(Rounding/toward_negative(), +1.0, +4.0),
+    rounded/div(Rounding/toward_positive(), +1.0, +4.0)) =
     Eq/refl();
-let _a_tie_to_even_and_away: Eq()(rounded/to_integral(Rounding/ties_to_away(), 2.5), 3.0) = Eq/refl();
-let _a_tie_to_even: Eq()(rounded/to_integral(Rounding/ties_to_even(), 2.5), 2.0) = Eq/refl();
-let _half_the_least_subnormal_rounds_by_direction: Eq()(rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +1, exponent = -1075 }), Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])) =
+
+let _a_tie_to_even_and_away: Eq()(rounded/to_integral(Rounding/ties_to_away(), +2.5), +3.0) =
     Eq/refl();
-let _an_overflow_toward_zero_stops_at_the_largest: Eq()(rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +1, exponent = +1024 }), Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F])) =
+
+let _a_tie_to_even: Eq()(rounded/to_integral(Rounding/ties_to_even(), +2.5), +2.0) =
     Eq/refl();
-let _an_exact_cancellation_is_negative_toward_negative: Eq()(Flt/to_str(rounded/sub(Rounding/toward_negative(), 1.0, 1.0)), "-0") =
+
+let _half_the_least_subnormal_rounds_by_direction: Eq()(
+    rounded/of_dyadic(Rounding/toward_positive(), Dyadic { mantissa = +1, exponent = -1075 }),
+    Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])) =
+    Eq/refl();
+
+let _an_overflow_toward_zero_stops_at_the_largest: Eq()(
+    rounded/of_dyadic(Rounding/toward_zero(), Dyadic { mantissa = +1, exponent = +1024 }),
+    Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F])) =
+    Eq/refl();
+
+let _an_exact_cancellation_is_negative_toward_negative: Eq()(
+    Flt/to_str(rounded/sub(Rounding/toward_negative(), +1.0, +1.0)),
+    "-0") =
     Eq/refl();
 
 let spelled(values: List(Flt)) -> List(Str) =
@@ -82,8 +204,8 @@ test ord_is_the_ieee_total_order =
             Flt/ord(+nan.0, +nan.0),
             Flt/ord(+nan.0, +inf.0),
             Flt/ord(-inf.0, +nan.0),
-            Flt/ord(1.0, 2.0),
-            Flt/ord(2.0, 2.0)],
+            Flt/ord(+1.0, +2.0),
+            Flt/ord(+2.0, +2.0)],
         [
             Ordering/lt(),
             Ordering/gt(),
@@ -97,13 +219,13 @@ test ord_is_the_ieee_total_order =
 test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
     Test/all([
         Test/equal(
-            spelled(List/sort([1.0, +nan.0, 0.5, -0.0, +0.0])),
+            spelled(List/sort([+1.0, +nan.0, +0.5, -0.0, +0.0])),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([+nan.0, +0.0, 1.0, -0.0, 0.5])),
+            spelled(List/sort([+nan.0, +0.0, +1.0, -0.0, +0.5])),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([0.5, -0.0, +nan.0, 1.0, +0.0])),
+            spelled(List/sort([+0.5, -0.0, +nan.0, +1.0, +0.0])),
             ["-0", "+0", "+0.5", "+1", "+nan"])]);
 
 -- `of_str` reads every spelling `to_str` writes, the infinities and the default NaN among them, in any case and with an optional sign.
@@ -121,14 +243,28 @@ test of_str_reads_back_what_to_str_writes =
         ["+inf", "-inf", "+nan", "+inf", "-inf", "+nan", "none", "+0.0025"]);
 
 -- IEEE's operations past the arithmetic hold in a type: the remainder is to the nearest quotient, `nextUp` steps a negative subnormal onto `-0`, the class tells the zeros apart, and a payload survives setting and reading it.
-let _the_remainder_takes_the_nearest_quotient: Eq()(Flt/to_str(Flt/remainder(7.0, 2.0)), "-1") = Eq/refl();
-let _next_up_steps_onto_negative_zero: Eq()(Flt/to_str(Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))), "-0") =
+let _the_remainder_takes_the_nearest_quotient: Eq()(Flt/to_str(Flt/remainder(+7.0, +2.0)), "-1") =
     Eq/refl();
-let _log_b_reads_the_leading_bit: Eq()(Flt/try_log_b(8.0), Option/some(+3)) = Eq/refl();
-let _the_class_of_negative_zero: Eq()(Flt/class(-0.0), Class/negative_zero()) = Eq/refl();
-let _a_payload_reads_back: Eq()(Flt/to_str(Flt/payload(Flt/quiet_nan(5.0))), "+5") = Eq/refl();
-let _a_scaling_rounds_once: Eq()(Flt/to_str(Flt/scale(1.0, +1024)), "+inf") = Eq/refl();
-let _an_inexact_quotient_raises_inexact: Eq()(Flt/signals/div(Rounding/ties_to_even(), 1.0, 3.0), Exceptions { ..Exceptions/none, inexact = true }) =
+
+let _next_up_steps_onto_negative_zero: Eq()(Flt/to_str(Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))), "-0") =
+    Eq/refl();
+
+let _log_b_reads_the_leading_bit: Eq()(Flt/try_log_b(+8.0), Option/some(+3)) =
+    Eq/refl();
+
+let _the_class_of_negative_zero: Eq()(Flt/class(-0.0), Class/negative_zero()) =
+    Eq/refl();
+
+let _a_payload_reads_back: Eq()(Flt/to_str(Flt/payload(Flt/quiet_nan(+5.0))), "+5") =
+    Eq/refl();
+
+let _a_scaling_rounds_once: Eq()(Flt/to_str(Flt/scale(+1.0, +1024)), "+inf") =
+    Eq/refl();
+
+let _an_inexact_quotient_raises_inexact: Eq()(
+    Flt/signals/div(Rounding/ties_to_even(), +1.0, +3.0),
+    Exceptions { ..Exceptions/none, inexact = true }) =
     Eq/refl();
 
 let show(f: Flt) -> Str =
@@ -137,14 +273,16 @@ let show(f: Flt) -> Str =
 -- The remainder takes the integer nearest the quotient, ties to even, and keeps the dividend's sign on a zero; it is invalid for an infinite dividend or a zero divisor, and leaves the dividend under an infinite divisor.
 test remainder_is_to_the_nearest_quotient =
     Test/equal(
-        List/map([
-            Flt/remainder(5.0, 3.0),
-            Flt/remainder(7.0, 2.0),
-            Flt/remainder(5.0, 2.0),
-            Flt/remainder(-4.0, 2.0),
-            Flt/remainder(1.0, +inf.0),
-            Flt/remainder(+inf.0, 1.0),
-            Flt/remainder(1.0, 0.0)], show),
+        List/map(
+            [
+                Flt/remainder(+5.0, +3.0),
+                Flt/remainder(+7.0, +2.0),
+                Flt/remainder(+5.0, +2.0),
+                Flt/remainder(-4.0, +2.0),
+                Flt/remainder(+1.0, +inf.0),
+                Flt/remainder(+inf.0, +1.0),
+                Flt/remainder(+1.0, +0.0)],
+            show),
         ["-1", "-1", "+1", "-0", "+1", "+nan", "+nan"]);
 
 -- `nextUp` and `nextDown` at every place IEEE names: the zeros, the negative least subnormal, both infinities and the largest finite value.
@@ -152,64 +290,88 @@ test next_up_and_down_at_the_edges =
     let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
-        List/map([
-            Flt/next_up(1.0),
-            Flt/next_up(+0.0),
-            Flt/next_up(-0.0),
-            Flt/next_up(+inf.0),
-            Flt/next_up(-inf.0),
-            Flt/next_down(+0.0),
-            Flt/next_up(largest)], Flt/to_le_bytes),
-        List/map([1.0000000000000002, least, least, +inf.0, Flt/neg(largest), Flt/neg(least), +inf.0], Flt/to_le_bytes));
+        List/map(
+            [
+                Flt/next_up(+1.0),
+                Flt/next_up(+0.0),
+                Flt/next_up(-0.0),
+                Flt/next_up(+inf.0),
+                Flt/next_up(-inf.0),
+                Flt/next_down(+0.0),
+                Flt/next_up(largest)],
+            Flt/to_le_bytes),
+        List/map(
+            [+1.0000000000000002, least, least, +inf.0, Flt/neg(largest), Flt/neg(least), +inf.0],
+            Flt/to_le_bytes));
 
 -- The six §9.6 variants: a NaN gives way to a number only in the `_number` forms, and the magnitude forms compare absolute values, breaking a tie as `min` and `max` do.
 test the_min_and_max_variants =
     Test/equal(
-        List/map([
-            Flt/minimum_number(+nan.0, 1.0),
-            Flt/maximum_number(1.0, +nan.0),
-            Flt/minimum_magnitude(-3.0, 2.0),
-            Flt/maximum_magnitude(-3.0, 2.0),
-            Flt/minimum_magnitude(-2.0, 2.0),
-            Flt/maximum_magnitude_number(+nan.0, -2.0),
-            Flt/minimum_magnitude(+nan.0, 1.0)], show),
+        List/map(
+            [
+                Flt/minimum_number(+nan.0, +1.0),
+                Flt/maximum_number(+1.0, +nan.0),
+                Flt/minimum_magnitude(-3.0, +2.0),
+                Flt/maximum_magnitude(-3.0, +2.0),
+                Flt/minimum_magnitude(-2.0, +2.0),
+                Flt/maximum_magnitude_number(+nan.0, -2.0),
+                Flt/minimum_magnitude(+nan.0, +1.0)],
+            show),
         ["+1", "+1", "+2", "-3", "-2", "-2", "+nan"]);
 
 -- The payload operations: a quiet and a signaling NaN built from a payload read it back, an inadmissible payload builds `+0`, and anything but a NaN has payload `-1`.
 test payloads_are_set_and_read =
     Test/all([
-        Test/equal(List/map([Flt/payload(Flt/quiet_nan(5.0)), Flt/payload(Flt/signaling_nan(1.0)), Flt/payload(1.0), Flt/signaling_nan(0.0), Flt/quiet_nan(0.5)], show), ["+5", "+1", "-1", "+0", "+0"]),
-        Test/assert(Flt/is_signaling(Flt/signaling_nan(1.0))),
-        Test/assert(Bool/not(Flt/is_signaling(Flt/quiet_nan(1.0))))]);
+        Test/equal(
+            List/map(
+                [
+                    Flt/payload(Flt/quiet_nan(+5.0)),
+                    Flt/payload(Flt/signaling_nan(+1.0)),
+                    Flt/payload(+1.0),
+                    Flt/signaling_nan(+0.0),
+                    Flt/quiet_nan(+0.5)],
+                show),
+            ["+5", "+1", "-1", "+0", "+0"]),
+        Test/assert(Flt/is_signaling(Flt/signaling_nan(+1.0))),
+        Test/assert(Bool/not(Flt/is_signaling(Flt/quiet_nan(+1.0))))]);
 
 -- Every class IEEE names, and the predicates that answer it.
 test the_ten_classes =
-    Test/equal(
-        List/map([Flt/signaling_nan(1.0), +nan.0, -inf.0, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0, +inf.0], (f) => Spell/spell(Flt/class(f))),
-        ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()", "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()", "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()", "Class/positive_infinity()"]);
+    Test/equal(List/map([Flt/signaling_nan(+1.0), +nan.0, -inf.0, -1.0, Flt/neg(Flt/of_le_bytes(x[0x01,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), -0.0, +0.0, Flt/of_le_bytes(x[0x01,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00]), +1.0, +inf.0], (f) => Spell/spell(Flt/class(f))), ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()", "Class/negative_normal()", "Class/negative_subnormal()", "Class/negative_zero()", "Class/positive_zero()", "Class/positive_subnormal()", "Class/positive_normal()", "Class/positive_infinity()"]);
 
 -- Conversion to an integer in each direction, and `logB` where it is defined.
 test to_int_rounds_in_its_direction =
     Test/all([
         Test/equal(
-            List/map([Rounding/ties_to_even(), Rounding/ties_to_away(), Rounding/toward_zero(), Rounding/toward_positive(), Rounding/toward_negative()],
+            List/map(
+                [
+                    Rounding/ties_to_even(),
+                    Rounding/ties_to_away(),
+                    Rounding/toward_zero(),
+                    Rounding/toward_positive(),
+                    Rounding/toward_negative()],
                 (r) => rounded/to_int(r, -2.5, @True/qed())),
             [-2, -3, -2, -2, -3]),
-        Test/equal(Flt/try_log_b(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])), Option/some(-1074)),
+        Test/equal(
+            Flt/try_log_b(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+            Option/some(-1074)),
         Test/equal(Flt/try_log_b(+inf.0), Option/none())]);
 
 -- The environment rounds in its direction, restores the one before a block, and accumulates what every operation raised; a `State` over its status sequences in it.
 let rounds_and_records: Env(Flt) =
-    let third = Env/with_rounding(Rounding/toward_positive(), Env/div(1.0, 3.0))!;
+    let third = Env/with_rounding(Rounding/toward_positive(), Env/div(+1.0, +3.0))!;
     let after = Env/rounding!;
-    let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), 2.0)!;
+    let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
     let status = State/get()!;
     Env/pure(match after == status.rounding | true => third | false => +nan.0 end);
 
 test the_environment_rounds_and_records =
     let (third, raised) = Env/run(rounds_and_records);
     Test/all([
-        Test/equal(show(third), show(rounded/div(Rounding/toward_positive(), 1.0, 3.0))),
+        Test/equal(show(third), show(rounded/div(Rounding/toward_positive(), +1.0, +3.0))),
         Test/equal(raised, Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
 
 -- IEEE's comparison table (§5.11): a quiet comparison is invalid only at a signaling NaN, a signaling one at any NaN; the saved flags test as they were.
@@ -218,151 +380,291 @@ test comparisons_signal_as_ieee_tabulates =
     let invalid = Exceptions { ..Exceptions/none, invalid = true };
     Test/equal(
         [
-            raised(Env/eql(+nan.0, 1.0)),
-            raised(Env/lt(+nan.0, 1.0)),
-            raised(Env/lt_quiet(+nan.0, 1.0)),
-            raised(Env/eql(Flt/signaling_nan(1.0), 1.0)),
+            raised(Env/eql(+nan.0, +1.0)),
+            raised(Env/lt(+nan.0, +1.0)),
+            raised(Env/lt_quiet(+nan.0, +1.0)),
+            raised(Env/eql(Flt/signaling_nan(+1.0), +1.0)),
             raised(Env/eql_signaling(+nan.0, +nan.0)),
-            raised(Env/lt(1.0, 2.0))],
+            raised(Env/lt(+1.0, +2.0))],
         [Exceptions/none, invalid, Exceptions/none, invalid, invalid, Exceptions/none]);
 
 -- A NaN other than the default spells as the bytes that build it, and TOML keeps a NaN's sign both ways.
 test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
     let negative = Result/unwrap_or(Toml/decode("v = -nan"), Map/empty());
     Test/all([
-        Test/equal(Spell/spell(Flt/quiet_nan(5.0)), "/std/Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127], @/std/Bool/True/qed())"),
+        Test/equal(
+            Spell/spell(Flt/quiet_nan(+5.0)),
+            "/std/Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127], @/std/Bool/True/qed())"),
         Test/equal(Spell/spell(+nan.0), "+nan.0"),
         Test/equal(Spell/spell(-nan.0), "-nan.0"),
         Test/equal(
-            match Map/get(negative, "v") | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f) | _ => false end,
+            match Map/get(negative, "v")
+            | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f)
+            | _ => false
+            end,
             true),
-        Test/equal(Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(-nan.0))), ""), "v = -nan\n")]);
+        Test/equal(
+            Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(-nan.0))), ""),
+            "v = -nan\n")]);
 
 -- Every class reads back from what `to_str` writes, bit for bit — the NaNs with their signs, kinds and payloads — and from what `to_hex_str` writes.
-let _a_nan_spells_its_kind_in_a_type: Eq()(Flt/to_str(Flt/signaling_nan(18.0)), "+snan(0x12)") = Eq/refl();
-let _hex_spells_three_in_a_type: Eq()(Flt/to_hex_str(3.0), "+0x1.8p+1") = Eq/refl();
+let _a_nan_spells_its_kind_in_a_type: Eq()(Flt/to_str(Flt/signaling_nan(+18.0)), "+snan(0x12)") =
+    Eq/refl();
+
+let _hex_spells_three_in_a_type: Eq()(Flt/to_hex_str(+3.0), "+0x1.8p+1") =
+    Eq/refl();
 
 let reads_back(f: Flt) -> Bool =
-    let decimal = match Flt/of_str(Flt/to_str(f)) | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f) | none() => false end;
-    let hex = match Flt/of_hex_str(Flt/to_hex_str(f)) | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f) | none() => false end;
+    let decimal =
+        match Flt/of_str(Flt/to_str(f))
+        | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f)
+        | none() => false
+        end;
+    let hex =
+        match Flt/of_hex_str(Flt/to_hex_str(f))
+        | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f)
+        | none() => false
+        end;
     decimal && hex;
 
 test every_class_reads_back_from_its_text =
     let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
-        List/map([
-            +nan.0, -nan.0, Flt/signaling_nan(1.0), Flt/neg(Flt/signaling_nan(18.0)), Flt/quiet_nan(5.0),
-            +inf.0, -inf.0, +0.0, -0.0, least, Flt/neg(least), largest, 0.1, -2.5, 1.0e300], reads_back),
+        List/map(
+            [
+                +nan.0,
+                -nan.0,
+                Flt/signaling_nan(+1.0),
+                Flt/neg(Flt/signaling_nan(+18.0)),
+                Flt/quiet_nan(+5.0),
+                +inf.0,
+                -inf.0,
+                +0.0,
+                -0.0,
+                least,
+                Flt/neg(least),
+                largest,
+                +0.1,
+                -2.5,
+                +1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0],
+            reads_back),
         List/map(List/range(0, 15), (_) => true));
 
 test nan_and_hex_text_spell_as_ieee_writes_them =
     Test/all([
         Test/equal(
-            List/map([+nan.0, -nan.0, Flt/signaling_nan(1.0), Flt/quiet_nan(5.0)], Flt/to_str),
+            List/map([+nan.0, -nan.0, Flt/signaling_nan(+1.0), Flt/quiet_nan(+5.0)], Flt/to_str),
             ["+nan", "-nan", "+snan", "+nan(0x5)"]),
+        Test/equal(List/map([+3.0, -0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                        0x00]), +1.0], Flt/to_hex_str), ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
         Test/equal(
-            List/map([3.0, -0.0, Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), 1.0], Flt/to_hex_str),
-            ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
-        Test/equal(
-            List/map(["snan(0x0)", "nan(0x)", "NaN(0X5)", "0x1p-1074", "-0x1.8P1", "0x"], (s) => Option/map(Flt/of_str(s), Flt/to_str)),
-            [Option/none(), Option/none(), Option/some("+nan(0x5)"), Option/some(Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))), Option/some("-3"), Option/none()])]);
+            List/map(
+                ["snan(0x0)", "nan(0x)", "NaN(0X5)", "0x1p-1074", "-0x1.8P1", "0x"],
+                (s) => Option/map(Flt/of_str(s), Flt/to_str)),
+            [
+                Option/none(),
+                Option/none(),
+                Option/some("+nan(0x5)"),
+                Option/some(Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00]))),
+                Option/some("-3"),
+                Option/none()])]);
 
 -- Text reads in a direction too: a tenth lands on either side of itself, and a value past the largest finite one stops at it toward zero.
 test text_reads_in_a_direction =
-    let read(r: Rounding, s: Str) -> Str = match rounded/of_str(r, s) | some(f) => Flt/to_str(f) | none() => "none" end;
+    let read(r: Rounding, s: Str) -> Str =
+        match rounded/of_str(r, s) | some(f) => Flt/to_str(f) | none() => "none" end;
     Test/all([
-        Test/equal(read(Rounding/toward_positive(), "0.1"), Flt/to_str(0.1)),
-        Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(0.1))),
-        Test/equal(read(Rounding/toward_zero(), "1e400"), Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
-        Test/equal(read(Rounding/toward_positive(), "1e-400"), Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
-        Test/equal(read(Rounding/toward_negative(), "-0x1.00000000000008p0"), Flt/to_str(Flt/neg(Flt/next_up(1.0))))]);
+        Test/equal(read(Rounding/toward_positive(), "0.1"), Flt/to_str(+0.1)),
+        Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(+0.1))),
+        Test/equal(read(Rounding/toward_zero(), "1e400"), Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF,
+                    0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
+        Test/equal(read(Rounding/toward_positive(), "1e-400"), Flt/to_str(Flt/of_le_bytes(x[0x01,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
+        Test/equal(
+            read(Rounding/toward_negative(), "-0x1.00000000000008p0"),
+            Flt/to_str(Flt/neg(Flt/next_up(+1.0))))]);
 
 -- A fixed number of significant digits, rounded in a direction, carrying into the next power of ten when it rounds up past it.
 test significant_digits_round_in_a_direction =
-    let third = Flt/div(1.0, 3.0);
+    let third = Flt/div(+1.0, +3.0);
     Test/equal(
         [
             Flt/to_str_significant(third, 5, @True/qed()),
             rounded/to_str_significant(Rounding/toward_positive(), third, 5, @True/qed()),
-            Flt/to_str_significant(999.5, 3, @True/qed()),
-            Flt/to_str_significant(2.5, 1, @True/qed()),
-            rounded/to_str_significant(Rounding/ties_to_away(), 2.5, 1, @True/qed()),
+            Flt/to_str_significant(+999.5, 3, @True/qed()),
+            Flt/to_str_significant(+2.5, 1, @True/qed()),
+            rounded/to_str_significant(Rounding/ties_to_away(), +2.5, 1, @True/qed()),
             Flt/to_str_significant(-0.0, 3, @True/qed()),
-            Flt/to_str_significant(123456.0, 2, @True/qed())],
+            Flt/to_str_significant(+123456.0, 2, @True/qed())],
         ["+0.33333", "+0.33334", "+1000", "+2", "+3", "-0", "+120000"]);
 
 -- A float's exact value is a `Dyadic`, whose arithmetic never rounds and whose comparisons read the number rather than the representation: `0.1 + 0.2` held exactly is the sum that rounds to `0.30000000000000004`, and `6 · 2^-1` is `3`.
-let _three_quarters_is_exactly_three_over_four: Eq()(Dyadic/of(0.75, @True/qed()) == Dyadic { mantissa = +3, exponent = -2 }, true) =
+let _three_quarters_is_exactly_three_over_four: Eq()(
+    Dyadic/of(+0.75, @True/qed()) == Dyadic { mantissa = +3, exponent = -2 },
+    true) =
     Eq/refl();
-let _a_dyadic_sum_never_rounds: Eq()(Dyadic/of(0.1, @True/qed()) + Dyadic/of(0.2, @True/qed()) == Dyadic { mantissa = +21617278211378382, exponent = -56 }, true) =
+
+let _a_dyadic_sum_never_rounds: Eq()(
+    Dyadic/of(+0.1, @True/qed()) + Dyadic/of(+0.2, @True/qed())
+        == Dyadic { mantissa = +21617278211378382, exponent = -56 },
+    true) =
     Eq/refl();
-let _two_representations_hash_as_one_number: Eq()(Hash/hash(Dyadic { mantissa = +6, exponent = -1 }), Hash/hash(Dyadic/of_int(+3))) =
+
+let _two_representations_hash_as_one_number: Eq()(
+    Hash/hash(Dyadic { mantissa = +6, exponent = -1 }),
+    Hash/hash(Dyadic/of_int(+3))) =
     Eq/refl();
-let _normalizing_strips_the_trailing_zeros: Eq()(Dyadic/normalized(Dyadic { mantissa = -12, exponent = +1 }), Dyadic { mantissa = -3, exponent = +3 }) =
+
+let _normalizing_strips_the_trailing_zeros: Eq()(
+    Dyadic/normalized(Dyadic { mantissa = -12, exponent = +1 }),
+    Dyadic { mantissa = -3, exponent = +3 }) =
     Eq/refl();
 
 test dyadics_compute_and_compare_as_numbers =
-    let half = Dyadic/of(0.5, @True/qed());
+    let half = Dyadic/of(+0.5, @True/qed());
     Test/all([
         Test/equal(Dyadic { mantissa = +6, exponent = -1 }, Dyadic/of_int(+3)),
-        Test/equal(half * half - half, Dyadic/neg(Dyadic/of(0.25, @True/qed()))),
-        Test/equal(List/map([+inf.0, +nan.0, -0.0], Dyadic/try_of), [Option/none(), Option/none(), Option/some(Dyadic/of_int(+0))]),
-        Test/equal(List/sort([Dyadic/of_int(+2), half, Dyadic/of_int(-1)]), [Dyadic/of_int(-1), half, Dyadic/of_int(+2)]),
+        Test/equal(half * half - half, Dyadic/neg(Dyadic/of(+0.25, @True/qed()))),
+        Test/equal(
+            List/map([+inf.0, +nan.0, -0.0], Dyadic/try_of),
+            [Option/none(), Option/none(), Option/some(Dyadic/of_int(+0))]),
+        Test/equal(
+            List/sort([Dyadic/of_int(+2), half, Dyadic/of_int(-1)]),
+            [Dyadic/of_int(-1), half, Dyadic/of_int(+2)]),
         Test/equal(Show/show(Dyadic/of(-0.75, @True/qed())), "-6755399441055744*2^-53"),
         Test/equal(
-            List/map([Rounding/toward_negative(), Rounding/toward_positive()],
-                (r) => rounded/of_dyadic(r, Dyadic/of(0.1, @True/qed()) + Dyadic/of(0.2, @True/qed()))),
-            [0.3, 0.1 + 0.2])]);
+            List/map(
+                [Rounding/toward_negative(), Rounding/toward_positive()],
+                (r) =>
+                    rounded/of_dyadic(
+                        r,
+                        Dyadic/of(+0.1, @True/qed()) + Dyadic/of(+0.2, @True/qed()))),
+            [+0.3, +0.1 + +0.2])]);
 
 -- §9.4's reductions compute exactly and round once: `0.1 + 0.2 + 0.3` folded is `0.6000000000000001` but their sum is `0.6`, a large sum that cancels never overflows on the way, a dot product whose products would overflow cancels exactly, and an exact zero sum takes §6.3's sign.
-let _a_sum_rounds_once: Eq()(Flt/sum([0.1, 0.2, 0.3]), 0.6) = Eq/refl();
-let _a_cancelling_sum_does_not_overflow: Eq()(Flt/sum([1.0e308, 1.0e308, -1.0e308]), 1.0e308) = Eq/refl();
-let _a_cancelling_dot_is_exact: Eq()(Flt/dot(Vec/of_list([1.0e200, 1.0e200]), Vec/of_list([1.0e200, -1.0e200])), +0.0) = Eq/refl();
-let _a_sum_of_negative_zeros_is_negative: Eq()(Flt/to_le_bytes(Flt/sum([-0.0, -0.0])), Flt/to_le_bytes(-0.0)) = Eq/refl();
-let _a_cancelling_sum_toward_negative_is_negative_zero: Eq()(Flt/to_le_bytes(rounded/sum(Rounding/toward_negative(), [1.0, -1.0])), Flt/to_le_bytes(-0.0)) = Eq/refl();
-let _a_scaled_product_keeps_its_scale: Eq()(Flt/scaled_prod([1.0e200, 1.0e200, 1.0e200]).1, +1993) = Eq/refl();
+let _a_sum_rounds_once: Eq()(Flt/sum([+0.1, +0.2, +0.3]), +0.6) =
+    Eq/refl();
+
+let _a_cancelling_sum_does_not_overflow: Eq()(
+    Flt/sum([
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+        -100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0]),
+    +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0) =
+    Eq/refl();
+
+let _a_cancelling_dot_is_exact: Eq()(
+    Flt/dot(
+        Vec/of_list([
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0]),
+        Vec/of_list([
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+            -100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0])),
+    +0.0) =
+    Eq/refl();
+
+let _a_sum_of_negative_zeros_is_negative: Eq()(
+    Flt/to_le_bytes(Flt/sum([-0.0, -0.0])),
+    Flt/to_le_bytes(-0.0)) =
+    Eq/refl();
+
+let _a_cancelling_sum_toward_negative_is_negative_zero: Eq()(
+    Flt/to_le_bytes(rounded/sum(Rounding/toward_negative(), [+1.0, -1.0])),
+    Flt/to_le_bytes(-0.0)) =
+    Eq/refl();
+
+let _a_scaled_product_keeps_its_scale: Eq()(
+    Flt/scaled_prod([
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0]).1,
+    +1993) =
+    Eq/refl();
 
 -- §9.5's augmented operations answer a value and its exact error: `1 + 2^-60` is `1` with `2^-60` left over, and the pair a product answers adds back to the exact product.
-let _an_augmented_sum_keeps_what_rounding_dropped: Eq()(Flt/augmented_add(1.0, Flt/scale(1.0, -60)), (1.0, Flt/scale(1.0, -60))) = Eq/refl();
-let _an_augmented_product_adds_back_exactly: Eq()(Dyadic/of(Flt/augmented_mul(0.1, 0.1).0, @True/qed()) + Dyadic/of(Flt/augmented_mul(0.1, 0.1).1, @True/qed())
-        == Dyadic/of(0.1, @True/qed()) * Dyadic/of(0.1, @True/qed()), true) =
+let _an_augmented_sum_keeps_what_rounding_dropped: Eq()(
+    Flt/augmented_add(+1.0, Flt/scale(+1.0, -60)),
+    (+1.0, Flt/scale(+1.0, -60))) =
+    Eq/refl();
+
+let _an_augmented_product_adds_back_exactly: Eq()(
+    Dyadic/of(Flt/augmented_mul(+0.1, +0.1).0, @True/qed())
+        + Dyadic/of(Flt/augmented_mul(+0.1, +0.1).1, @True/qed())
+        == Dyadic/of(+0.1, @True/qed()) * Dyadic/of(+0.1, @True/qed()),
+    true) =
     Eq/refl();
 
 test reductions_round_once_and_signal_as_ieee_defines =
     let invalid = Exceptions { ..Exceptions/none, invalid = true };
-    let (pr, sf) = Flt/scaled_prod([1.0e200, 1.0e200, 1.0e200]);
+    let (pr, sf) =
+        Flt/scaled_prod([
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+            +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0]);
     Test/all([
-        Test/equal(show(Flt/sum([0.1, 0.2, 0.3])), show(0.6)),
+        Test/equal(show(Flt/sum([+0.1, +0.2, +0.3])), show(+0.6)),
         Test/equal(show(Flt/sum([])), show(+0.0)),
         Test/equal(Flt/is_nan(Flt/sum([+inf.0, -inf.0])), true),
         Test/equal(signals/sum(Rounding/ties_to_even(), [+inf.0, -inf.0]), invalid),
-        Test/equal(signals/dot(Rounding/ties_to_even(), Vec/of_list([+inf.0]), Vec/of_list([0.0])), invalid),
-        Test/equal(signals/sum(Rounding/ties_to_even(), [1.0e308, 1.0e308]), Exceptions { ..Exceptions/none, overflow = true, inexact = true }),
-        Test/equal(show(Flt/sum_abs([-1.5, 2.5])), show(4.0)),
-        Test/equal(show(Flt/sum_square([3.0, 4.0])), show(25.0)),
+        Test/equal(
+            signals/dot(Rounding/ties_to_even(), Vec/of_list([+inf.0]), Vec/of_list([+0.0])),
+            invalid),
+        Test/equal(
+            signals/sum(
+                Rounding/ties_to_even(),
+                [
+                    +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+                    +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0]),
+            Exceptions { ..Exceptions/none, overflow = true, inexact = true }),
+        Test/equal(show(Flt/sum_abs([-1.5, +2.5])), show(+4.0)),
+        Test/equal(show(Flt/sum_square([+3.0, +4.0])), show(+25.0)),
         Test/equal(sf, +1993),
-        Test/equal(pr >= 1.0 && pr < 2.0, true),
-        Test/equal(Flt/scaled_prod_sum(Vec/of_list([1.0, 2.0]), Vec/of_list([2.0, 2.0])), (1.5, +3)),
-        Test/equal(Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0 != Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0, true)]);
+        Test/equal(pr >= +1.0 && pr < +2.0, true),
+        Test/equal(
+            Flt/scaled_prod_sum(Vec/of_list([+1.0, +2.0]), Vec/of_list([+2.0, +2.0])),
+            (+1.5, +3)),
+        Test/equal(
+            Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0
+                != Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0,
+            true)]);
 
 test augmented_operations_answer_the_error =
-    let tiny = Flt/scale(1.0, -60);
+    let tiny = Flt/scale(+1.0, -60);
     Test/all([
-        Test/equal(Flt/augmented_add(1.0, tiny), (1.0, tiny)),
-        Test/equal(Flt/augmented_sub(1.0, 1.0), (+0.0, +0.0)),
-        Test/equal(Flt/augmented_mul(+inf.0, 2.0), (+inf.0, +inf.0)),
-        Test/equal(signals/augmented_add(1.0, tiny), Exceptions/none),
-        Test/equal(signals/augmented_mul(1.0e308, 10.0), Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
+        Test/equal(Flt/augmented_add(+1.0, tiny), (+1.0, tiny)),
+        Test/equal(Flt/augmented_sub(+1.0, +1.0), (+0.0, +0.0)),
+        Test/equal(Flt/augmented_mul(+inf.0, +2.0), (+inf.0, +inf.0)),
+        Test/equal(signals/augmented_add(+1.0, tiny), Exceptions/none),
+        Test/equal(
+            signals/augmented_mul(
+                +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+                +10.0),
+            Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
 
 -- §8.3's alternate handling: an exception the block handles is not recorded, and its result is replaced.
 test handled_exceptions_are_not_recorded =
     let overflow = Exceptions { ..Exceptions/none, overflow = true };
-    let (caught, raised) = Env/run(Env/checked(overflow, Env/mul(1.0e308, 10.0)));
-    let (fine, _) = Env/run(Env/checked(overflow, Env/add(1.0, 2.0)));
-    let (replaced, _) = Env/run(Env/substitute(overflow, 0.0, Env/mul(1.0e308, 10.0)));
+    let (caught, raised) =
+        Env/run(
+            Env/checked(
+                overflow,
+                Env/mul(
+                    +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+                    +10.0)));
+    let (fine, _) = Env/run(Env/checked(overflow, Env/add(+1.0, +2.0)));
+    let (replaced, _) =
+        Env/run(
+            Env/substitute(
+                overflow,
+                +0.0,
+                Env/mul(
+                    +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
+                    +10.0)));
     Test/all([
         Test/equal(Option/is_some(caught), false),
         Test/equal(raised, Exceptions { ..Exceptions/none, inexact = true }),
-        Test/equal(Option/map(fine, show), Option/some(show(3.0))),
-        Test/equal(show(replaced), show(0.0))]);
+        Test/equal(Option/map(fine, show), Option/some(show(+3.0))),
+        Test/equal(show(replaced), show(+0.0))]);

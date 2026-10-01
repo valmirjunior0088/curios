@@ -43,7 +43,9 @@ test nat_renders_and_parses_past_every_width =
 test int_crosses_zero_past_every_width =
     Test/all([
         Test/equal(Int/abs(-1073741824), 1073741824),
-        Test/equal([-1073741824 - +1, +1 - +100000000000000000000], [-1073741825, -99999999999999999999])]);
+        Test/equal(
+            [-1073741824 - +1, +1 - +100000000000000000000],
+            [-1073741825, -99999999999999999999])]);
 
 -- The sign of a product is the product of the signs, and division truncates toward zero with the remainder taking the dividend's sign.
 test int_signs_multiply_and_divide_past_every_width =

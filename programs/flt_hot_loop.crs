@@ -5,7 +5,7 @@ use /std/{Str, Nat, Flt, Io};
 let run(k: Nat, x: Flt) -> Flt =
     match k: (_) => Flt
     | 0 => x
-    | m + 1 => run(m, Flt/sqrt(x * 1.0000001 + 0.5) / 0.999 + 0.25)
+    | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25)
     end;
 
 let input = /std/read()!;
@@ -14,7 +14,7 @@ match input: (_) => Io({})
     match Str/of_bytes(bytes): (_) => Io({})
     | some(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
-        | some(n) => /std/print(Str/concat(Flt/to_str(run(n, 1.0)), "\n"))
+        | some(n) => /std/print(Str/concat(Flt/to_str(run(n, +1.0)), "\n"))
         | none() => /std/print("bad input\n")
         end
     | none() => /std/print("invalid utf-8\n")

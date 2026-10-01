@@ -279,7 +279,9 @@ and raw_swap_step(
     h1: Bool,
     h2: Bool,
     c: Bool,
-) -> Eq()(b[xor3(h1, h2, c), ..raw(x, y, maj3(h1, h2, c))], b[xor3(h2, h1, c), ..raw(y, x, maj3(h2, h1, c))]) =
+) -> Eq()(
+    b[xor3(h1, h2, c), ..raw(x, y, maj3(h1, h2, c))],
+    b[xor3(h2, h1, c), ..raw(y, x, maj3(h2, h1, c))]) =
     cong_cons2(
         xor3_comm(h1, h2, c),
         Eq/trans(raw_comm(x, y, maj3(h1, h2, c)), cong_raw_c(y, x, maj3_comm(h1, h2, c))));

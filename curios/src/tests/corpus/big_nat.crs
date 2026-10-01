@@ -177,7 +177,12 @@ pub let eq(a: BigNat, b: BigNat, p: Eq()(a.bits, b.bits)) -> Eq()(a, b) =
         (_: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
 --- Congruence of `combine` in its tail.
-pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq()(s, t)) -> Eq()(combine(h, s), combine(h, t)) =
+pub let cong_combine(
+    h: Bool,
+    @s: Bits,
+    @t: Bits,
+    p: Eq()(s, t),
+) -> Eq()(combine(h, s), combine(h, t)) =
     Eq/cong((w) => combine(h, w), p);
 
 let cong_bits(@s: BigNat, @t: BigNat, p: Eq()(s, t)) -> Eq()(s.bits, t.bits) =
@@ -252,7 +257,9 @@ test mul_small_propagates_carry =
 
 -- Full big-by-big `mul`: the product needs 57 bits, so a correct result proves it lives in the numeral itself and never in a fixed-width intermediate.
 test mul_crosses_word_width =
-    Test/equal(mul(of_decimal("123456789"), of_decimal("987654321")), of_decimal("121932631112635269"));
+    Test/equal(
+        mul(of_decimal("123456789"), of_decimal("987654321")),
+        of_decimal("121932631112635269"));
 
 -- `mul/pow2` doubles by prepending low bits to the numeral: 2^40 is a run of forty zeros under a one.
 test mul_pow2_builds_large_powers =

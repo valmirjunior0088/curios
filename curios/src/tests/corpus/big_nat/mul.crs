@@ -291,7 +291,9 @@ let add_raw_medial(
     b: Bits,
     c: Bits,
     d: Bits,
-) -> Eq()(add/raw(add/raw(a, b, false), add/raw(c, d, false), false), add/raw(add/raw(a, c, false), add/raw(b, d, false), false)) =
+) -> Eq()(
+    add/raw(add/raw(a, b, false), add/raw(c, d, false), false),
+    add/raw(add/raw(a, c, false), add/raw(b, d, false), false)) =
     Eq/trans(
         add/raw_assoc(a, b, add/raw(c, d, false), false, false),
         Eq/trans(
@@ -435,7 +437,9 @@ let trim_dbl_raw(x: BigNat) -> Eq()(trim(dbl_raw(x.bits)), combine(false, x.bits
 let dbl_add_raw(
     x: Bits,
     y: Bits,
-) -> Eq()(combine(false, add/raw(x, y, false)), add/raw(combine(false, x), combine(false, y), false)) =
+) -> Eq()(
+    combine(false, add/raw(x, y, false)),
+    add/raw(combine(false, x), combine(false, y), false)) =
     match x
     | b[] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
     | b[_, .._] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
