@@ -1,0 +1,40 @@
+use /std/{Nat, Flt, Bool, Str, List, Option};
+use /std/Tui/{Style, Frame};
+
+-- The row a reading stands on, counted from the bottom of `h` rows that span `lo` to `hi`: the nearest one, the end row for a reading past either end, and none for a reading no row is nearest to.
+let level(p: Flt, lo: Flt, hi: Flt, h: Nat) -> Option(Nat) =
+    let rows = Nat/to_flt(h - 1);
+    Flt/try_to_nat(Flt/nearest(Flt/max(+0.0, Flt/min((p - lo) / (hi - lo) * rows, rows))));
+
+let within(from: Nat, to: Nat, at: Nat) -> Bool =
+    Nat/min(from, to) <= at && at <= Nat/max(from, to);
+
+-- The stroke through `row` of a column whose line arrives from the row `from` and stands at `to`. A column with no row of its own is blank, and one after such a column starts flat.
+let tile(from: Option(Nat), to: Option(Nat), row: Nat) -> Str =
+    match to
+    | none() => " "
+    | some(b) =>
+        let a = Option/unwrap_or(from, b);
+        choose
+        | a == b => match row == b | true => "─" | false => " " end
+        | row == b => match a < b | true => "╭" | false => "╰" end
+        | row == a => match a < b | true => "╯" | false => "╮" end
+        | within(a, b, row) => "│"
+        | _ => " "
+        end
+    end;
+
+--- The last `w` of `points` as a line of box-drawing strokes, one reading per column from the left, on a scale from `lo` at the bottom row to `hi` at the top. A reading past either end is drawn at that end, and one that is no number leaves its column blank, the line starting flat after it.
+---
+--- A `lo` above `hi` draws the line upside down. Where the two are equal no reading has a place between them: one above goes to the top row, one below to the bottom, and one equal to them is blank.
+pub let wave(style: Style, points: List(Flt), lo: Flt, hi: Flt, w: Nat, h: Nat) -> Frame(w, h) =
+    let levels = List/map(List/drop(points, List/len(points) - w), (p) => level(p, lo, hi, h));
+    let previous: List(Option(Nat)) = [Option/none(), ..levels];
+    let strokes = List/zip(previous, levels);
+    Frame/of_lines(
+        style,
+        List/map(
+            List/range(0, h),
+            (y) => Str/flatten(List/map(strokes, (s) => tile(s.0, s.1, h - 1 - y)))),
+        w,
+        h);

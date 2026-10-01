@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Option, Io, Try, Async, Tty};
+use /std/{Nat, Bool, Str, List, Option, Io, Try, Async, Tty};
 use /std/time/{Duration};
 use /std/Async/{Channel};
 
@@ -40,16 +40,19 @@ mod ansi;
 
 --- Two frames of one size into the bytes that carry the terminal from the first to the second.
 pub mod render;
+pub use render/{let render};
 
 --- The terminal taken and given back, and what a program with a loop of its own writes it over.
 pub mod Session;
 pub use Session/{let Session};
 
 --- A frame in a box.
-pub mod Border;
+pub mod border;
+pub use border/{let border};
 
---- Styled text wrapped into a pane.
-pub mod Paragraph;
+--- `s` in `style` wrapped at `w`, each line fitted, the whole fitted to `h`.
+pub let paragraph(style: Style, s: Str, w: Nat, h: Nat) -> Frame(w, h) =
+    Frame/of_lines(style, text/wrap(s, w), w, h);
 
 --- A list with one selected entry.
 pub mod Listing;
@@ -59,8 +62,21 @@ pub use Listing/{let Listing};
 pub mod Field;
 pub use Field/{let Field};
 
---- A window onto a larger frame.
-pub mod Viewport;
+--- A window onto a larger frame: the part of `frame` from `x`, `y` on, at `w` by `h`. A window past the edge shows blank.
+pub let viewport(
+    @w0: Nat,
+    @h0: Nat,
+    frame: Frame(w0, h0),
+    x: Nat,
+    y: Nat,
+    w: Nat,
+    h: Nat,
+) -> Frame(w, h) =
+    Frame/fit(Frame/crop(frame, x, y).frame, w, h);
+
+--- A run of readings as a line.
+pub mod wave;
+pub use wave/{let wave};
 
 --- What an `update` asks the loop to do beside the new model.
 pub mod Directive;

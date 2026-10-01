@@ -72,7 +72,7 @@ pub let draw(
             | false => Option/none()
             end
         end;
-    let _ = Io/write(Io/stdout, render/render(before, frame, cursor))!;
+    let _ = Io/write(Io/stdout, render(before, frame, cursor))!;
     Async/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
 --- The updated session and next burst of input as events, parking until one arrives; `none` once standard input has ended.

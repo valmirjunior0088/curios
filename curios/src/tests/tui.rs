@@ -200,7 +200,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
 // Shared with the coordination measurement so both exercise the same application.
 pub(super) const LISTING_PROGRAM: &str = r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Async, Io, Show, Tui};
-        use /std/Tui/{Style, Frame, Key, Event, Directive, Listing, Border};
+        use /std/Tui/{Style, Frame, Key, Event, Directive, Listing};
         let app: Tui(Listing, Nat) =
             Tui {
                 init = (Listing/new(["one", "two", "three"]), Directive/none()),
@@ -215,7 +215,7 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                     end,
                 view(model, w, h) =
                     let boxed(iw: Nat, ih: Nat) -> Frame(iw + 2, ih + 2) =
-                        Border/around(Style/plain, "pick", Listing/draw(model, Style/plain, Style { ..Style/plain, reverse = true }, iw, ih));
+                        Tui/border(Style/plain, "pick", Listing/draw(model, Style/plain, Style { ..Style/plain, reverse = true }, iw, ih));
                     match w: (a) => Frame(a, h)
                     | 0 => Frame/blank(0, h)
                     | w1 + 1 =>
