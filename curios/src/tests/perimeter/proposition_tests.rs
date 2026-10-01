@@ -59,10 +59,18 @@ fn a_proposition_may_not_carry_a_type_field() {
 //
 // From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X)(x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `List(True)` yields `Eq()(one, none)` for a one-element list against the empty one; `Eq/cong` through `List/len` carries that to `Eq()(1, 0)`, and `Eq/subst` transports `()` into `False`.
 //
-// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix: what it has to establish is that both checkers still accept the lemma and its instantiation.
+// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. Both are put to the two-checker matrix and run: the first has both checkers accept the lemma and its instantiation, and its call, whose every argument erases, reaches the runtime as the program it is.
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     rejected_by(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION, "type mismatch");
+}
+
+#[test]
+fn irrelevance_still_identifies_a_propositions_inhabitants() {
+    assert_eq!(
+        run(IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS),
+        b"1"
+    );
 }
 
 #[test]
