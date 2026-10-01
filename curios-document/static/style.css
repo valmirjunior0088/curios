@@ -389,8 +389,7 @@ h2 {
 }
 
 /* The witnesses: one row each, in one box. */
-.witnesses,
-.reexports {
+.witnesses {
     margin: 0;
     padding: 0;
     list-style: none;
@@ -398,8 +397,7 @@ h2 {
     border-radius: 4px;
     overflow: hidden;
 }
-.witnesses li,
-.reexports li {
+.witnesses li {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
@@ -410,8 +408,7 @@ h2 {
     font-family: var(--mono);
     font-size: 13px;
 }
-.witnesses li:last-child,
-.reexports li:last-child {
+.witnesses li:last-child {
     border-bottom: none;
 }
 .witnesses .line {
@@ -434,12 +431,6 @@ h2 {
     font-size: 14px;
     line-height: 1.6;
     color: var(--ink-57);
-}
-.reexports .sep {
-    color: var(--ink-28);
-}
-.reexports .target {
-    color: var(--ink-70);
 }
 
 footer {
