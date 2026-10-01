@@ -523,8 +523,8 @@ pub enum Subterm {
     Goal,
     /// The body of a body-less witness, `satisfy C(T);`: lowered to the `Derive` elaboration transient, which the concept's derivation expands or refuses. Desugar-only — minted by the witness lowering, never parsed — so that the declaration's telescope wraps it exactly as it wraps a written body. Carries no payload; its span rides on the wrapping [`Term`].
     Derive,
-    /// A literal whose value is synthesized from the registry rather than lowered to a core intrinsic (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
-    Syn(Syn),
+    /// A literal whose value is synthesized from the registry rather than lowered to a core intrinsic (see [`ProofLiteral`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
+    ProofLiteral(ProofLiteral),
     /// An infix operator application `left <op> right` (see [`Infix`]).
     Infix(Infix),
     /// A polymorphic numeric literal (see [`NumLit`]).
@@ -533,7 +533,7 @@ pub enum Subterm {
 
 /// The literals the lowerer desugars to a proof-carrying construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Syn {
+pub enum ProofLiteral {
     Char(char),
     Str(StrLit),
 }

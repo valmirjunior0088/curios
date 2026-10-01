@@ -17,7 +17,7 @@ impl Radix {
     }
 }
 
-/// The written form of a `Nat` literal's magnitude: a numeral together with its radix. Character literals are syntax-owned [`crate::Syn::Char`] values rather than natural-number spellings.
+/// The written form of a `Nat` literal's magnitude: a numeral together with its radix. Character literals are syntax-owned [`crate::ProofLiteral::Char`] values rather than natural-number spellings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NatLiteral(pub Natural, pub Radix);
 

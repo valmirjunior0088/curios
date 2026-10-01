@@ -3,7 +3,7 @@ use {
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
         Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name, Nat,
-        NatLiteral, NumLit, Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
+        NatLiteral, NumLit, Pattern, PatternField, ProofLiteral, StructLitEntry, Subterm, Term,
     },
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
@@ -301,11 +301,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     // A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.
-    pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
-        match syn {
+    pub(super) fn proof_literal(&self, literal: &ProofLiteral) -> Result<curios_core::Term, Error> {
+        match literal {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
-            Syn::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
-            Syn::Str(string) => Ok(self.str_literal(string.value.as_bytes())),
+            ProofLiteral::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
+            ProofLiteral::Str(string) => Ok(self.str_literal(string.value.as_bytes())),
         }
     }
 
@@ -324,8 +324,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 curios_core::Term::goal(self.context.fresh_metavar())
             }
             Subterm::Derive => curios_core::Term::derive(),
-            // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `syn_literal`), never a core intrinsic.
-            Subterm::Syn(syn) => self.syn_literal(syn)?,
+            // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `proof_literal`), never a core intrinsic.
+            Subterm::ProofLiteral(literal) => self.proof_literal(literal)?,
             Subterm::Intrinsic(intrinsic) => {
                 curios_core::Term::intrinsic(self.intrinsic(intrinsic)?)
             }
@@ -1075,7 +1075,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 false => u8::try_from(magnitude).ok(),
             },
             // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
-            (Grain::X, Subterm::Syn(Syn::Char(character))) => u8::try_from(*character as u32).ok(),
+            (Grain::X, Subterm::ProofLiteral(ProofLiteral::Char(character))) => {
+                u8::try_from(*character as u32).ok()
+            }
             _ => None,
         }
     }

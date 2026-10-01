@@ -102,7 +102,7 @@ fn the_non_finite_values_are_signed_literals() {
 fn char_literal_ascii() {
     assert_eq!(
         "'a'".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Char('a')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('a')))
     );
 }
 
@@ -110,7 +110,7 @@ fn char_literal_ascii() {
 fn char_literal_escape() {
     assert_eq!(
         "'\\n'".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Char('\n')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\n')))
     );
 }
 
@@ -199,7 +199,7 @@ fn a_padded_numeral_keeps_the_width_it_was_written_at() {
 fn string_literal_is_str() {
     assert_eq!(
         "\"a\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Str(StrLit::line("a"))))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line("a"))))
     );
 }
 
@@ -207,7 +207,9 @@ fn string_literal_is_str() {
 fn unrecognized_string_escape_is_literal_backslash_and_char() {
     assert_eq!(
         "\"\\%\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Str(StrLit::line("\\%"))))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(
+            "\\%"
+        ))))
     );
 }
 
@@ -222,7 +224,9 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_string() {
     ] {
         assert_eq!(
             source.parse::<Term>().unwrap(),
-            Term::from(Subterm::Syn(Syn::Str(StrLit::line(expected)))),
+            Term::from(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(
+                expected
+            )))),
             "{source}"
         );
     }
@@ -232,7 +236,7 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_string() {
 fn a_braced_unicode_escape_names_a_scalar_in_a_character() {
     assert_eq!(
         "'\\u{301}'".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Char('\u{301}')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{301}')))
     );
     // The printer writes a visible scalar itself, so its escape has no round trip of its own: one scalar, one spelling.
     assert_eq!("'\\u{65}'".parse::<Term>().unwrap().to_string(), "'e'");
@@ -271,7 +275,9 @@ fn a_backslash_u_without_a_brace_still_stands_for_itself() {
     ] {
         assert_eq!(
             source.parse::<Term>().unwrap(),
-            Term::from(Subterm::Syn(Syn::Str(StrLit::line(expected)))),
+            Term::from(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(
+                expected
+            )))),
             "{source}"
         );
     }
@@ -639,7 +645,9 @@ fn list_bits_and_bytes_spreads_round_trip() {
 }
 
 fn block(value: &str) -> Term {
-    Term::from(Subterm::Syn(Syn::Str(StrLit::block(value))))
+    Term::from(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::block(
+        value,
+    ))))
 }
 
 /// A block's value is the lines between its delimiters with the indentation they share with the closer removed: a block reads at the indentation of the code around it.

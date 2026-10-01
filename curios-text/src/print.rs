@@ -6,10 +6,10 @@ use {
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
         Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
         Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
-        MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix,
-        StructField, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
-        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
+        ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
+        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::parse::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
@@ -150,9 +150,9 @@ fn is_atom(term: &Term) -> bool {
     match term.as_subterm() {
         Subterm::Name(_)
         | Subterm::NumLit(_)
-        | Subterm::Syn(Syn::Char(_))
+        | Subterm::ProofLiteral(ProofLiteral::Char(_))
         | Subterm::Intrinsic(Intrinsic::Flt(_)) => true,
-        Subterm::Syn(Syn::Str(literal)) => !literal.block,
+        Subterm::ProofLiteral(ProofLiteral::Str(literal)) => !literal.block,
         Subterm::Proj(Proj { head, .. }) => is_atom(head),
         _ => false,
     }
@@ -1258,9 +1258,11 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Hole | Subterm::Goal => pure("?"),
         // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
         Subterm::Derive => pure("derive"),
-        Subterm::Syn(Syn::Char(character)) => print_char_literal(character),
-        Subterm::Syn(Syn::Str(literal)) if literal.block => print_block_string(&literal.value),
-        Subterm::Syn(Syn::Str(literal)) => pure(format!(
+        Subterm::ProofLiteral(ProofLiteral::Char(character)) => print_char_literal(character),
+        Subterm::ProofLiteral(ProofLiteral::Str(literal)) if literal.block => {
+            print_block_string(&literal.value)
+        }
+        Subterm::ProofLiteral(ProofLiteral::Str(literal)) => pure(format!(
             "\"{}\"",
             literal
                 .value

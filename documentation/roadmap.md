@@ -114,7 +114,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Architecture
 
-- [ ] [Findings](roadmap/08-architecture/00-findings.md) — the kernel's conversion inferring a type it should look up, two printers that hand-roll their frames, an error path nothing reaches, names of a retired root, a test-only constructor in production, and history in a build script an edit would rebuild
+- [ ] [Findings](roadmap/08-architecture/00-findings.md) — the kernel's conversion inferring a type it should look up, two printers that hand-roll their frames, an error path nothing reaches, a test-only constructor in production, and history in a build script an edit would rebuild
 - [ ] [A shared term costs its size](roadmap/08-architecture/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
 - [ ] [One environment, and every read recorded](roadmap/08-architecture/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
 - [ ] [A compilation is a graph of item tasks](roadmap/08-architecture/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core

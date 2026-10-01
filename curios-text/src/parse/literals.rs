@@ -64,7 +64,7 @@ pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
         .and_keep(parse_char_value())
         .and_drop(take_exact("'"))
         .and_drop(parse_whitespace())
-        .map(|character| Subterm::Syn(Syn::Char(character)))
+        .map(|character| Subterm::ProofLiteral(ProofLiteral::Char(character)))
         .map(Into::into)
 }
 
@@ -287,7 +287,7 @@ pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\"").or(refuse_line_break_in_string()))
         .and_drop(parse_whitespace())
-        .map(|chunks| Subterm::Syn(Syn::Str(StrLit::line(chunks.concat()))))
+        .map(|chunks| Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(chunks.concat()))))
         .map(Into::into)
 }
 
@@ -345,7 +345,7 @@ pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
                         )),
                 ))
                 .flat_map(|(pieces, close)| match assemble_block(pieces) {
-                    Ok(value) => pure(Subterm::Syn(Syn::Str(StrLit::block(value)))),
+                    Ok(value) => pure(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::block(value)))),
                     Err(message) => commit(fail_from(&close, message)),
                 })
         })

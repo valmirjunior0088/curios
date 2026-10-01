@@ -405,7 +405,7 @@ impl InfixMethod {
         for operand in [left, right] {
             assert!(
                 cursor.entry().is_some(),
-                "a syn operator concept declares its method over both operands"
+                "an operator concept declares its method over both operands"
             );
             let plicity = marks.next().unwrap_or(Plicity::Explicit);
             positions.next(plicity);
@@ -458,7 +458,7 @@ fn infix_method(
         .fields
         .iter()
         .position(|field| field == field_name)
-        .expect("the syn operator concepts declare their table fields");
+        .expect("the operator concepts declare their table fields");
 
     // Mint the witness goal exactly like an omitted `use` argument.
     let (_, universes) = context.instantiate_universe_bound(&concept.universe_context, &())?;
@@ -481,7 +481,7 @@ fn infix_method(
         .field_type_from(&witness, index)
         .expect("a concept's own field index is in range");
     let Subterm::FuncType(method_func_type) = &*method_type else {
-        panic!("a syn operator concept declares its method as an arrow");
+        panic!("an operator concept declares its method as an arrow");
     };
     let telescope = &method_func_type.telescope;
     let plicities = method_func_type.plicities();
