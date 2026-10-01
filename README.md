@@ -2,7 +2,7 @@
 
 # [Curios](https://valmirjunior0088.github.io/curios/)
 
-**Mild opinions about your rhetoric. Strong feelings about your arithmetic.**
+_Mild opinions about your **rhetoric**. Strong feelings about your **arithmetic**._
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
