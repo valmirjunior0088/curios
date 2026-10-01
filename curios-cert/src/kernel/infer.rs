@@ -23,6 +23,8 @@ mod declaration_tests;
 #[cfg(test)]
 mod intrinsic_tests;
 #[cfg(test)]
+mod signature_tests;
+#[cfg(test)]
 mod sort_tests;
 #[cfg(test)]
 mod structure_tests;
