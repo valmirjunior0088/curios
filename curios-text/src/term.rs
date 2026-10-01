@@ -388,7 +388,7 @@ pub struct FuncSugarParam {
     pub type_: Term,
 }
 
-/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar through the crate-internal `type_()`/`body()` accessors — the type becomes a Π-type, the body a lambda binding every parameter.
+/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar — the type becomes a Π-type, the body a lambda binding every parameter — over one set of binders, so a parameter is the same binder in both; the crate-internal `type_()`/`body()` accessors spell the two halves as surface terms for a site that lowers them apart.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
@@ -421,17 +421,22 @@ pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeP
 /// The function-definition sugar's body as the lambda binding every parameter. Each binder copies its plicity: the generated function value carries the same marks its signature does, so a written `@`/`use` in the sugar is checked against the slot it claims rather than silently dropped.
 pub(crate) fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term {
     Subterm::Func(Func {
-        params: params
-            .iter()
-            .map(|param| FuncParam {
-                plicity: param.plicity,
-                pattern: param.label.clone(),
-                annotation: Some(param.type_.clone()),
-            })
-            .collect(),
+        params: func_sugar_params(params),
         body: body.clone(),
     })
     .into()
+}
+
+/// The function-definition sugar's telescope as the parameters of the lambda its body is, each annotated with its written type.
+pub(crate) fn func_sugar_params(params: &[FuncSugarParam]) -> Vec<FuncParam> {
+    params
+        .iter()
+        .map(|param| FuncParam {
+            plicity: param.plicity,
+            pattern: param.label.clone(),
+            annotation: Some(param.type_.clone()),
+        })
+        .collect()
 }
 
 impl LetSignature {

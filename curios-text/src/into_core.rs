@@ -709,16 +709,15 @@ fn process_items(
                         let name = curios_core::Global::Authored(context.prefixed(&let_item.label));
                         context.record_import_scope(Some(&name));
                         let lower = Lowerer::new(context, Some(name));
-                        let sugar = lower.sugar(&let_item.signature);
-                        let type_ =
-                            lower.half(sugar, || lower.term(&let_item.signature.type_()))?;
+                        let signature = lower.signature(&let_item.signature);
+                        let type_ = lower.signature_type(&signature, None)?;
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::Authored,
                             span: let_item.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             type_,
-                            body: lower.half(sugar, || lower.value(&let_item.signature.body()))?,
+                            body: lower.signature_value(&signature, |body| lower.value(body))?,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -1416,21 +1415,16 @@ fn process_items(
                             }
                         };
 
-                        // A no-op without a telescope, where `type_()` hands back the already-spanned application: `with_span` keeps the innermost span.
-                        let declared_type = match declared {
-                            Some(span) => signature.type_().with_span(span),
-                            None => signature.type_(),
-                        };
-
                         let lower = Lowerer::new(context, Some(name));
-                        let sugar = lower.sugar(&signature);
+                        let signature = lower.signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
                             span: None,
                             name,
                             island: context.island(),
-                            type_: lower.half(sugar, || lower.term(&declared_type))?,
-                            body: lower.half(sugar, || lower.value(&signature.body()))?,
+                            // Without a telescope the type is the application itself, which carries this span already.
+                            type_: lower.signature_type(&signature, declared.as_ref())?,
+                            body: lower.signature_value(&signature, |body| lower.value(body))?,
                         };
                         witnesses.insert(name);
                         Ok(item)

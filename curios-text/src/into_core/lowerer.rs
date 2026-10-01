@@ -4,6 +4,7 @@ use {
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
         Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name, Nat,
         NatLiteral, NumLit, Pattern, PatternField, ProofLiteral, StructLitEntry, Subterm, Term,
+        func_sugar_params, func_sugar_type_params,
     },
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
@@ -43,23 +44,21 @@ pub(super) struct Lowerer<'a, 'b> {
     used: RefCell<HashSet<curios_core::Free>>,
     /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
     saw_goal: Cell<bool>,
-    /// The function-definition sugar whose half is about to be lowered, until that half's root takes it — see [`Self::half`].
-    signature: Cell<Option<usize>>,
-    signatures: RefCell<Vec<Signature>>,
 }
 
-/// One written binder the lint may report: its spelling, its identity, its span, and the signature whose outermost lambda bound it, when one did.
+/// One written binder the lint may report: its spelling, its identity and its span.
 struct Candidate {
     name: String,
     id: curios_core::Free,
     span: Span,
-    signature: Option<usize>,
 }
 
-/// One function-definition sugar `f(params) -> output = body`. Its telescope is lowered twice, as the Π-type's binders and as the body lambda's, with distinct identities; a parameter the result type mentions is used by the declaration whatever the body does, so the names the output mentions exempt the lambda's parameters of that spelling.
-#[derive(Default)]
-struct Signature {
-    output_mentions: HashSet<String>,
+/// A `let`-like signature as the lowering holds it: what was written, and the binders of its parameters when it is the function-definition sugar `f(params) -> output = body`.
+///
+/// The sugar's telescope becomes both a Π-type's binders and the body lambda's, and the leaves are minted once, here, so a parameter is one identity in both. A mention in the result type is then a use of the binder the body binds, with nothing to pair afterwards, and the Π's binder carries the written place the lambda's does, so a proof the elaborator writes in the type credits the same binder.
+pub(super) struct Signature<'s> {
+    written: &'s LetSignature,
+    leaves: Vec<Binder>,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
@@ -71,33 +70,65 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             candidates: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
-            signature: Cell::new(None),
-            signatures: RefCell::new(Vec::new()),
         }
     }
 
-    /// The function-definition sugar a signature is, when it is one: what its type and its body are lowered as, each through [`Self::half`], and read together by [`Self::flush`]. A plain `let x : T = e` is none.
-    pub(super) fn sugar(&self, signature: &LetSignature) -> Option<usize> {
-        match signature {
-            LetSignature::Func { .. } => {
-                let mut signatures = self.signatures.borrow_mut();
-                signatures.push(Signature::default());
-                Some(signatures.len() - 1)
+    /// `written` with its parameters minted, when it is the function-definition sugar: what [`Self::signature_type`] and [`Self::signature_value`] lower, in whichever order the site needs.
+    pub(super) fn signature<'s>(&self, written: &'s LetSignature) -> Signature<'s> {
+        let leaves = match written {
+            LetSignature::Func { params, .. } => {
+                self.mint_written(param_labels(&func_sugar_params(params)))
             }
-            LetSignature::Name { .. } => None,
+            LetSignature::Name { .. } => Vec::new(),
+        };
+        Signature { written, leaves }
+    }
+
+    /// The type a signature declares, under `declared` where the site spans it. The sugar's is the Π-type over its parameters: a plain name is the binder its lambda binds, while a compound pattern has no one name to give, so its slot is anonymous and its leaves are out of every domain's and the output's scope.
+    pub(super) fn signature_type(
+        &self,
+        signature: &Signature,
+        declared: Option<&Span>,
+    ) -> Result<curios_core::Term, Error> {
+        let LetSignature::Func { params, output, .. } = signature.written else {
+            return self.term(&signature.written.type_());
+        };
+        let mut seen = 0;
+        let binders = params
+            .iter()
+            .map(|param| {
+                let leaves = pattern_names(&param.label).len();
+                let binder = match &param.label {
+                    Pattern::Binder(Some(_)) => signature.leaves[seen].clone(),
+                    _ => (String::new(), self.context.fresh_binder(None)),
+                };
+                seen += leaves;
+                binder
+            })
+            .collect::<Vec<_>>();
+        let lowered = self.func_type_over(&func_sugar_type_params(params), &binders, || {
+            self.term(output)
+        });
+        match declared {
+            Some(span) => lowered
+                .map(|type_| curios_core::Term::spanned(span.clone(), type_))
+                .map_err(|error| error.at(span.clone())),
+            None => lowered,
         }
     }
 
-    /// Lower one half of a sugar, its Π-type or its lambda. The half's root is the first thing lowered and takes the sugar, so nothing written beneath either half can stand in for it: a lambda in the result type is not the parameters, and a function type in the body or in a parameter's own type is not the telescope.
-    pub(super) fn half<T>(
+    /// The value a signature binds: the sugar's is the lambda over its parameters, and a plain one is its body, lowered as `lower_value` lowers a value at the site.
+    pub(super) fn signature_value(
         &self,
-        sugar: Option<usize>,
-        lower: impl FnOnce() -> Result<T, Error>,
-    ) -> Result<T, Error> {
-        self.signature.set(sugar);
-        let lowered = lower();
-        self.signature.set(None);
-        lowered
+        signature: &Signature,
+        lower_value: impl FnOnce(&Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        match signature.written {
+            LetSignature::Func { params, body, .. } => {
+                self.lambda(&func_sugar_params(params), &signature.leaves, body)
+            }
+            LetSignature::Name { body, .. } => lower_value(body),
+        }
     }
 
     /// The lints of the declaration this lowered, decided now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal reports none: its binders are what the goal's report lists for the author to use next.
@@ -106,20 +137,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             return;
         }
         let used = self.used.borrow();
-        let signatures = self.signatures.borrow();
         let lints = self
             .candidates
             .borrow()
             .iter()
             .enumerate()
             .filter(|(_, candidate)| !used.contains(&candidate.id))
-            .filter(|(_, candidate)| {
-                !candidate.signature.is_some_and(|signature| {
-                    signatures[signature]
-                        .output_mentions
-                        .contains(&candidate.name)
-                })
-            })
             .map(|(ordinal, candidate)| {
                 let binder = LintedBinder {
                     declaration: self.declaration,
@@ -144,11 +167,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// [`Self::mint`] for written binders: one that carries a span, can be referred to and is not `_`-prefixed becomes a lint candidate. `signature` is the sugar whose outermost lambda these are, when they are.
+    /// [`Self::mint`] for written binders: one that carries a span, can be referred to and is not `_`-prefixed becomes a lint candidate.
     fn mint_written(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
-        signature: Option<usize>,
     ) -> Vec<Binder> {
         labels
             .into_iter()
@@ -168,16 +190,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     name: name.clone(),
                     id,
                     span,
-                    signature,
                 });
                 (name, id)
             })
             .collect()
     }
 
-    /// The binders of a lambda's parameters. The lambda at the root of a sugar's body is its sugar's, and its parameters are decided together with the telescope — see [`Signature`].
+    /// The binders of a written lambda's parameters.
     fn mint_params(&self, params: &[FuncParam]) -> Vec<Binder> {
-        self.mint_written(param_labels(params), self.signature.take())
+        self.mint_written(param_labels(params))
     }
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
@@ -231,27 +252,36 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         params: &[FuncTypeParam],
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        // The Π-type at the root of a sugar's type is its telescope, taken before its domains are lowered: a parameter's own type may be a Π-type, and it is not the telescope. The parameters the result mentions are used by the declaration — see [`Signature`].
-        let telescope = self.signature.take();
         let binders = self.mint(params.iter().map(|p| p.label.clone().unwrap_or_default()));
+        self.func_type_over(params, &binders, output)
+    }
+
+    /// [`Self::func_type_under`] over binders already minted, one per parameter.
+    fn func_type_over(
+        &self,
+        params: &[FuncTypeParam],
+        binders: &[Binder],
+        output: impl FnOnce() -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
         let mut lowered = Vec::with_capacity(params.len());
         for (index, param) in params.iter().enumerate() {
             let domain = self.bound(&binders[..index], || self.input_type(&param.type_))?;
             lowered.push((param.plicity, binders[index].1, domain));
         }
-        let output = self.bound(&binders, output)?;
-        if let Some(signature) = telescope {
-            let mentioned = output.free_vars_shared();
-            self.signatures.borrow_mut()[signature]
-                .output_mentions
-                .extend(
-                    binders
-                        .iter()
-                        .filter(|(_, id)| mentioned.contains(id))
-                        .map(|(name, _)| name.clone()),
-                );
-        }
+        let output = self.bound(binders, output)?;
         Ok(curios_core::Term::func_type_marked(lowered, output))
+    }
+
+    /// A lambda over `params`, whose leaves' binders are `binders`: its body is a region of its own.
+    fn lambda(
+        &self,
+        params: &[FuncParam],
+        binders: &[Binder],
+        body: &Term,
+    ) -> Result<curios_core::Term, Error> {
+        let body = self.bound(binders, || self.region(body))?;
+        let (params, body) = self.lower_func_params(params, binders, body)?;
+        Ok(curios_core::Term::func_marked(params, body))
     }
 
     /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses.
@@ -494,10 +524,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
-                let binders = self.mint_params(&func.params);
-                let body = self.bound(&binders, || self.region(&func.body))?;
-                let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
-                Ok(curios_core::Term::func_marked(params, body))
+                self.lambda(&func.params, &self.mint_params(&func.params), &func.body)
             }
             // Spine forms (atomic / apply / tuple / proj): collect bangs in left-to-right evaluation order, then wrap.
             _ => {
@@ -562,7 +589,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .members
                 .iter()
                 .flat_map(|member| pattern_labels(&member.binder)),
-            None,
         );
 
         let mut binds = Vec::new();
@@ -570,10 +596,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let mut types = Vec::with_capacity(group.members.len());
             let mut values = Vec::with_capacity(group.members.len());
             for member in &group.members {
-                let sugar = self.sugar(&member.signature);
-                let body = member.signature.body();
-                values.push(self.half(sugar, || lower_value(&body, &mut binds))?);
-                types.push(self.half(sugar, || self.term(&member.signature.type_()))?);
+                let signature = self.signature(&member.signature);
+                values
+                    .push(self.signature_value(&signature, |body| lower_value(body, &mut binds))?);
+                types.push(self.signature_type(&signature, None)?);
             }
             Ok((types, values))
         })?;
@@ -840,7 +866,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// One pattern-leaf binder: its written spelling and the identity it lowers to. `_` gets an identity nothing can name, so repeated wildcards never collide.
     pub(super) fn pattern_binder(&self, name: &Label) -> Binder {
-        self.mint_written([(name.to_string(), name.span().cloned())], None)
+        self.mint_written([(name.to_string(), name.span().cloned())])
             .remove(0)
     }
 
