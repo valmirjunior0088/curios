@@ -4,7 +4,7 @@
 use curios_profile::ROTATION_CAP;
 use {
     crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
-    clap::{ArgGroup, Args, Parser, Subcommand},
+    clap::{ArgGroup, Args, Parser, Subcommand, builder::PossibleValuesParser},
     curios_pipeline::Stage,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
@@ -346,7 +346,13 @@ pub(crate) enum Query {
 
     #[command(about = "The program's representation at one rung of the pipeline, reprinted")]
     Stage {
-        #[arg(value_name = "STAGE", help = format!("One of: {}", *NAMES))]
+        // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden.
+        #[arg(
+            value_name = "STAGE",
+            help = format!("One of: {}", *NAMES),
+            value_parser = PossibleValuesParser::new(Stage::NAMES),
+            hide_possible_values = true
+        )]
         name: String,
 
         #[arg(value_name = "TARGET", help = STAGE.target_help())]
