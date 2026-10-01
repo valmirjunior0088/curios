@@ -149,9 +149,10 @@ fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() 
 fn a_witness_telescopes_undischarged_bound_names_the_witness() {
     let report = error(
         r#"
-        use /std/{Nat, Bool, Str, Show};
+        use /std/{Nat, Str, Show};
+        use /std/Bool/{Holds};
         struct Small(n: Nat): pub Type { Nat }
-        satisfy (@n: Nat, @ok: Bool/Holds(n < 2)) => Show(Small(n)) { show(_s) = "small" }
+        satisfy (@n: Nat, @ok: Holds(n < 2)) => Show(Small(n)) { show(_s) = "small" }
         let s: Str = Show/show(Small(3) { 0 });
         /std/print("unreachable")
         "#,

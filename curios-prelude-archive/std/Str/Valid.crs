@@ -1,6 +1,7 @@
 use /std/Str/{classify, Scan, step, scan_from, pending, concluded, advanced, begins_scalars_of,
     continues, classify_continues, step_of_continuing};
-use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str, proved};
+use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
+use /std/Bool/{True, False, Holds};
 
 --- Whether a scan has come to rest between characters.
 let at_lead(s: Scan) -> Bool =
@@ -10,7 +11,7 @@ let at_lead(s: Scan) -> Bool =
 ---
 --- Decided, so it has no constructors to walk. A proof walks the bytes instead: `from(s, x[c, ..t])` *is* `from(step(c, s), t)`, so the evidence for the whole is already the evidence for the tail. A recursive call writes the tail it moves to, as `@t`, since inferring it from the evidence would take the whole.
 pub let from(s: Scan, b: Bytes) -> Prop =
-    Bool/Holds(at_lead(scan_from(s, b)));
+    Holds(at_lead(scan_from(s, b)));
 
 --- That `b` is well-formed UTF-8, which is what `Str` carries.
 ---
@@ -19,7 +20,7 @@ pub let Valid(b: Bytes) -> Prop =
     from(Scan/lead(), b);
 
 --- A scan at rest is at `lead`.
-let lead_of(s: Scan, h: Bool/Holds(at_lead(s))) -> Eq()(s, Scan/lead()) =
+let lead_of(s: Scan, h: Holds(at_lead(s))) -> Eq()(s, Scan/lead()) =
     match s
     | lead() => Eq/refl()
     | cont(_, _, _) => match h end
@@ -36,15 +37,15 @@ let append(
 
 --- The procedure that decides whether `b` is well-formed from `s`: the evidence when it is, `none` otherwise.
 pub let try(s: Scan, b: Bytes) -> Option(from(s, b)) =
-    match at_lead(scan_from(s, b)): (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match at_lead(scan_from(s, b)): (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 --- Valid bytes concatenate to valid bytes.
 pub let concat(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
     Eq/subst(
-        (sc: Scan) => Bool/Holds(at_lead(sc)),
+        (sc: Scan) => Holds(at_lead(sc)),
         Eq/sym(
             Eq/trans(
                 append(Scan/lead(), a, b),
@@ -52,7 +53,7 @@ pub let concat(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a,
         vb);
 
 --- Nothing is valid from the bad state.
-pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =
+pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> False =
     match x
     | x[] => match w end
     | x[_, ..t] => from_bad(@t, w)
@@ -63,21 +64,21 @@ let scan_continues(s: Scan) -> Bool =
     match s | lead() => true | cont(_, lo, hi) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
 
 --- Every step leaves a scan asking for continuation bytes, whatever it began in: a lead's range is `classify`'s, and a continuation's is `0x80..=0xBF` itself.
-let step_continues(c: Byte, s: Scan) -> Bool/Holds(scan_continues(step(c, s))) =
+let step_continues(c: Byte, s: Scan) -> Holds(scan_continues(step(c, s))) =
     let n = Byte/to_nat(c);
     match s
-    | bad() => Bool/True/qed()
+    | bad() => True/qed()
     | lead() =>
         let asked = classify_continues(c);
         match classify(c)
-        | ascii() => Bool/True/qed()
+        | ascii() => True/qed()
         | lead(_, _, _, _) => asked
-        | bad() => Bool/True/qed()
+        | bad() => True/qed()
         end
     | cont(rem, lo, hi) =>
         match Bool/not(Nat/in_range(n, lo, hi))
-        | true => Bool/True/qed()
-        | false => match rem == 1 | true => Bool/True/qed() | false => Bool/True/qed() end
+        | true => True/qed()
+        | false => match rem == 1 | true => True/qed() | false => True/qed() end
         end
     end;
 
@@ -87,8 +88,8 @@ let interrupted(
     rem: Nat,
     lo: Nat,
     hi: Nat,
-    h: Bool/Holds(scan_continues(Scan/cont(rem, lo, hi))),
-    q: Bool/Holds(Bool/not(continues(c))),
+    h: Holds(scan_continues(Scan/cont(rem, lo, hi))),
+    q: Holds(Bool/not(continues(c))),
 ) -> Eq()(step(c, Scan/cont(rem, lo, hi)), Scan/bad()) =
     let n = Byte/to_nat(c);
     match Nat/in_range(n, lo, hi)
@@ -97,7 +98,7 @@ let interrupted(
         match 0x80 <= lo
         | false => match h end
         | true =>
-            let continuing = Nat/Le/to_in_range(n, 0x80, 0xBF, proved(), proved());
+            let continuing = Nat/Le/to_in_range(n, 0x80, 0xBF, True/proved(), True/proved());
             match Nat/in_range(n, 0x80, 0xBF)
             | true => match q end
             | false => match continuing end
@@ -108,17 +109,17 @@ let interrupted(
 --- Self-synchronization, first half: bytes valid from `s` and cut where a character may begin are valid up to the cut. A scan reaching the cut inside a character meets either the end, where validity says it must have left, or a byte continuing none, which sends it bad.
 let seam_before(
     s: Scan,
-    h: Bool/Holds(scan_continues(s)),
+    h: Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
+    at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> from(s, Bytes/slice(b, 0, k, @within)) =
     match k
     | 0 =>
         match s
-        | lead() => Bool/True/qed()
+        | lead() => True/qed()
         | bad() => match from_bad(@b, d) end
         | cont(rem, lo, hi) =>
             match b
@@ -140,11 +141,11 @@ let seam_before(
 --- Self-synchronization, second half: bytes valid from `s` and cut where a character may begin are valid from the cut, read from between characters.
 let seam_after(
     s: Scan,
-    h: Bool/Holds(scan_continues(s)),
+    h: Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
+    at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> Valid(Bytes/drop(b, k, @within)) =
     match k
@@ -175,9 +176,9 @@ pub let before(
     v: Valid(b),
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
+    at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/slice(b, 0, k, @within)) =
-    seam_before(Scan/lead(), Bool/True/qed(), k, within, at, v);
+    seam_before(Scan/lead(), True/qed(), k, within, at, v);
 
 --- Valid bytes cut where a character may begin are valid after the cut.
 pub let after(
@@ -185,21 +186,21 @@ pub let after(
     v: Valid(b),
     k: Nat,
     within: Nat/Le(k, Bytes/len(b)),
-    at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
+    at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/drop(b, k, @within)) =
-    seam_after(Scan/lead(), Bool/True/qed(), k, within, at, v);
+    seam_after(Scan/lead(), True/qed(), k, within, at, v);
 
 --- Valid bytes begin where a character may: none starts with a byte continuing one.
-pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(Str/At/starts(b)) =
+pub let begins(@b: Bytes, v: Valid(b)) -> Holds(Str/At/starts(b)) =
     match b
-    | x[] => Bool/True/qed()
+    | x[] => True/qed()
     | x[c, ..t] =>
         match continues(c)
-        | false => Bool/True/qed()
+        | false => True/qed()
         | true =>
             match from_bad(
                 @t,
-                Eq/subst((sc: Scan) => from(sc, t), step_of_continuing(c, Bool/True/qed()), v))
+                Eq/subst((sc: Scan) => from(sc, t), step_of_continuing(c, True/qed()), v))
             end
         end
     end;
@@ -213,7 +214,7 @@ let finish(
     hi: Nat,
     partial: Nat,
     @t: Bytes,
-    p: Bool/Holds(pending(rem, lo, hi, partial)),
+    p: Holds(pending(rem, lo, hi, partial)),
     w: from(Scan/cont(rem, lo, hi), t),
 ) -> Char =
     match t
@@ -226,12 +227,12 @@ let finish(
             | true =>
                 let last =
                     Eq/subst(
-                        (r: Nat) => Bool/Holds(pending(r, lo, hi, partial)),
-                        Nat/eq_of_eql(rem, 1, Bool/True/qed()),
+                        (r: Nat) => Holds(pending(r, lo, hi, partial)),
+                        Nat/eq_of_eql(rem, 1, True/qed()),
                         p);
                 Char {
                     code = partial * 0x40 + (Byte/to_nat(c) - 0x80),
-                    valid = concluded(lo, hi, partial, Byte/to_nat(c), last, Bool/True/qed()),
+                    valid = concluded(lo, hi, partial, Byte/to_nat(c), last, True/qed()),
                 }
             | false =>
                 finish(
@@ -240,15 +241,7 @@ let finish(
                     0xBF,
                     partial * 0x40 + (Byte/to_nat(c) - 0x80),
                     @rest,
-                    advanced(
-                        rem,
-                        lo,
-                        hi,
-                        partial,
-                        Byte/to_nat(c),
-                        p,
-                        Bool/True/qed(),
-                        Bool/True/qed()),
+                    advanced(rem, lo, hi, partial, Byte/to_nat(c), p, True/qed(), True/qed()),
                     w)
             end
         end
@@ -257,7 +250,7 @@ let finish(
 --- The first character of bytes valid from the first byte.
 pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char =
     match classify(c)
-    | ascii() => Char { code = Byte/to_nat(c), valid = Bool/True/qed() }
+    | ascii() => Char { code = Byte/to_nat(c), valid = True/qed() }
     | lead(rem, lo, hi, partial) => finish(rem, lo, hi, partial, @t, begins_scalars_of(c), w)
     | bad() => match from_bad(@t, w) end
     end;
@@ -267,17 +260,17 @@ pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char
 --- Walked by the guards `Char/to_utf8` chose its family by, so each arm's goal reduces to that family's bytes read through `classify`. What reduction cannot see is where a lead byte narrows its first continuation's range, and each such edge is one arm: `E0` floors it at `A0`, so a three-byte form cannot spell what two bytes hold; `ED` caps it at `9F`, which excludes the surrogates; `F0` floors it at `90`, lifting a four-byte value past `U+FFFF`; and `F4` caps it at `8F`, at `U+10FFFF`. The code point's own bounds settle each — its guards, and `c.valid` where the ceiling is the scalar values' — and every other byte's range reduction decides.
 pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
     match c.code < 0x80
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false =>
         match c.code < 0x800
         -- `C2..=DF`: the lead byte's payload is at least `2`, since the code point is at least `0x80`, and below `0x20`.
         | true =>
             match c.code / 0x40 >= 2
-            | false => match Bool/False/refuted() end
+            | false => match False/refuted() end
             | true =>
                 match c.code / 0x40 <= 0x1F
-                | true => Bool/True/qed()
-                | false => match Bool/False/refuted() end
+                | true => True/qed()
+                | false => match False/refuted() end
                 end
             end
         | false =>
@@ -285,17 +278,17 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
             -- `E0..=EF`, the lead byte's payload being below `0x10`.
             | true =>
                 match c.code / 0x1000 <= 0xF
-                | false => match Bool/False/refuted() end
+                | false => match False/refuted() end
                 | true =>
                     match c.code / 0x1000 == 0
                     -- `E0`: the code point is at least `0x800` with nothing above its low twelve bits, so its next six are at least `0x20`.
                     | true =>
                         match c.code / 0x1000 == 0xD
-                        | true => match Bool/False/refuted() end
+                        | true => match False/refuted() end
                         | false =>
                             match c.code % 0x1000 / 0x40 >= 0x20
-                            | true => Bool/True/qed()
-                            | false => match Bool/False/refuted() end
+                            | true => True/qed()
+                            | false => match False/refuted() end
                             end
                         end
                     | false =>
@@ -303,13 +296,13 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         -- `ED`: the code point is below `0xE000`, so validity puts it below the surrogates at `0xD800`, and its next six bits below `0x20`.
                         | true =>
                             match c.code % 0x1000 / 0x40 <= 0x1F
-                            | true => Bool/True/qed()
+                            | true => True/qed()
                             | false =>
                                 let high =
-                                    Char/Valid/below_surrogates_of(c.code, c.valid, proved());
-                                match Bool/False/refuted() end
+                                    Char/Valid/below_surrogates_of(c.code, c.valid, True/proved());
+                                match False/refuted() end
                             end
-                        | false => Bool/True/qed()
+                        | false => True/qed()
                         end
                     end
                 end
@@ -317,17 +310,17 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
             | false =>
                 let top = Char/Valid/at_most(c.code, c.valid);
                 match c.code / 0x40000 <= 4
-                | false => match Bool/False/refuted() end
+                | false => match False/refuted() end
                 | true =>
                     match c.code / 0x40000 == 0
                     -- `F0`: the code point is at least `0x10000` with nothing above its low eighteen bits, so its next six are at least `0x10`.
                     | true =>
                         match c.code / 0x40000 == 4
-                        | true => match Bool/False/refuted() end
+                        | true => match False/refuted() end
                         | false =>
                             match c.code % 0x40000 / 0x1000 >= 0x10
-                            | true => Bool/True/qed()
-                            | false => match Bool/False/refuted() end
+                            | true => True/qed()
+                            | false => match False/refuted() end
                             end
                         end
                     | false =>
@@ -335,10 +328,10 @@ pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
                         -- `F4`: the code point is at most `U+10FFFF`, so its next six bits are at most `0xF`.
                         | true =>
                             match c.code % 0x40000 / 0x1000 <= 0xF
-                            | true => Bool/True/qed()
-                            | false => match Bool/False/refuted() end
+                            | true => True/qed()
+                            | false => match False/refuted() end
                             end
-                        | false => Bool/True/qed()
+                        | false => True/qed()
                         end
                     end
                 end

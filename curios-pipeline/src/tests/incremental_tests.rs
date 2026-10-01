@@ -182,9 +182,10 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
 }
 
 /// A hypothesis only a proof the elaborator writes reads, in `below`, beside one nothing reads, in `idle`.
-const CREDITED: &str = "use /std/{Nat, proved};
+const CREDITED: &str = "use /std/{Nat};
+use /std/Bool/{True};
 
-pub let below(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Le(i, n) = proved();
+pub let below(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Le(i, n) = True/proved();
 
 pub let idle(i: Nat, q: Nat/Lt(i, 3)) -> Nat = i;
 

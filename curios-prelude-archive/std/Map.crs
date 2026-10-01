@@ -1,4 +1,5 @@
 use /std/{Bytes, Bits, Byte, Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell};
+use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
 
 induct Node(V: Type): Type
@@ -74,8 +75,8 @@ let bit_round(h: Bool) -> Eq()(bit_of(byte_of_bit(h)), h) =
     match h | true => Eq/refl() | false => Eq/refl() end;
 
 -- An encoding of no bits is no encoding of a cons: the lengths differ, and zero against a successor is refuted by the comparison deciding it.
-let no_empty(k: Byte, r: Bytes, e: Eq()(x[], x[k, ..r])) -> Bool/False =
-    Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(Bytes/len, e), Bool/True/qed());
+let no_empty(k: Byte, r: Bytes, e: Eq()(x[], x[k, ..r])) -> False =
+    Eq/subst((m) => Holds(Nat/eql(0, m)), Eq/cong(Bytes/len, e), True/qed());
 
 -- Distinct bit runs encode distinctly.
 --

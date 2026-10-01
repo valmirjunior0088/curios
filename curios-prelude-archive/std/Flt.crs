@@ -4,6 +4,7 @@ pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, 
     of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic,
     Vec};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- IEEE 754's rounding directions.
@@ -36,7 +37,7 @@ mod reduction;
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
-    Bool/Holds(Nat/eql(Bytes/len(b), 8));
+    Holds(Nat/eql(Bytes/len(b), 8));
 
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
@@ -44,11 +45,11 @@ pub let is_finite(f: Flt) -> Bool =
 
 --- That `f` is a number, decided: the domain `to_int` states.
 pub let Finite(f: Flt) -> Prop =
-    Bool/Holds(-inf.0 < f && f < +inf.0);
+    Holds(-inf.0 < f && f < +inf.0);
 
 --- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
 pub let NonNeg(f: Flt) -> Prop =
-    Bool/Holds(+0.0 <= f && f < +inf.0);
+    Holds(+0.0 <= f && f < +inf.0);
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =
@@ -110,19 +111,19 @@ pub let unordered(a: Flt, b: Flt) -> Bool =
 
 --- That `f` is a finite nonzero value, decided: the domain of `log_b`.
 pub let FiniteNonZero(f: Flt) -> Prop =
-    Bool/Holds(is_finite(f) && Bool/not(is_zero(f)));
+    Holds(is_finite(f) && Bool/not(is_zero(f)));
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match -inf.0 < f && f < +inf.0: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
-    | true => (_) => Bool/True/qed()
+    match -inf.0 < f && f < +inf.0: (d) => (Holds(d && Bool/not(is_zero(f)))) -> Holds(d)
+    | true => (_) => True/qed()
     | false => (no) => match no end
     end(ok);
 
 --- The procedure that decides `FiniteNonZero(f)`.
 pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
-    match is_finite(f) && Bool/not(is_zero(f)): (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match is_finite(f) && Bool/not(is_zero(f)): (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
@@ -325,21 +326,21 @@ pub let signaling_nan(p: Flt) -> Flt =
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     match Nat/eql(Bytes/len(b), 8): (_) => Option(Flt)
-    | true => Option/some(of_le_bytes(b, @Bool/True/qed()))
+    | true => Option/some(of_le_bytes(b, @True/qed()))
     | false => Option/none()
     end;
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    match -inf.0 < f && f < +inf.0: (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match -inf.0 < f && f < +inf.0: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f < +inf.0: (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match f >= +0.0 && f < +inf.0: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
@@ -857,13 +858,13 @@ satisfy Mul(Flt) {
 
 --- No precondition: IEEE division is total.
 satisfy Div(Flt) {
-    Ok(_) = Bool/True,
+    Ok(_) = True,
     div(a, b) = div(a, b),
 }
 
 --- No precondition: IEEE remainder is total.
 satisfy Rem(Flt) {
-    Ok(_) = Bool/True,
+    Ok(_) = True,
     rem(a, b) = rem(a, b),
 }
 

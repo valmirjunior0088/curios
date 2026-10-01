@@ -23,5 +23,5 @@
 - **Big numbers on the host**, through an `externref` to GMP: every slow operation a host call, and the browser answering with `BigInt`, a second implementation both hosts must agree with bit for bit.
 - **An `i32` wire**, which splits every 64-bit host quantity — a file's size, a time, a count — into base-10⁹ limbs and refuses a count past `2³¹`.
 - **A 64-bit middle tier**, a third form in every test for a range the limbs cover; **64-bit limbs**, which WebAssembly cannot multiply exactly.
-- **`Byte` as a refinement struct**, `{ code: Nat, ok: Bool/Holds(code < 256) }`: reduction is untyped, so a binder's `.code` stops `(256·q + r.code) / 256` reducing, and the free-monoid peel manufactures `Byte(u8)` values out of packed runs where `/sys` cannot name a `/std` struct.
+- **`Byte` as a refinement struct**, `{ code: Nat, ok: Holds(code < 256) }`: reduction is untyped, so a binder's `.code` stops `(256·q + r.code) / 256` reducing, and the free-monoid peel manufactures `Byte(u8)` values out of packed runs where `/sys` cannot name a `/std` struct.
 - **A width-indexed `Word` family**, which would unify `Bool` and `Byte` while sharing no behaviour, destabilizing `Bool`, which every comparison returns and every bound is stated through.

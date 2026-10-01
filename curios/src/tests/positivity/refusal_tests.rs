@@ -30,10 +30,10 @@ fn a_declaration_recursing_through_a_type_former_parameter_is_refused() {
 fn a_negative_occurrence_is_rejected() {
     rejected(
         r#"
-        use /std/{Bool};
+        use /std/Bool/{False};
 
         induct Bad : pub Type
-        | c(f : (Bad) -> Bool/False)
+        | c(f : (Bad) -> False)
         end
 
         /std/print("unreachable")
@@ -46,10 +46,10 @@ fn a_negative_occurrence_is_rejected() {
 fn a_positive_but_not_strictly_positive_occurrence_is_rejected() {
     rejected(
         r#"
-        use /std/{Bool};
+        use /std/Bool/{False};
 
         induct Bad2 : pub Type
-        | c(f : ((Bad2) -> Bool/False) -> Bool/False)
+        | c(f : ((Bad2) -> False) -> False)
         end
 
         /std/print("unreachable")
@@ -82,12 +82,12 @@ fn a_negative_occurrence_borrowed_through_another_declaration_is_rejected() {
 fn a_negative_cycle_through_a_mutual_group_is_rejected() {
     rejected(
         r#"
-        use /std/{Bool};
+        use /std/Bool/{False};
 
         induct Left : Type
         | wrap(Right)
         and Right : Type
-        | back(f : (Left) -> Bool/False)
+        | back(f : (Left) -> False)
         end
 
         /std/print("unreachable")
@@ -100,10 +100,10 @@ fn a_negative_cycle_through_a_mutual_group_is_rejected() {
 fn a_negative_struct_field_is_rejected() {
     rejected(
         r#"
-        use /std/{Bool};
+        use /std/Bool/{False};
 
         struct Consume : pub Type {
-            run : (Consume) -> Bool/False,
+            run : (Consume) -> False,
         }
 
         /std/print("unreachable")

@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Str, Char, Option, Show, Ord, Spell};
+use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Sub, Mul};
 use /big_nat/{BigNat, add, ord, dbl, dbl_succ, is_zero, mul, of_nat, sub, view, zero};
 
@@ -36,7 +37,7 @@ pub let is_decimal(s: Str) -> Bool =
 
 --- The decided proposition that `s` is a nonempty run of decimal digits.
 pub let Decimal(s: Str) -> Prop =
-    Bool/Holds(is_decimal(s));
+    Holds(is_decimal(s));
 
 --- The number `s` spells, under the evidence that it is decimal.
 pub let of_decimal(s: Str, @_: Decimal(s)) -> BigNat =

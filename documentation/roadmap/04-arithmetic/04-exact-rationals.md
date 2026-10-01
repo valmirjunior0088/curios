@@ -59,9 +59,9 @@ eql : Rat -> Rat -> Bool
 cmp : Rat -> Rat -> Ordering
 lt, le, gt, ge : Rat -> Rat -> Bool
 min, max : Rat -> Rat -> Rat
-Le(x, y) := Bool/Holds(le(x, y))
-Lt(x, y) := Bool/Holds(lt(x, y))
-NonZero(x) := Bool/Holds(Bool/not(eql(x, zero)))
+Le(x, y) := Holds(le(x, y))
+Lt(x, y) := Holds(lt(x, y))
+NonZero(x) := Holds(Bool/not(eql(x, zero)))
 non_zero : (x : Rat) -> Option(NonZero(x))
 reciprocal : (x : Rat, @ok : NonZero(x)) -> Rat
 div : (x : Rat, y : Rat, @ok : NonZero(y)) -> Rat

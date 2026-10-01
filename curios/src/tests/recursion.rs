@@ -58,7 +58,8 @@ fn a_local_group_is_mutually_recursive() {
 #[test]
 fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
     let source = r#"
-        use /std/{Nat, Bool, Eq, WellFounded};
+        use /std/{Nat, Eq, WellFounded};
+        use /std/Bool/{True};
         let top(n : Nat) -> (Nat) -> Nat =
             match n | 0 => (x) => x | p + 1 => (x) => top(p)(x) + 1 end;
         let nested(n : Nat) -> (Nat) -> Nat =
@@ -67,7 +68,7 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
         let measured(n : Nat, k : Nat) -> Nat =
             WellFounded/recurse(
                 (_ : Nat) => (k : Nat) -> Nat,
-                (x, ih) => (k) => match x | 0 => k | p + 1 => ih(p, Bool/True/qed())(k) + 1 end,
+                (x, ih) => (k) => match x | 0 => k | p + 1 => ih(p, True/qed())(k) + 1 end,
                 n,
                 WellFounded/lt(n))(k);
         let _top : Eq()(top(3)(1), 4) = Eq/refl();

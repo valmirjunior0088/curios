@@ -273,7 +273,7 @@ impl Spelling {
     /// A narrowing's call, with a proof binder stating what it asks of its operand.
     fn narrowing(&mut self, function: &str, operand: &str, holds: String) -> String {
         let proof = format!("ok{}", self.proofs.len());
-        self.proofs.push(format!("{proof}: Bool/Holds({holds})"));
+        self.proofs.push(format!("{proof}: Holds({holds})"));
         format!("{function}({operand}, @{proof})")
     }
 }

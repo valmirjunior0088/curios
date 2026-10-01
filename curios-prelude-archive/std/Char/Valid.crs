@@ -1,16 +1,17 @@
-use /std/{Bool, Nat, Option, proved};
+use /std/{Nat, Option};
+use /std/Bool/{True, Holds};
 use /std/Char/{is_valid};
 
 --- That `code` is a Unicode scalar value, which is what `Char` carries.
 ---
 --- Decided, so a literal or a guard already taken discharges it by reduction.
 pub let Valid(code: Nat) -> Prop =
-    Bool/Holds(is_valid(code));
+    Holds(is_valid(code));
 
 --- A code below the surrogates is a scalar value.
 pub let below_surrogates(code: Nat, p: Nat/Lt(code, 0xD800)) -> Valid(code) =
     match code < 0xD800
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false => match p end
     end;
 
@@ -21,7 +22,7 @@ pub let above_surrogates(
     high: Nat/Le(code, 0x10FFFF),
 ) -> Valid(code) =
     match code < 0xD800
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false =>
         match code >= 0xE000
         | true => high
@@ -32,7 +33,7 @@ pub let above_surrogates(
 --- A scalar value is at most `U+10FFFF`.
 pub let at_most(code: Nat, valid: Valid(code)) -> Nat/Le(code, 0x10FFFF) =
     match code < 0xD800
-    | true => proved()
+    | true => True/proved()
     | false =>
         match code >= 0xE000
         | true => valid
@@ -47,7 +48,7 @@ pub let below_surrogates_of(
     below_end: Nat/Lt(code, 0xE000),
 ) -> Nat/Lt(code, 0xD800) =
     match code < 0xD800
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false =>
         match code >= 0xE000
         | true => match below_end end
@@ -57,7 +58,7 @@ pub let below_surrogates_of(
 
 --- The evidence that `code` is a Unicode scalar value, or `none`.
 pub let try(code: Nat) -> Option(Valid(code)) =
-    match is_valid(code): (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match is_valid(code): (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;

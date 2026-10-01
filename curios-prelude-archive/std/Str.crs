@@ -1,4 +1,5 @@
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord, proved};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord};
+use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -37,30 +38,28 @@ let class_continues(k: Class) -> Bool =
     match k | ascii() => true | lead(_, lo, hi, _) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
 
 --- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
-let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
+let classify_continues(c: Byte) -> Holds(class_continues(classify(c))) =
     let n = Byte/to_nat(c);
     match Nat/in_range(n, 0x0, 0x7F)
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false =>
         match Nat/in_range(n, 0xC2, 0xDF)
-        | true => Bool/True/qed()
+        | true => True/qed()
         | false =>
             match Nat/in_range(n, 0xE0, 0xEF)
             | true =>
                 match n == 0xE0
-                | true => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
-                | false => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
+                | true => match n == 0xED | true => True/qed() | false => True/qed() end
+                | false => match n == 0xED | true => True/qed() | false => True/qed() end
                 end
             | false =>
                 match Nat/in_range(n, 0xF0, 0xF4)
                 | true =>
                     match n == 0xF0
-                    | true =>
-                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
-                    | false =>
-                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
+                    | true => match n == 0xF4 | true => True/qed() | false => True/qed() end
+                    | false => match n == 0xF4 | true => True/qed() | false => True/qed() end
                     end
-                | false => Bool/True/qed()
+                | false => True/qed()
                 end
             end
         end
@@ -96,22 +95,19 @@ pub let step(c: Byte, s: Scan) -> Scan =
     end;
 
 --- A scan between characters that meets a byte continuing one goes bad: `classify` reports no lead for it, each of its guards refuted by the byte's range.
-let step_of_continuing(
-    c: Byte,
-    q: Bool/Holds(continues(c)),
-) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
+let step_of_continuing(c: Byte, q: Holds(continues(c))) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
     let n = Byte/to_nat(c);
     match Nat/in_range(n, 0x0, 0x7F)
-    | true => match Bool/False/refuted() end
+    | true => match False/refuted() end
     | false =>
         match Nat/in_range(n, 0xC2, 0xDF)
-        | true => match Bool/False/refuted() end
+        | true => match False/refuted() end
         | false =>
             match Nat/in_range(n, 0xE0, 0xEF)
-            | true => match Bool/False/refuted() end
+            | true => match False/refuted() end
             | false =>
                 match Nat/in_range(n, 0xF0, 0xF4)
-                | true => match Bool/False/refuted() end
+                | true => match False/refuted() end
                 | false => Eq/refl()
                 end
             end
@@ -179,15 +175,15 @@ let scalars_within(
     max: Nat,
     min2: Nat,
     max2: Nat,
-    s: Bool/Holds(scalars(min, max)),
+    s: Holds(scalars(min, max)),
     low: Nat/Le(min, min2),
     high: Nat/Le(max2, max),
-) -> Bool/Holds(scalars(min2, max2)) =
+) -> Holds(scalars(min2, max2)) =
     match max < 0xD800
     | true =>
         match max2 < 0xD800
-        | true => Bool/True/qed()
-        | false => match Bool/False/refuted() end
+        | true => True/qed()
+        | false => match False/refuted() end
         end
     | false =>
         match min >= 0xE000
@@ -197,14 +193,14 @@ let scalars_within(
             | false => match s end
             | true =>
                 match max2 < 0xD800
-                | true => Bool/True/qed()
+                | true => True/qed()
                 | false =>
                     match min2 >= 0xE000
-                    | false => match Bool/False/refuted() end
+                    | false => match False/refuted() end
                     | true =>
                         match max2 <= 0x10FFFF
-                        | true => Bool/True/qed()
-                        | false => match Bool/False/refuted() end
+                        | true => True/qed()
+                        | false => match False/refuted() end
                         end
                     end
                 end
@@ -218,8 +214,8 @@ let concluded(
     hi: Nat,
     partial: Nat,
     c: Nat,
-    p: Bool/Holds(pending(1, lo, hi, partial)),
-    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
+    p: Holds(pending(1, lo, hi, partial)),
+    inside: Holds(Nat/in_range(c, lo, hi)),
 ) -> Char/Valid(partial * 0x40 + (c - 0x80)) =
     scalars_within(
         partial * 0x40 + (lo - 0x80),
@@ -227,8 +223,8 @@ let concluded(
         partial * 0x40 + (c - 0x80),
         partial * 0x40 + (c - 0x80),
         p,
-        proved(),
-        proved());
+        True/proved(),
+        True/proved());
 
 --- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
 let advanced(
@@ -237,10 +233,10 @@ let advanced(
     hi: Nat,
     partial: Nat,
     c: Nat,
-    p: Bool/Holds(pending(rem, lo, hi, partial)),
-    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
-    more: Bool/Holds(Bool/not(rem == 1)),
-) -> Bool/Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
+    p: Holds(pending(rem, lo, hi, partial)),
+    inside: Holds(Nat/in_range(c, lo, hi)),
+    more: Holds(Bool/not(rem == 1)),
+) -> Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
     match rem
     | 0 => match p end
     | r1 + 1 =>
@@ -255,8 +251,8 @@ let advanced(
                     (partial * 0x40 + (c - 0x80)) * 0x40,
                     (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
                     p,
-                    proved(),
-                    proved())
+                    True/proved(),
+                    True/proved())
             | r3 + 1 =>
                 match r3
                 | 0 =>
@@ -266,8 +262,8 @@ let advanced(
                         (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
                         ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
                         p,
-                        proved(),
-                        proved())
+                        True/proved(),
+                        True/proved())
                 | _ + 1 => match p end
                 end
             end
@@ -283,16 +279,16 @@ let each_below(k: Nat) -> Bool =
     match k | 0 => true | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp) end;
 
 --- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
-let every_byte: Bool/Holds(each_below(256)) =
-    Bool/True/qed();
+let every_byte: Holds(each_below(256)) =
+    True/qed();
 
 --- A byte below `m`, read out of the check over every byte below `m`.
 let begins_below(
     m: Nat,
     n: Nat,
-    all: Bool/Holds(each_below(m)),
+    all: Holds(each_below(m)),
     inside: Nat/Lt(n, m),
-) -> Bool/Holds(begins_scalars(Nat/to_byte(n % 256))) =
+) -> Holds(begins_scalars(Nat/to_byte(n % 256))) =
     match m
     | 0 => match inside end
     | mp + 1 =>
@@ -300,19 +296,19 @@ let begins_below(
         | false => match all end
         | true =>
             match n < mp
-            | true => begins_below(mp, n, all, Bool/True/qed())
+            | true => begins_below(mp, n, all, True/qed())
             | false =>
                 Eq/subst(
-                    (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/Le/antisym(mp, n, proved(), inside),
-                    Bool/True/qed())
+                    (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
+                    Nat/Le/antisym(mp, n, True/proved(), inside),
+                    True/qed())
             end
         end
     end;
 
 --- Every byte begins only scalar values.
-let begins_scalars_of(c: Byte) -> Bool/Holds(begins_scalars(c)) =
-    begins_below(256, Byte/to_nat(c), every_byte, Bool/True/qed());
+let begins_scalars_of(c: Byte) -> Holds(begins_scalars(c)) =
+    begins_below(256, Byte/to_nat(c), every_byte, True/qed());
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
@@ -402,7 +398,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
         b: Bytes,
         v: Valid/from(sc, b),
         acc: {A, Nat},
-        p: Bool/Holds(pending_at(sc, acc.1)),
+        p: Holds(pending_at(sc, acc.1)),
     ) -> {A, Nat} =
         match b
         | x[] => acc
@@ -415,8 +411,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                         Scan/lead(),
                         t,
                         v,
-                        (f(Char { code = Byte/to_nat(h), valid = Bool/True/qed() }, acc.0), 0),
-                        Bool/True/qed())
+                        (f(Char { code = Byte/to_nat(h), valid = True/qed() }, acc.0), 0),
+                        True/qed())
                 | lead(rem, lo, hi, partial) =>
                     go(Scan/cont(rem, lo, hi), t, v, (acc.0, partial), begins_scalars_of(h))
                 | bad() => match Valid/from_bad(@t, v) end
@@ -430,8 +426,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     | true =>
                         let last =
                             Eq/subst(
-                                (r: Nat) => Bool/Holds(pending(r, lo, hi, acc.1)),
-                                Nat/eq_of_eql(rem, 1, Bool/True/qed()),
+                                (r: Nat) => Holds(pending(r, lo, hi, acc.1)),
+                                Nat/eq_of_eql(rem, 1, True/qed()),
                                 p);
                         go(
                             Scan/lead(),
@@ -448,32 +444,24 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 acc.1,
                                                 Byte/to_nat(h),
                                                 last,
-                                                Bool/True/qed()),
+                                                True/qed()),
                                     },
                                     acc.0),
                                 0),
-                            Bool/True/qed())
+                            True/qed())
                     | false =>
                         go(
                             Scan/cont(rem - 1, 0x80, 0xBF),
                             t,
                             v,
                             (acc.0, partial),
-                            advanced(
-                                rem,
-                                lo,
-                                hi,
-                                acc.1,
-                                Byte/to_nat(h),
-                                p,
-                                Bool/True/qed(),
-                                Bool/True/qed()))
+                            advanced(rem, lo, hi, acc.1, Byte/to_nat(h), p, True/qed(), True/qed()))
                     end
                 end
             | bad() => match Valid/from_bad(@x[h, ..t], v) end
             end
         end;
-    go(Scan/lead(), s.bytes, s.valid, (init, 0), Bool/True/qed()).0;
+    go(Scan/lead(), s.bytes, s.valid, (init, 0), True/qed()).0;
 
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =
@@ -571,7 +559,7 @@ let meets(
                         match have.char == want.char
                         | true =>
                             match again(have.past, have.progress)(want.past)
-                            | some(met) => Option/some((past = met.past, reach = proved()))
+                            | some(met) => Option/some((past = met.past, reach = True/proved()))
                             | none() => Option/none()
                             end
                         | false => Option/none()
@@ -603,7 +591,7 @@ pub let span(
                 match pred(n.char)
                 | true =>
                     let rest = again(n.past, n.progress);
-                    (past = rest.past, reach = proved())
+                    (past = rest.past, reach = True/proved())
                 | false => (past = at, reach = Nat/Le/refl(at.offset))
                 end
             | none() => (past = at, reach = Nat/Le/refl(at.offset))
@@ -670,7 +658,7 @@ let occurrence(
                         Option/some((
                             start = found.start,
                             past = found.past,
-                            ordered = proved(),
+                            ordered = True/proved(),
                             progress = found.progress))
                     | none() => Option/none()
                     end;
@@ -687,7 +675,7 @@ let occurrence(
                                 start = at,
                                 past = met.past,
                                 ordered = Nat/Le/refl(at.offset),
-                                progress = proved()))
+                                progress = True/proved()))
                         | none() => later()
                         end
                     end
@@ -772,7 +760,9 @@ pub let split(s: Str, sep: Str) -> List(Str) =
             (at, again) =>
                 match occurrence(s, at, sep, first)
                 | some(found) =>
-                    [between(s, at, found.start, @found.ordered), ..again(found.past, proved())]
+                    [
+                        between(s, at, found.start, @found.ordered),
+                        ..again(found.past, True/proved())]
                 | none() => [after(s, at)]
                 end,
             At/start(s))
@@ -791,7 +781,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
                     flatten([
                         between(s, at, found.start, @found.ordered),
                         to,
-                        again(found.past, proved())])
+                        again(found.past, True/proved())])
                 | none() => after(s, at)
                 end,
             At/start(s))
@@ -807,7 +797,7 @@ pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
                 | none() => between(s, run, at, @ordered)
                 | some(n) =>
                     match with(n.char)
-                    | none() => again(n.past, n.progress)(run, proved())
+                    | none() => again(n.past, n.progress)(run, True/proved())
                     | some(replacement) =>
                         flatten([
                             between(s, run, at, @ordered),
@@ -827,7 +817,9 @@ pub let lines(s: Str) -> List(Str) =
         (at, again) =>
             match occurrence(s, at, "\n", newline)
             | some(found) =>
-                [strip(between(s, at, found.start, @found.ordered)), ..again(found.past, proved())]
+                [
+                    strip(between(s, at, found.start, @found.ordered)),
+                    ..again(found.past, True/proved())]
             | none() =>
                 let rest = after(s, at);
                 match is_empty(rest) | true => [] | false => [strip(rest)] end

@@ -517,9 +517,10 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
 #[test]
 fn the_library_well_founded_recursion_serves_a_proof() {
     let source = r#"
-        use /std/{Nat, Str, Bool, WellFounded, Char, List};
+        use /std/{Nat, Str, WellFounded, Char, List};
+        use /std/Bool/{True};
         let two_more(n: Nat) -> Nat/Lt(n, n + 2) =
-            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => Bool/True/qed(), n, WellFounded/lt(n));
+            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
         let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) = WellFounded/lt;
         /std/print(Str/of_char(List/get(@Char, ['a', 'b', 'c'], 1, @two_more(1))))
         "#;

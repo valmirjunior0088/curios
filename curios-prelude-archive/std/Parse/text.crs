@@ -1,16 +1,17 @@
 use /std/{Str, Char, Nat, Bool, Bytes, Result, Option, Parse};
+use /std/Bool/{Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- What a text parser's positions know: that the input is valid text and that a character may begin at the position — a `Str/At`'s own facts, so a text primitive reads its string and its position back out of one.
 pub struct Boundary(input: Bytes, offset: Nat): Prop {
     valid: Str/Valid(input),
     within: Nat/Le(offset, Bytes/len(input)),
-    boundary: Bool/Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
+    boundary: Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
 }
 
 --- A text parser walks its string's bytes, and its positions are the string's own.
 satisfy Input(Str) {
-    Holds(input, offset) = Boundary(input, offset),
+    Admits(input, offset) = Boundary(input, offset),
     bytes(s) = s.bytes,
     start(s) =
         let first = Str/At/start(s);

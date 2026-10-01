@@ -1,6 +1,7 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map, fold};
-use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord, proved};
+use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord};
+use /std/Bool/{True};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -185,8 +186,8 @@ pub let balanced(
             choose
             | lo + 1 < hi =>
                 let mid = (lo + hi) / 2;
-                combine(go(pred, lo, mid, proved()), go(pred, mid, hi, bounded))
-            | lo < hi => single(lo, proved())
+                combine(go(pred, lo, mid, True/proved()), go(pred, mid, hi, bounded))
+            | lo < hi => single(lo, True/proved())
             | _ => empty
             end
         end;

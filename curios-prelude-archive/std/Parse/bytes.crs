@@ -1,11 +1,12 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, Option, Parse};
+use /std/Bool/{True};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
 satisfy Input(Bytes) {
-    Holds(input, offset) = Nat/Le(offset, Bytes/len(input)),
+    Admits(input, offset) = Nat/Le(offset, Bytes/len(input)),
     bytes(input) = input,
-    start(_) = Bool/True/qed(),
+    start(_) = True/qed(),
 }
 
 --- The position past `at`, which holds a byte: still within the input.

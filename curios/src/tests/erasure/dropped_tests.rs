@@ -142,10 +142,11 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
 #[test]
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
-        use /std/{Bool, Io};
-        let absurd(@A : Type, c : Bool/False) -> A = match c end;
-        let direct(@A : Type, c : Bool/False) -> A = match c : (_) => A end;
-        let via_absurd(@A : Type, c : Bool/False) -> A = absurd(c);
+        use /std/{Io};
+        use /std/Bool/{False};
+        let absurd(@A : Type, c : False) -> A = match c end;
+        let direct(@A : Type, c : False) -> A = match c : (_) => A end;
+        let via_absurd(@A : Type, c : False) -> A = absurd(c);
         let proofs = (direct, via_absurd);
         /std/print("ok")
         "#;
@@ -177,13 +178,14 @@ fn erased_indexed_relevant_repro() {
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
-        use /std/{Nat, Bool, Io};
+        use /std/{Nat, Io};
+        use /std/Bool/{False};
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
-        let absurd(@A : Type, c : Bool/False) -> A = match c end;
-        let id_void(w : Bool/False) -> Bool/False = w;
-        let f(m : Type) -> (Bool/False) -> Box(m) = (v) => absurd(@Box(m), id_void(v));
+        let absurd(@A : Type, c : False) -> A = match c end;
+        let id_void(w : False) -> False = w;
+        let f(m : Type) -> (False) -> Box(m) = (v) => absurd(@Box(m), id_void(v));
         let g = f;
         /std/print("ok")
         "#;
@@ -215,11 +217,12 @@ fn a_kept_field_survives_beside_a_dependent_proof_payload() {
     // Declaration arity one, application arity one: the proposition and its proof drop on both sides of the seam while the `Nat` rides through.
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bool, Io};
+        use /std/{Nat, Str, Io};
+        use /std/Bool/{True};
         pub induct Rec: pub Type
         | mixed(n: Nat, @P: Prop, proof: P)
         end
-        let r: Rec = Rec/mixed(7, Bool/True/qed());
+        let r: Rec = Rec/mixed(7, True/qed());
         match r | mixed(n, @P, p) => /std/print(Str/concat(Nat/to_str(n), "\n")) end
         "#),
         b"7\n"
@@ -248,9 +251,10 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
 fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bool};
+        use /std/{Nat, Str};
+        use /std/Bool/{True};
         let app(P: (Nat) -> Type, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
-        let pf(n: Nat) -> Nat/Le(n, n) = app((k) => Nat/Le(k, k), (k) => Bool/True/qed(), n);
+        let pf(n: Nat) -> Nat/Le(n, n) = app((k) => Nat/Le(k, k), (k) => True/qed(), n);
         let _: Nat/Le(3, 3) = pf(3);
         /std/print("ok")
         "#),

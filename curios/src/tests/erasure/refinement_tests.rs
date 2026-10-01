@@ -6,10 +6,11 @@ use crate::tests::run;
 #[test]
 fn a_nat_case_split_is_erased_under_its_successor() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let f(x: Nat, ih: (y: Nat, r: Lt(y, x)) -> (Nat) -> Nat, m: Nat) -> Nat =
-            match x | 0 => m | xp + 1 => ih(xp, Bool/True/qed())(m) end;
+            match x | 0 => m | xp + 1 => ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(5, (y, _) => (m) => y + m, 10)))
         "#;
     assert_eq!(run(source), b"14");
@@ -19,11 +20,12 @@ fn a_nat_case_split_is_erased_under_its_successor() {
 #[test]
 fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
         let f(x: Nat, ih: (y: Nat, r: Lt(y, count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
-            match count(x) | 0 => m | xp + 1; h => h + ih(xp, Bool/True/qed())(m) end;
+            match count(x) | 0 => m | xp + 1; h => h + ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(3, (y, _) => (m) => y + m, 10)))
         "#;
     assert_eq!(run(source), b"43");
@@ -33,11 +35,12 @@ fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
 #[test]
 fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
         let f(x: Nat, ih: (y: Nat, r: Lt(y, count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
-            match count(x) | 0 => m | xp + 1 => ih(xp, Bool/True/qed())(m) end;
+            match count(x) | 0 => m | xp + 1 => ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(5, (y, _) => (m) => y + m, 10)))
         "#;
     assert_eq!(run(source), b"14");
@@ -47,10 +50,11 @@ fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
 #[test]
 fn a_list_case_split_is_erased_under_its_cons() {
     let source = r#"
-        use /std/{Nat, Bool, List};
+        use /std/{Nat, List};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let f(l: List(Nat), g: (t: List(Nat), r: Lt(List/len(t), List/len(l))) -> (Nat) -> Nat) -> Nat =
-            match l | [] => 0 | [_, ..t] => g(t, Bool/True/qed())(1) end;
+            match l | [] => 0 | [_, ..t] => g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;
     assert_eq!(run(source), b"3");
@@ -60,10 +64,11 @@ fn a_list_case_split_is_erased_under_its_cons() {
 #[test]
 fn a_bytes_case_split_is_erased_under_its_cons() {
     let source = r#"
-        use /std/{Nat, Bool, Bytes};
+        use /std/{Nat, Bytes};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let f(b: Bytes, g: (t: Bytes, r: Lt(Bytes/len(t), Bytes/len(b))) -> (Nat) -> Nat) -> Nat =
-            match b | x[] => 0 | x[_, ..t] => g(t, Bool/True/qed())(1) end;
+            match b | x[] => 0 | x[_, ..t] => g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f(x[1, 2, 3], (t, _) => (m) => Bytes/len(t) + m)))
         "#;
     assert_eq!(run(source), b"3");
@@ -73,10 +78,11 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
 #[test]
 fn a_list_fold_over_an_expression_is_erased_under_its_cons() {
     let source = r#"
-        use /std/{Nat, Bool, List};
+        use /std/{Nat, List};
+        use /std/Bool/{True};
         use /std/Nat/{Lt};
         let f(l: List(Nat), g: (t: List(Nat), r: Lt(List/len(t), List/len(List/reverse(l)))) -> (Nat) -> Nat) -> Nat =
-            match List/reverse(l) | [] => 0 | [_, ..t]; h => h + g(t, Bool/True/qed())(1) end;
+            match List/reverse(l) | [] => 0 | [_, ..t]; h => h + g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;
     assert_eq!(run(source), b"6");

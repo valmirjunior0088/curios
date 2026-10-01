@@ -2,15 +2,16 @@ pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
 use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, Eq};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
-    Bool/Holds(neq(a, 0));
+    Holds(neq(a, 0));
 
 --- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
-    Bool/Holds(ge(a, 0));
+    Holds(ge(a, 0));
 
 --- That `a` is below `b`, decided as `Nat/Lt` is, with its laws and its crossings with `a <= b` beneath.
 ---
@@ -48,16 +49,16 @@ pub let view(i: Int) -> Sign(i) =
     go(i >= +0, Eq/refl());
 
 -- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
-let floor(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
-    Bool/True/qed();
+let floor(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
+    True/qed();
 
-let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
-    Bool/True/qed();
+let floor_mul(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
+    True/qed();
 
-let positive(m: Nat, y: Nat) -> Bool/Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
-    Bool/True/qed();
+let positive(m: Nat, y: Nat) -> Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
+    True/qed();
 
-let absurd_succ(@P: Type, x: Nat, h: Bool/Holds(+0 == Nat/to_int(x) + 1)) -> P =
+let absurd_succ(@P: Type, x: Nat, h: Holds(+0 == Nat/to_int(x) + 1)) -> P =
     match h: (_) => P end;
 
 --- Where `a` stands against `b`, with the evidence.
@@ -91,7 +92,7 @@ pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
     below(a < b, Eq/refl());
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
-pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(a == b)) -> Eq()(a, b) =
+pub let eq_of_eql(a: Int, b: Int, h: Holds(a == b)) -> Eq()(a, b) =
     match trichotomy(a, b)
     | lt(p) => absurd_succ(to_nat(b - a - 1, @p), h)
     | eq(e) => e
@@ -123,14 +124,14 @@ pub let of_str(s: Str) -> Option(Int) =
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
-    match n >= +0: (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match n >= +0: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 --- The magnitude, as a `Nat`.
 pub let abs(n: Int) -> Nat =
-    match n >= +0 | true => to_nat(n, @Bool/True/qed()) | false => to_nat(+0 - n) end;
+    match n >= +0 | true => to_nat(n, @True/qed()) | false => to_nat(+0 - n) end;
 
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =

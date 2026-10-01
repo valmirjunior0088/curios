@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Eq, proved};
+use /std/{Nat, Eq};
+use /std/Bool/{True};
 use /std/Nat/{Lt, Le};
 
 --- `n` divided by `d`: the quotient and remainder, with Euclid's identity and the remainder's bound beside them.
@@ -21,7 +22,7 @@ pub let div_mod(n: Nat, d: Nat, @ok: Lt(0, d)) -> DivMod(n, d) =
         quotient = Nat/div(n, d, @ok),
         remainder = Nat/rem(n, d, @ok),
         joined = Eq/refl(),
-        bounded = Bool/True/qed(),
+        bounded = True/qed(),
     };
 
 --- `m * d <= n` gives `m <= n / d`: the quotient is the largest multiplier that fits.
@@ -34,7 +35,7 @@ pub let le_div_of_mul_le(
     @ok: Lt(0, d),
     p: Le(m * d, n),
 ) -> Le(m, Nat/div(n, d, @ok)) =
-    proved();
+    True/proved();
 
 --- `n < m * d` gives `n / d < m`: a quotient of at least `m` would scale past `n`, since the quotient's multiple of `d` is at most `n` — a product the elaborator proves from the facts in scope.
 pub let div_lt_of_lt_mul(
@@ -44,4 +45,4 @@ pub let div_lt_of_lt_mul(
     @ok: Lt(0, d),
     p: Lt(n, m * d),
 ) -> Lt(Nat/div(n, d, @ok), m) =
-    proved();
+    True/proved();

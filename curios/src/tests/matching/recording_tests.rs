@@ -19,7 +19,8 @@ fn assert_refused_in_a_dead_arm(source: &str) {
 fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
     assert_refused_in_a_dead_arm(
         r#"
-        use /std/{Bool, Nat, print};
+        use /std/{Nat, print};
+        use /std/Bool/{True, Holds};
         use /std/ops/{Eql};
 
         struct U: pub Type { Nat }
@@ -32,7 +33,7 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
         let dead(x: U, y: U) -> Nat =
             match x == y
             | true =>
-                let _p: Bool/Holds(Nat/lt(3, 2)) = Bool/True/qed();
+                let _p: Holds(Nat/lt(3, 2)) = True/qed();
                 0
             | false => 1
             end;
@@ -47,13 +48,14 @@ fn a_guard_over_a_top_level_name_records_nothing() {
     assert_refused_in_a_dead_arm(
         r#"
         use /std/{Bool, Nat, print};
+        use /std/Bool/{True, Holds};
 
         let flag: Bool = false;
 
         let dead(n: Nat) -> Nat =
             match flag
             | true =>
-                let _p: Bool/Holds(flag) = Bool/True/qed();
+                let _p: Holds(flag) = True/qed();
                 n
             | false => 0
             end;
@@ -68,13 +70,14 @@ fn a_guard_over_a_global_projection_records_nothing() {
     assert_refused_in_a_dead_arm(
         r#"
         use /std/{Bool, Nat, print};
+        use /std/Bool/{True, Holds};
 
         let pair: {Bool, Nat} = (false, 0);
 
         let dead(n: Nat) -> Nat =
             match pair.0
             | true =>
-                let _p: Bool/Holds(pair.0) = Bool/True/qed();
+                let _p: Holds(pair.0) = True/qed();
                 n
             | false => 0
             end;
@@ -89,13 +92,14 @@ fn a_guard_over_a_global_projection_records_nothing() {
 fn a_guard_over_a_local_definition_of_a_closed_term_records_nothing() {
     assert_refused_in_a_dead_arm(
         r#"
-        use /std/{Bool, Nat, print};
+        use /std/{Nat, print};
+        use /std/Bool/{True, Holds};
 
         let dead(n: Nat) -> Nat =
             let c = Nat/lt(3, 2);
             match c
             | true =>
-                let _p: Bool/Holds(c) = Bool/True/qed();
+                let _p: Holds(c) = True/qed();
                 n
             | false => 0
             end;
@@ -110,11 +114,12 @@ fn a_guard_over_a_local_definition_of_a_closed_term_records_nothing() {
 fn a_guard_over_a_parameter_records_its_equation() {
     let output = run(r#"
         use /std/{Bool, Nat, print};
+        use /std/Bool/{True, Holds};
 
         let live(b: Bool, n: Nat) -> Nat =
             match b
             | true =>
-                let _p: Bool/Holds(b) = Bool/True/qed();
+                let _p: Holds(b) = True/qed();
                 n
             | false => 0
             end;

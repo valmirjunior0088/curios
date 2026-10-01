@@ -11,12 +11,13 @@ use crate::tests::{error, run};
 fn a_function_types_codomain_is_cumulative() {
     let source = r#"
         use /std/{Bool, print};
+        use /std/Bool/{True, Holds};
 
         let apply(motive: (Bool) -> Type, b: Bool) -> Type =
             motive(b);
 
-        let witnessed: apply(Bool/Holds, true) =
-            Bool/True/qed();
+        let witnessed: apply(Holds, true) =
+            True/qed();
 
         let _ = witnessed;
         print("ok")
@@ -29,10 +30,11 @@ fn a_function_types_codomain_is_cumulative() {
 #[test]
 fn a_function_types_domain_is_invariant() {
     let wider_domain = r#"
-        use /std/{Bool, print};
+        use /std/{print};
+        use /std/Bool/{Holds};
 
         let takes(motive: (Prop) -> Type) -> Type =
-            motive(Bool/Holds(true));
+            motive(Holds(true));
 
         let given(t: Type) -> Type =
             t;
@@ -68,10 +70,11 @@ fn a_function_types_domain_is_invariant() {
 #[test]
 fn the_head_rules_still_decide_a_bare_sort() {
     let source = r#"
-        use /std/{Bool, print};
+        use /std/{print};
+        use /std/Bool/{Holds};
 
         let holds: Type =
-            Bool/Holds(true);
+            Holds(true);
 
         let _ = holds;
         print("ok")

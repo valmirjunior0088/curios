@@ -12,12 +12,12 @@ pub mod text;
 
 --- What a parser asks of the carrier it reads: what a position in its bytes knows, the bytes it walks, and that the start is such a position. Sealed: `Bytes` and `Str` are the carriers, each witnessed beside its primitives.
 pub concept Input(I: Type): Type {
-    --- What a position at an offset into the carrier's bytes knows.
-    Holds(Bytes, Nat) -> Prop,
+    --- That the carrier admits `offset` as a position in `input`.
+    Admits(Bytes, Nat) -> Prop,
     --- The bytes a parser walks.
     bytes(I) -> Bytes,
     --- Why the start is a position.
-    start(i: I) -> Holds(bytes(i), 0),
+    start(i: I) -> Admits(bytes(i), 0),
 }
 
 --- A position a parser may stand at in `input`: an offset, and what `P` knows of the input there, erased.
@@ -33,11 +33,11 @@ pub struct Of(I: Type, P: (Bytes, Nat) -> Prop, A: Type): Type {
 
 --- A parser reading an `I` into an `A` — `Parse(Bytes, A)` over bytes, `Parse(Str, A)` over text. The combinators below are written once for both.
 pub let Parse(I: Type, use Input(I), A: Type) -> Type =
-    Of(I, (input: Bytes, offset: Nat) => Input/Holds(@I, input, offset), A);
+    Of(I, (input: Bytes, offset: Nat) => Input/Admits(@I, input, offset), A);
 
 --- A position a parser reading an `I` may stand at in `input`.
 pub let Pos(I: Type, use Input(I), input: Bytes) -> Type =
-    At((input: Bytes, offset: Nat) => Input/Holds(@I, input, offset), input);
+    At((input: Bytes, offset: Nat) => Input/Admits(@I, input, offset), input);
 
 --- `p` from the start of `input`: its value, or the refusal that stopped it, at a byte offset into the input's bytes. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof()`.
 pub let run(@I: Type, use Input(I), @A: Type, p: Parse(I, A), input: I) -> Result(Error, A) =

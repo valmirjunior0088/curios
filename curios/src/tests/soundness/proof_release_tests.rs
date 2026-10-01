@@ -125,10 +125,11 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
 fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     rejected_as_a_proof(
         r#"
-        use /std/{Nat, Str, Bool};
+        use /std/{Nat, Str};
+        use /std/Bool/{False};
 
-        let f(n : Nat) -> Bool/False =
-            (let g(m : Nat) -> Bool/False = f(m); g)(n);
+        let f(n : Nat) -> False =
+            (let g(m : Nat) -> False = f(m); g)(n);
 
         /std/print(match f(0) : (_) => Str end)
         "#,
@@ -139,15 +140,16 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
 #[test]
 fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
-        let outer(n : Nat) -> Bool/True =
+        let outer(n : Nat) -> True =
             match n
-            | 0 => Bool/True/qed()
-            | p + 1; _ => (let keep(t : Bool/True) -> Bool/True = t; keep)(outer(p))
+            | 0 => True/qed()
+            | p + 1; _ => (let keep(t : True) -> True = t; keep)(outer(p))
             end;
 
-        let proved : Bool/True = outer(3);
+        let proved : True = outer(3);
 
         /std/print("kept")
         "#;
@@ -169,14 +171,15 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
 #[test]
 fn a_partial_argument_to_an_erased_call_is_still_reached() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         let spin(n : Nat) -> Nat = spin(n);
 
-        let mk_proof(n : Nat) -> Bool/True = Bool/True/qed();
+        let mk_proof(n : Nat) -> True = True/qed();
 
         let use_it(n : Nat) -> Nat =
-            let witness : Bool/True = mk_proof(spin(0));
+            let witness : True = mk_proof(spin(0));
             n;
 
         /std/print(Nat/to_str(use_it(5)))
@@ -209,11 +212,12 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
 #[test]
 fn a_partial_erased_scrutinee_is_still_reached() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         let spin(n : Nat) -> Nat = spin(n);
 
-        let mk(n : Nat) -> Bool/True = Bool/True/qed();
+        let mk(n : Nat) -> True = True/qed();
 
         let use_it(n : Nat) -> Nat =
             match mk(spin(0))
@@ -229,15 +233,16 @@ fn a_partial_erased_scrutinee_is_still_reached() {
 #[test]
 fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         let spin(n : Nat) -> Nat = spin(n);
 
         let use_it(n : Nat) -> Nat =
-            let witness : Bool/True =
+            let witness : True =
                 match spin(0)
-                | 0 => Bool/True/qed()
-                | _ => Bool/True/qed()
+                | 0 => True/qed()
+                | _ => True/qed()
                 end;
             n;
 
@@ -250,14 +255,15 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
 #[test]
 fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         concept Trivial(A : Type) : pub Prop {
-            fact(A) -> Bool/True,
+            fact(A) -> True,
         }
 
         satisfy Trivial(Nat) {
-            fact(n) = let loop : Bool/True = loop; loop,
+            fact(n) = let loop : True = loop; loop,
         }
 
         let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat = 0;

@@ -290,9 +290,10 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
 fn well_founded_recursion_serves_a_proposition_and_a_computation() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bool, Char, List, WellFounded};
+        use /std/{Nat, Str, Char, List, WellFounded};
+        use /std/Bool/{True};
         let below(n: Nat) -> Nat/Lt(n, n + 3) =
-            WellFounded/recurse((k) => Nat/Lt(k, k + 3), (k, ih) => Bool/True/qed(), n, WellFounded/lt(n));
+            WellFounded/recurse((k) => Nat/Lt(k, k + 3), (k, ih) => True/qed(), n, WellFounded/lt(n));
         let fib(n: Nat) -> Nat =
             WellFounded/recurse(
                 (k) => Nat,
@@ -302,7 +303,7 @@ fn well_founded_recursion_serves_a_proposition_and_a_computation() {
                     | kp + 1 =>
                         match kp
                         | 0 => 1
-                        | kpp + 1 => ih(kp, Bool/True/qed()) + ih(kpp, Bool/True/qed())
+                        | kpp + 1 => ih(kp, True/qed()) + ih(kpp, True/qed())
                         end
                     end,
                 n,
@@ -341,8 +342,9 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
 fn a_bound_whose_subject_a_later_argument_pins_discharges() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Bool, Eq};
-        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, 3)) -> Nat = n;
+        use /std/{Nat, Eq};
+        use /std/Bool/{Holds};
+        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 3)) -> Nat = n;
         let g: Nat = need(Eq/refl());
         /std/print(Nat/to_str(g))
         "#),
@@ -355,8 +357,9 @@ fn a_bound_whose_subject_a_later_argument_pins_discharges() {
 fn a_bound_whose_subject_the_expected_type_pins_discharges() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Bool, Vec};
-        let mk(@n: Nat, @_ok: Bool/Holds(n < 10)) -> Vec(Nat, n) = Vec/replicate(n, 0);
+        use /std/{Nat, Vec};
+        use /std/Bool/{Holds};
+        let mk(@n: Nat, @_ok: Holds(n < 10)) -> Vec(Nat, n) = Vec/replicate(n, 0);
         let v: Vec(Nat, 3) = mk();
         /std/print(Nat/to_str(Vec/len(v)))
         "#),
@@ -369,9 +372,10 @@ fn a_bound_whose_subject_the_expected_type_pins_discharges() {
 fn a_bound_in_a_witness_telescope_discharges_once_the_goal_pins_it() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Bool, Str, Show};
+        use /std/{Nat, Str, Show};
+        use /std/Bool/{Holds};
         struct Small(n: Nat): pub Type { Nat }
-        satisfy (@n: Nat, @_ok: Bool/Holds(n < 10)) => Show(Small(n)) { show(_s) = "small" }
+        satisfy (@n: Nat, @_ok: Holds(n < 10)) => Show(Small(n)) { show(_s) = "small" }
         /std/print(Show/show(Small(3) { 0 }))
         "#),
         b"small"
@@ -383,8 +387,9 @@ fn a_bound_in_a_witness_telescope_discharges_once_the_goal_pins_it() {
 fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     let error = typecheck(
         r#"
-        use /std/{Nat, Bool, Eq};
-        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, 30)) -> Nat = n;
+        use /std/{Nat, Eq};
+        use /std/Bool/{Holds};
+        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 30)) -> Nat = n;
         let g: Nat = need(Eq/refl());
         /std/print("unreachable")
         "#,
@@ -392,7 +397,7 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     .expect_err("30 is not below 10");
 
     assert!(
-        error.contains("nothing discharged Bool/Holds(30 < 10), which reduces to Bool/False"),
+        error.contains("nothing discharged Holds(30 < 10), which reduces to /std/Bool/False"),
         "unexpected report: {error}"
     );
 }
@@ -402,8 +407,9 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
 fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     typecheck(
         r#"
-        use /std/{Nat, Bool, Eq};
-        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
+        use /std/{Nat, Eq};
+        use /std/Bool/{Holds};
+        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
         let f(m: Nat) -> Nat =
             match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
         /std/print("ok")
@@ -413,8 +419,9 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
 
     let error = typecheck(
         r#"
-        use /std/{Nat, Bool, Eq};
-        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
+        use /std/{Nat, Eq};
+        use /std/Bool/{Holds};
+        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
         let f(m: Nat) -> Nat =
             need(m, match m < 10 | true => Eq/refl() | false => Eq/refl() end);
         /std/print("unreachable")
@@ -423,7 +430,7 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     .expect_err("a slot born outside the arm does not rest on its guard");
 
     assert!(
-        error.contains("nothing discharged Bool/Holds(m < 10)"),
+        error.contains("nothing discharged Holds(m < 10)"),
         "unexpected report: {error}"
     );
 }
@@ -433,10 +440,11 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
 fn a_bound_over_one_length_reached_by_two_routes_discharges() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Bytes, Bool, Char, Str};
+        use /std/{Nat, Bytes, Char, Str};
+        use /std/Bool/{True};
         let _within(c: Char, k: Nat)
             -> Nat/Le(k + Bytes/len(Char/to_utf8(c)), k + Bytes/len(Str/of_char(c).bytes) + 1) =
-            Bool/True/qed();
+            True/qed();
         /std/print("ok")
         "#),
         b"ok"

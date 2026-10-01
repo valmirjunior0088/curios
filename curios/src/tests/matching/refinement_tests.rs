@@ -159,12 +159,13 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_its_dual() {
     let source = r#"
-        use /std/{Nat, Option, Bool};
+        use /std/{Nat, Option};
+        use /std/Bool/{True};
 
         let at_least(n : Nat, m : Nat) -> Option(Nat/Le(m, n)) =
             match n < m
             | true => Option/none()
-            | false => Option/some(Bool/True/qed())
+            | false => Option/some(True/qed())
             end;
 
         let shown(n : Nat, m : Nat) -> Nat =
@@ -179,18 +180,19 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
     let source = r#"
-        use /std/{Nat, Int, Option, Bool};
+        use /std/{Nat, Int, Option};
+        use /std/Bool/{True, Holds};
 
         let above(n : Nat) -> Option(Nat/Le(5, n)) =
             match n <= 4
             | true => Option/none()
-            | false => Option/some(Bool/True/qed())
+            | false => Option/some(True/qed())
             end;
 
-        let below(i : Int) -> Option(Bool/Holds(i <= +4)) =
+        let below(i : Int) -> Option(Holds(i <= +4)) =
             match +5 <= i
             | true => Option/none()
-            | false => Option/some(Bool/True/qed())
+            | false => Option/some(True/qed())
             end;
 
         let shown(n : Nat, i : Int) -> Nat =
@@ -208,12 +210,13 @@ fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
     let source = r#"
-        use /std/{Nat, Option, Bool};
+        use /std/{Nat, Option};
+        use /std/Bool/{True};
 
         let past(n : Nat) -> Option(Nat/Le(6, n)) =
             match n <= 4
             | true => Option/none()
-            | false => Option/some(Bool/True/qed())
+            | false => Option/some(True/qed())
             end;
 
         let shown(n : Nat) -> Nat = match past(n) | some(_) => n | none() => 0 end;
@@ -231,12 +234,13 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
 #[test]
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     let source = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         let nested(cp : Nat) -> Nat =
             match cp % 4096 / 64 <= 63
             | false =>
-                let _e : Nat/Lt(63, cp % 4096 / 64) = Bool/True/qed();
+                let _e : Nat/Lt(63, cp % 4096 / 64) = True/qed();
                 0
             | true => 1
             end;
@@ -251,12 +255,13 @@ fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
 fn a_guard_answers_its_definition_one_unfolding_down() {
     let source = r#"
         use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
 
         let small(n : Nat) -> Bool = n < 10;
 
         let below(k : Nat) -> Nat =
             match small(k)
-            | true => (let _p : Bool/Holds(k < 10) = Bool/True/qed(); k)
+            | true => (let _p : Holds(k < 10) = True/qed(); k)
             | false => 10
             end;
 
@@ -270,17 +275,18 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
 fn a_field_checked_before_its_struct_parameter_is_inferred_meets_the_guard() {
     let source = r#"
         use /std/{Nat, Bool, Option};
+        use /std/Bool/{True, Holds};
 
         let small(n : Nat) -> Bool = n < 10;
 
         struct Below(k : Nat) : pub Type {
             value : Nat,
-            proof : Bool/Holds(small(k)),
+            proof : Holds(small(k)),
         }
 
         let below(k : Nat) -> Option(Below(k)) =
             match small(k)
-            | true => Option/some(Below { value = k, proof = Bool/True/qed() })
+            | true => Option/some(Below { value = k, proof = True/qed() })
             | false => Option/none()
             end;
 
@@ -294,6 +300,7 @@ fn a_field_checked_before_its_struct_parameter_is_inferred_meets_the_guard() {
 fn a_guard_whose_definition_is_a_match_answers_that_match() {
     let source = r#"
         use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
 
         let between(n : Nat) -> Bool =
             match n >= 3 | true => n <= 9 | false => false end;
@@ -303,7 +310,7 @@ fn a_guard_whose_definition_is_a_match_answers_that_match() {
 
         let inside(k : Nat) -> Nat =
             match between(k)
-            | true => (let _p : Bool/Holds(also_between(k)) = Bool/True/qed(); k)
+            | true => (let _p : Holds(also_between(k)) = True/qed(); k)
             | false => 0
             end;
 

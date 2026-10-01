@@ -397,9 +397,10 @@ let _ = std/Io/write(std/Io/stdout, x[../std/Str/to_bytes("ok")])!;
 fn a_position_past_a_character_meets_the_operand_after_it() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Bytes, Bool, Char, Str, Eq};
+        use /std/{Nat, Bytes, Char, Str, Eq};
+        use /std/Bool/{True};
         let _past(a: Bytes, b: Bytes, c: Char)
-            -> Eq()(Bytes/drop(x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @Bool/True/qed()), b) =
+            -> Eq()(Bytes/drop(x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @True/qed()), b) =
             Eq/refl();
         /std/print("ok")
         "#),

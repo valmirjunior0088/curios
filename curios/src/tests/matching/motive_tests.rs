@@ -154,21 +154,22 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
 fn an_elided_motive_over_an_expression_reaches_a_guard_behind_a_let() {
     let source = r#"
         use /std/{Nat, Bool, Byte};
+        use /std/Bool/{True, Holds};
         let ladder(c : Byte) -> Bool =
             let m = Byte/to_nat(c);
             match m < 1 | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
-        let climbs(c : Byte) -> Bool/Holds(ladder(c)) =
+        let climbs(c : Byte) -> Holds(ladder(c)) =
             match Byte/to_nat(c) < 1
-            | true => Bool/True/qed()
-            | false => match Nat/in_range(Byte/to_nat(c), 3, 5) | true => Bool/True/qed() | false => Bool/True/qed() end
+            | true => True/qed()
+            | false => match Nat/in_range(Byte/to_nat(c), 3, 5) | true => True/qed() | false => True/qed() end
             end;
         let aliased(n : Nat) -> Bool =
             let m = n;
             match Nat/in_range(m, 0, 1) | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
-        let climbs_aliased(n : Nat) -> Bool/Holds(aliased(n)) =
+        let climbs_aliased(n : Nat) -> Holds(aliased(n)) =
             match Nat/in_range(n, 0, 1)
-            | true => Bool/True/qed()
-            | false => match Nat/in_range(n, 3, 5) | true => Bool/True/qed() | false => Bool/True/qed() end
+            | true => True/qed()
+            | false => match Nat/in_range(n, 3, 5) | true => True/qed() | false => True/qed() end
             end;
         /std/print("ok")
         "#;
@@ -181,10 +182,11 @@ fn an_elided_motive_over_an_expression_reaches_a_guard_behind_a_let() {
 fn an_elided_motive_over_an_expression_reaches_an_occurrence_behind_a_definition() {
     let source = r#"
         use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
         let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
-        let bounded(n : Nat, h : Nat/Lt(n, 10)) -> Bool/Holds(below(n)) =
+        let bounded(n : Nat, h : Nat/Lt(n, 10)) -> Holds(below(n)) =
             match n < 5
-            | true => Bool/True/qed()
+            | true => True/qed()
             | false => h
             end;
         /std/print("ok")
@@ -214,11 +216,12 @@ fn an_elided_motive_over_an_expression_specializes_a_goal_that_writes_it() {
 fn an_elided_motive_over_an_expression_refuses_an_arm_whose_goal_fails() {
     let source = r#"
         use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
         let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
-        let unbounded(n : Nat) -> Bool/Holds(below(n)) =
+        let unbounded(n : Nat) -> Holds(below(n)) =
             match n < 5
-            | true => Bool/True/qed()
-            | false => Bool/True/qed()
+            | true => True/qed()
+            | false => True/qed()
             end;
         /std/print("ok")
         "#;

@@ -10,7 +10,7 @@
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, and a truncated subtraction through the case split `omega` makes, opened only where the search needs it ([`plan`]).
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
-//! - An empty proposition the facts refute: how `Bool/False/refuted` reaches the procedure, and `proved` wherever its proposition is one.
+//! - An empty proposition the facts refute: how `False/refuted` reaches the procedure, and `True/proved` wherever its proposition is one.
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!

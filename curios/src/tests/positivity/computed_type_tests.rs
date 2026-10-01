@@ -141,6 +141,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
 fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
     let source = r#"
         use /std/{Bytes, Bool};
+        use /std/Bool/{True, False};
 
         let always(b : Bytes) -> Bool =
             match b
@@ -149,14 +150,14 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
             end;
 
         let Certified(b : Bytes) -> Prop =
-            match always(b) | true => Bool/True | false => Bool/False end;
+            match always(b) | true => True | false => False end;
 
         struct Wrapped : Type {
             bytes : Bytes,
             ok : Certified(bytes),
         }
 
-        let w : Wrapped = Wrapped { bytes = x[0x61], ok = Bool/True/qed() };
+        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
 
         /std/print("certified")
         "#;
@@ -168,6 +169,7 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
 fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
     let source = r#"
         use /std/{Bytes, Bool};
+        use /std/Bool/{True, False};
 
         let always(b : Bytes) -> Bool =
             match b
@@ -176,14 +178,14 @@ fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
             end;
 
         let Certified(b : Bytes) -> Prop =
-            match always(b) | true => Bool/True | false => Bool/False end;
+            match always(b) | true => True | false => False end;
 
         struct Wrapped : Type {
             bytes : Bytes,
             ok : Certified(bytes),
         }
 
-        let w : Wrapped = Wrapped { bytes = x[0x61], ok = Bool/True/qed() };
+        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
 
         /std/print("folded")
         "#;

@@ -305,7 +305,7 @@ f(@Nat, x)
 join(use custom_show, values)
 ```
 
-Omitted implicit arguments are inferred. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `Bool/True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
+Omitted implicit arguments are inferred. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
 A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/types/a-call-fills-one-parameter-group.md).
 
@@ -434,7 +434,7 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `Bool/True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -515,7 +515,7 @@ Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does no
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `Bool/False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -1155,6 +1155,8 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 
 ### Bounds from the facts in scope
 
+A bound is stated and proved in `/std/Bool`'s vocabulary, which a program imports by name: `use /std/Bool/{True, False, Holds};`. `Holds(b)` is the proposition that the decision `b` holds: it reduces to `True`, proved by `True/qed()`, where `b` is `true`, and to the empty `False` where it is not.
+
 A bound reduction does not decide is proved by the elaborator where it follows by linear arithmetic from the facts in scope: the hypotheses and their proof fields one level down, and the guards of the arms around it, each read through the local definitions and refinements in scope. The fragment is `Nat` and `Int` comparisons with literal coefficients; at `Nat`, also a truncated subtraction, through its two cases, and a quotient or remainder at any nonzero divisor, through the quotient's bounds; and, where linear arithmetic alone finds none, the products of pairs of facts and the negated goal. The proof is an ordinary term both checkers recheck, so nothing it adds is trusted ([A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)).
 
 ```crs
@@ -1162,11 +1164,13 @@ let get(xs: List(Nat), i: Nat, m: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, List/len(xs
     List/get(xs, i);
 ```
 
-Two `/std` functions reach the same proof where no bound asks for it. `/std/proved()` states a fact a term needs, its proposition written or pinned by the expectation. `Bool/False/refuted()` produces the contradiction a zero-arm match eliminates, in an arm the facts rule out:
+Two `/std` functions reach the same proof where no bound asks for it. `True/proved()` states a fact a term needs, its proposition written or pinned by the expectation. `False/refuted()` produces the contradiction a zero-arm match eliminates, in an arm the facts rule out:
 
 ```crs
+use /std/Bool/{False};
+
 let clamp(n: Nat, q: Nat/Le(n, 10)) -> Nat =
-    match n > 20 | true => match Bool/False/refuted() end | false => n end;
+    match n > 20 | true => match False/refuted() end | false => n end;
 ```
 
 A bound the facts do not imply is refused. The report names the facts considered and the ones it could not read, and gives an assignment of the atoms under which the facts hold and the bound fails. A written goal `?` over a bound reports the same.

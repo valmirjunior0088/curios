@@ -7,8 +7,7 @@
 use super::{core_elab, typecheck};
 
 /// The imports every program opens with.
-const HEADER: &str =
-    "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io, proved};";
+const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io}; use /std/Bool/{True, False, Holds};";
 
 /// What a row asks the procedure for.
 enum Ask {
@@ -43,8 +42,8 @@ const fn body(binders: &'static str, result: &'static str, body: &'static str) -
 
 const ROWS: &[Row] = &[
     // A tautology conversion decides and reduction does not.
-    claim("b: Bool", "Bool/Holds(b || Bool/not(b))"),
-    claim("b: Bool", "Bool/Holds(Bool/not(b && Bool/not(b)))"),
+    claim("b: Bool", "Holds(b || Bool/not(b))"),
+    claim("b: Bool", "Holds(Bool/not(b && Bool/not(b)))"),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         "xs: List(Nat), i: Nat, m: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, List/len(xs))",
@@ -92,30 +91,30 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, n: Nat, p: Nat/Lt(i, n)",
         "{}",
-        "let k = n + 2; let _: Nat/Lt(i + 1, k) = proved(); ()",
+        "let k = n + 2; let _: Nat/Lt(i + 1, k) = True/proved(); ()",
     ),
     // A local definition bound to a call, `Str`'s `occurrence`: the facts over it are written over its name, where the call's reduct would carry the body it unfolds to, whose arms elaborate only where they were written.
     body(
         "s: Str, at: Str/At(s), @here: Nat/Lt(at.offset, Bytes/len(s.bytes)), again: (p: Str/At(s)) -> Option({start: Str/At(s), ordered: Nat/Le(p.offset, start.offset)})",
         "Option({start: Str/At(s), ordered: Nat/Le(at.offset, start.offset)})",
-        "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = proved())) | none() => Option/none() end",
+        "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = True/proved())) | none() => Option/none() end",
     ),
     // A local definition bound to the item's own recursive call, which reduction reads as the slot the member is known by while it is checked: the bound waits on that slot alone, and is proved over the definition's name.
     body(
         "k: Nat",
         "{at: Nat, below: Nat/Le(at, k)}",
-        "match k | 0 => (at = 0, below = Bool/True/qed()) | j + 1 => let back = row(j); (at = back.at, below = proved()) end",
+        "match k | 0 => (at = 0, below = True/qed()) | j + 1 => let back = row(j); (at = back.at, below = True/proved()) end",
     ),
     // A guard's false arm, and a variable refined to a successor.
     body(
         "n: Int",
         "{}",
-        "match n >= +0 | true => () | false => let _: Int/Le(+0, +0 - n) = proved(); () end",
+        "match n >= +0 | true => () | false => let _: Int/Le(+0, +0 - n) = True/proved(); () end",
     ),
     body(
         "k: Nat, n: Nat, p: Nat/Le(k, n)",
         "{}",
-        "match k | 0 => () | j + 1 => let _: Nat/Lt(j, n) = proved(); () end",
+        "match k | 0 => () | j + 1 => let _: Nat/Lt(j, n) = True/proved(); () end",
     ),
     // A natural's bound read at `Int`.
     claim(
@@ -124,37 +123,37 @@ const ROWS: &[Row] = &[
     ),
     // A conjunction in a hypothesis, through a function unfolding to one and through `&&`.
     claim(
-        "c: Char, h: Bool/Holds(Char/is_upper(c))",
+        "c: Char, h: Holds(Char/is_upper(c))",
         "Nat/Lt(c.code, 0x5B)",
     ),
-    claim("x: Nat, h: Bool/Holds(x >= 3 && x <= 9)", "Nat/Le(x, 9)"),
+    claim("x: Nat, h: Holds(x >= 3 && x <= 9)", "Nat/Le(x, 9)"),
     // A range check's guard, and a guard on a function unfolding to one: `Char/to_ascii_lower`'s bound.
     body(
         "n: Nat",
         "{}",
-        "match Nat/in_range(n, 0, 0x7F) | true => let _: Nat/Lt(n, 0x80) = proved(); () | false => () end",
+        "match Nat/in_range(n, 0, 0x7F) | true => let _: Nat/Lt(n, 0x80) = True/proved(); () | false => () end",
     ),
     body(
         "c: Char",
         "{}",
-        "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = proved(); () | false => () end",
+        "match Char/is_upper(c) | true => let _: Nat/Lt(c.code + 0x20, 0xD800) = True/proved(); () | false => () end",
     ),
     // A range check's guard over a call and over a local definition: its bounds are proved over the operands the arm's key spells, which both checkers hold, where their reducts — the intrinsic a call unfolds to, the value a definition stands for — are a spelling one of them misses.
     body(
         "c: Byte",
         "{}",
-        "match Nat/in_range(Byte/to_nat(c), 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, Byte/to_nat(c)) = proved(); () | false => () end",
+        "match Nat/in_range(Byte/to_nat(c), 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, Byte/to_nat(c)) = True/proved(); () | false => () end",
     ),
     body(
         "m: Nat",
         "{}",
-        "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, m) = proved(); () | false => () end",
+        "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Nat/Le(0xF0, m) = True/proved(); () | false => () end",
     ),
     // An `==` guard's true arm, as the equation it gives.
     body(
         "x: Nat, y: Nat, p: Nat/Lt(y, 5)",
         "{}",
-        "match x == y | true => let _: Nat/Lt(x, 5) = proved(); () | false => () end",
+        "match x == y | true => let _: Nat/Lt(x, 5) = True/proved(); () | false => () end",
     ),
     // A goal that needs the negated goal scaled: the refuting form.
     claim("a: Nat, b: Nat, p: Nat/Le(a * 2, b * 2)", "Nat/Le(a, b)"),
@@ -164,45 +163,45 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, m: Nat, n: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, n)",
         "Nat",
-        "let f(r: Nat/Lt(i, n)) -> Nat = 0; let x = proved(); f(x)",
+        "let f(r: Nat/Lt(i, n)) -> Nat = 0; let x = True/proved(); f(x)",
     ),
     // Contradiction arms: facts that refute each other, from hypotheses and from a guard.
     body(
         "n: Nat, p: Nat/Le(0x80, n), q: Nat/Le(n, 0x7F)",
         "Nat",
-        "match Bool/False/refuted() end",
+        "match False/refuted() end",
     ),
     body(
         "n: Nat, q: Nat/Le(n, 10)",
         "Nat",
-        "match n > 20 | true => match Bool/False/refuted() end | false => 0 end",
+        "match n > 20 | true => match False/refuted() end | false => 0 end",
     ),
     body(
         "n: Int, q: Int/Le(n, +10)",
         "Int",
-        "match n > +20 | true => match Bool/False/refuted() end | false => +0 end",
+        "match n > +20 | true => match False/refuted() end | false => +0 end",
     ),
     // A range check from zero over a local definition, `Str`'s shape: the check folds to its upper bound, which is still proved over the check the arm recorded.
     body(
-        "c: Byte, q: Bool/Holds(Nat/in_range(Byte/to_nat(c), 0x80, 0xBF))",
+        "c: Byte, q: Holds(Nat/in_range(Byte/to_nat(c), 0x80, 0xBF))",
         "Nat",
-        "let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F) | true => match Bool/False/refuted() end | false => 0 end",
+        "let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F) | true => match False/refuted() end | false => 0 end",
     ),
     // A hypothesis the arm's guard reduces to an empty proposition refutes the scope by itself, for a contradiction and for a bound alike.
     body(
-        "n: Nat, q: Bool/Holds(Nat/in_range(n, 0x80, 0xBF))",
+        "n: Nat, q: Holds(Nat/in_range(n, 0x80, 0xBF))",
         "Nat",
-        "match n <= 0x7F | true => match Bool/False/refuted() end | false => 0 end",
+        "match n <= 0x7F | true => match False/refuted() end | false => 0 end",
     ),
     body(
         "n: Nat, p: Nat/Le(0x80, n)",
         "{}",
-        "match n <= 0x7F | true => let _: Nat/Lt(n, 3) = proved(); () | false => () end",
+        "match n <= 0x7F | true => let _: Nat/Lt(n, 3) = True/proved(); () | false => () end",
     ),
     body(
         "n: Int, p: Int/Le(+0x80, n)",
         "Int",
-        "match n <= +0x7F | true => match Bool/False/refuted() end | false => +0 end",
+        "match n <= +0x7F | true => match False/refuted() end | false => +0 end",
     ),
     // Truncated subtraction, read by the case split its definition makes.
     claim("k: Nat, n: Nat, ok: Nat/Le(k, n)", "Nat/Le(k + (n - k), n)"),
@@ -215,7 +214,7 @@ const ROWS: &[Row] = &[
     body(
         "k: Nat, n: Nat",
         "Nat",
-        "match k <= n | true => let _: Nat/Le(k + (n - k), n) = proved(); 0 | false => 0 end",
+        "match k <= n | true => let _: Nat/Le(k + (n - k), n) = True/proved(); 0 | false => 0 end",
     ),
     // Division and remainder by a literal, through the quotient and remainder they denote.
     claim(
@@ -228,13 +227,13 @@ const ROWS: &[Row] = &[
     body(
         "n: Nat",
         "Nat",
-        "match n % 16 < 10 | true => 0 | false => let _: Nat/Lt(n % 16 - 10, 6) = proved(); 0 end",
+        "match n % 16 < 10 | true => 0 | false => let _: Nat/Lt(n % 16 - 10, 6) = True/proved(); 0 end",
     ),
     // A remainder divided again, under `==` guards: `Str/Valid`'s shape, whose inner remainder is lifted away before the outer one.
     body(
         "code: Nat",
         "Nat",
-        "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match Bool/False/refuted() end end end end",
+        "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match False/refuted() end end end end",
     ),
     // Products of two facts for a variable multiplier: `Nat/div_mod`'s two proofs.
     claim(
@@ -260,7 +259,7 @@ const ROWS: &[Row] = &[
 /// What the procedure must refuse.
 const CONTROLS: &[Row] = &[
     // A decision no tautology settles, with nothing in scope that could.
-    claim("b: Bool", "Bool/Holds(b)"),
+    claim("b: Bool", "Holds(b)"),
     // No fact in scope.
     claim("i: Nat, n: Nat", "Nat/Lt(i, n)"),
     // A fact too weak for the goal.
@@ -269,7 +268,7 @@ const CONTROLS: &[Row] = &[
     body(
         "x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)",
         "Nat",
-        "match Bool/False/refuted() end",
+        "match False/refuted() end",
     ),
     // A product of three facts.
     claim("x: Nat, p: Nat/Le(x * x * x, 7)", "Nat/Le(x, 1)"),
@@ -284,13 +283,13 @@ const CONTROLS: &[Row] = &[
     body(
         "n: Nat, q: Nat/Le(n, 10)",
         "Nat",
-        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Nat/Lt(n, 3) = proved(); 0 end",
+        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Nat/Lt(n, 3) = True/proved(); 0 end",
     ),
     // A guard's fact at a retry the hole was born outside of: the bound is decided under the refinements its slot was born under, and the arm's are not among them.
     body(
         "i: Nat, m: Nat, n: Nat, q: Nat/Le(m, n)",
         "Nat",
-        "let h = proved(); match i < m | true => let _: Nat/Lt(i, n) = h; 0 | false => 0 end",
+        "let h = True/proved(); match i < m | true => let _: Nat/Lt(i, n) = h; 0 | false => 0 end",
     ),
 ];
 
@@ -301,8 +300,8 @@ fn programs(binders: &str, ask: &Ask) -> Vec<String> {
     };
     match *ask {
         Ask::Claim(claim) => vec![
-            item(claim, &format!("proved(@{claim})")),
-            item(claim, "proved()"),
+            item(claim, &format!("True/proved(@{claim})")),
+            item(claim, "True/proved()"),
         ],
         Ask::Body { result, body } => vec![item(result, body)],
     }
@@ -376,12 +375,7 @@ fn is_fact(binder: &str, row: &Row) -> bool {
         })
     });
     let stated = [
-        "Nat/Lt(",
-        "Nat/Le(",
-        "Int/Lt(",
-        "Int/Le(",
-        "Eq()(",
-        "Bool/Holds(",
+        "Nat/Lt(", "Nat/Le(", "Int/Lt(", "Int/Le(", "Eq()(", "Holds(",
     ]
     .iter()
     .any(|head| type_.trim().starts_with(head));
@@ -419,8 +413,9 @@ Io/pure(())";
 #[test]
 fn a_filled_row_files_the_same_proof_every_time() {
     // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
-    let omitted = "use /std/{Nat, Io, proved};
-let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = proved(@Nat/Lt(a * 16 + b, 256));
+    let omitted = "use /std/{Nat, Io};
+use /std/Bool/{True};
+let byte(a: Nat, b: Nat, p: Nat/Lt(a, 16), q: Nat/Lt(b, 16)) -> Nat/Lt(a * 16 + b, 256) = True/proved(@Nat/Lt(a * 16 + b, 256));
 Io/pure(())";
     let first = core_elab(omitted);
     assert_eq!(core_elab(omitted), first);
@@ -451,8 +446,9 @@ fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
 #[test]
 fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let refusal = |binders: &str, claim: &str| {
-        let program =
-            format!("{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())");
+        let program = format!(
+            "{HEADER}\nlet row({binders}) -> {claim} = True/proved(@{claim});\nIo/pure(())"
+        );
         typecheck(&program).expect_err("the control is refused")
     };
 
@@ -474,7 +470,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A contradiction goal the facts do not refute: they all hold at the assignment, which is a fraction here.
     let absurd = {
         let program = format!(
-            "{HEADER}\nlet row(x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)) -> Nat = match Bool/False/refuted() end;\nIo/pure(())"
+            "{HEADER}\nlet row(x: Nat, p: Nat/Le(x * 2, 3), q: Nat/Le(3, x * 2)) -> Nat = match False/refuted() end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -487,14 +483,14 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A guard written through `Cmp` is recorded as written and as the dispatch resolves, and is one fact.
     let guarded = {
         let program = format!(
-            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match Bool/False/refuted() end | false => 0 end;\nIo/pure(())"
+            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match False/refuted() end | false => 0 end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
     assert_eq!(guarded.matches("a guard,").count(), 1, "{guarded}");
 
     // A decision the procedure reads nothing in says nothing new.
-    let silent = refusal("b: Bool", "Bool/Holds(b)");
+    let silent = refusal("b: Bool", "Holds(b)");
     assert!(!silent.contains("facts in scope"), "{silent}");
 }
 

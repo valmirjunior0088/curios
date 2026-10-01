@@ -133,7 +133,8 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Byte, Bytes, Str, Char, List, Option, Bool};
+        use /std/{Nat, Byte, Bytes, Str, Char, List, Option};
+        use /std/Bool/{True};
 
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
@@ -161,7 +162,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 match b
                 | x[] => acc
                 | x[_, ..t] =>
-                    let code = Byte/to_nat(Bytes/get(b, 0, @Bool/True/qed()));
+                    let code = Byte/to_nat(Bytes/get(b, 0, @True/qed()));
                     go(t, [..acc, Option/unwrap_or(Char/of_nat(code), '?')])
                 end;
             go(Str/to_bytes(s), []);
@@ -325,6 +326,7 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Bool, List, Vec};
+        use /std/Bool/{True, False, Holds};
 
         induct S: Type
         | ok()
@@ -336,11 +338,11 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
             match s | bad() => S/bad() | ok() => choose | Bool/not(n < 10) => S/bad() | _ => S/ok() end end;
         let run_from(s: S, l: List(Nat)) -> S = match l | [] => s | [h, ..t] => run_from(step(h, s), t) end;
         let fine(s: S) -> Bool = match s | ok() => true | bad() => false end;
-        let from_bad(@l: List(Nat), v: Bool/Holds(fine(run_from(S/bad(), l)))) -> Bool/False =
+        let from_bad(@l: List(Nat), v: Holds(fine(run_from(S/bad(), l)))) -> False =
             match l | [] => match v end | [_, ..t] => from_bad(@t, v) end;
 
-        let total(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> Nat =
-            let go(s: S, l: List(Nat), acc: Nat, v: Bool/Holds(fine(run_from(s, l)))) -> Nat =
+        let total(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat =
+            let go(s: S, l: List(Nat), acc: Nat, v: Holds(fine(run_from(s, l)))) -> Nat =
                 match l
                 | [] => acc
                 | [h, ..t] =>
@@ -355,13 +357,13 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
                 end;
             go(S/ok(), l, 0, v);
 
-        let counted(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> {w: Nat, v: Vec(Nat, w)} =
+        let counted(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> {w: Nat, v: Vec(Nat, w)} =
             let n = total(l, v);
             (w = n, v = Vec/replicate(n, 0));
         let width(@w: Nat, _v: Vec(Nat, w)) -> Nat = w;
-        let use_it(l: List(Nat), v: Bool/Holds(fine(run_from(S/ok(), l)))) -> Nat = width(counted(l, v).v);
+        let use_it(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat = width(counted(l, v).v);
 
-        /std/print(Nat/to_str(use_it([1, 2, 3], Bool/True/qed())))
+        /std/print(Nat/to_str(use_it([1, 2, 3], True/qed())))
         "#),
         b"6"
     );
@@ -371,14 +373,15 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
 #[test]
 fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
     let output = run(r#"
-        use /std/{Bytes, Byte, Nat, Bool, Eq, print};
+        use /std/{Bytes, Byte, Nat, Eq, print};
+        use /std/Bool/{True};
 
         let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
             match k < Bytes/len(b)
             | true =>
                 match Bytes/get(b, k) == f
                 | true =>
-                    let found = Byte/eq_of_eql(Bytes/get(b, k), f, Bool/True/qed());
+                    let found = Byte/eq_of_eql(Bytes/get(b, k), f, True/qed());
                     consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
                 | false => fallback
                 end
@@ -421,7 +424,8 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
-        use /std/{Bytes, Nat, Bool, Eq, print, proved};
+        use /std/{Bytes, Nat, Eq, print};
+        use /std/Bool/{True};
 
         let hop(@b: Bytes, some: Nat/Lt(0, Bytes/len(b))) -> Nat =
             match b
@@ -430,13 +434,13 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
             end;
 
         let reach(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b))) -> Nat =
-            k + hop(@Bytes/drop(b, k, @within), proved());
+            k + hop(@Bytes/drop(b, k, @within), True/proved());
 
         pub let same(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b)))
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
             Eq/refl();
 
-        print(Nat/to_str(reach(x[1, 2], 0, @Bool/True/qed(), @Bool/True/qed())))
+        print(Nat/to_str(reach(x[1, 2], 0, @True/qed(), @True/qed())))
         "#);
 
     assert_eq!(output, b"1");

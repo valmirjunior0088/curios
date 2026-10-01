@@ -2,17 +2,18 @@ pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
+use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is below `b`.
 ---
 --- Decided rather than proved: over literals it reduces to the proposition that holds, which is how `/` and `%` on `Nat` discharge what they ask of a divisor. Declared beside the carrier rather than in `Lt` beside its lemmas, so a proof that recurses over the relation finds it already established.
 pub let Lt(a: Nat, b: Nat) -> Prop =
-    Bool/Holds(lt(a, b));
+    Holds(lt(a, b));
 
 --- That `a` is below `b` or equal to it, decided as `Lt` is.
 pub let Le(a: Nat, b: Nat) -> Prop =
-    Bool/Holds(le(a, b));
+    Holds(le(a, b));
 
 --- The decimal digit of `d` modulo ten.
 let single_digit(d: Nat) -> Str =
@@ -99,7 +100,7 @@ pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
-pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq()(a, b) =
+pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b

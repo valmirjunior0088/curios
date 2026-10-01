@@ -595,7 +595,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bits against Bytes",
-        binders: "bs: Bytes, ts: Bits, a: Bool/Holds(Nat/eql(Nat/rem(Bits/len(ts), 8), 0))",
+        binders: "bs: Bytes, ts: Bits, a: Holds(Nat/eql(Nat/rem(Bits/len(ts), 8), 0))",
         held: &[
             // Regrouping moves no bit, so each reinterpretation reduces back through the other, in both orders.
             "Eq()(Bits/to_bytes(Bytes/to_bits(bs)), bs)",
@@ -608,7 +608,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Flt against Bytes",
-        binders: "f: Flt, b: Bytes, e: Bool/Holds(Nat/eql(Bytes/len(b), 8))",
+        binders: "f: Flt, b: Bytes, e: Holds(Nat/eql(Bytes/len(b), 8))",
         held: &[
             // Decoding what `to_le_bytes` wrote is the float it was given. The decoding owes an eight-byte bound, discharged by the length the second row states.
             "Eq()(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",

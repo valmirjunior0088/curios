@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Bits, Eq};
+use /std/Bool/{True};
 use /big_nat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw, eq,
     is_trimmed, is_trimmed_of_canonical, maj3, of_bits, of_nat, of_trimmed_bits, trim,
     trim_is_trimmed, trim_of_trimmed, xor3, add};
@@ -29,7 +30,7 @@ let spread_zero(bits: Bits) -> Eq()(spread(0, bits), bits) =
 let spread_succ(k: Nat, bits: Bits) -> Eq()(spread(k + 1, bits), combine(false, spread(k, bits))) =
     match bits
     | b[] => Eq/refl()
-    | b[h, ..t] => Eq/sym(combine_cons(false, spread(k, b[h, ..t]), Bool/True/qed()))
+    | b[h, ..t] => Eq/sym(combine_cons(false, spread(k, b[h, ..t]), True/qed()))
     end;
 
 -- Zeros ahead of a trimmed word leave its high bit where it was, so it stays trimmed.

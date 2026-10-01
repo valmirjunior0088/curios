@@ -36,9 +36,10 @@ pub(super) const A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA:
         "#;
 
 pub(super) const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{False};
 
-        let ex_falso(f : Bool/False) -> Nat =
+        let ex_falso(f : False) -> Nat =
             match f
             end;
 
@@ -46,17 +47,18 @@ pub(super) const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
         "#;
 
 pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{True};
 
         induct Two : pub Prop
         | a()
         | b()
         end
 
-        let into_prop(t : Two) -> Bool/True =
+        let into_prop(t : Two) -> True =
             match t
-            | a() => Bool/True/qed()
-            | b() => Bool/True/qed()
+            | a() => True/qed()
+            | b() => True/qed()
             end;
 
         /std/print(Nat/to_str(1))
@@ -102,7 +104,8 @@ pub(super) const A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES: &str = r#"
         "#;
 
 pub(super) const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = r#"
-        use /std/{Nat, Eq, Bool};
+        use /std/{Nat, Eq};
+        use /std/Bool/{False};
 
         let blur(a : Nat) -> Nat = 0;
 
@@ -117,8 +120,8 @@ pub(super) const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = 
 
         let same : Eq()(Loose/mk(0), Loose/mk(7)) = Eq/refl();
 
-        let boom : Bool/False =
-            Eq/subst((n : Nat) => match n : (_) => Type | 0 => {} | _ => Bool/False end,
+        let boom : False =
+            Eq/subst((n : Nat) => match n : (_) => Type | 0 => {} | _ => False end,
                      Eq/cong(extract, same),
                      ());
 
@@ -126,7 +129,7 @@ pub(super) const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = 
         "#;
 
 pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
-        use /std/{Bool};
+        use /std/Bool/{False};
 
         induct Two : pub Prop
         | a()
@@ -139,11 +142,11 @@ pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: 
 
         let coerce(w : Ind(Two/a())) -> Ind(Two/b()) = w;
 
-        let boom(w : Ind(Two/b())) -> Bool/False =
-            match w : (x, q) => Bool/False
+        let boom(w : Ind(Two/b())) -> False =
+            match w : (x, q) => False
             end;
 
-        let bad : Bool/False = boom(coerce(Ind/only()));
+        let bad : False = boom(coerce(Ind/only()));
 
         /std/print("FORGED")
         "#;
@@ -220,7 +223,8 @@ pub(super) const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
         "#;
 
 pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat};
+        use /std/Bool/{False};
 
         induct Two : pub Prop
         | a()
@@ -237,11 +241,11 @@ pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VA
 
         let coerce(w : Ind(Pair/mk(0, Two/a()))) -> Ind(Pair/mk(0, Two/b())) = w;
 
-        let boom(w : Ind(Pair/mk(0, Two/b()))) -> Bool/False =
-            match w : (x, q) => Bool/False
+        let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =
+            match w : (x, q) => False
             end;
 
-        let bad : Bool/False = boom(coerce(Ind/only()));
+        let bad : False = boom(coerce(Ind/only()));
 
         /std/print("FORGED")
         "#;
@@ -294,7 +298,8 @@ pub(super) const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#
         "#;
 
 pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &str = r#"
-        use /std/{Eq, Bool, Nat, Option};
+        use /std/{Eq, Nat, Option};
+        use /std/Bool/{False};
 
         induct Color : pub Type
         | red()
@@ -305,70 +310,74 @@ pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &st
         | same(@z : A) : (z, z)
         end
 
-        let absurd_bool(h : Eq()(false, true)) -> Bool/False =
+        let absurd_bool(h : Eq()(false, true)) -> False =
             match h end;
 
-        let absurd_color(h : Eq()(Color/green(), Color/red())) -> Bool/False =
+        let absurd_color(h : Eq()(Color/green(), Color/red())) -> False =
             match h end;
 
-        let absurd_nat(h : Eq()(0, 1)) -> Bool/False =
+        let absurd_nat(h : Eq()(0, 1)) -> False =
             match h end;
 
-        let absurd_successor(n : Nat, h : Eq()(0, n + 1)) -> Bool/False =
+        let absurd_successor(n : Nat, h : Eq()(0, n + 1)) -> False =
             match h end;
 
-        let absurd_option(h : Eq()(Option/some(1), Option/none())) -> Bool/False =
+        let absurd_option(h : Eq()(Option/some(1), Option/none())) -> False =
             match h end;
 
-        let absurd_same(h : Same()(Color/green(), Color/red())) -> Bool/False =
+        let absurd_same(h : Same()(Color/green(), Color/red())) -> False =
             match h end;
 
         /std/print("ok")
         "#;
 
 pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
-        use /std/{Eq, Bool};
+        use /std/{Eq};
+        use /std/Bool/{False};
 
         induct Two : pub Prop
         | a()
         | b()
         end
 
-        let absurd(h : Eq()(Two/a(), Two/b())) -> Bool/False =
+        let absurd(h : Eq()(Two/a(), Two/b())) -> False =
             match h end;
 
-        let forged : Bool/False = absurd(Eq/refl());
+        let forged : False = absurd(Eq/refl());
 
         /std/print("FORGED")
         "#;
 
 pub(super) const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
-        use /std/{Eq, Bool};
+        use /std/{Eq};
+        use /std/Bool/{False};
 
         induct Color : pub Type
         | red()
         | green()
         end
 
-        let absurd(c : Color, h : Eq()(c, Color/red())) -> Bool/False =
+        let absurd(c : Color, h : Eq()(c, Color/red())) -> False =
             match h end;
 
         /std/print("FORGED")
         "#;
 
 pub(super) const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#"
-        use /std/{Eq, Bool, Nat};
+        use /std/{Eq, Nat};
+        use /std/Bool/{False};
 
-        let absurd(f : (Nat) -> Nat, h : Eq()(f(0), f(1))) -> Bool/False =
+        let absurd(f : (Nat) -> Nat, h : Eq()(f(0), f(1))) -> False =
             match h end;
 
         /std/print("FORGED")
         "#;
 
 pub(super) const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
-        use /std/{Eq, Bool, Nat};
+        use /std/{Eq, Nat};
+        use /std/Bool/{False};
 
-        let absurd(x : Nat, y : Nat, h : Eq()(x * 2 + 1, y * 2)) -> Bool/False =
+        let absurd(x : Nat, y : Nat, h : Eq()(x * 2 + 1, y * 2)) -> False =
             match h end;
 
         /std/print("FORGED")
@@ -390,7 +399,8 @@ pub(super) const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
         "#;
 
 pub(super) const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
-        use /std/{Eq, Bool, Nat};
+        use /std/{Eq, Nat};
+        use /std/Bool/{False};
 
         induct Box : pub Prop
         | mk(A : Type)
@@ -406,8 +416,8 @@ pub(super) const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
         let types_equal(A : Type, B : Type) -> Eq()(A, B) =
             Eq/cong(unbox, boxes_equal(A, B));
 
-        let bad : Bool/False =
-            Eq/subst((t : Type) => t, types_equal(Nat, Bool/False), 0);
+        let bad : False =
+            Eq/subst((t : Type) => t, types_equal(Nat, False), 0);
 
         /std/print("FORGED")
         "#;
@@ -421,13 +431,14 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         "#;
 
 pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
-        use /std/{Eq, List, Bool};
+        use /std/{Eq, List};
+        use /std/Bool/{True};
 
         let all_equal(@X : Prop, x : X, y : X) -> Eq()(x, y) =
             Eq/refl();
 
-        let one : List(Bool/True) = [Bool/True/qed()];
-        let none : List(Bool/True) = [];
+        let one : List(True) = [True/qed()];
+        let none : List(True) = [];
 
         let bad : Eq()(one, none) =
             all_equal(one, none);
@@ -454,9 +465,10 @@ pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str =
         "#;
 
 pub(super) const A_LIST_OF_PROOFS_IS_STILL_A_LIST: &str = r#"
-        use /std/{Nat, List, Bool};
+        use /std/{Nat, List};
+        use /std/Bool/{True};
 
-        let one : List(Bool/True) = [Bool/True/qed()];
+        let one : List(True) = [True/qed()];
 
         /std/print(Nat/to_str(List/len(one)))
         "#;
@@ -897,12 +909,13 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
 // The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/soundness/effects/a-term-outside-io-performs-no-effect.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
 pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
+    use /std/Bool/{False};
 
     let forge(f : (Bool) -> Bool, c : Cell(Bool), p : Eq()(f(true), true)) -> Str =
         let done = Cell/fill(c, false);
         match f(true)
         | false =>
-            let contradiction : Bool/False = Bool/false_neq_true(p);
+            let contradiction : False = Bool/false_neq_true(p);
             match contradiction end
         | true => "no contradiction"
         end;
@@ -934,39 +947,43 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
 pub(super) const PARTIAL_DIRECT: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     let loop(n : Nat) -> Box = loop(n);
-    let bad : Bool/False = loop(0).p;
+    let bad : False = loop(0).p;
     /std/print("FORGED")
     "#;
 
 pub(super) const PARTIAL_THROUGH_WITNESS: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     concept Make(A : Type) : pub Type { make(A) -> Box, }
     let loop(n : Nat) -> Box = loop(n);
     satisfy Make(Nat) { make(n) = loop(n), }
-    let bad : Bool/False = Make/make(0).p;
+    let bad : False = Make/make(0).p;
     /std/print("FORGED")
     "#;
 
 pub(super) const PARTIAL_HIGHER_ORDER: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     let loop(n : Nat) -> Box = loop(n);
     let apply(f : (Nat) -> Box, n : Nat) -> Box = f(n);
-    let bad : Bool/False = apply(loop, 0).p;
+    let bad : False = apply(loop, 0).p;
     /std/print("FORGED")
     "#;
 
 pub(super) const PARTIAL_IN_FIELD: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     struct Holder : pub Type { run : (Nat) -> Box }
     let loop(n : Nat) -> Box = loop(n);
     let holder : Holder = Holder { run = loop };
-    let bad : Bool/False = holder.run(0).p;
+    let bad : False = holder.run(0).p;
     /std/print("FORGED")
     "#;
 
@@ -974,8 +991,9 @@ pub(super) const PARTIAL_IN_FIELD: &str = r#"
 ///
 /// Both checkers record every settled node with the type it settled at, checked or inferred alike. Nothing here is a checked position, and the elimination conjures a `Nat` from a proof that never terminates, so a checker seeding only checked positions would accept it — the quadrant this matrix exists to make visible.
 pub(super) const INFERRED_PROOF_POSITION: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     let loop(n : Nat) -> Box = loop(n);
     let conjured : Nat =
         match loop(0).p : (_) => Nat
@@ -987,12 +1005,13 @@ pub(super) const INFERRED_PROOF_POSITION: &str = r#"
 ///
 /// Nothing but the classification walk can see this one: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`.
 pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
-    use /std/{Nat, Bool};
-    struct Box : pub Type { p : Bool/False }
+    use /std/{Nat};
+    use /std/Bool/{False};
+    struct Box : pub Type { p : False }
     let make : Box =
         let r : Box = r;
         r;
-    let bad : Bool/False = make.p;
+    let bad : False = make.p;
     /std/print("FORGED")
     "#;
 
@@ -1038,9 +1057,10 @@ pub(super) const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
 ///
 /// `n - 1` is `0` at `0`, so `bogus(0)` calls itself forever. The declared result is a proposition, which obliges the group to descend, and the size-change engine decides that — an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and since erasure deletes the proof, `False` follows immediately.
 pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
-    use /std/{Nat, Bool};
-    let bogus(n : Nat) -> Bool/False = bogus(n - 1);
-    let bad : Bool/False = bogus(0);
+    use /std/{Nat};
+    use /std/Bool/{False};
+    let bogus(n : Nat) -> False = bogus(n - 1);
+    let bad : False = bogus(0);
     /std/print("FORGED")
     "#;
 
@@ -1048,9 +1068,10 @@ pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
 ///
 /// The classic size-change subtlety: every call maps a parameter to a parameter, so each call matrix is full of `Same` entries and none is `Less`. Composing a swap with itself returns the identity, so no cycle carries a strict decrease and the group cannot be total — an engine reading "the argument came from a parameter" as progress would certify a recursion that runs forever.
 pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
-    use /std/{Nat, Bool};
-    let bogus(a : Nat, b : Nat) -> Bool/False = bogus(b, a);
-    let bad : Bool/False = bogus(0, 1);
+    use /std/{Nat};
+    use /std/Bool/{False};
+    let bogus(a : Nat, b : Nat) -> False = bogus(b, a);
+    let bad : False = bogus(0, 1);
     /std/print("FORGED")
     "#;
 

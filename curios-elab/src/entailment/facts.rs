@@ -849,7 +849,7 @@ impl<'a> Reader<'a> {
             .map(|(_, view)| view.form().clone().aligned(view.relation()).1))
     }
 
-    /// That every monomial over naturals is at least zero — clause 2 of what conversion decides, so `Bool/True/qed()` proves it — for every such monomial a fact, a case or the goal was read over: a goal over an atom no fact names still needs that atom's sign.
+    /// That every monomial over naturals is at least zero — clause 2 of what conversion decides, so `True/qed()` proves it — for every such monomial a fact, a case or the goal was read over: a goal over an atom no fact names still needs that atom's sign.
     fn naturals(&mut self, context: &mut Context, target: Option<&Target>) -> Result<(), Error> {
         let mut monomials: Vec<Monomial> = Vec::new();
         for form in self.forms(target) {
@@ -1253,7 +1253,7 @@ fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error>
     .map(Option::flatten)
 }
 
-/// The decision `stated` holds, opened by its heads to `Bool/Holds(decision)` — `Nat/Lt(i, n)` to `i < n` as written — or `None` where opening reaches no `Holds`.
+/// The decision `stated` holds, opened by its heads to `Holds(decision)` — `Nat/Lt(i, n)` to `i < n` as written — or `None` where opening reaches no `Holds`.
 pub(super) fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
     let holds = global(context.syntax().proof.holds);
     open_until(context, stated, |term| match &**term {
@@ -1382,7 +1382,7 @@ pub(super) fn order(context: &Context, carrier: Carrier) -> OrderSyntax {
     }
 }
 
-/// `Bool/True/qed()`.
+/// `True/qed()`.
 pub(super) fn qed(context: &Context) -> Term {
     Term::apply(global(context.syntax().proof.true_qed), Vec::<Term>::new())
 }

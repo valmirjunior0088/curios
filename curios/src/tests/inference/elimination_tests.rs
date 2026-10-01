@@ -45,16 +45,17 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
 #[test]
 fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"
-        use /std/{Nat, Option, Bool};
+        use /std/{Nat, Option};
+        use /std/Bool/{True, False};
         let AtMost(a : Nat, hi : Nat) -> Prop =
             match a <= hi : (_) => Prop
-            | false => Bool/False
-            | true => Bool/True
+            | false => False
+            | true => True
             end;
         let certify(a : Nat, hi : Nat) -> Option(AtMost(a, hi)) =
             match a <= hi
             | false => Option/none()
-            | true => Option/some(Bool/True/qed())
+            | true => Option/some(True/qed())
             end;
         match certify(3, 9)
         | some(_) => /std/print("refined")

@@ -1,7 +1,7 @@
 -- The binary naturals `/std/BigNat` was until `Nat` became unbounded at run time: a trimmed word of `Bits` beside its certificate, each operation a facade with its laws proved beneath it. Kept because its proofs are the heaviest the checkers meet — recursion that descends on either of two words, packed-literal views, a refinement over a packed carrier — and the tests at its end run the arithmetic those proofs are about.
 use /std/{Nat, Bool, Bits, Eq, Str, Option, Ordering, Test};
 use /std/Bits/{nonempty};
-use /std/Bool/{false_neq_true};
+use /std/Bool/{false_neq_true, True, Holds};
 
 --- Whether `bits` has no redundant high zero bit.
 pub let is_trimmed(bits: Bits) -> Bool =
@@ -12,7 +12,7 @@ pub let is_trimmed(bits: Bits) -> Bool =
 
 --- The proposition that `bits` is trimmed.
 pub let Canonical(bits: Bits) -> Prop =
-    Bool/Holds(is_trimmed(bits));
+    Holds(is_trimmed(bits));
 
 --- `t` with `head` as a new low bit, trimmed: `combine(false, b[])` is `b[]`.
 pub let combine(head: Bool, t: Bits) -> Bits =
@@ -56,7 +56,7 @@ pub let trim_is_trimmed(bits: Bits) -> Eq()(is_trimmed(trim(bits)), true) =
     end;
 
 let canonical_of_is_trimmed(bits: Bits, p: Eq()(is_trimmed(bits), true)) -> Canonical(bits) =
-    Eq/subst(Bool/Holds, Eq/sym(p), Bool/True/qed());
+    Eq/subst(Holds, Eq/sym(p), True/qed());
 
 let canonical_of_trim(bits: Bits) -> Canonical(trim(bits)) =
     canonical_of_is_trimmed(trim(bits), trim_is_trimmed(bits));

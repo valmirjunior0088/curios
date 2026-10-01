@@ -20,12 +20,13 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
 #[test]
 fn a_let_bound_proof_leaves_no_computation_behind() {
     let source = r#"
-        use /std/{Nat, Bool, List, Io, proc};
+        use /std/{Nat, List, Io, proc};
+        use /std/Bool/{True};
         use /std/Nat/{Le};
         let use_it(a: Nat, b: Nat, _p: Nat/Le(a, b)) -> Nat = a + b;
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
-            let p = Le/trans(@n, @n, @n + 1, Le/refl(n), Bool/True/qed());
+            let p = Le/trans(@n, @n, @n + 1, Le/refl(n), True/qed());
             proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
     let optimized = cont_optm(source);
@@ -39,9 +40,10 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
 #[test]
 fn a_top_level_proof_does_not_run_before_the_program() {
     let source = r#"
-        use /std/{Nat, Bool, print};
+        use /std/{Nat, print};
+        use /std/Bool/{True};
         use /std/Nat/{Le};
-        let p: Nat/Le(300, 301) = Le/trans(@300, @300, @301, Le/refl(300), Bool/True/qed());
+        let p: Nat/Le(300, 301) = Le/trans(@300, @300, @301, Le/refl(300), True/qed());
         print("ok")
         "#;
     let optimized = cont_optm(source);
@@ -113,11 +115,12 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
 #[test]
 fn a_well_founded_recursion_is_fused_with_its_step() {
     let source = r#"
-        use /std/{Nat, List, Io, Bool, proc, WellFounded};
+        use /std/{Nat, List, Io, proc, WellFounded};
+        use /std/Bool/{True};
         let sum_to(n: Nat) -> Nat =
             WellFounded/recurse(
                 (_) => Nat,
-                (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, Bool/True/qed()) end,
+                (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, True/qed()) end,
                 n,
                 WellFounded/lt(n));
         Io/bind(proc/args, (args) => proc/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))

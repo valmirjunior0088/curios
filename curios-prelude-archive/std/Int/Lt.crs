@@ -1,18 +1,19 @@
 use /std/{Int, Bool, Option};
+use /std/Bool/{True, Holds};
 
 --- That `a` is below `b`, decided as `Nat/Lt` is.
 pub let Lt(a: Int, b: Int) -> Prop =
-    Bool/Holds(Int/lt(a, b));
+    Holds(Int/lt(a, b));
 
 --- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Int, b: Int) -> Option(Lt(a, b)) =
-    match a < b: (r) => Option(Bool/Holds(r))
-    | true => Option/some(Bool/True/qed())
+    match a < b: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---
 --- The dual of `Le/of_not_lt`, and as it is, the hypothesis itself: conversion reads a negated `Int` comparison as its dual.
-pub let of_not_le(a: Int, b: Int, p: Bool/Holds(Bool/not(a <= b))) -> Lt(b, a) =
+pub let of_not_le(a: Int, b: Int, p: Holds(Bool/not(a <= b))) -> Lt(b, a) =
     p;

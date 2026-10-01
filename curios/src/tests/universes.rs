@@ -18,10 +18,11 @@ use {
 
 /// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart.
 const TWO_INSTANCES_OF_ZIP: &str = r#"
-    use /std/{Nat, List, Eq, Io, Bool};
+    use /std/{Nat, List, Eq, Io};
+    use /std/Bool/{True, False, Holds};
     let same(@T: Type, l: List(T)) -> List(T) = l;
-    let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> Bool/False =
-        Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, Bool/True/qed());
+    let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> False =
+        Eq/subst((m: Nat) => Holds(Nat/eql(0, m)), e, True/qed());
     let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
         Eq/cong((w: Nat) => w - 1, e);
     pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/len(b), List/len(a)))
