@@ -2,7 +2,7 @@
 
 **Assumes.** Every registry entry is well formed: its result sort is a literal sort, its arity is well sorted, its constructors are sized, each constructor's parameter prefix agrees with the family's, its index targets inhabit the index telescope, and its constructor tags are distinct.
 
-**Status.** **probed** clause by clause, and what an entry asserts is stated on `check_induct_decl` and `check_struct_decl` themselves. Two agreements are unspellable rather than checked: the indices are the arity's terminal, and a constructor signature terminates in its index targets alone.
+**Evidence.** Probed clause by clause, and what an entry asserts is stated on `check_induct_decl` and `check_struct_decl` themselves. Two agreements are unspellable rather than checked: the indices are the arity's terminal, and a constructor signature terminates in its index targets alone.
 
 - **The result sort is literal, not one that reduces to a sort.** A `result_sort` computing to `Prop` would be a proposition to every classifier and relevant to the `Prop`-valued index guard, which matches it syntactically, so inversion would tell a proposition's constructors apart and excuse the only arm of an elimination.
 - **Tags are distinct**, since every lookup resolves a tag by first match, and coverage would answer about the first entry once per entry.

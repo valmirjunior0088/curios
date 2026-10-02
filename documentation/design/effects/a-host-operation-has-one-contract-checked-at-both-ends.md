@@ -7,7 +7,7 @@ The contract is enforced where each side meets the wire. The native adapter deco
 **Rationale.**
 
 - **A contract stated once cannot drift between its consumers.** Hosts that agree on every signature can still behave differently, and a status beside a placeholder payload is interpreted again by every `/std` wrapper, each free to read a failed open's empty token as a handle. A reply typed as its outcome cannot answer a success without its payload, or a failure with one.
-- **Each end guards what the other cannot see.** The native adapter catches its own host's fault beside the call that made it; the guest cannot know which host it runs under, and its receiving end is the one place every host's reply passes. Neither establishes that a host told the truth about the world, only that a program never holds a value its type does not admit ([The foreign wire contract](../soundness/effects/foreign-wire-contract.md)).
+- **Each end guards what the other cannot see.** The native adapter catches its own host's fault beside the call that made it; the guest cannot know which host it runs under, and its receiving end is the one place every host's reply passes. Neither establishes that a host told the truth about the world, only that a program never holds a value its type does not admit ([The foreign wire contract](../soundness/formation/foreign-wire-contract.md)).
 - **Reading the outcome in `/sys` makes the status the first thing read**, once, in code the kernel certifies, and leaves `/std` its domain vocabulary — `Io/Error`, `Io/Chunk`, modes, readiness.
 
 **Rejected.**

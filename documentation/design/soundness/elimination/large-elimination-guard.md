@@ -2,7 +2,7 @@
 
 **Assumes.** A proposition eliminates into a relevant result only when it is empty or a singleton.
 
-**Status.** **probed** in both directions, in both checkers.
+**Evidence.** Probed in both directions, in both checkers.
 
 - **The motive is typed, not read.** The guard asks whether the motive's result is relevant, and a type-valued `match` classified by its motive could claim `Prop` over arms inhabiting `Nat`. `check_motive` types the motive under its real binders — the family's index domains, then the scrutinee at the family instantiated there — and requires a sort, Rocq's `type_of_case`, and the sort it derives is what the guard reads. It runs above the dispatch, so one clause covers every elimination form.
 - **A singleton's payload must be determined by the index targets.** A target mentioning a payload through a non-injective function mentions it without determining it, and irrelevance would identify two inhabitants the eliminator tells apart. Both checkers decide it by the shared `pinned_by_targets` walk: a binder counts exactly when matching a value against a target recovers it, which holds when the target is the binder, so a target the walk cannot decompose pins nothing. There is no constructor-application rung, since at a `Prop`-sorted family irrelevance denies the injectivity it would assume. `tests::board::a_non_injective_index_target_does_not_force_its_binder` refuses, with `an_unmentioned_payload_binder_is_not_forced` as the control. Erasure reads each pinned payload back from the scrutinee's index at the position the walk reports, so `tests::erasure::value_tests` holds it too.

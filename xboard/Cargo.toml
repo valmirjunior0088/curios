@@ -1,0 +1,25 @@
+[package]
+name = "xboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The soundness board: every flaw found in the Curios checkers as a ticket whose witnesses are put to them again on each run"
+
+[lints]
+workspace = true
+
+# Over the pipeline and the kernel, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
+[dependencies]
+# The module and the term a witness built by hand supplies.
+curios-core = { workspace = true }
+# The qualified name such a module declares an item under.
+curios-utilities = { workspace = true }
+# The error a witness expects of the kernel.
+curios-cert = { workspace = true }
+# The error a witness expects of the elaborator.
+curios-elab = { workspace = true }
+# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope.
+curios-pipeline = { workspace = true }
+# The registry's name for `False`, which a module built by hand is put at.
+curios-prelude = { workspace = true }
+curios-text = { workspace = true }

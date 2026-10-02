@@ -378,7 +378,9 @@ pub struct Program {
 /// The whole of one unit as a *flat* list of top-level `items`, with the registries they are checked against.
 ///
 /// Flat rather than one N-deep nested `Subterm::Let`/`Rec` term: folding a unit into one would make its construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine O(N) in stack, overflowing at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// The default is the empty unit: no item, no mount, no registry entry. Every field is a collection, so it states nothing, and a module built by hand names only what it holds.
+#[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Module {
     pub items: Vec<Item>,

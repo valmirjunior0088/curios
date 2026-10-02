@@ -1,8 +1,8 @@
-//! Coverage for the soundness board entries that nothing else guards.
+//! Coverage for the rules that can admit a term, where nothing else guards one.
 //!
-//! The soundness board is `documentation/design/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/soundness/the-soundness-board.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
+//! Each rule is argued in an entry under `documentation/design/soundness/` (see `documentation/design/soundness/the-soundness-board.md`). The soundness board, `xboard/src/board/`, holds a ticket only for a proof of `False` that was seen admitted, so a rule nothing has broken has no witness there: these tests are what fails when such a rule stops holding.
 //!
-//! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`.
+//! The rules with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`.
 //!
 //! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A board test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked, as a probe refused with `unbound variable` passes having never reached the check at all.
 

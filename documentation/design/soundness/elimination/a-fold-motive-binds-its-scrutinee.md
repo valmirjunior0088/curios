@@ -2,7 +2,7 @@
 
 **Assumes.** A free-monoid fold's induction hypothesis is typed at the motive opened at the tail, and nothing else in the arm reaches the scrutinee's occurrence in it.
 
-**Status.** **probed**, in both checkers, from the surface and by construction.
+**Evidence.** Probed, in both checkers, from the surface and by construction.
 
 **Context specialization must not reach the hypothesis.** A fold's cons arm is checked with the scrutinee specialized to the cons value, and the hypothesis is assumed inside that arm; a motive that names the scrutinee instead of binding it, `match n : (_) => Eq()(n, 0)`, would have that occurrence specialized too, so the hypothesis would read `Eq()(k + 1, 0)`, the arm's own goal, and `| k + 1; ih => ih` would certify `Eq()(1, 0)`. So a fold's motive may not mention its scrutinee — for a variable, a free occurrence; for an expression, its spelling standing whole. The kernel tests it in `check_free_monoid` and refuses with `curios_cert::Error::FoldMotiveCapturesScrutinee`; the elaborator tests it in its three fold paths (`refuse_captured_scrutinee`) and also reads a defined local through its definition, since a `let` alias is one the reducer reads through in the arm. The syntactic test is exact because an occurrence behind a respelling is one the case equation cannot fire on either. Only a written motive reaches the rule: an elided motive over a variable closes over it, and one over an expression is solved by occurrence abstraction, which refuses what it cannot abstract.
 

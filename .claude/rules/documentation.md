@@ -16,7 +16,8 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | `documentation/roadmap.md` | What exists and what is pending, one line each |
 | `documentation/roadmap/**` | The specification of a pending item |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject; a decision scoped to one crate is its `README.md`'s |
-| `documentation/design/soundness/*/**` | One board rule per file with its evidence; the claim, the grades and the boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
+| `xboard/src/board/` | The soundness board: one part of the judgment per file, with a ticket for every proof of `False` found in it |
+| `documentation/design/soundness/*/**` | The argument for a rule that can admit a term and the tests that hold it, until it moves into the rustdoc of the code that enforces the rule; the claim and the boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
 | Crate `README.md` | The crate's mission and its crate-scoped decisions |
 | Rustdoc | Local architecture, algorithms, invariants and API contracts |
 | `Cargo.toml` `description` | The crate's purpose in one line |
@@ -26,7 +27,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 ## Decisions and board entries
 
 - A decision states what was **decided**, the **rationale**, and what was **rejected**, so a settled question is told from an unasked one. It states the intended rule; where the code falls short, the gap is a roadmap item, not a caveat.
-- A board entry states what it **assumes** and its **status**, and names the fixtures that are its evidence.
+- A board entry states what its rule **assumes** and why it holds, and names the tests that are its evidence. It carries no grade: what has been found is the tickets on the board.
 - Neither has an index: a directory listing cannot go stale. A filename spells its heading out, and an entry is cited by its path, so a moved one fails loudly.
 - A wrong sentence is corrected in place, never annotated as amended. Everything is written in the present tense.
 - A measured figure is the latest result of a measurement a reader can retake — a named measurement test or a stated protocol — and stays only where it is the argument. A past reading, a replaced baseline and a rejected alternative's cost are dropped, here and in the comments beside a measurement alike; only `benchmarks/` keeps its runs.

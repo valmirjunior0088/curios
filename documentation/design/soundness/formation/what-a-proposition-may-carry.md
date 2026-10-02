@@ -2,7 +2,7 @@
 
 **Assumes.** Π into a proposition is a proposition whatever it quantifies over; a record of propositions is one; and a `Prop`-sorted structure or concept carries only non-informative fields.
 
-**Status.** **argued** and **probed** in both directions, in both checkers.
+**Evidence.** Argued and probed in both directions, in both checkers.
 
 **Impredicativity is sound only beside two other rules.** Π into `Prop` being a proposition puts Coquand–Paulin's construction in range, so this rule stands on strict positivity refusing a merely-positive occurrence ([Strict positivity](strict-positivity.md); `tests::positivity::refusal_tests::a_positive_but_not_strictly_positive_occurrence_is_rejected`) and on [the large-elimination guard](../elimination/large-elimination-guard.md). `kernel::sort::tests::a_function_into_a_proposition_is_a_proposition` is the Π rule's accepting rung, a field quantifying over a universe into a proposition, with the same quantification into a relevant result refused beside it. The pairing holds where this rule lives: the guard computes formation, so eliminating a two-constructor proposition into a record of relevant components is refused as into a bare one, and positivity sees through an anonymous Σ, refusing a merely-positive occurrence behind one as it does the bare spelling.
 

@@ -4,13 +4,12 @@ The one list of Curios's work: every capability landed or pending, and every pla
 
 The areas follow [`design/`](design)'s subjects. Each opens with its open work, then lists what has landed, one line per capability; a landed line's detail is its design decision's, its crate's `README.md`'s and its tests'.
 
-An open line says what is missing or wrong today, and where, and links its spec under [`roadmap/`](roadmap): one directory per area once the area holds two files, and a lone spec loose in `roadmap/` itself, its line directly under this description, before any area. Directories and specs carry their index in this file's order, renumbered when an item lands or is inserted. An area opens with its findings, `00-findings.md`: small fixes and possible bugs, each naming where, what is wrong, the fix, its check and its size, worked as one pass; an entry marked uncertain says what is not yet known, and is investigated before its fix is taken. Its specs follow, those where the code breaks a rule a document states first, then capabilities and costs, refined before unrefined, and last those waiting for a consumer. A spec states its context from the code, its goal, the decisions already settled and the questions still open, stages each with its own check, its verification, and its retirement. A spec not yet refined is marked "Not refined yet" and says what is known and what it waits on. A design decision states the intended rule, so where the code falls short the gap is an open line here, never a caveat there.
+An open line says what is missing or wrong today, and where, and links its spec under [`roadmap/`](roadmap): one directory per area once the area holds two files, and a lone spec loose in `roadmap/` itself, its line directly under this description, before any area. Directories and specs carry their index in this file's order, renumbered when an item lands or is inserted. An area's directory opens with its findings, `00-findings.md`, which has no line here: small fixes and possible bugs, each naming where, what is wrong, the fix, its check and its size, worked as one pass; an entry marked uncertain says what is not yet known, and is investigated before its fix is taken. Its specs follow, those where the code breaks a rule a document states first, then capabilities and costs, refined before unrefined, and last those waiting for a consumer. A spec states its context from the code, its goal, the decisions already settled and the questions still open, stages each with its own check, its verification, and its retirement. A spec not yet refined is marked "Not refined yet" and says what is known and what it waits on. A design decision states the intended rule, so where the code falls short the gap is an open line here, never a caveat there.
 
 When an item lands, its contracts go to the owning rustdoc, `README.md` and tests, its rationale and rejected alternatives to a design decision or the crate's `README.md`, and its line here becomes a checked summary; once nothing references the spec, the spec is deleted.
 
 ## Soundness
 
-- [ ] [Findings](roadmap/01-soundness/00-findings.md) — the elaborator's conversion fires eta whatever the goal type, and the two checkers part on unit eta where a program reaches it
 - [ ] [The two checkers' conversion held to each other](roadmap/01-soundness/01-conversion-held-across-checkers.md) — not refined yet; their conversion meets only where the corpus sends both, and their recurrence keys and untyped child positions differ
 - [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — not refined yet; an item under a name already in scope is not judged, and the mount disjointness that keeps one from arriving is checked in `curios-text`
 - [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [the relational layer](roadmap/04-arithmetic/08-relational-layer.md) has a consumer
@@ -23,7 +22,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Types
 
-- [ ] [Findings](roadmap/02-types/00-findings.md) — none open
 - [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-types/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
 - [ ] [A universe level settled before its evidence is in](roadmap/02-types/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
 - [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-types/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits
@@ -41,7 +39,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Surface
 
-- [ ] [Findings](roadmap/03-surface/00-findings.md) — a leading byte-order mark refused as an invisible character, and whitespace wider than the reference names
 - [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
@@ -73,7 +70,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Effects
 
-- [ ] [Findings](roadmap/05-effects/00-findings.md) — none open
 - [ ] [Foreign calls past scalars and byte strings](roadmap/05-effects/01-foreign-calls-past-scalars.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
 - [x] [Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
 - [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
@@ -85,7 +81,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Lowering
 
-- [ ] [Findings](roadmap/06-lowering/00-findings.md) — a `Nat` shift by a count of `2³²` or more computing a different number, a sequence that long answering a wrong length or stopping on a bare trap, a flag licensing a deletion no pass performs while dead calls stand, a merge path perhaps unreachable, a specialization key that reads any literal as a tag, and an assertion restating the verifier
 - [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/06-lowering/01-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand
 - [ ] [Contification of a function with several return contexts](roadmap/06-lowering/02-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
 - [x] [WebAssembly-GC is the only target](design/lowering/webassembly-gc-is-the-only-target.md), serialized by `curios-wasm` with text round-tripped against the binary writer, and optimized closed-world by Binaryen
@@ -96,7 +91,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Tools
 
-- [ ] [Findings](roadmap/07-tools/00-findings.md) — a test that exits early counted by its exit code, a formatter that moves comments onto the wrong line, refusals that print internal paths, lack a location, read one fault five ways or point elsewhere, a report spelling names through imported modules in full, test instruments that pass with their defect present, measurement readings the code has moved past, a benchmark cross-check that compares nothing, a sign with no literal reported as a missing `inf.0`, a module file with no name for a stem checked as a program, and CLI migration shims
 - [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold
 - [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
 - [ ] [A binary reader for `curios-wasm`](roadmap/07-tools/03-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
@@ -114,7 +108,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Architecture
 
-- [ ] [Findings](roadmap/08-architecture/00-findings.md) — a truth table that reads a shared term once per path, two printers that hand-roll their frames, an error path nothing reaches, a test-only constructor in production, and history in a build script an edit would rebuild
 - [ ] [A shared term costs its size](roadmap/08-architecture/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
 - [ ] [One environment, and every read recorded](roadmap/08-architecture/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
 - [ ] [A compilation is a graph of item tasks](roadmap/08-architecture/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
@@ -131,7 +124,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Standard library
 
-- [ ] [Findings](roadmap/09-standard-library/00-findings.md) — `Flt`'s `div_mod` answers a zero divisor its callers never pass; a terminal session reads a failed read as silence; no inventory says which defaults are specified; `Hash/digest` bounds its lanes one bit past the unboxed range; and one definition could say more with what the elaborator proves
 - [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
 - [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings

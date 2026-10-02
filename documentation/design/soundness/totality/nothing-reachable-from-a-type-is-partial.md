@@ -2,7 +2,7 @@
 
 **Assumes.** Obligation (T) of [Totality of the erased program](../totality-of-the-erased-program.md): every definition reachable from a term in a type position is total, decided per recursive group by size-change termination over the calls the kernel types ([`curios-cert`'s README](../../../../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types)).
 
-**Status.** **probed**, at the engine's accepting side conditions.
+**Evidence.** Probed, at the engine's accepting side conditions.
 
 - **The arithmetic rung licenses a decrease on two facts, both attacked.** Zero must be ruled out — by a `Nat` dispatch, or by a boolean arm from a comparison against a literal, spelled bare, with its operands flipped and behind a definition only unfolding exposes — and the right operand must be a literal at or above the least value that shrinks. `tests::soundness::an_arithmetic_decrease_needs_a_literal_operand_that_shrinks` holds both halves, with `a_division_by_a_literal_above_one_licenses_the_decrease` accepting; `a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease` and `a_nonzero_fact_does_not_escape_the_arm_that_established_it` hold the fact's extent to its arm.
 - **The local gate's sort test reduces.** `check_group` refuses a group that does not descend when a member is erased: its declared type is a proposition, or yields a sort, decided by reducing at every step and answering yes on a reduction that fails, the refusing direction. `tests::soundness::a_sort_reached_through_an_alias_still_needs_descent`, with `an_aliased_sort_that_descends_is_still_accepted` as the control.

@@ -2,7 +2,7 @@
 
 **Assumes.** Every part a type former binds or applies is a type, and a nominal occurrence's parameters and indices and a nominal value's parameters inhabit the arity its declaration states — each established by typing rather than by classification.
 
-**Status.** **probed** at every position, with a closed inhabitant of `False` behind each missing clause.
+**Evidence.** Probed at every position, with a closed inhabitant of `False` behind each missing clause.
 
 **The classifier has two roles, and only one is a judgment.** `Sort::of` is a lookup that classifies a type typing has already checked — all conversion can afford to call, since typing reaches conversion — while `infer_type` accepts a term as a type by typing it and destructing its type as a sort; they share the Π and Σ rules and differ in one function. A stuck type-valued `match` is the shape that tells them apart: it states its own sort through its motive, which the lookup believes and the judgment's arm rule refuses. Every classifier call site is fed a term typing has established, and the six type positions — a function type's domain and codomain, a tuple type's component, a lambda's domain annotation, a `let`'s declared type and a `rec` member's declared type — each refuse a lying motive by that arm mismatch: `recheck::elimination_tests::no_type_position_admits_a_lying_motive`, mutation-checked against weakening the telescope's typing to classification. A declared type is typed as written, never its reduct, so every part a written type binds or applies is typed (`recheck::reads_tests::a_definition_reads_the_signature_it_types_and_the_body_it_unfolds`, and `curios-prelude-archive`'s `kernel_disagreements` walking `/std` with no refusal).
 

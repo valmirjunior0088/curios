@@ -2611,6 +2611,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "xboard"
+version = "0.15.6"
+dependencies = [
+ "curios-cert",
+ "curios-core",
+ "curios-elab",
+ "curios-pipeline",
+ "curios-prelude",
+ "curios-text",
+ "curios-utilities",
+]
+
+[[package]]
 name = "xtask"
 version = "0.15.6"
 dependencies = [

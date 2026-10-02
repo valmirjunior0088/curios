@@ -2,7 +2,7 @@
 
 **Assumes.** A remembered reduct or inferred type is the kernel's own pure function of the definition store, and replaying one changes what a judgment spends but never what it decides.
 
-**Status.** **argued**, in the component's four invariants, and **probed** at the interlock with a live case equation and at the clears of the local-bearing tables. A wrong reduct admits by [the board's shared route](../the-soundness-board.md).
+**Evidence.** Argued, in the component's four invariants, and probed at the interlock with a live case equation and at the clears of the local-bearing tables. A wrong reduct admits by [the board's shared route](../the-soundness-board.md).
 
 - **Keys are valid by construction.** `invalidate` runs whenever a name is overwritten. A whnf entry for a local-free term has a scope-independent key; one for a local-bearing term — a function of the case equations in force too — lives in tables cleared wherever that set changes, an equation assumed, retracted, withheld or restored. Which table a term belongs to is decided inside the component.
 - **They are consulted at every reduction level.** `whnf_within` probes on entry and stores on exit, and `Memos::whnf` gates the lookup exactly as `Memos::store_whnf` gates the store.

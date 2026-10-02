@@ -304,7 +304,7 @@ const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching 
 pub enum EntryTail {
     /// The authored entrypoint, exactly as parsed — the ordinary program, judged at `Io({})`.
     Authored,
-    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `False`, through [`examine_entrypoint`].
+    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `False`: how the soundness board puts a witness, through [`examine_entrypoint`].
     Proof,
     /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail. A unit with no tests gets `Test/main([])`, which runs nothing and exits 0.
     Tests,

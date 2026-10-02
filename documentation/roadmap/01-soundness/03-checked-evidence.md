@@ -76,7 +76,7 @@ Each is revised in the change that makes it true.
 - The same decision's closed machine: relabelled a trusted evaluator, held by its differential.
 - [`curios-analysis`'s README](../../../curios-analysis/README.md) decision *These rules are shared rather than duplicated* is restated: they are shared because they are certifier-grade.
 - `curios-cert`'s module documentation: the representation claim.
-- Board entries: [The closed machine](../../design/soundness/conversion/the-closed-machine.md) is re-graded as a trusted evaluator, and an entry is added for the certificate checker.
+- Board entries: [The closed machine](../../design/soundness/conversion/the-closed-machine.md) is restated for a trusted evaluator, and an entry is added for the certificate checker.
 
 ## Rejected
 

@@ -2,7 +2,7 @@
 
 **Assumes.** A declared name the environment already answers for was judged by the walk that built it, so no item of the unit being judged arrives under a name already in scope.
 
-**Status.** **argued** for the premise, which is discharged outside the trusted base, and **probed** at the consequence. The certifier's walk decides what to judge by name — `fresh` is `!globals.in_scope(name)`, gating the per-item typing judgment, the residue passes, and `check_induct_decl` and `check_struct_decl` — so an item arriving under a name the environment holds is not judged at all; `Globals::in_scope` states the assumption.
+**Evidence.** Argued for the premise, which is discharged outside the trusted base, and probed at the consequence. The certifier's walk decides what to judge by name — `fresh` is `!globals.in_scope(name)`, gating the per-item typing judgment, the residue passes, and `check_induct_decl` and `check_struct_decl` — so an item arriving under a name the environment holds is not judged at all; `Globals::in_scope` states the assumption.
 
 **What holds the premise is the mount discipline.** Mount sets are pairwise disjoint, checked in `curios-text`'s `into_core` before discovery, so two units cannot declare one name; a unit claiming a prefix the prelude mounts collides and is refused ([A module is a compilation unit](../../architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md)), and the elaborator's registries refuse a duplicate rather than overwriting one. The kernel's skip rests on that refusal, and nothing in `curios-cert` checks it.
 

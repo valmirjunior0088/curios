@@ -1,10 +1,14 @@
 ---
-description: Iterative bug, wart, and misfit hunt — find one, present it, fix on approval, commit, repeat
+description: Bug, wart, and misfit hunt — find what no findings file notes yet, propose adding it, fix on approval, commit
 argument-hint: "[crate or path to hunt in — curios-cont, curios-elab/src/convert.rs, …]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*)
 ---
 
-Hunt the scope `$ARGUMENTS` names for one thing at a time worth fixing. With no scope given, pick a crate, and say why.
+Hunt the scope `$ARGUMENTS` names for what is worth fixing and not yet written down. With no scope given, pick a crate, and say why.
+
+## What is already noted
+
+Each area's findings file, `documentation/roadmap/<area>/00-findings.md`, holds the warts already found and waiting for their fix. Read the ones the scope touches before hunting: a wart one of them notes is known, not a find. Hunt for the warts none of them notes, and propose adding each to the file of its area, in that file's own form — where, what is wrong, the fix, its check and its size. Propose as many as the hunt turns up; a hunt is not limited to one.
 
 ## What to look for
 
@@ -29,15 +33,15 @@ When a probe you wrote is refused, do not rewrite it until it compiles. First de
 - the theory allows it and the rule over-approximates — lifting the rule is a finding, presented like any other;
 - the refusal is right but the diagnostic misnames the fault, its span, or what the reader needs — the diagnostic is the finding.
 
-"The elaborator was just being conservative" is the comfortable reading, not the demonstrated one: read the refusing rule and the syntax reference against each other before choosing. A rule on the soundness board (`documentation/design/soundness/`) is lifted only with its row — present the change with the row named, never fix it inline.
+"The elaborator was just being conservative" is the comfortable reading, not the demonstrated one: read the refusing rule and the syntax reference against each other before choosing. A rule argued under `documentation/design/soundness/` is lifted only with the rule named — present the change, never fix it inline.
 
-The opposite discovery — a program accepted that should be refused — is not a wart. Hand it to `/hunt-unsoundness` with the row named, and do not fix it here.
+The opposite discovery — a program accepted that should be refused — is not a wart. Hand it to `/hunt-unsoundness` with the rule named, and do not fix it here.
 
 ## The loop
 
-1. Find one thing. When more than one is pending, take them by consequence, not by the order found.
-2. Present it: what and where (`file:line`), why it's wrong, the fix, and a real alternative only if one exists. Then stop and wait.
-3. On approval: make exactly that change, nothing beside it. Between fixes the check is `cargo xtask fmt` and `cargo xtask clippy`, plus one fast crate-local test run only to prove a test you added passes. A change touching only prose (`//!`, `///`, comments, Markdown) commits as soon as it is written and waits on no check. Below Ersd, clippy proves nothing about behavior, so a fix there is unverified until the gate runs — say so in the report. Commit the named files only: one-line imperative subject, no body, no trailers.
+1. Find what no findings file notes, as many as there are.
+2. Present them together, by consequence, not by the order found: for each, what and where (`file:line`), why it's wrong, the fix, a real alternative only if one exists, and the findings file it would be added to. Then stop and wait.
+3. On approval to add: write the entries into their files, and commit them as prose. On approval to fix one: make exactly that change, nothing beside it. Between fixes the check is `cargo xtask fmt` and `cargo xtask clippy`, plus one fast crate-local test run only to prove a test you added passes. A change touching only prose (`//!`, `///`, comments, Markdown) commits as soon as it is written and waits on no check. Below Ersd, clippy proves nothing about behavior, so a fix there is unverified until the gate runs — say so in the report. Commit the named files only: one-line imperative subject, no body, no trailers.
 4. On skip: record it for the final report and move on.
 5. Repeat. Anything noticed mid-fix queues for a later round, never bundles in.
 
