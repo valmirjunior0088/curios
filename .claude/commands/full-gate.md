@@ -3,7 +3,7 @@ description: Run the hand-off gate — every step at once in the background, plu
 allowed-tools: Bash(cargo:*), Bash(git:*), Bash(npm:*), Read
 ---
 
-The hand-off gate for code. It runs once, after the last step of an effort, and only on the user's go-ahead; a plan covering several specs gets one gate, at its end. Why the gate holds these steps and no others is `documentation/design/architecture/every-gate-step-catches-what-no-other-step-does.md`.
+The hand-off gate for code. It runs once, after the last step of an effort, and only on the user's go-ahead; a plan covering several specs gets one gate, at its end. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`.
 
 ## The steps
 

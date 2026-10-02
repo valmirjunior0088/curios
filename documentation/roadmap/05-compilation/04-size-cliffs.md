@@ -5,7 +5,7 @@
 ## The cliffs
 
 - **Elaboration is not linear in `let` depth**, so a long enough chain of `let`s does not finish.
-- **The parser buys its depth with stack**, as the lowerings do ([Depth is bought with stack, not with hand-rolled frames](../../design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)), so deeply nested calls, parentheses or `+` overflow the main stack of a debug build.
+- **The parser buys its depth with stack**, as the lowerings do ([Depth is bought with stack, not with hand-rolled frames](../../design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)), so deeply nested calls, parentheses or `+` overflow the main stack of a debug build.
 - **Every binding gets a fresh local**, and the module is validated before Binaryen merges them, so a function holding enough `let`s panics with "too many locals".
 
 ## Refinement

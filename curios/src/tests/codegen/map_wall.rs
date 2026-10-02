@@ -1,4 +1,4 @@
-//! The `spines` insert slope, the end-to-end instrument behind `documentation/design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
+//! The `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
 
 use {
     crate::to_cwasm,
@@ -167,7 +167,7 @@ end
 ///   ofnat 18 ns/iter, control 4 ns/iter, key construction 14 ns/insert   (retake: 18 / 3 / 14)
 /// ```
 ///
-/// **The key class is negligible — 14 ns against the insert `map_wall_spines_slope` reads, under 2%** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// **The key class is negligible — 14 ns against the insert `map_wall_spines_slope` reads, under 2%** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement: reports timings rather than asserting"]
 fn map_wall_key_share() {

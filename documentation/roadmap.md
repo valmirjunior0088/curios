@@ -4,9 +4,15 @@ The one list of Curios's work: every capability landed or pending, and every pla
 
 The areas follow [`design/`](design)'s subjects. Each opens with its open work, then lists what has landed, one line per capability; a landed line's detail is its design decision's, its crate's `README.md`'s and its tests'.
 
-An open line says what is missing or wrong today, and where, and links its spec under [`roadmap/`](roadmap): one directory per area once the area holds two files, and a lone spec loose in `roadmap/` itself, its line directly under this description, before any area. Directories and specs carry their index in this file's order, renumbered when an item lands or is inserted. An area's directory opens with its findings, `00-findings.md`, which has no line here: small fixes and possible bugs, each naming where, what is wrong, the fix, its check and its size, worked as one pass; an entry marked uncertain says what is not yet known, and is investigated before its fix is taken. Its specs follow, those where the code breaks a rule a document states first, then capabilities and costs, refined before unrefined, and last those waiting for a consumer. A spec states its context from the code, its goal, the decisions already settled and the questions still open, stages each with its own check, its verification, and its retirement. A spec not yet refined is marked "Not refined yet" and says what is known and what it waits on. A design decision states the intended rule, so where the code falls short the gap is an open line here, never a caveat there.
+An open line says what is missing or wrong today, and where, and links its spec under [`roadmap/`](roadmap): one directory per area, and a spec about the workspace as a whole loose in `roadmap/` itself, its line right after these opening paragraphs, before any area, with the workspace's other lines. Directories and specs carry their index in this file's order, renumbered when an item lands or is inserted. An area's specs run those where the code breaks a rule a document states first, then capabilities and costs, refined before unrefined, and last those waiting for a consumer. A spec states its context from the code, its goal, the decisions already settled and the questions still open, stages each with its own check, its verification, and its retirement. A spec not yet refined is marked "Not refined yet" and says what is known and what it waits on. A design decision states the intended rule, so where the code falls short the gap is an open line here, never a caveat there.
+
+An area's directory opens with its findings, `00-findings.md`, and `roadmap/00-findings.md` holds those of the workspace as a whole; findings have no line here, and are small fixes and possible bugs, worked as one pass, each a bullet led by the finding in bold and naming where, what is wrong, the fix, its check and its size. An entry marked uncertain says what is not yet known, and is investigated before its fix is taken. The commit that fixes a finding deletes its entry.
 
 When an item lands, its contracts go to the owning rustdoc, `README.md` and tests, its rationale and rejected alternatives to a design decision or the crate's `README.md`, and its line here becomes a checked summary; once nothing references the spec, the spec is deleted.
+
+- [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen, the shared analyses apart from the certifier, and the emitter out of the prelude build
+- [x] [One crate is the authority for one external concern](design/one-crate-is-the-authority-for-one-external-concern.md), and [every gate step catches what no other step does](design/every-gate-step-catches-what-no-other-step-does.md)
+- [x] CI: on every push to `main`, the gate's steps on Ubuntu and the runtime's tests on macOS as well
 
 ## Soundness
 
@@ -20,22 +26,23 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] The certifier files its own verdicts: each unit carries its record of every definition's totality and of what judging it read, and [a group's calls are the ones the kernel types](../curios-cert/README.md#a-groups-calls-are-the-ones-the-kernel-types)
 - [x] [A reduction step costs what it builds](design/soundness/a-reduction-step-costs-what-it-builds.md), deterministic across machines, with every memo cleared where the budget is restored
 
-## Types
+## Theory
 
-- [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-types/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
-- [ ] [A universe level settled before its evidence is in](roadmap/02-types/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
-- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-types/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits
-- [ ] [Flex–flex problems with distinct heads](roadmap/02-types/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
-- [ ] [Strict positivity through a type-former parameter](roadmap/02-types/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
-- [ ] [K-like reduction](roadmap/02-types/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
+- [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-theory/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
+- [ ] [A universe level settled before its evidence is in](roadmap/02-theory/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
+- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits
+- [ ] [Flex–flex problems with distinct heads](roadmap/02-theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
+- [ ] [Strict positivity through a type-former parameter](roadmap/02-theory/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
+- [ ] [K-like reduction](roadmap/02-theory/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
 - [x] Π- and Σ-types with eta for both, named tuple fields, and `let` bindings recursive by their body, with `let … and …;` groups
-- [x] [An implicit, cumulative universe hierarchy whose levels settle by where they came from](design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), polymorphic per declaration
-- [x] [`Prop`, strict, proof-irrelevant and definitionally K](design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md), irrelevance asked before either side is reduced
-- [x] [Plicity as part of function identity](design/types/plicity-is-part-of-function-identity.md): implicit binders, inserted lambda binders, and [one parameter group per call](design/types/a-call-fills-one-parameter-group.md)
-- [x] [Subsumption as a relation](design/types/subsumption-is-a-relation-not-a-traversal-order.md), decided structurally in both checkers
-- [x] Inductive families: constructor registry and dependent eliminators, indexed families, [coverage by index inversion](design/types/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md), the large-elimination guard, and [strict positivity modulo polarity](design/types/strict-positivity-modulo-polarity.md)
-- [x] [A motive is a term](design/types/a-motive-is-a-term-not-a-grammar.md), and an omitted one is the expected type, specialized per arm with no convoy
+- [x] [An implicit, cumulative universe hierarchy whose levels settle by where they came from](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), polymorphic per declaration
+- [x] [`Prop`, strict, proof-irrelevant and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md), irrelevance asked before either side is reduced
+- [x] [Plicity as part of function identity](design/theory/plicity-is-part-of-function-identity.md): implicit binders, inserted lambda binders, and [one parameter group per call](design/theory/a-call-fills-one-parameter-group.md)
+- [x] [Subsumption as a relation](design/theory/subsumption-is-a-relation-not-a-traversal-order.md), decided structurally in both checkers
+- [x] Inductive families: constructor registry and dependent eliminators, indexed families, [coverage by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md), the large-elimination guard, and [strict positivity modulo polarity](design/theory/strict-positivity-modulo-polarity.md)
+- [x] [A motive is a term](design/theory/a-motive-is-a-term-not-a-grammar.md), and an omitted one is the expected type, specialized per arm with no convoy
 - [x] Bidirectional elaboration: pattern unification over metavariable spines, re-validation in checking mode, postponement on a blocked conversion, right-biased imitation for flex-apply, and projections and matches that wait on a stuck head's metavariable
+- [x] [Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
 
 ## Surface
 
@@ -68,32 +75,42 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), by linear arithmetic with a quotient's bounds, subtraction's cases and products, in an ordinary term both checkers recheck
 - [x] Certified division with remainder and divisibility (`/std/Nat/div_mod`, `/std/Nat/Divides`), and `Int`'s order carried from `Nat` along the embedding
 
-## Effects
+## Compilation
 
-- [ ] [Foreign calls past scalars and byte strings](roadmap/05-effects/01-foreign-calls-past-scalars.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
-- [x] [Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
-- [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
-- [x] [A host operation has one contract, checked at both ends](design/effects/a-host-operation-has-one-contract-checked-at-both-ends.md): each row typed in `curios-abi`, read by `/sys` as a `Result` or an `Option`, held to its row by the native adapter and by the guest, and conformed across the native, mock, plugin and browser hosts
-- [x] [Only a fiber waits](design/effects/only-a-fiber-waits.md): every peer-facing handle non-blocking, single-attempt writes and an explicit flush, write-once cells, bounded channels and level waiting in the guest heap
-- [x] Structured concurrency in `/std/Async`: fibers and tasks, `race`, `select` and `join_all`, `sleep` and `timeout`, scoped resources, and deadlock detection
-- [x] Host capabilities: terminal with raw mode, files and the filesystem over `Path`, clock and randomness, process IO and subprocesses, TCP with TLS, and serial ports
-- [x] Foreign functions: `foreign` declarations answered by a WebAssembly module a package names and pins, linked by `run` and `test`, and carried inside a `compile`d executable
-
-## Lowering
-
-- [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/06-lowering/01-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand
-- [ ] [Contification of a function with several return contexts](roadmap/06-lowering/02-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
-- [x] [WebAssembly-GC is the only target](design/lowering/webassembly-gc-is-the-only-target.md), serialized by `curios-wasm` with text round-tripped against the binary writer, and optimized closed-world by Binaryen
+- [ ] [A shared term costs its size](roadmap/05-compilation/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
+- [ ] [One environment, and every read recorded](roadmap/05-compilation/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
+- [ ] [A compilation is a graph of item tasks](roadmap/05-compilation/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
+- [ ] [Size cliffs](roadmap/05-compilation/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local
+- [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/05-compilation/05-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand
+- [ ] [Contification of a function with several return contexts](roadmap/05-compilation/06-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
+- [ ] [A binary reader for `curios-wasm`](roadmap/05-compilation/07-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
+- [x] [A module is a compilation unit, and the prelude is an environment](design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): units folded over a dependency order, every edge declared in a manifest, and a package named `std` compiled as the standard library
+- [x] The prelude built once per compiler build, archived and certified, and restored with no source fallback
+- [x] Packages: manifests and discovery, exactly pinned dependencies in a content-addressed store, and `curios pin` deriving a row's hash from the delivery
+- [x] [Cached verdicts](design/soundness/admission/cached-verdicts.md) and [reused payloads](design/soundness/admission/reused-payloads.md), and [a stored unit is a baseline for an item-level recompile](design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)
+- [x] A unit carries no identity another compilation could mint, and nothing branches on a name's spelling
+- [x] [Depth is bought with stack, not with hand-rolled frames](design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
+- [x] Compile cost: per-node memoization bounded by written binder nesting, a closed fold on the shared machine, a type-level concatenation that copies nothing, a string literal checked once per use, and the certifier measured by item and judgment
+- [x] [WebAssembly-GC is the only target](design/compilation/webassembly-gc-is-the-only-target.md), serialized by `curios-wasm` with text round-tripped against the binary writer, and optimized closed-world by Binaryen
 - [x] The erased IR: flat, verified arenas; erasure as transcription; behaviour-summary pruning, partial evaluation and monoid rebasing; one lowering into continuations
 - [x] The continuation IR: a pre-closure CPS graph with delayed closure conversion, an interprocedural optimizer, SCC specialization, a dataflow substrate for unboxed scalars, return through several continuations, and structured control flow by SCC condensation
-- [x] Value representation: [a variant collapses when nothing needs to distinguish it](design/lowering/a-variant-collapses-when-nothing-needs-to-distinguish-it.md), [a field is declared at the carrier its shape names](design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md), [a value costs when it is kept, not when it is named](design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md), and a closure carries its code as a table index
-- [x] [A lowering names the elimination it performs](design/lowering/a-lowering-names-the-elimination-it-performs.md), and [a refusal is a panic the emitter renders](design/lowering/a-refusal-is-a-panic-the-emitter-renders.md)
+- [x] Value representation: [a variant collapses when nothing needs to distinguish it](design/compilation/a-variant-collapses-when-nothing-needs-to-distinguish-it.md), [a field is declared at the carrier its shape names](design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md), [a value costs when it is kept, not when it is named](design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md), and a closure carries its code as a table index
+- [x] [A lowering names the elimination it performs](design/compilation/a-lowering-names-the-elimination-it-performs.md), and [a refusal is a panic the emitter renders](design/compilation/a-refusal-is-a-panic-the-emitter-renders.md)
+
+## Runtime
+
+- [ ] [Foreign calls past scalars and byte strings](roadmap/06-runtime/01-foreign-calls-past-scalars.md) — not refined yet; a `Handle`, a `List` and several results at once are each refused where a plugin's signature is read
+- [x] Execution on a shared, GC-enabled Wasmtime engine, from precompiled `.cwasm` compiled across threads
+- [x] A slim launcher embedded in the compiler, and self-contained executables carrying their foreign modules
+- [x] [The heap is sized ahead of its churn](../curios-runtime/README.md#the-heap-is-sized-ahead-of-its-churn)
+- [x] [A host operation has one contract, checked at both ends](design/runtime/a-host-operation-has-one-contract-checked-at-both-ends.md): each row typed in `curios-abi`, read by `/sys` as a `Result` or an `Option`, held to its row by the native adapter and by the guest, and conformed across the native, mock, plugin and browser hosts
+- [x] Host capabilities: terminal with raw mode, files and the filesystem over `Path`, clock and randomness, process IO and subprocesses, TCP with TLS, and serial ports
+- [x] Foreign functions: `foreign` declarations answered by a WebAssembly module a package names and pins, linked by `run` and `test`, and carried inside a `compile`d executable
 
 ## Tools
 
 - [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold
 - [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
-- [ ] [A binary reader for `curios-wasm`](roadmap/07-tools/03-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
 - [x] [A diagnostic spells what its reader can write](design/tools/a-diagnostic-spells-what-its-reader-can-write.md): spans across every stage, names as resolution reaches them, written goals reporting their scope and verified candidate fits
 - [x] [An argument names one subject, and each command states what it accepts](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md): `run`, `compile`, `document`, `test`, `curate`, `pin`, `new`, `lint`, `format`, `wonder` and `profile`
 - [x] `curios wonder`: diagnostics, tests, a declaration's fate in the optimizer and any pipeline rung, over the command line and a language server
@@ -103,39 +120,20 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)
 - [x] [A library is documented for its consumers, from the compilation that builds it](design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md)
 - [x] Profiling through `curios-profile`: `--profile` writes a stream as it runs, `curios profile` reads it back, and `cargo xtask profile` builds and folds one
-- [x] Distribution: CI, tag-triggered releases for Linux and macOS, a checksum-verified installer, and a browser playground
+- [x] Distribution: tag-triggered releases for Linux and macOS, a checksum-verified installer, and a browser playground
 - [x] The language reference, the command-line reference, and cross-language benchmarks against six other languages
-
-## Architecture
-
-- [ ] [A shared term costs its size](roadmap/08-architecture/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
-- [ ] [One environment, and every read recorded](roadmap/08-architecture/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
-- [ ] [A compilation is a graph of item tasks](roadmap/08-architecture/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
-- [ ] [Size cliffs](roadmap/08-architecture/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local
-- [x] [A module is a compilation unit, and the prelude is an environment](design/architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): units folded over a dependency order, every edge declared in a manifest, and a package named `std` compiled as the standard library
-- [x] Crate boundaries: a pipeline with no back end, a launcher with no Cranelift or Binaryen, the shared analyses apart from the certifier, and the emitter out of the prelude build
-- [x] The prelude built once per compiler build, archived and certified, and restored with no source fallback
-- [x] Packages: manifests and discovery, exactly pinned dependencies in a content-addressed store, and `curios pin` deriving a row's hash from the delivery
-- [x] [Cached verdicts](design/soundness/admission/cached-verdicts.md) and [reused payloads](design/soundness/admission/reused-payloads.md), and [a stored unit is a baseline for an item-level recompile](design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)
-- [x] A unit carries no identity another compilation could mint, and nothing branches on a name's spelling
-- [x] [Depth is bought with stack, not with hand-rolled frames](design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
-- [x] Compile cost: per-node memoization bounded by written binder nesting, a closed fold on the shared machine, a type-level concatenation that copies nothing, a string literal checked once per use, and the certifier measured by item and judgment
-- [x] [One crate is the authority for one external concern](design/architecture/one-crate-is-the-authority-for-one-external-concern.md), and [every gate step catches what no other step does](design/architecture/every-gate-step-catches-what-no-other-step-does.md)
 
 ## Standard library
 
-- [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/09-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
-- [ ] [Text read as text, and numbers by each format's grammar](roadmap/09-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
-- [ ] [A certified sort and an `Ord`-keyed tree](roadmap/09-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
+- [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/08-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
+- [ ] [Text read as text, and numbers by each format's grammar](roadmap/08-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
+- [ ] [A certified sort and an `Ord`-keyed tree](roadmap/08-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
 - [x] Foundations: `/std/Bool`'s `True`, `False` and `Holds`, `Eq` and `Ordering`, `Option` and `Result`, `State`, `Try`, `Io/Error` and `Path`
 - [x] Collections: `List` and its helpers, `Vec` counting its list in its type, and `Map`, a canonical crit-bit trie over `Bytes` keys
 - [x] Text: proof-carrying UTF-8 `Str` addressed by proved byte positions, certified `Char`, parser combinators, typed format strings, and decimal conversions that round-trip
 - [x] Formats: `Json` over binary64, `Toml` 1.0.0, and `Html` as a tree
 - [x] Applications: an HTTP client and server over TCP and `Async`, command-line interfaces, and terminal programs with widgets
 - [x] [Explicit invariants](../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position): decoding and encoding carry their certificates, indices carry their bounds, and a host's facts arrive first-order
-
-## Runtime
-
-- [x] Execution on a shared, GC-enabled Wasmtime engine, from precompiled `.cwasm` compiled across threads
-- [x] A slim launcher embedded in the compiler, and self-contained executables carrying their foreign modules
-- [x] [The heap is sized ahead of its churn](../curios-runtime/README.md#the-heap-is-sized-ahead-of-its-churn)
+- [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
+- [x] [Only a fiber waits](design/standard-library/only-a-fiber-waits.md): every peer-facing handle non-blocking, single-attempt writes and an explicit flush, write-once cells, bounded channels and level waiting in the guest heap
+- [x] Structured concurrency in `/std/Async`: fibers and tasks, `race`, `select` and `join_all`, `sleep` and `timeout`, scoped resources, and deadlock detection

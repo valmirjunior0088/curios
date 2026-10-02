@@ -13,7 +13,7 @@ pub struct MemArg {
 
 /// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, tables, memories, element and data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces.
 ///
-/// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/lowering/webassembly-gc-is-the-only-target.md), and this crate does not enforce it a second time.
+/// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/compilation/webassembly-gc-is-the-only-target.md), and this crate does not enforce it a second time.
 ///
 /// Field order mirrors operand order in the encoding wherever the two could disagree. The three copies — `ArrayCopy`, `MemoryCopy`, `TableCopy` — each name their *target* before their source, because that is the order the format writes the two indices in; a variant that listed them the other way would put the field called `source_name` in the destination slot, and a consumer passing one type for both would never notice.
 #[derive(Debug, Clone)]

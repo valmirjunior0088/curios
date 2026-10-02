@@ -1,6 +1,6 @@
 # Strict positivity
 
-**Assumes.** Every `induct` and `struct` declaration is strictly positive modulo polarity ([Strict positivity, modulo polarity](../../types/strict-positivity-modulo-polarity.md)).
+**Assumes.** Every `induct` and `struct` declaration is strictly positive modulo polarity ([Strict positivity, modulo polarity](../../theory/strict-positivity-modulo-polarity.md)).
 
 **Evidence.** Probed at shapes chosen to make the lattice's accepting side wrong (`curios`'s `tests::positivity::refusal_tests`, with `composition_tests` as the accepting controls, and `tests::board`'s `a_non_strict_occurrence_behind_a_record_is_still_refused`), at the positions the walk skips (`tests::positivity::index_tests`), and at both coverage modes; all hold.
 

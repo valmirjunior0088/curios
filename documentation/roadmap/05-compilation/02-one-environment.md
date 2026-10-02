@@ -21,7 +21,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 **A signature is not final before its body.** `finalize_definition` settles a written signature's universe context with the constraints its body raised (`finalize_universe_metas(interface, internal)`), and the surface has no syntax for a level, so Lean's rule — the signature alone fixes the universe parameters — is not available.
 
-**A proof body is not opaque.** Eliminating `Accessible` into data reduces the proof, and a relevant `match` on an `Eq` proof reduces it to `refl` ([`Prop` is strict, proof-irrelevant, and definitionally K](../../design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md)). A later item may need any body.
+**A proof body is not opaque.** Eliminating `Accessible` into data reduces the proof, and a relevant `match` on an `Eq` proof reduces it to `refl` ([`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md)). A later item may need any body.
 
 ## Permanent decisions
 
@@ -60,8 +60,8 @@ Each lands alone and passes the gate.
 ## Design decisions this overturns or corrects
 
 - [`curios-unit`'s README](../../../curios-unit/README.md): *A scope is borrowed, per stage*, with `Prefix`'s own documentation.
-- [A module is a compilation unit, and the prelude is an environment](../../design/architecture/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation stops being units folded over one dependency order.
-- [A stored unit is a baseline for an item-level recompile](../../design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): invalidation by recorded reads.
+- [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation stops being units folded over one dependency order.
+- [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): invalidation by recorded reads.
 - [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the per-item argument restated over recorded reads.
 
 ## Rejected

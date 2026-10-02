@@ -2,7 +2,7 @@
 //!
 //! A compiler stage recurses over two very different depths. One is *authored* — how deeply someone nested a lambda, a module, a match — and the default thread stack tolerates it because a human wrote every level. The other is *data-shaped*: the scan-state chain a string literal lowers to, the UTF-8 derivation of a `Str`, a spine built by a loop. That depth is a function of the input, so no constant bounds it. A reduction budget does not *prevent* it either — this bracket grows rather than aborting, which is the point — but it is not blind to it: the reduction entry points on both sides charge a level the native frame it takes, measured, so what a runaway walk costs in stack is part of what the budget decides. See `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`. The walks that are *not* reduction — the kernel's typing descent above all — are bounded by this bracket alone.
 //!
-//! So the recursion stays and the stack grows to fit it: [`recurse`] is that bracket, and the only place the figures are written. Why recursion rather than an explicit frame stack, and why the figures live once, are `README.md`'s decisions; how to tell a frame machine, which belongs behind this bracket as recursion, from a loop, which does not — a machine's elements mirror a function's locals — is `documentation/design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md`'s.
+//! So the recursion stays and the stack grows to fit it: [`recurse`] is that bracket, and the only place the figures are written. Why recursion rather than an explicit frame stack, and why the figures live once, are `README.md`'s decisions; how to tell a frame machine, which belongs behind this bracket as recursion, from a loop, which does not — a machine's elements mirror a function's locals — is `documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md`'s.
 
 /// Native-stack headroom to keep in reserve before growing.
 ///
@@ -18,7 +18,7 @@ const STACK_GROWTH: usize = 32 * 1024 * 1024;
 ///
 /// Cheap enough to sit at the head of a hot recursive function: the common case is one comparison against the remaining stack. Guard the *entry point* of a recursive walk rather than each internal step — one check per level is the intent, and the segment is sized so that levels are rarely what triggers it.
 ///
-/// That intent holds only where the thread has the reserve to begin with, which is what [`grown`] is for: on a thread smaller than `RED_ZONE` — every Rust test thread, at its default two mebibytes — the common case is not one comparison but a fresh segment mapped and unmapped around *every* outermost call, since the reserve can never be met on the thread itself, which costs re-erasing the standard library more than the walk does (`documentation/design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md`).
+/// That intent holds only where the thread has the reserve to begin with, which is what [`grown`] is for: on a thread smaller than `RED_ZONE` — every Rust test thread, at its default two mebibytes — the common case is not one comparison but a fresh segment mapped and unmapped around *every* outermost call, since the reserve can never be met on the thread itself, which costs re-erasing the standard library more than the walk does (`documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md`).
 pub fn recurse<T>(walk: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(RED_ZONE, STACK_GROWTH, walk)
 }

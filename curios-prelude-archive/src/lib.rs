@@ -2,7 +2,7 @@
 //!
 //! Two units, folded in that order: `/sys` names nothing above it and `/std` names `/sys`, so [`with_prelude`] hands back the pair as an ordered prefix rather than as one merged image. Each image is framed exactly as a store slot is — the record of the tree the root was compiled from, ahead of the unit — and holds the unit before certification, which `curios-prelude` performs as it restores the images for a compilation.
 //!
-//! `/sys` mirrors the host store one declaration per wire row, and every row returns an `Io` — a description of the call, not its result. `/sys/Io` holds the sequencing (`pure`, `bind`) and nothing else; `/std` owns the taxonomy that wraps them. See this crate's README for the placement law, and `documentation/design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` for the invariant those wrappers rest on.
+//! `/sys` mirrors the host store one declaration per wire row, and every row returns an `Io` — a description of the call, not its result. `/sys/Io` holds the sequencing (`pure`, `bind`) and nothing else; `/std` owns the taxonomy that wraps them. See this crate's README for the placement law, and `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` for the invariant those wrappers rest on.
 //!
 //! # This image is not certified, and nothing should reach it here
 //!

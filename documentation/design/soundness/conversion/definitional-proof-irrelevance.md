@@ -1,6 +1,6 @@
 # Definitional proof irrelevance
 
-**Assumes.** Any two inhabitants of a proposition are interchangeable ([`Prop` is strict, proof-irrelevant, and definitionally K](../../types/prop-is-strict-proof-irrelevant-and-definitionally-k.md)).
+**Assumes.** Any two inhabitants of a proposition are interchangeable ([`Prop` is strict, proof-irrelevant, and definitionally K](../../theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md)).
 
 **Evidence.** Argued, by the fixpoint on (V) below; its side condition, [the large-elimination guard](../elimination/large-elimination-guard.md), is probed.
 

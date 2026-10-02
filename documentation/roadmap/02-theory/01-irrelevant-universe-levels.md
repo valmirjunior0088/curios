@@ -1,6 +1,6 @@
 # A universe level only a parameter's type mentions is irrelevant
 
-Working specification for comparing a nominal type's universe levels by variance rather than by equality. `!` holds its region at the level of the action it binds, because both checkers equate the levels of two instances of an `induct` or a `struct`; Rocq, and MetaCoq's verified specification of it, compare them by variance instead, and a level that only types a parameter is irrelevant. [A universe level is implicit, cumulative, and settles by where it came from](../../design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) states irrelevance as the rule; this brings both checkers to it at the narrowest point that closes the gap: irrelevance, and nothing covariant.
+Working specification for comparing a nominal type's universe levels by variance rather than by equality. `!` holds its region at the level of the action it binds, because both checkers equate the levels of two instances of an `induct` or a `struct`; Rocq, and MetaCoq's verified specification of it, compare them by variance instead, and a level that only types a parameter is irrelevant. [A universe level is implicit, cumulative, and settles by where it came from](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) states irrelevance as the rule; this brings both checkers to it at the narrowest point that closes the gap: irrelevance, and nothing covariant.
 
 It is independent of every other spec. Its kernel stage lands before its elaborator stage, so the kernel never refuses what the elaborator starts producing.
 
@@ -10,9 +10,9 @@ It is independent of every other spec. Its kernel stage lands before its elabora
 - **How the checkers compare a nominal node today.** Every nominal node carries its universe instance, and both checkers equate it level by level:
   - `curios-elab/src/convert.rs`: `compare_levels`, which adds one equation per level, in `compare_induct_type`, `compare_variant`, `compare_struct_type` and `compare_struct`;
   - `curios-cert/src/kernel/convert.rs`: `levels_eq` in the `InductType`, `StructType`, `Variant` and `Struct` arms, and the level-only rule over `Term::level_differences`.
-- **Subsumption** relates sorts and function types only, and is conversion everywhere else ([Subsumption is a relation, not a traversal order](../../design/types/subsumption-is-a-relation-not-a-traversal-order.md)).
+- **Subsumption** relates sorts and function types only, and is conversion everywhere else ([Subsumption is a relation, not a traversal order](../../design/theory/subsumption-is-a-relation-not-a-traversal-order.md)).
 - **Full application is structural.** `InductType`, `StructType`, `Variant` and `Struct` are built only inside a fully applied former or constructor wrapper, and the kernel checks their counts at the boundary; a partial application is the wrapper, not the node.
-- **Positivity is the precedent for where a derived fact about a declaration lives** ([Strict positivity modulo polarity](../../design/types/strict-positivity-modulo-polarity.md)): `polarities` rides `InductDecl` and `StructDecl`, one analysis in `curios-analysis` computes it for both checkers, the prelude's are archived once per compiler build, and the kernel recomputes a carried vector rather than believing it (`curios-analysis`'s `tests/driven.rs::a_carried_polarity_vector_is_recomputed_rather_than_believed`).
+- **Positivity is the precedent for where a derived fact about a declaration lives** ([Strict positivity modulo polarity](../../design/theory/strict-positivity-modulo-polarity.md)): `polarities` rides `InductDecl` and `StructDecl`, one analysis in `curios-analysis` computes it for both checkers, the prelude's are archived once per compiler build, and the kernel recomputes a carried vector rather than believing it (`curios-analysis`'s `tests/driven.rs::a_carried_polarity_vector_is_recomputed_rather_than_believed`).
 
 ## The gap
 
@@ -65,9 +65,9 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 - The fixture flips, and its `Result/bind` control still passes.
 - `/std` certifies, `kernel_disagreements` reports none, and `curios-analysis/tests/driven.rs` is clean.
 - Every attack shape is refused, each by a mutation-checked fixture.
-- The parameter census and the prelude build's rows are retaken and every change explained; [A shared term costs its size](../08-architecture/01-shared-term-costs.md)'s type-level claims keep their budgets.
+- The parameter census and the prelude build's rows are retaken and every change explained; [A shared term costs its size](../05-compilation/01-shared-term-costs.md)'s type-level claims keep their budgets.
 
-**To retake the measurements.** The census is `cargo test -p curios-prelude-archive --all-features --lib -- --ignored --nocapture universe_parameter_census`, one line per `/std` definition with its parameter count; the kernel walk is `kernel_disagreements` in the same crate, run the same way. The prelude build's rows are read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo xtask clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total; take them on an otherwise idle machine. Those claims are timed as [its budget table](../08-architecture/01-shared-term-costs.md#budgets) says.
+**To retake the measurements.** The census is `cargo test -p curios-prelude-archive --all-features --lib -- --ignored --nocapture universe_parameter_census`, one line per `/std` definition with its parameter count; the kernel walk is `kernel_disagreements` in the same crate, run the same way. The prelude build's rows are read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo xtask clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total; take them on an otherwise idle machine. Those claims are timed as [its budget table](../05-compilation/01-shared-term-costs.md#budgets) says.
 
 ## Rejected
 
@@ -80,4 +80,4 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 
 ## Retirement
 
-Check [the universe decision](../../design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), which states irrelevance as the rule with its prior art and what was rejected, against what landed; extend `syntax.md`'s cumulativity sentence ("A type accepted at one level is also accepted where a higher level is required") to a nominal type whose level only types its parameters; record the new board entry's status; replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Check [the universe decision](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), which states irrelevance as the rule with its prior art and what was rejected, against what landed; extend `syntax.md`'s cumulativity sentence ("A type accepted at one level is also accepted where a higher level is required") to a nominal type whose level only types its parameters; record the new board entry's status; replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

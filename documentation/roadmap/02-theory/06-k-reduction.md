@@ -4,7 +4,7 @@
 
 ## What is missing
 
-Definitional K licenses index inversion's deletion rule, and every `Eq/subst` and `refl` match in `/std` lands in a proposition, where irrelevance decides it ([`Prop` is strict, proof-irrelevant, and definitionally K](../../design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md)). A relevant match on a stuck `Eq` proof does not reduce: nothing fires K as a reduction step.
+Definitional K licenses index inversion's deletion rule, and every `Eq/subst` and `refl` match in `/std` lands in a proposition, where irrelevance decides it ([`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md)). A relevant match on a stuck `Eq` proof does not reduce: nothing fires K as a reduction step.
 
 ## Previously discussed
 

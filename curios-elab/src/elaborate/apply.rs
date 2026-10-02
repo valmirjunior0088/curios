@@ -330,7 +330,7 @@ pub(super) fn elaborate_apply(
         }
     }
 
-    // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/types/a-call-fills-one-parameter-group.md.
+    // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/theory/a-call-fills-one-parameter-group.md.
     let ft = match &*head_type {
         Subterm::FuncType(ft) => ft.clone(),
         other => return Err(Error::not_a_function(written_type.clone(), other.clone())),

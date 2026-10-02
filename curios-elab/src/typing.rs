@@ -185,7 +185,7 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
 
 /// Whether `inferred` is admissible where `expected` is wanted: the subsumption relation `A ≤ B`, decided structurally as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, and `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'` — falling through to conversion otherwise.
 ///
-/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion, `(b: Bool) -> Prop` would be refused where `(Bool) -> Type` is wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never names. See `documentation/design/types/subsumption-is-a-relation-not-a-traversal-order.md`.
+/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion, `(b: Bool) -> Prop` would be refused where `(Bool) -> Type` is wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never names. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
 ///
 /// Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
 fn subsume(

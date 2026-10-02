@@ -1,6 +1,6 @@
 # Subsumption and level entailment
 
-**Assumes.** A term typing at `A` may be admitted at `B` whenever `A ≤ B`, decided under the item's assumed constraints ([Subsumption is a relation, not a traversal order](../../types/subsumption-is-a-relation-not-a-traversal-order.md)).
+**Assumes.** A term typing at `A` may be admitted at `B` whenever `A ≤ B`, decided under the item's assumed constraints ([Subsumption is a relation, not a traversal order](../../theory/subsumption-is-a-relation-not-a-traversal-order.md)).
 
 **Evidence.** Probed, at the oracle and from source; the level rung is reached from source only at levels the elaborator chose, so at stated levels, offsets and hypotheses its evidence is fixtures against the checkers.
 

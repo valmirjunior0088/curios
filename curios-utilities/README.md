@@ -46,6 +46,6 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 ### Stack depth is bought here
 
-**Decision.** Recursive walks over data-shaped depth run inside `recurse`, which grows the native stack when the reserve runs low, and a stage's entry point inside `grown`, which takes a segment unconditionally; the two figures are written here and nowhere else ([Depth is bought with stack, not with hand-rolled frames](../documentation/design/architecture/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)).
+**Decision.** Recursive walks over data-shaped depth run inside `recurse`, which grows the native stack when the reserve runs low, and a stage's entry point inside `grown`, which takes a segment unconditionally; the two figures are written here and nowhere else ([Depth is bought with stack, not with hand-rolled frames](../documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)).
 
 **Rationale.** Figures kept once cannot drift, where three call sites carrying their own constants could.

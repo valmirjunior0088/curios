@@ -217,7 +217,7 @@ Adjacent constant atoms lower to a single packed constant rather than a chain of
 
 Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required.
 
-All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant, and definitionally K](design/types/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it came from](design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md).
+All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it came from](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md).
 
 ### Function types
 
@@ -307,7 +307,7 @@ join(use custom_show, values)
 
 Omitted implicit arguments are inferred. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
-A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/types/a-call-fills-one-parameter-group.md).
+A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/theory/a-call-fills-one-parameter-group.md).
 
 A projection is positional or labeled:
 
@@ -464,7 +464,7 @@ Postfix `!` is not allowed in types. The token `!=` is an infix operator and is 
 
 Every operation that touches the host — writing a handle, reading a clock, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Guest cell and channel operations also return `Io(T)`, since they allocate or observe state within the guest instance. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
 
-**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
+**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 
 `Io/pure` wraps a value as a description performing nothing and `Io/bind` sequences one into another, but postfix `!` reaches `Io` through its `Monad` witness like any other monad. Binding a description does not perform it, and forcing one twice performs it twice:
 
@@ -509,7 +509,7 @@ pub let fiber: Async({}) =
 
 The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `lift(action)` is the spelling that embeds it.
 
-Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([A fallible operation returns `Try`, and `!` lifts along declared edges](design/effects/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md)).
+Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md)).
 
 ## Pattern matching
 
@@ -523,7 +523,7 @@ The motive states the result type as a family. It is an ordinary term, checked a
 (indices) -> Scrutinee(indices) -> Sort
 ```
 
-There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/types/a-motive-is-a-term-not-a-grammar.md)).
+There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/theory/a-motive-is-a-term-not-a-grammar.md)).
 
 ```crs
 match b: (_) => Nat                                -- result ignores the scrutinee
@@ -855,7 +855,7 @@ pub induct Sized(T: Type): (length: Nat) -> pub Type
 end
 ```
 
-A family with both is a function of its parameters returning a function of its indices, and is applied the way it is declared: `Sized` has type `(T: Type) -> (length: Nat) -> Type` and is written `Sized(T)(n)`, so `Sized(T)` is itself the family `(length: Nat) -> Type` that a match over it eliminates. A family with only parameters or only indices takes them in one call — `Option(A)`, `Tagged(3, s)` below. Why is [A call fills one parameter group](design/types/a-call-fills-one-parameter-group.md).
+A family with both is a function of its parameters returning a function of its indices, and is applied the way it is declared: `Sized` has type `(T: Type) -> (length: Nat) -> Type` and is written `Sized(T)(n)`, so `Sized(T)` is itself the family `(length: Nat) -> Type` that a match over it eliminates. A family with only parameters or only indices takes them in one call — `Option(A)`, `Tagged(3, s)` below. Why is [A call fills one parameter group](design/theory/a-call-fills-one-parameter-group.md).
 
 Each index binder may be named or left bare — `(length: Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
 

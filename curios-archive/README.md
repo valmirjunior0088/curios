@@ -1,6 +1,6 @@
 # curios-archive
 
-Zero-copy archiving for the workspace: the one crate that names rkyv ([One crate is the authority for one external concern](../documentation/design/architecture/one-crate-is-the-authority-for-one-external-concern.md)), the `archived` attribute every stored type carries, the `Proxy`/`Via` adapter for a type rkyv cannot archive directly, and the four entry points — `to_bytes`, `from_bytes`, `access`, `deserialize` — with the error type fixed. rkyv is reached through this crate's re-export by `curios-archive-derive`'s expansion and nowhere else, so grepping the workspace for `rkyv` finds only prose and file names. How to annotate a type and what each entry point returns belong to the crate rustdoc; the macro's own decisions are `curios-archive-derive/README.md`'s.
+Zero-copy archiving for the workspace: the one crate that names rkyv ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)), the `archived` attribute every stored type carries, the `Proxy`/`Via` adapter for a type rkyv cannot archive directly, and the four entry points — `to_bytes`, `from_bytes`, `access`, `deserialize` — with the error type fixed. rkyv is reached through this crate's re-export by `curios-archive-derive`'s expansion and nowhere else, so grepping the workspace for `rkyv` finds only prose and file names. How to annotate a type and what each entry point returns belong to the crate rustdoc; the macro's own decisions are `curios-archive-derive/README.md`'s.
 
 ## Design
 

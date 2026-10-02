@@ -1,121 +1,14 @@
-# Results — three columns fell together, and each was named before the run
-
-One run of the harness in [README.md](README.md), captured 2026-08-22. Run 08 closed the `spines` wall and left the other four columns flat, ending on the observation that three of the five Lean ratios sat between 1.25× and 1.31× and none of them was about allocation. Two days later three columns move at once: **`chain` 133.4 → 69.5 ms (−47.9%), `spines` 54.4 → 24.4 ms (−55.1%), `trees` 115.5 → 100.6 ms (−12.9%)**, with `lcg` and `churn` inside ±1.7%.
+One run of the harness in [README.md](../../README.md), captured 2026-08-22. Run 08 closed the `spines` wall and left the other four columns flat, ending on the observation that three of the five Lean ratios sat between 1.25× and 1.31× and none of them was about allocation. Two days later three columns move at once: **`chain` 133.4 → 69.5 ms (−47.9%), `spines` 54.4 → 24.4 ms (−55.1%), `trees` 115.5 → 100.6 ms (−12.9%)**, with `lcg` and `churn` inside ±1.7%.
 
 The three that moved are exactly the three the compiler's own probes named in advance, and the two that did not are exactly the two those probes called flat. Curios is now **ahead of Lean on two workloads and ahead of Rust natively on one**, first in two of the ten tables, second in three, and last in one.
 
-## How this was run
+**Source.** Curios compiler commit `51232992ce88`, version 0.10.1 (run 08 was `7f166fa87148`, also 0.10.1; 75 commits in between). The harness — `Dockerfile`, `entrypoint.sh` — and all five workloads' sources in every language are byte-identical to what run 08 timed; nothing in the interval touches `programs/`, and the only changes under `benchmarks/` are run 08's own results file and the README rows it appended.
 
-- **Source** — Curios compiler commit `51232992ce88`, version 0.10.1 (run 08 was `7f166fa87148`, also 0.10.1; 75 commits in between). The harness — `Dockerfile`, `entrypoint.sh` — and all five workloads' sources in every language are byte-identical to what run 08 timed; nothing in the interval touches `programs/`, and the only changes under `benchmarks/` are run 08's own results file and the README rows it appended.
-- **Machine** — Apple Silicon (arm64), inside Docker Desktop's Linux VM, pinned to one core (`--cpuset-cpus 0`). Every contestant shares the same virtualized guest.
-- **Engine** — and for the first time the two halves disagree. The `wasmtime` crate embedded in Curios's native executable is **47.0.3**, unchanged since run 04 and the engine under *both* Curios columns. The standalone `wasmtime` the wasm section runs its other three contestants under is **48.0.0**, up from 47.0.3 in runs 04–08, because the image installs the current release. See [the engine moved under half the wasm table](#the-engine-moved-under-half-the-wasm-table) — Curios's own rows are the engine-frozen ones this time.
-- **Method** — hyperfine 1.20.0, 5 timed runs + 1 warmup per contestant, whole-process wall-clock (startup included). hyperfine flagged statistical outliers on Grain's `lcg` wasm row and its sub-5 ms calibration caveat on Rust `spines`; nothing else. One row it did not flag deserves a reader's caution anyway: Rust → wasm `chain` came in at 169.0 ± 18.8 ms over a 156.5–202.1 range, so quote that comparison by its range rather than its mean.
-- **Workloads** — `lcg` at N = 100,000,000; `trees` at D = 21; `chain` at K = 1600; `churn` at N = 75,000,000; `spines` at N = 75,000. Every one is the harness default, which is [the corpus's documented size](../programs/README.md#the-cross-language-workloads) for each.
-- **Correctness** — all eight implementations agreed at every cross-check input: `lcg(8) = 9345`, `trees(10) = 96122`, `chain(8) = 819185`, `churn(8) = 897441`, `spines(8) = 28`. Separately, Rust and Curios were checked against the corpus's five full-size anchors and reproduced all of them: `lcg(10⁸) = 17662`, `trees(21) = 536864`, `chain(1600) = 457407`, `churn(75000000) = 762495`, `spines(75000) = 675283`.
-- **Toolchains** — rustc 1.98.0 (was 1.97.1), OCaml 5.2.0 (flambda, unchanged), Node v22.23.2 (unchanged), Lean 4.33.1 (was 4.33.0), Grain 0.7.2 (pinned, unchanged), AssemblyScript 0.28.20 (unchanged). This is the first capture since run 05 to carry any toolchain change at all — run 05's was Lean alone, and runs 06 through 08 carried none — and the first to carry three at once: the image's base layer moved, so every unpinned installer fetched its current release.
+## Notes on the tables
 
-One thing remains worth repeating from every run so far: **Curios only targets wasm.** Its "native" row is a self-contained executable that embeds wasmtime and executes the same compiled module represented by the Curios wasm row. Those two numbers agreeing is a consistency check, not a contest between two Curios backends — and this is the closest they have ever agreed, within 0.6 ms on `lcg` and within 0.4 ms on the other four.
+- **wasm on wasmtime:** Curios's rows are its own executable at wasmtime 47.0.3; the other three run under the standalone wasmtime 48.0.0.
 
-## Native targets
-
-### `lcg` — integer ALU + counted loop (N = 100,000,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Rust | 223.6 ± 0.2 ms | 1.00× |
-| Lean 4 | 225.1 ± 0.4 ms | 1.01× |
-| Node (V8) | 234.8 ± 0.5 ms | 1.05× |
-| **Curios** | **293.6 ± 0.6 ms** | **1.31×** |
-| OCaml (flambda) | 358.0 ± 0.2 ms | 1.60× |
-
-### `trees` — allocation + heap traversal (D = 21)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Lean 4 | 34.3 ± 0.4 ms | 1.00× |
-| Rust | 93.6 ± 0.8 ms | 2.73× |
-| **Curios** | **100.6 ± 0.6 ms** | **2.93×** |
-| OCaml (flambda) | 104.4 ± 0.5 ms | 3.04× |
-| Node (V8) | 197.9 ± 1.1 ms | 5.77× |
-
-### `chain` — death-birth churn over a cons list (K = 1600)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| OCaml (flambda) | 46.0 ± 0.1 ms | 1.00× |
-| Node (V8) | 57.4 ± 1.1 ms | 1.25× |
-| **Curios** | **69.5 ± 0.5 ms** | **1.51×** |
-| Lean 4 | 105.3 ± 1.1 ms | 2.29× |
-| Rust | 113.1 ± 0.7 ms | 2.46× |
-
-### `churn` — record update against the mutation floor (N = 75,000,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Rust | 239.4 ± 0.4 ms | 1.00× |
-| **Curios** | **268.8 ± 0.8 ms** | **1.12×** |
-| Node (V8) | 292.6 ± 1.4 ms | 1.22× |
-| Lean 4 | 321.9 ± 0.4 ms | 1.34× |
-| OCaml (flambda) | 348.5 ± 0.8 ms | 1.46× |
-
-### `spines` — map inserts under a plateaued live set (N = 75,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Rust | 2.4 ± 0.0 ms | 1.00× |
-| Node (V8) | 16.2 ± 0.5 ms | 6.69× |
-| Lean 4 | 18.6 ± 0.5 ms | 7.70× |
-| OCaml (flambda) | 22.6 ± 0.2 ms | 9.35× |
-| **Curios** | **24.4 ± 0.4 ms** | **10.09×** |
-
-## wasm on wasmtime
-
-Curios's rows are its own executable at wasmtime 47.0.3; the other three run under the standalone wasmtime 48.0.0.
-
-### `lcg` (N = 100,000,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Rust → wasm | 259.4 ± 1.4 ms | 1.00× |
-| **Curios** | **293.0 ± 0.5 ms** | **1.13×** |
-| AssemblyScript | 307.8 ± 0.6 ms | 1.19× |
-| Grain | 29,700 ± 378 ms | 114.48× |
-
-### `trees` (D = 21)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| **Curios** | **100.9 ± 0.8 ms** | **1.00×** |
-| Rust → wasm | 122.8 ± 1.0 ms | 1.22× |
-| AssemblyScript | 213.1 ± 0.7 ms | 2.11× |
-| Grain | 1,765 ± 6 ms | 17.49× |
-
-### `chain` (K = 1600)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| **Curios** | **69.2 ± 0.5 ms** | **1.00×** |
-| Rust → wasm | 169.0 ± 18.8 ms | 2.44× |
-| AssemblyScript | 508.5 ± 2.5 ms | 7.35× |
-| Grain | 4,660 ± 11 ms | 67.37× |
-
-### `churn` (N = 75,000,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| Rust → wasm | 231.2 ± 1.9 ms | 1.00× |
-| **Curios** | **268.4 ± 0.2 ms** | **1.16×** |
-| AssemblyScript | 274.5 ± 1.1 ms | 1.19× |
-| Grain | 58,283 ± 209 ms | 252.14× |
-
-### `spines` (N = 75,000)
-
-| Language | Mean | vs best |
-| :--- | ---: | ---: |
-| AssemblyScript | 13.3 ± 1.2 ms | 1.00× |
-| Rust → wasm | 16.7 ± 1.9 ms | 1.26× |
-| **Curios** | **24.5 ± 0.5 ms** | **1.85×** |
-| Grain | 134.0 ± 0.6 ms | 10.10× |
+- **timing:** hyperfine flagged statistical outliers on Grain's `lcg` wasm row and its sub-5 ms calibration caveat on Rust `spines`; nothing else. One row it did not flag deserves a reader's caution anyway: Rust → wasm `chain` came in at 169.0 ± 18.8 ms over a 156.5–202.1 range, so quote that comparison by its range rather than its mean.
 
 ## The three columns that moved, and what named them
 
@@ -123,9 +16,9 @@ Everything Curios's rows did in this interval is one campaign: the uniform-repre
 
 | Step | Decision | What its own probe measured, x86-64 in-process |
 | :--- | :--- | :--- |
-| Exact reads | [A field is declared at the carrier its shape names](../documentation/design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md) | `chain` −61.4%, `spines` −21.6%, against `lcg` +0.8%, `trees` +0.8%, `churn` +0.1% |
-| Typed dispatch tables | [A closure carries its code as a table index](../curios-cont/README.md) | `monad_io` −24.9%, `parse_digits` −15.4%; all five harness workloads inside ±1.7% |
-| Family keying | [A field is declared at the carrier its shape names](../documentation/design/lowering/a-field-is-declared-at-the-carrier-its-shape-names.md) | `chain` −9.3/−10.8%, `trees` −7.3/−7.6%, `spines` −7.1/−7.5%, against `lcg` and `churn` inside 1.5% |
+| Exact reads | [A field is declared at the carrier its shape names](../../../documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md) | `chain` −61.4%, `spines` −21.6%, against `lcg` +0.8%, `trees` +0.8%, `churn` +0.1% |
+| Typed dispatch tables | [A closure carries its code as a table index](../../../curios-cont/README.md) | `monad_io` −24.9%, `parse_digits` −15.4%; all five harness workloads inside ±1.7% |
+| Family keying | [A field is declared at the carrier its shape names](../../../documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md) | `chain` −9.3/−10.8%, `trees` −7.3/−7.6%, `spines` −7.1/−7.5%, against `lcg` and `churn` inside 1.5% |
 | Typed slots | the same decision's second half | `spines` −7.7%, `trees` −7.2/−4.9%, `chain` −2.7/−2.8%, against `lcg`, `churn`, `state_monad` inside 1% |
 
 Multiplying those three per-step figures — the middle two averaged over their two passes — gives a composite for each column, and the harness is the independent check on it: a different architecture, a different host, a virtualized guest, and whole-process timing against a different contestant field.
@@ -188,6 +81,6 @@ What this run leaves open is a shorter list than run 08's. `lcg` has not moved s
 
 ## Caveats
 
-The full set is in [README.md](README.md#caveats--read-these-before-trusting-a-number). The load-bearing ones remain: one machine under a macOS → Linux VM, whole-process timing, idiomatic machine integers, and different memory-management strategies in the wasm table.
+The full set is in [README.md](../../README.md#caveats--read-these-before-trusting-a-number). The load-bearing ones remain: one machine under a macOS → Linux VM, whole-process timing, idiomatic machine integers, and different memory-management strategies in the wasm table.
 
 Three notes specific to this capture. **The wasm section's engine is no longer the engine Curios embeds** — 48.0.0 against 47.0.3 — so that half of the table compares across a version boundary this run did not choose; the section above names the three rows where it shows. **Three toolchains moved**, ending the run 06–08 stretch in which none did, and Lean's `trees` shows it. And **the composed prediction above is not a measurement** — it multiplies percentage moves taken on another architecture, and is recorded because the columns it named were right, not because its magnitudes were.

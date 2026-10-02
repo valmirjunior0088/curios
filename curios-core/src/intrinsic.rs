@@ -60,7 +60,7 @@ pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
 
 /// The type a foreign call produces over `operands`: the `Io` of the row's result shape, or for a row that diverges the `Io` of the type its first operand names.
 ///
-/// A diverging call yields whatever the region that holds it wanted, which is sound because `Io` has no eliminator: an inhabitant of `Io(False)` is a description that proves nothing. `documentation/design/effects/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` is the decision.
+/// A diverging call yields whatever the region that holds it wanted, which is sound because `Io` has no eliminator: an inhabitant of `Io(False)` is a description that proves nothing. `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` is the decision.
 pub fn foreign_produced(
     function: &ForeignFunction,
     operands: &[Term],

@@ -18,7 +18,7 @@ The Curios core language: the term representation both checkers build on — wha
 
 **Decision.** `foreign_signature` states a host call's operands and result in the `Signature` vocabulary `Intrinsic::signature` uses: a returning row's operands `Operand::At` their wire types and its result `Produced::Fixed(Io(…))` over its wire results, and the one diverging row, exit, a type operand ahead of its `Byte` producing `Io(A)`. Both checkers walk that signature with the operand handling they share with intrinsics, and erasure drops the type operand as it drops an intrinsic's. The row is read through the identity the term carries — the roster's for a builtin, the declaration's own for a user's `foreign` — so nothing written beside it reaches the type.
 
-**Rationale.** A rule of each checker's own reading a signature off the term let a term say what its row did not and two checkers disagree; typed as an intrinsic, a call has one statement and one walk ([A host operation has one contract, checked at both ends](../documentation/design/effects/a-host-operation-has-one-contract-checked-at-both-ends.md)).
+**Rationale.** A rule of each checker's own reading a signature off the term let a term say what its row did not and two checkers disagree; typed as an intrinsic, a call has one statement and one walk ([A host operation has one contract, checked at both ends](../documentation/design/runtime/a-host-operation-has-one-contract-checked-at-both-ends.md)).
 
 **Rejected.** A result-type field on the foreign term, which admits a type for a returning row and none for a diverging one; a dedicated `Exit` intrinsic, a compiler exception for what a diverging row describes.
 

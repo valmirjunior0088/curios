@@ -51,7 +51,7 @@ fn assert_stream(io: &MockIo) {
 
 /// Measure compilation and execution around the host and guest boundary's checked adapters and outcomes.
 ///
-/// This capture times compilation and execution around the checked host and guest boundary — [a host operation has one contract, checked at both ends](../../../documentation/design/effects/a-host-operation-has-one-contract-checked-at-both-ends.md): the checked host adapter, the operation contracts, guest reply validation and the `/sys` outcomes built over wire-shaped calls. It is a local native measurement, separate from the containerized cross-language series.
+/// This capture times compilation and execution around the checked host and guest boundary — [a host operation has one contract, checked at both ends](../../../documentation/design/runtime/a-host-operation-has-one-contract-checked-at-both-ends.md): the checked host adapter, the operation contracts, guest reply validation and the `/sys` outcomes built over wire-shaped calls. It is a local native measurement, separate from the containerized cross-language series.
 ///
 /// ## Workloads and reproduction
 ///

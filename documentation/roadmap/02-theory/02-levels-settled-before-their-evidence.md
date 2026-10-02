@@ -1,6 +1,6 @@
 # A universe level settled before its evidence is in
 
-**Not refined yet.** This specification reserves two places where [a universe level that settles by where it came from](../../design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) settles before what would decide it is known, beside what [irrelevant universe levels](01-irrelevant-universe-levels.md) take. It is not an implementation plan.
+**Not refined yet.** This specification reserves two places where [a universe level that settles by where it came from](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) settles before what would decide it is known, beside what [irrelevant universe levels](01-irrelevant-universe-levels.md) take. It is not an implementation plan.
 
 ## The findings
 

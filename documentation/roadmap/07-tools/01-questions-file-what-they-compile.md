@@ -7,7 +7,7 @@ Working specification for bringing `lint` and the `wonder` queries under [A comm
 - **The engine's cache.** `ReadOnly` (`curios-wonder/src/diagnostics.rs`) believes a stored unit on a re-read through the overlay (`Verdicts::get_overlaid`), offers the nearest baseline — what the session kept, then the slot the tree filed, then the scope's (`Verdicts::kept`, `Verdicts::earlier`) — and on `put` keeps the unit for the session (`Verdicts::keep`) and places it where something follows (`Verdicts::place`), filing nothing.
 - **The contract.** Each command's `Contract` (`curios/src/contract.rs`) states how it reaches the store; `lint` and every `wonder` query read one and file nothing, which the engine holds whatever store it is handed.
 - **The overlay.** The server consults every open document's text before the disk (`RootSource::with_overlay`); the command line has none.
-- **The baseline's filing rule.** [A stored unit is a baseline for an item-level recompile](../../design/architecture/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) files no unit compiled over a baseline until the differential test earns it.
+- **The baseline's filing rule.** [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) files no unit compiled over a baseline until the differential test earns it.
 
 ## The gap
 

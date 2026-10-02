@@ -1,4 +1,4 @@
-//! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
+//! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
 //!
 //! For every corpus program this classifies each tuple construction and rope-slice result by how its value travels: projection, continuation transfer, known-function transfer, return, closure capture, heap storage, unknown call, and mixed flow. Values that merge at a parameter are surveyed as one region, because eligibility in the spec is a property of the merged flow rather than of a single construction site — the fold accumulator's arm constructions and the loop parameter they meet at are one candidate, not five.
 //! The census is a measurement, not an assertion: the ignored test prints the classification, and the machinery is pinned by the focused test below rather than by the survey's own figures.
@@ -1128,7 +1128,7 @@ fn surveys_the_fold_accumulator_region() {
     assert!(!regions.is_empty(), "the census still surveys the walk");
 }
 
-/// The death-birth tally for one program — the churn census instrument, whose verdicts are `documentation/design/lowering/a-value-costs-when-it-is-kept-not-when-it-is-named.md`'s — the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
+/// The death-birth tally for one program — the churn census instrument, whose verdicts are `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`'s — the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
 #[derive(Debug, Default)]
 struct Rebirth {
     /// Tuple constructions in the program.

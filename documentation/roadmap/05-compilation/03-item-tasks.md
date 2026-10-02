@@ -76,4 +76,4 @@ Parallelizing the Ersd and Cont optimizers or the emitter beyond Cranelift; cach
 - No erased arena is cumulative, and no stored unit is addressed by an ordered predecessor list.
 - The prelude build and a program's compilation use every worker the product supplies, with the measured speedup recorded.
 
-Before this specification is deleted, its contracts are recorded in the owning crates' READMEs and rustdoc, its decision and its rejected alternatives are a design decision in `documentation/design/architecture/`, `.claude/rules/`' area routing names the executor, the roadmap entry is a checked summary, and no reference to this filename remains.
+Before this specification is deleted, its contracts are recorded in the owning crates' READMEs and rustdoc, its decision and its rejected alternatives are a design decision in `documentation/design/compilation/`, `.claude/rules/`' area routing names the executor, the roadmap entry is a checked summary, and no reference to this filename remains.

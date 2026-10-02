@@ -1,6 +1,6 @@
 # Every gate step catches what no other step does
 
-**Decision.** The hand-off gate, `/full-gate` (`.claude/commands/full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../../xtask/README.md).
+**Decision.** The hand-off gate, `/full-gate` (`.claude/commands/full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../xtask/README.md).
 
 - **`runtime`** is a prerequisite rather than a check: it builds the slim launcher in its own Cargo invocation, which `curios` embeds.
 - **`fmt-check`** alone fails on formatting drift.

@@ -15,7 +15,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | `documentation/syntax.md` | The surface language, complete |
 | `documentation/roadmap.md` | What exists and what is pending, one line each |
 | `documentation/roadmap/**` | The specification of a pending item |
-| `documentation/design/**` | One cross-cutting decision per file, in a directory per subject; a decision scoped to one crate is its `README.md`'s |
+| `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
 | `xboard/src/board/` | The soundness board: one part of the judgment per file, with a ticket for every proof of `False` found in it |
 | `documentation/design/soundness/*/**` | The argument for a rule that can admit a term and the tests that hold it, until it moves into the rustdoc of the code that enforces the rule; the claim and the boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
 | Crate `README.md` | The crate's mission and its crate-scoped decisions |

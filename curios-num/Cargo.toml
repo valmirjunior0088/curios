@@ -11,7 +11,7 @@ workspace = true
 [features]
 archive = ["curios-archive/enabled"]
 
-# The one place in the workspace `num-bigint` and `num-traits` are named, so the pins live here rather than in the workspace table: `documentation/design/architecture/one-crate-is-the-authority-for-one-external-concern.md`.
+# The one place in the workspace `num-bigint` and `num-traits` are named, so the pins live here rather than in the workspace table: `documentation/design/one-crate-is-the-authority-for-one-external-concern.md`.
 [dependencies]
 curios-archive = { workspace = true }
 num-bigint = { version = "0.5.1" }

@@ -13,7 +13,7 @@ archive = ["curios-archive/enabled"]
 # `test_support`'s `Temporary`, the directory of its own a test that touches the disk works in, removed when dropped. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate's tests — the same reason `curios-runtime`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 
-# The one SHA-256 authority among the product crates (`documentation/design/architecture/one-crate-is-the-authority-for-one-external-concern.md`): every content digest, store key and tree hash is spelled through `digest.rs`.
+# The one SHA-256 authority among the product crates (`documentation/design/one-crate-is-the-authority-for-one-external-concern.md`): every content digest, store key and tree hash is spelled through `digest.rs`.
 [dependencies]
 curios-archive = { workspace = true }
 stacker = { version = "0.1.25" }
