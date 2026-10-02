@@ -24,7 +24,7 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::wasm_optm,
+    curios::optimize,
     curios_abi::ForeignStore,
     curios_document::write_documentation,
     curios_package::{
@@ -554,7 +554,9 @@ fn dispatch() -> Result<(), Failure> {
                 elaboration.budget,
                 &name,
                 contract.admit_program(target, manifest, None, &here()?)?,
-                |module| wasm_optm(&module, |stage| println!("{stage}")),
+                |module| {
+                    optimize(&module, true, |stage| println!("{stage}"));
+                },
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },

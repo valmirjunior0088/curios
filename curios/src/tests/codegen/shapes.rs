@@ -2,7 +2,7 @@
 
 use {
     super::map_wall::{cwasm_of, run, timed},
-    crate::{tests::ersd_optm, wasm_optm},
+    crate::{optimize, tests::ersd_optm},
     curios_ersd::{FieldShape, Module},
     curios_num::Grain,
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
@@ -132,7 +132,7 @@ fn optimized_wat(source: &str) -> String {
     .expect("the workload compiles");
 
     let mut printed = String::new();
-    wasm_optm(&module, |stage| {
+    optimize(&module, true, |stage| {
         if let Stage::WasmOptm(text) = stage {
             printed = text.to_string();
         }

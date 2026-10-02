@@ -33,7 +33,7 @@ fn optimizes_to_a_smaller_valid_module() {
 
     let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
-    let optimized = optimize(bytes.clone(), false);
+    let optimized = optimize(bytes.clone(), false, |_| {});
 
     assert!(optimized.starts_with(b"\0asm"));
     assert!(
@@ -44,7 +44,7 @@ fn optimizes_to_a_smaller_valid_module() {
     );
 
     // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which leaves a runtime profile unreadable.
-    let named = optimize(bytes, true);
+    let named = optimize(bytes, true, |_| {});
 
     assert!(named.starts_with(b"\0asm"));
     assert!(
@@ -55,9 +55,9 @@ fn optimizes_to_a_smaller_valid_module() {
     );
 }
 
-/// `wasm_optm` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, captured in the session that optimized. The `(module` head pins that the payload is the folded text form; the export string pins that it renders *this* module, since exports survive optimization and print verbatim.
+/// `optimize` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, asked for in the session that optimized. The `(module` head pins that the payload is the module's text and not a placeholder.
 ///
-/// [`crate::to_cwasm`] is asserted beside it rather than through it: rendering and precompiling are two things the Binaryen path does, and one function doing both would make every `wonder stage wasm-optm` pay for a payload it discards. The double optimization is this test's alone.
+/// [`crate::to_cwasm`] is asserted beside it: it is the same optimization followed by the precompile, watched by nobody.
 #[test]
 fn dumping_emits_the_optimized_module_as_text() {
     let source = r#"
@@ -84,7 +84,7 @@ fn dumping_emits_the_optimized_module_as_text() {
 
     let mut text = None;
 
-    crate::wasm_optm(&module, |stage| match stage {
+    crate::optimize(&module, true, |stage| match stage {
         Stage::WasmOptm(dump) => text = Some(dump.to_string()),
         other => panic!("expected only Stage::WasmOptm, got {:?}", other.name()),
     });
@@ -194,7 +194,7 @@ fn passes_the_full_memory_and_table_surface_through() {
 
     for (construct, source) in sources {
         let module = source.parse::<Module>().expect("expected a module");
-        let optimized = optimize(to_bytes(&module), false);
+        let optimized = optimize(to_bytes(&module), false, |_| {});
 
         assert!(
             optimized.starts_with(b"\0asm"),

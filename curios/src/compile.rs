@@ -31,28 +31,27 @@ fn validate(bytes: &[u8]) {
     }
 }
 
-/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload the runtime deserializes — the same payload a bundled executable carries. Uses `curios-runtime`'s shared engine so the precompiled artifact matches the configuration `run_bytes` deserializes against.
-pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
-    let raw = curios_wasm::to_bytes(module);
-    validate(&raw);
-    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
-    let bytes = curios_binaryen::optimize(raw, cfg!(feature = "profile"));
-
-    curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
-}
-
-/// Optimize `module` and emit `Stage::WasmOptm` — Binaryen's own text rendering of the result — through `observe`, exactly as the driver emits every other stage at its production site. This is the one stage the pure pipeline cannot emit, produced here because this crate is where Binaryen runs; the caller chose this function *because* it wants the dump, so names ride unconditionally.
+/// Optimize `module` with Binaryen and return its bytes, emitting `Stage::WasmOptm` through `observe` where the optimized module exists — exactly as the driver emits every other stage at its production site. This is the one stage the pure pipeline cannot emit, emitted here because this crate is where Binaryen runs.
 ///
-/// **The rung and nothing else.** [`to_cwasm`]'s Cranelift compilation is deliberately not here: a caller that asked to see a module has no use for machine code, and on the measurement corpus that compilation is a tenth to a sixth of the whole answer. A caller wanting the payload too calls [`to_cwasm`] beside this, which optimizes a second time; only the one test asserting both halves of the Binaryen path does.
-pub fn wasm_optm<O>(module: &curios_wasm::Module, mut observe: O)
+/// The stage renders only when the observer formats it, so a compilation that watches nothing pays nothing for it. `names` keeps the name section: a caller that means to read the dump asks for it, or the text reads as bare indices.
+pub fn optimize<O>(module: &curios_wasm::Module, names: bool, mut observe: O) -> Vec<u8>
 where
     O: FnMut(curios_pipeline::Stage<'_>),
 {
     let raw = curios_wasm::to_bytes(module);
     validate(&raw);
-    let (_optimized, text) = curios_binaryen::optimize_with_text(raw, true);
 
-    observe(curios_pipeline::Stage::WasmOptm(&text));
+    curios_binaryen::optimize(raw, names, |optimized| {
+        observe(curios_pipeline::Stage::WasmOptm(optimized));
+    })
+}
+
+/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload the runtime deserializes — the same payload a bundled executable carries. Uses `curios-runtime`'s shared engine so the precompiled artifact matches the configuration `run_bytes` deserializes against.
+pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
+    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
+    let bytes = optimize(module, cfg!(feature = "profile"), |_| {});
+
+    curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
 }
 
 /// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and run it on the shared runtime engine — the identical path a bundled executable takes. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.

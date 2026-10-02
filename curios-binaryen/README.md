@@ -14,8 +14,8 @@ WebAssembly-level optimization for the Curios native product via a statically li
 
 ### The optimized module is observed through Binaryen's own text writer
 
-**Decision.** `optimize_with_text` renders the optimized module with `BinaryenModuleAllocateAndWriteText`, from the in-memory module the optimizer just rewrote, and that text is the `wonder stage wasm-optm` dump. It is eyes-only: nothing parses it, and the folded s-expression dialect is Binaryen's to change.
+**Decision.** `optimize` hands its observer an `Optimized` view of the module it just rewrote, which renders with `BinaryenModuleAllocateAndWriteText` when the observer formats it, and that text is the `wonder stage wasm-optm` dump. It is eyes-only: nothing parses it, and the folded s-expression dialect is Binaryen's to change.
 
-**Rationale.** The observation exists to show what the optimizer did, and its own printer is the one renderer that cannot misrepresent it; the module is alive between `BinaryenModuleOptimize` and `BinaryenModuleDispose`, so the capture is one C call.
+**Rationale.** The observation exists to show what the optimizer did, and its own printer is the one renderer that cannot misrepresent it; the module is alive between `BinaryenModuleOptimize` and `BinaryenModuleDispose`, so the capture is one C call, made only for an observer that looks.
 
 **Rejected.** A binary reader in `curios-wasm` printing the optimized bytes in the house rendering, whose bug would misrepresent the thing observed; reinstate for a consumer that must hold the optimized module as data, when the operand-less and memarg encodings can become paired tables beside `Instr` as the WAT `mnemonics!` table is. Parsing Binaryen's text, a second grammar with no other consumer. A `wasmprinter` dependency re-parsing bytes whose source module is still in memory.

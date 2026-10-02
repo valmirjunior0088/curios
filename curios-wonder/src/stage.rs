@@ -1,6 +1,6 @@
 //! The `stage` query: the program's representation at one rung of the pipeline, reprinted.
 //!
-//! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is constructed by the native product after Binaryen rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
+//! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
     crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},

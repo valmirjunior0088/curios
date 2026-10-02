@@ -4,7 +4,7 @@ use {curios_text::Entrypoint, std::fmt};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///
-/// The enum is the vocabulary of observation points, not a promise that the pure pipeline emits each: [`Stage::WasmOptm`] observes what Binaryen did to the emitted module, and this crate must not depend on Binaryen, so that one variant is constructed downstream by the native product and its payload is rendered text rather than a borrowed IR.
+/// The enum is the vocabulary of observation points, not a promise that the pure pipeline emits each: [`Stage::WasmOptm`] observes what Binaryen did to the emitted module, and this crate must not depend on Binaryen, so that one variant is emitted downstream, by the native product where Binaryen runs, and its payload is a rendering Binaryen is asked for rather than a borrowed IR.
 pub enum Stage<'a> {
     Text(&'a Entrypoint),
     /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term and universe metavariables — the universes' seeds travel beside it, in what the lowering hands elaboration — and unresolved `Transient` nodes (`Infix`, `NumLit`), and its registries are unelaborated. Useful for debugging the lowering; not a typed program.
@@ -18,8 +18,8 @@ pub enum Stage<'a> {
     Cont(&'a curios_cont::Module),
     ContOptm(&'a curios_cont::Module),
     Wasm(&'a curios_wasm::Module),
-    /// The Binaryen-optimized module, rendered by Binaryen's own text writer — ground truth from the session that optimized it, not a reader's reconstruction. The native product's `wasm_optm` emits it, mirroring the driver's own observe-at-production idiom; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
-    WasmOptm(&'a str),
+    /// The Binaryen-optimized module, rendered by Binaryen's own text writer when the observer formats it — ground truth from the session that optimized it, not a reader's reconstruction, and free for an observer that does not look. The native product's `optimize` emits it where Binaryen runs, as the driver emits every other stage at its production site; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
+    WasmOptm(&'a dyn fmt::Display),
 }
 
 impl<'a> Stage<'a> {
@@ -65,7 +65,7 @@ impl fmt::Display for Stage<'_> {
             // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
             Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
             // Already laid out by Binaryen's writer; only its trailing newline is trimmed, so this dump ends like every house-rendered one.
-            Stage::WasmOptm(text) => write!(f, "{}", text.trim_end()),
+            Stage::WasmOptm(rendering) => write!(f, "{}", rendering.to_string().trim_end()),
         }
     }
 }
