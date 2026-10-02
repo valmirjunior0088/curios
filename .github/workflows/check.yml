@@ -75,6 +75,23 @@ jobs:
       - name: Run tests
         run: cargo x test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
+  # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's tests need neither the launcher nor Binaryen.
+  runtime-macos:
+    name: Runtime tests (macOS)
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.146
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: runtime-macos
+      - name: Run the runtime's tests
+        run: cargo x test curios-runtime
+
   doctests:
     name: Doctests
     runs-on: ubuntu-24.04
