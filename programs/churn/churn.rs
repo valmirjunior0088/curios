@@ -1,5 +1,5 @@
 // churn: thread a six-field record through N LCG-fed steps, two fields updated
-// per step. One source, compiled twice: native (rustc -O) and wasm (wasm32-wasip1).
+// per step. One source, compiled twice: native (rustc -O) and wasm (wasm32-wasip2).
 //
 // The imperative spelling mutates two fields of a stack struct in place, so this
 // column allocates nothing anywhere — it is the mutation floor the pure

@@ -1,5 +1,5 @@
 // spines: N LCG-keyed inserts into a map, then fold the values. One source,
-// compiled twice: native (rustc -O) and wasm (wasm32-wasip1).
+// compiled twice: native (rustc -O) and wasm (wasm32-wasip2).
 //
 // The obvious Rust map is std's HashMap keyed by the integer itself: open
 // addressing in flat storage, no per-insert allocation once grown, no boundary

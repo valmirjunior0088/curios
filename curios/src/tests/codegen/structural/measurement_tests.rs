@@ -14,6 +14,23 @@ use super::test_support::*;
 ///
 /// It asserts nothing. The structural claim is [`closures_carry_their_code_as_a_table_index`]'s to make; this prints the static shape of the dispatch over the corpus — table slots, dispatch sites, environment allocations — so the timings below stay pinned to the modules that produced them.
 ///
+/// # What it last printed
+///
+/// Taken at `7694acba7`, x86-64 Linux, debug.
+///
+/// | Program | Table slots | Dispatch sites | Environment constructions | Interned as consts |
+/// | --- | ---: | ---: | ---: | ---: |
+/// | `lcg` | 5 | 3 | 2 | 0 |
+/// | `trees` | 5 | 3 | 2 | 0 |
+/// | higher-order | 7 | 4 | 4 | 2 |
+/// | uncurry | 5 | 3 | 2 | 0 |
+/// | string-walk | 5 | 3 | 2 | 0 |
+/// | `monad_io` | 10 | 25 | 8 | 1 |
+/// | `parse_digits` | 8 | 23 | 6 | 1 |
+/// | `rng_state` | 8 | 23 | 6 | 1 |
+///
+/// The closure-free controls sit at five slots and three dispatch sites, which is `/std`'s own plumbing rather than anything the program asked for; the monadic and walking programs are where the table is actually exercised.
+///
 /// # What the index buys
 ///
 /// A change here is timed as native binaries of two compiler builds, `echo <N> | /usr/bin/time -v <bin>`, arms interleaved run-by-run to keep thermal drift out of the comparison, every pair printing identical output before any figure is read.
@@ -38,7 +55,7 @@ use super::test_support::*;
 ///
 /// The final column counts environments materialized once in `$start` — closures whose captures are all interned constants, which the hoister interns because the code field is an `i32`. The population is everywhere: at least one per corpus fixture, and 9 of the 19–21 environment constructions in each stdin-driven program, the `/std` description machinery's capture-free thunks most of them.
 #[test]
-#[ignore = "measurement: records what the closure table costs and saves rather than asserting"]
+#[ignore = "measurement, counted: records what the closure table costs and saves rather than asserting"]
 fn closure_index_dispatch_measurements() {
     const MONAD_IO: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -95,23 +112,23 @@ fn closure_index_dispatch_measurements() {
 ///
 /// # What it last printed
 ///
-/// **Debug**.
+/// Taken at `7694acba7`, x86-64 Linux, **debug**.
 ///
 /// | Fixture | Multi-result types | Allocation sites |
 /// | --- | --- | --- |
-/// | lcg | 0 | 79 |
-/// | trees | 0 | 81 |
-/// | higher-order | 0 | 81 |
-/// | direct/escaping | 0 | 81 |
-/// | function-only | 0 | 79 |
-/// | mutual-recursion | 0 | 79 |
-/// | split-return | 1 | 79 |
+/// | lcg | 0 | 91 |
+/// | trees | 0 | 92 |
+/// | higher-order | 0 | 93 |
+/// | direct/escaping | 0 | 92 |
+/// | function-only | 0 | 90 |
+/// | mutual-recursion | 0 | 90 |
+/// | split-return | 1 | 91 |
 ///
 /// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
 ///
 /// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Toggling the pass on `programs/parse_digits.crs` and nothing else moved `user` time by one to two percent (debug compiler): the per-character loop is not allocation-bound on the tuple the protocol removes.
 #[test]
-#[ignore = "measurement: reports what the return protocol reaches rather than asserting"]
+#[ignore = "measurement, counted: reports what the return protocol reaches rather than asserting"]
 fn split_return_measurements() {
     for (label, source) in [
         ("lcg", LCG),
@@ -164,9 +181,9 @@ fn split_return_measurements() {
 /// | `parse_digits` | 1000000 | 0.92 s | 5 767 168 B | 3 786 408 B |
 /// | `trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
 ///
-/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. At the same revision: `lcg` 6708, `trees` 7706, `higher-order` 7160, `direct/escaping` 7174, `function-only` 6632, `mutual-recursion` 6834, `split-return` 8367 bytes.
+/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at `7694acba7`: `lcg` 23530, `trees` 24667, `higher-order` 23905, `direct/escaping` 23669, `function-only` 23088, `mutual-recursion` 23259, `split-return` 29800 bytes. The baseline above is `82cb8ef7`'s and has not been retaken, so the two are not read against each other.
 #[test]
-#[ignore = "measurement: reports emitted size rather than asserting"]
+#[ignore = "measurement, counted: reports emitted size rather than asserting"]
 fn copy_growth_measurements() {
     for (label, source) in [
         ("lcg", LCG),

@@ -290,29 +290,6 @@ pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> 
     Ok(())
 }
 
-pub(crate) fn benchmarks(tag: &str) -> Result<(), String> {
-    run(
-        Command::new("docker"),
-        &[
-            "build",
-            "--platform",
-            "linux/arm64",
-            "--file",
-            "benchmarks/Dockerfile",
-            "--tag",
-            tag,
-            ".",
-        ],
-    )?;
-
-    run(
-        Command::new("docker"),
-        &["run", "--rm", "--cpuset-cpus", "0", tag],
-    )?;
-
-    Ok(())
-}
-
 pub(crate) fn clean() -> Result<(), String> {
     run(Command::new("git"), &["clean", "-xffd"])?;
 

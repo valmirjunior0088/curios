@@ -122,7 +122,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A library is documented for its consumers, from the compilation that builds it](design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md)
 - [x] Profiling through `curios-profile`: `--profile` writes a stream as it runs, `curios profile` reads it back, and `cargo xtask profile` builds and folds one
 - [x] Distribution: tag-triggered releases for Linux and macOS, a checksum-verified installer, and a browser playground
-- [x] The language reference, the command-line reference, and cross-language benchmarks against six other languages
+- [x] The language reference, the command-line reference, and a benchmark bench recording what Curios costs against Rust, natively and on WebAssembly
 
 ## Standard library
 

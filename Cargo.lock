@@ -2611,6 +2611,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "xbench"
+version = "0.15.6"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "xboard"
 version = "0.15.6"
 dependencies = [

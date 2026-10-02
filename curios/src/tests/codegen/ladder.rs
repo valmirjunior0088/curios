@@ -102,7 +102,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The env sites that remain belong to `/std/Nat/of_str/1` and `/std/Str/trim_bounds/1` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
 #[test]
-#[ignore = "measurement: divides the string-walk gap rather than asserting"]
+#[ignore = "measurement, counted: divides the string-walk gap rather than asserting"]
 fn string_walk_ladder_measurements() {
     for (label, source) in [
         ("parse_digits", PARSE_DIGITS),
@@ -318,46 +318,81 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 ///
 /// # What it last measured
 ///
-/// Native binaries, Linux, N = 300 000, five runs each, `user` seconds:
+/// Taken at `7694acba7`, x86-64 Linux, in process at N = 300 000: one warmup round, then seven rounds over the whole family, each round timing every member so no member is measured on a warmer machine than another. Median of the seven, with their span.
 ///
-/// | Rung | `user` | Isolates | Reading |
-/// | --- | --- | --- | --- |
-/// | `baseline` | 0.76 0.76 0.84 0.73 0.71 | — | within noise of `parse_multibyte`'s 0.75–0.76, so the mirror calibrates against the real fold |
-/// | `flat_acc` | 0.62 0.60 0.53 0.59 0.65 | the accumulator tuple | roughly a fifth of the walk |
-/// | `held_scan` | 0.69 0.68 0.75 0.67 0.66 | the scan argument reconstruction | roughly 7% here; the real fold's own sweep measured ~2%, and the real figure is the sweep's — the mirror's smaller step inlines differently |
-/// | `inline_step` | 0.57 0.58 0.74 0.64 0.59 | the returned scan state and its call | roughly a fifth, read as a bound: inlining also deduplicates a range test |
-/// | `indexed` | 1.22 1.22 1.19 1.23 1.01 | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
+/// | Rung | raw | binaryen | Isolates | Reading |
+/// | --- | --- | --- | --- | --- |
+/// | `baseline` | 2.129s [2.106–2.345] | 1.120s [1.045–1.188] | — | the reference the rest are read against |
+/// | `flat_acc` | 5.009s [4.971–5.522] | 4.049s [4.043–4.086] | the accumulator tuple | 2.35× the baseline, spans far apart on both paths: the `{Nat, Nat}` tuple is *cheaper* than the per-arm tail calls that replace it |
+/// | `held_scan` | 2.283s [2.136–2.394] | 1.123s [1.047–1.130] | the scan argument reconstruction | no difference proven — its spans overlap the baseline's on both paths here and at N = 2000, so this family cannot measure the obligation |
+/// | `inline_step` | 3.206s [3.192–3.575] | 2.145s [2.132–2.246] | the returned scan state and its call | 1.5× the baseline, and indistinguishable from `indexed` once Binaryen has run |
+/// | `indexed` | 3.088s [3.084–3.472] | 2.137s [1.965–2.263] | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
 ///
-/// The two shares this family does measure — the accumulator and the returned scan — are each around twenty percent of the walk.
+/// **What this family can and cannot attribute.** One obligation is measurable here: the accumulator tuple, and its sign is the opposite of what removing an obligation suggests. One is not: the scan argument reconstruction is inside the noise at two input sizes two orders of magnitude apart. The remaining two are a single figure rather than two — `inline_step` and `indexed` agree once optimized — so the returned scan state and the suffix view cannot be told apart by this instrument.
 #[test]
-#[ignore = "measurement: attributes the walk's obligations rather than asserting"]
+#[ignore = "measurement, mixed: attributes the walk's obligations rather than asserting"]
 fn walk_mirror_attribution_measurements() {
-    let input = "2000";
-    let mut agreed = None;
-    for (label, source) in [
+    // The size the family's own recorded protocol uses. At 2000 the walk is a minority of each run — module
+    // instantiation is the rest, and it scales with a member's module rather than with what the member removed,
+    // which prices the largest module slowest whatever its walk costs.
+    let input = "300000";
+    // One untimed round opens the sitting, then each round times every member once.
+    const WARMUP: usize = 1;
+    const ROUNDS: usize = 7;
+
+    // Every member is compiled before anything is timed: a compile between two timings is a position
+    // effect, and this family exists to compare its members to each other.
+    let prepared = [
         ("baseline", WALK_MIRROR_BASELINE),
         ("flat_acc", WALK_MIRROR_FLAT_ACC),
         ("held_scan", WALK_MIRROR_HELD_SCAN),
         ("inline_step", WALK_MIRROR_INLINE_STEP),
         ("indexed", WALK_MIRROR_INDEXED),
-    ] {
+    ]
+    .map(|(label, source)| {
         let module = compile_raw(source);
-        println!("{label:12} {:?} (tuple4, tuple2, slice, mstep calls)", {
-            let printed = module.to_string();
-            mirror_counts(&printed)
-        });
+        let counts = mirror_counts(&module.to_string());
         let raw = precompile(&to_bytes(&module)).expect("raw module precompiles");
         let optimized = crate::to_cwasm(&module).expect("binaryen path precompiles");
-        for (kind, cwasm) in [("raw", &raw), ("binaryen", &optimized)] {
-            let (system, io) = MockHost::builder().stdin_lines([input]).build();
-            let start = Instant::now();
-            // SAFETY: both payloads were precompiled above, in this process.
-            unsafe { run_bytes(cwasm, system, ForeignBindings::empty()) }.expect("mirror executes");
-            let elapsed = start.elapsed().as_secs_f64();
-            let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
-            println!("{label:12} {kind:9} {elapsed:.3}s prints {printed}");
-            let agreed = agreed.get_or_insert_with(|| printed.clone());
-            assert_eq!(*agreed, printed, "{label} disagrees with the family");
+
+        (label, counts, raw, optimized)
+    });
+
+    for (label, counts, _, _) in &prepared {
+        println!("{label:12} {counts:?} (tuple4, tuple2, slice, mstep calls)");
+    }
+
+    let mut agreed = None;
+    let mut taken = vec![[Vec::new(), Vec::new()]; prepared.len()];
+    for round in 0..WARMUP + ROUNDS {
+        // A round over the whole family, so a disturbance during the sitting reaches every member alike.
+        for (member, (label, _, raw, optimized)) in prepared.iter().enumerate() {
+            for (kind, cwasm) in [(0, raw), (1, optimized)] {
+                let (system, io) = MockHost::builder().stdin_lines([input]).build();
+                let start = Instant::now();
+                // SAFETY: both payloads were precompiled above, in this process.
+                unsafe { run_bytes(cwasm, system, ForeignBindings::empty()) }
+                    .expect("mirror executes");
+                let elapsed = start.elapsed().as_secs_f64();
+
+                if round >= WARMUP {
+                    taken[member][kind].push(elapsed);
+                }
+
+                let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
+                let agreed = agreed.get_or_insert_with(|| printed.clone());
+                assert_eq!(*agreed, printed, "{label} disagrees with the family");
+            }
+        }
+    }
+
+    println!("\n{ROUNDS} rounds, interleaved; median and span of each member's rounds");
+    for ((label, ..), rounds) in prepared.iter().zip(&taken) {
+        for (kind, mut times) in [("raw", rounds[0].clone()), ("binaryen", rounds[1].clone())] {
+            times.sort_by(f64::total_cmp);
+            let middle = times[times.len() / 2];
+            let (least, most) = (times[0], times[times.len() - 1]);
+            println!("{label:12} {kind:9} {middle:.4}s  [{least:.4}-{most:.4}]");
         }
     }
 }

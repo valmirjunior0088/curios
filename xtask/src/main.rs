@@ -181,17 +181,6 @@ enum Recipe {
         profile: BuildProfile,
     },
 
-    #[command(about = "Build the benchmark image and run it")]
-    Benchmarks {
-        #[arg(
-            long,
-            value_name = "TAG",
-            default_value = "curios-benchmarks",
-            help = "The image tag to build and run"
-        )]
-        tag: String,
-    },
-
     #[command(about = "Install editors/grammar's dependencies from its lock file")]
     GrammarInstall,
 
@@ -258,7 +247,6 @@ fn main() -> ExitCode {
             source,
             profile: build,
         } => profile(&source, build),
-        Recipe::Benchmarks { tag } => benchmarks(&tag),
         Recipe::GrammarInstall => grammar(&["clean-install"]),
         Recipe::GrammarTest => grammar(&["test"]),
         Recipe::VscodeInstall => vscode(&["clean-install"]),

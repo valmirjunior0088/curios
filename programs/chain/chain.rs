@@ -1,6 +1,6 @@
 // chain: build a cons list of 10 000 cells once, then transform it K times, every
 // round rebuilding each cell from a predecessor that dies with it. One source,
-// compiled twice: native (rustc -O) and wasm (wasm32-wasip1).
+// compiled twice: native (rustc -O) and wasm (wasm32-wasip2).
 //
 // Every walk consumes its input list node by node, so each cell is freed at the
 // point its successor is built and nothing is ever dropped recursively. That is

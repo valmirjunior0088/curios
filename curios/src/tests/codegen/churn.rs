@@ -157,7 +157,7 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 ///
 /// The engine grows the heap only when a single post-collection allocation cannot fit, so a heap left unsized parks barely above a tiny live set, a collection fires more than once a round, and every cell is copied more often than it is born. Under the default, stock *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it matches the 16 MiB ballast arm, which is the ballast-to-initial-size equivalence this probe's method assumes. The 250k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and over-sizing (the 256 MiB arm) gives the win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
 #[test]
-#[ignore = "measurement: times the churn workload rather than asserting"]
+#[ignore = "measurement, mixed: times the churn workload and counts its collections rather than asserting"]
 fn chain_collection_decomposition() {
     let stock = cwasm_of(CHAIN);
 
@@ -280,7 +280,7 @@ end
 ///
 /// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`map_wall_spines_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
 #[test]
-#[ignore = "measurement: times the spines workload rather than asserting"]
+#[ignore = "measurement, mixed: times the spines workload and counts its collections rather than asserting"]
 fn spines_collection_decomposition() {
     let stock = cwasm_of(SPINES);
 

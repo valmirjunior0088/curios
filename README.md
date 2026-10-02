@@ -151,7 +151,7 @@ Running the tests, `cargo xtask test`, also needs [cargo-nextest](https://nexte.
 - [Design decisions](documentation/design) — one file per decision, in a directory per subject, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness board](xboard) — a ticket for every proof of `False` found in the checkers, filed by part of the judgment and run by `cargo xboard`; [the claim it stands for](documentation/design/soundness/the-soundness-board.md), with the argument for each rule in a directory beside it
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
-- [Benchmark methodology and results](benchmarks/README.md)
+- [Benchmark methodology and results](xbench/README.md)
 
 ## Contributing
 

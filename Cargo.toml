@@ -33,6 +33,7 @@ members = [
     "curios-runtime",
     "xtask",
     "xboard",
+    "xbench",
 ]
 exclude = ["editors/zed"]
 

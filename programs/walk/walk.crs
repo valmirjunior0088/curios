@@ -1,0 +1,30 @@
+-- walk: fold a mixed-width UTF-8 text N times into a rolling hash, each fold seeded by the last.
+-- The text carries 1-, 2-, 3- and 4-byte characters, so the walk leaves the ASCII arm of `/std/Str/fold` and its continuation obligations run once per continuation byte rather than never.
+-- Each fold starts from the accumulator the fold before it produced, so the walk is a dependency chain: no implementation may hoist it out of the loop and walk the text once, which is what separates this from the ladder's `parse_multibyte.crs`.
+-- The text is derived from stdin rather than written as a literal, so closed-term evaluation cannot fold the walk away.
+-- N is read from stdin so the loop survives constant folding; `a * 31 + c` stays under 33M against a modulus of 1000003, well inside i31.
+use /std/{Str, Char, Nat, Io};
+
+let loop(k: Nat, text: Str, acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 =>
+        loop(m, text, Str/fold(text, acc, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003))
+    end;
+
+let total(n: Nat) -> Nat =
+    loop(n, Str/concat(Nat/to_str(n), Str/repeat("é→𝄞", 16)), 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

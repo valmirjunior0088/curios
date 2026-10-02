@@ -1,3 +1,4 @@
 [alias]
 xtask = "run --package xtask --"
 xboard = "run --package xboard --"
+xbench = "run --package xbench --"

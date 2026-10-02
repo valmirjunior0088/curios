@@ -152,23 +152,23 @@ fn optimized_wat(source: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// Release, x86-64 Linux:
+/// Taken at `7694acba7`, release, x86-64 Linux:
 ///
 /// ```text
-/// schema roster: 55 products, 59 families, 213 constructors
-/// recorded field shapes (whole prelude + program): {"bits": 4, "bytes": 50, "closure": 16, "family": 54, "flt": 2, "immediate": 91, "immediate/signed": 2, "list": 36, "opaque": 71, "product": 35}
-/// spines:       i31-cast 97, box 223, unbox 258, rope-cast 121, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
-/// chain:        i31-cast 71, box 205, unbox 220, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
-/// trees:        i31-cast 74, box 207, unbox 223, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
-/// churn:        i31-cast 71, box 205, unbox 221, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
-/// lcg:          i31-cast 70, box 203, unbox 217, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
-/// monad_io:     i31-cast 75, box 204, unbox 219, rope-cast 100, envr-cast 33, tuple-cast 10, tuple-test 6, tuple-types 3
-/// parse_digits: i31-cast 74, box 203, unbox 219, rope-cast 100, envr-cast 30, tuple-cast 10, tuple-test 6, tuple-types 3
+/// schema roster: 62 products, 63 families, 236 constructors
+/// recorded field shapes (whole prelude + program): {"bytes": 53, "closure": 18, "family": 60, "flt": 3, "immediate": 30, "list": 40, "number": 75, "opaque": 62, "product": 42}
+/// spines:       i31-cast 299, box 486, unbox 588, rope-cast 102, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
+/// chain:        i31-cast 245, box 411, unbox 463, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
+/// trees:        i31-cast 233, box 383, unbox 434, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
+/// churn:        i31-cast 248, box 410, unbox 464, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
+/// lcg:          i31-cast 227, box 377, unbox 429, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
+/// monad_io:     i31-cast 231, box 395, unbox 471, rope-cast 82, envr-cast 23, tuple-cast 3, tuple-test 2, tuple-types 2
+/// parse_digits: i31-cast 230, box 384, unbox 453, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
 /// ```
 ///
 /// **290 of 361 recorded fields — 80% — are monomorphic at erasure**, so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 100–121 sites, and the roster's nominal row types — 114 of them, against 3 tuple types per program — are a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
-#[ignore = "measurement: reports the census rather than asserting"]
+#[ignore = "measurement, counted: reports the census rather than asserting"]
 fn field_shape_census() {
     let module = ersd_optm(SPINES);
     let mut classes = BTreeMap::<&str, usize>::new();
@@ -297,12 +297,12 @@ end
 ///
 /// ```text
 /// outputs at 300 rounds: bare "491113", payload "161671"
-/// bare 13.60 ns/element, payload 17.18 ns/element, boxed-field read 3.58 ns (21%)
+/// Taken at `7694acba7`, seven readings in one sitting: bare 14.29–14.52 ns/element, payload 16.50–16.64 ns/element, boxed-field read 2.08–2.26 ns, median 2.17 (13–14%)
 /// ```
 ///
 /// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the absolute price fell while the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
 #[test]
-#[ignore = "measurement: reports timings rather than asserting"]
+#[ignore = "measurement, timed: reports timings rather than asserting"]
 fn boxed_field_read_measurements() {
     const ELEMENTS: f64 = 65536.0;
     const LOW: u64 = 100;
@@ -349,26 +349,28 @@ fn boxed_field_read_measurements() {
 ///
 /// # What it last printed
 ///
-/// Release, x86-64 Linux:
+/// Taken at `7694acba7`, release, x86-64 Linux:
 ///
 /// ```text
-/// families holding a family-typed field: 16
-///   free: 9 families, 8 slots typed at no width cost
-///   paid: 7 families, 11 slots typed for 8 slots of width
+/// families holding a family-typed field: 18
+///   free: 12 families, 12 slots typed at no width cost
+///   paid: 6 families, 9 slots typed for 8 slots of width
+///   /std/Map/Node                4 slots -> 5 slots, 0 typed -> 2 typed   PAID
 ///   /std/Io/Chunk/Chunk          2 slots -> 2 slots, 0 typed -> 0 typed   FREE
-///   /std/Map/Node                4 slots -> 6 slots, 1 typed -> 3 typed   PAID
+///   /std/Flt/exact/Mode          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
 ///   /std/Async/Step              3 slots -> 3 slots, 0 typed -> 1 typed   FREE
 ///   /std/Toml/Error/Error        4 slots -> 5 slots, 2 typed -> 3 typed   PAID
 ///   /std/Cli/Kind                3 slots -> 3 slots, 1 typed -> 2 typed   FREE
 ///   /std/Cli/Values              5 slots -> 5 slots, 2 typed -> 3 typed   FREE
 ///   /std/Cli/Cli                 6 slots -> 6 slots, 2 typed -> 3 typed   FREE
-///   /std/Cli/Outcome             2 slots -> 3 slots, 0 typed -> 2 typed   PAID
+///   /std/Cli/Outcome             2 slots -> 4 slots, 0 typed -> 2 typed   PAID
+///   /std/Cli/Slots               5 slots -> 5 slots, 3 typed -> 4 typed   FREE
 ///   /std/Cli/Cluster             4 slots -> 5 slots, 2 typed -> 3 typed   PAID
-///   /std/Cli/Chosen              3 slots -> 4 slots, 1 typed -> 3 typed   PAID
+///   /std/Cli/Chosen              3 slots -> 5 slots, 1 typed -> 3 typed   PAID
 ///   /std/Fmt/Fmt                 3 slots -> 3 slots, 0 typed -> 1 typed   FREE
 ///   /std/Test/Test               2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/Tui/Layout/Sizes        8 slots -> 9 slots, 5 typed -> 7 typed   PAID
-///   /std/Tui/input/Step          3 slots -> 3 slots, 1 typed -> 2 typed   FREE
+///   /std/Tui/Layout/Sizes        8 slots -> 8 slots, 1 typed -> 3 typed   FREE
+///   /std/Tui/input/Step          3 slots -> 3 slots, 0 typed -> 1 typed   FREE
 ///   /std/Toml/build/Act          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
 ///   /std/Toml/decode/Stmt        3 slots -> 3 slots, 1 typed -> 2 typed   FREE
 /// ```
@@ -377,7 +379,7 @@ fn boxed_field_read_measurements() {
 ///
 /// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Eight slots qualify here, on the command-line, formatting, scheduler, layout and TOML families rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]
-#[ignore = "measurement: reports the split rather than asserting"]
+#[ignore = "measurement, counted: reports the split rather than asserting"]
 fn family_slot_probe() {
     let module = ersd_optm(SPINES);
 

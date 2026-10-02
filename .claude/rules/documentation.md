@@ -22,7 +22,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | Rustdoc | Local architecture, algorithms, invariants and API contracts |
 | `Cargo.toml` `description` | The crate's purpose in one line |
 | `CLAUDE.md`, `.claude/` | How an agent works here |
-| `programs/README.md`, `benchmarks/README.md` | The measurement corpus; the benchmark harness and its results |
+| `programs/README.md`, `xbench/README.md` | The measurement corpus; the benchmark bench and its results |
 
 ## Decisions and board entries
 
@@ -30,7 +30,8 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 - A board entry states what its rule **assumes** and why it holds, and names the tests that are its evidence. It carries no grade: what has been found is the tickets on the board.
 - Neither has an index: a directory listing cannot go stale. A filename spells its heading out, and an entry is cited by its path, so a moved one fails loudly.
 - A wrong sentence is corrected in place, never annotated as amended. Everything is written in the present tense.
-- A measured figure is the latest result of a measurement a reader can retake — a named measurement test or a stated protocol — and stays only where it is the argument. A past reading, a replaced baseline and a rejected alternative's cost are dropped, here and in the comments beside a measurement alike; only `benchmarks/` keeps its runs.
+- A measured figure is the latest result of a measurement a reader can retake — a named measurement test or a stated protocol — and stays only where it is the argument. A past reading, a replaced baseline and a rejected alternative's cost are dropped, here and in the comments beside a measurement alike; only `xbench/src/readings/` keeps its readings.
+- A measured figure names the commit it was taken at, and a measurement states whether its figures are `counted`, `timed` or `mixed`. A figure that names neither cannot be told from one the code has moved past, and a reader cannot tell which figures need a quiet machine to retake — a `mixed` measurement needs one, and only its counted half transports to another machine. A timed figure is a median over repeated readings with their span, not one reading; and a measurement comparing variants to each other interleaves them, since no amount of repeating a sequence removes the position effect inside it.
 - An incident is evidence, not history: state the failure mode in the present tense and keep the concrete case as one clause, without the figures it once measured.
 
 ## Roadmap

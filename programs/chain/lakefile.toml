@@ -1,6 +1,0 @@
-name = "chain"
-defaultTargets = ["chain"]
-
-[[lean_exe]]
-name = "chain"
-root = "Chain"

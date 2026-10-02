@@ -1,0 +1,14 @@
+[package]
+name = "xbench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The benchmark bench: Curios and Rust on the measurement corpus, held to one answer and timed, as readings that record what they were taken under"
+
+[lints]
+workspace = true
+
+# The bench drives other languages' compilers and a timer, and names nothing of the workspace's.
+[dependencies]
+# The command line, in `xtask`'s own convention.
+clap = { version = "4.6.1", features = ["derive"] }

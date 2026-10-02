@@ -68,7 +68,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 ///
 /// # What it last printed
 ///
-/// x86-64 dev box, release, seven readings in one sitting: 924, 941, 942, 951, 1047, 1058, 1133 ns/insert, median 951. The machine read bimodally in that sitting, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// Taken at `7694acba7`, release, x86-64 Linux, seven readings in one sitting: 1060, 1069, 1069, 1081, 1084, 1124, 1160 ns/insert, median 1081. This sitting read unimodally, inside ±4.6%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
 ///
 /// # What the design rests on
 ///
@@ -77,7 +77,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 /// - **The crit-bit trie stands.** An immediate key's bit test costs a few register ops, so seventeen cheap levels beat a qp-trie's four or five, each paying an O(width) child copy per rebuild.
 /// - **The map walks once.** `insert1`/`remove1` descend once and decide on the way back up.
 #[test]
-#[ignore = "measurement: reports timings rather than asserting"]
+#[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_spines_slope() {
     let cwasm = cwasm_of(SPINES);
 
@@ -160,16 +160,16 @@ end
 ///
 /// # What it last printed
 ///
-/// Release, x86-64 Linux, twice for stability:
+/// Taken at `7694acba7`, release, x86-64 Linux, seven readings in one sitting:
 ///
 /// ```text
 /// outputs at N=1000: ofnat "923684", control "923689"
-///   ofnat 18 ns/iter, control 4 ns/iter, key construction 14 ns/insert   (retake: 18 / 3 / 14)
+///   key construction 151 154 154 156 156 159 162 ns/insert, median 156
 /// ```
 ///
-/// **The key class is negligible — 14 ns against the insert `map_wall_spines_slope` reads, under 2%** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// **The key class is 14% of the insert `map_wall_spines_slope` reads — 156 ns against 1081** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
-#[ignore = "measurement: reports timings rather than asserting"]
+#[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
     let ofnat = cwasm_of(KEY_OFNAT);
     let control = cwasm_of(KEY_CONTROL);
