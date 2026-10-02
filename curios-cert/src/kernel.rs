@@ -8,7 +8,7 @@
 //!
 //! # Refusing beats guessing
 //!
-//! Where the elaborator cannot classify something it falls back conservatively and carries on, because a diagnostic is worth more to a programmer than a refusal. The kernel does the opposite: a shape it cannot classify is a [`KernelError`], not a default. A guessed universe level is the unsound direction — it claims a type is smaller than it is — and a checker that guesses is not a second opinion. The cost is that the kernel may reject a term the elaborator accepted; that is a disagreement to investigate, which is exactly what a second opinion is for.
+//! Where the elaborator cannot classify something it falls back conservatively and carries on, because a diagnostic is worth more to a programmer than a refusal. The kernel does the opposite: a shape it cannot classify is an [`Error`], not a default. A guessed universe level is the unsound direction — it claims a type is smaller than it is — and a checker that guesses is not a second opinion. The cost is that the kernel may reject a term the elaborator accepted; that is a disagreement to investigate, which is exactly what a second opinion is for.
 
 mod at;
 pub(crate) use at::*;
@@ -65,7 +65,7 @@ use {
 
 /// Why the kernel refused a term.
 ///
-/// What a [`KernelError::Arity`] counted. One refusal, many tallies — a message reading `expected 1, found 0` with nothing to say what the 1 was would send a reader to the kernel's source to learn it was a universe level.
+/// What an [`Error::Arity`] counted. One refusal, many tallies — a message reading `expected 1, found 0` with nothing to say what the 1 was would send a reader to the kernel's source to learn it was a universe level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Counted {
     /// The levels an occurrence supplies, against the parameters its declaration's scheme binds.
@@ -109,7 +109,7 @@ impl fmt::Display for Counted {
 
 /// Every variant is a refusal, never a warning: reaching one means the kernel declined to certify the term, and a caller must treat that as rejection.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KernelError {
+pub enum Error {
     /// Reduction failed — the budget ran out, or a partial intrinsic was folded outside its domain.
     Reduce(ReduceError),
     /// A variable with no binder and no definition. In a well-formed module this cannot happen, which is why it is an error rather than a stuck neutral: the kernel is checking a *finished* term.
@@ -178,7 +178,7 @@ pub enum KernelError {
     MissingUniverseInstance { name: Free, expected: usize },
 }
 
-impl Exhaustion for KernelError {
+impl Exhaustion for Error {
     fn refusal(&self) -> Option<&ReduceError> {
         match self {
             Self::Reduce(error) => error.refusal(),
@@ -187,19 +187,19 @@ impl Exhaustion for KernelError {
     }
 }
 
-impl From<ReduceError> for KernelError {
+impl From<ReduceError> for Error {
     fn from(error: ReduceError) -> Self {
-        KernelError::Reduce(error)
+        Error::Reduce(error)
     }
 }
 
-impl From<UniverseError> for KernelError {
+impl From<UniverseError> for Error {
     fn from(error: UniverseError) -> Self {
-        KernelError::Reduce(ReduceError::Universe(error))
+        Error::Reduce(ReduceError::Universe(error))
     }
 }
 
-impl KernelError {
+impl Error {
     /// Render this refusal with global names shortened against `module`'s symbol table and a nominal family's implicit parameters marked — the two axes a reader needs to recognize the types they wrote.
     ///
     /// Universe instances are deliberately *not* suppressed here, unlike an elaboration diagnostic. A kernel refusal is often *about* the universes: `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type`. The same call `wonder stage`'s dumps make, for the same reason — a reader looking at the checker wants the levels the checker is arguing about.
@@ -230,22 +230,22 @@ impl KernelError {
     }
 }
 
-/// The faithful rendering: core's own names, every universe shown. A refusal reported to a reader goes through [`KernelError::format_with`].
-impl fmt::Display for KernelError {
+/// The faithful rendering: core's own names, every universe shown. A refusal reported to a reader goes through [`Error::format_with`].
+impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         Displayed(self, Rc::new(Spelling::default())).fmt(formatter)
     }
 }
 
 /// A refusal paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take. Local to this crate because the orphan rule forbids implementing a foreign trait for a foreign wrapper, and because the axes a kernel refusal wants are not the ones an elaboration diagnostic wants.
-struct Displayed<'a>(&'a KernelError, Rc<Spelling>);
+struct Displayed<'a>(&'a Error, Rc<Spelling>);
 
 /// Every arm below rebinds its term fields through the spelling before interpolating them. A field left unrebound renders core's own spelling and still compiles, which is why the rebinding is mechanical rather than left to each `write!`.
 impl fmt::Display for Displayed<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spelling = &self.1;
         match self.0 {
-            KernelError::Reduce(ReduceError::Exhausted {
+            Error::Reduce(ReduceError::Exhausted {
                 category,
                 remaining,
                 attempted,
@@ -253,115 +253,115 @@ impl fmt::Display for Displayed<'_> {
                 formatter,
                 "the kernel's reduction budget ran out: {category} needed {attempted} units with {remaining} left"
             ),
-            KernelError::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
-            KernelError::Unbound(name) => write!(formatter, "unbound name `{name}`"),
-            KernelError::Undeclared(name) => {
+            Error::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
+            Error::Unbound(name) => write!(formatter, "unbound name `{name}`"),
+            Error::Undeclared(name) => {
                 write!(formatter, "no declaration registered for `{name}`")
             }
-            KernelError::Unclassified(type_) => {
+            Error::Unclassified(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "cannot determine the sort of `{type_}`")
             }
-            KernelError::NotASort(term) => {
+            Error::NotASort(term) => {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is not a universe")
             }
-            KernelError::NotAMotive(term) => {
+            Error::NotAMotive(term) => {
                 let term = term.spelled(spelling);
                 write!(
                     formatter,
                     "`{term}` is not a valid motive: it must be well-typed and land in a sort",
                 )
             }
-            KernelError::AmbientFold(goal) => {
+            Error::AmbientFold(goal) => {
                 let goal = goal.spelled(spelling);
                 write!(
                     formatter,
                     "a fold that reads its induction hypothesis needs a motive to type it, and `{goal}` is an ambient goal",
                 )
             }
-            KernelError::FoldMotiveCapturesScrutinee(scrutinee) => {
+            Error::FoldMotiveCapturesScrutinee(scrutinee) => {
                 let scrutinee = scrutinee.spelled(spelling);
                 write!(
                     formatter,
                     "a fold's motive may only reach its scrutinee `{scrutinee}` through the binder it declares, or its induction hypothesis would be typed at the arm's own goal",
                 )
             }
-            KernelError::Mismatch { inferred, expected } => {
+            Error::Mismatch { inferred, expected } => {
                 let inferred = inferred.spelled(spelling);
                 let expected = expected.spelled(spelling);
                 write!(formatter, "expected `{expected}`, found `{inferred}`")
             }
-            KernelError::NotAFunction(type_) => {
+            Error::NotAFunction(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "`{type_}` is not a function type")
             }
-            KernelError::NotATuple(type_) => {
+            Error::NotATuple(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "`{type_}` has no components")
             }
-            KernelError::Arity {
+            Error::Arity {
                 counted,
                 expected,
                 actual,
             } => {
                 write!(formatter, "{counted}: expected {expected}, found {actual}")
             }
-            KernelError::LargeElimination(name) => write!(
+            Error::LargeElimination(name) => write!(
                 formatter,
                 "cannot eliminate the proposition `{name}` into a relevant result",
             ),
-            KernelError::NotCore(term) => {
+            Error::NotCore(term) => {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
-            KernelError::RepeatedTag(tag) => {
+            Error::RepeatedTag(tag) => {
                 write!(
                     formatter,
                     "constructor tag `{tag}` is declared more than once"
                 )
             }
-            KernelError::MissingArm { family, tag } => write!(
+            Error::MissingArm { family, tag } => write!(
                 formatter,
                 "no arm for `{tag}` of `{family}`, and its case is not impossible",
             ),
-            KernelError::NotDescending { type_ } => {
+            Error::NotDescending { type_ } => {
                 let type_ = type_.spelled(spelling);
                 write!(
                     formatter,
                     "a recursive proof or type at `{type_}` does not descend",
                 )
             }
-            KernelError::UntypedEntry => {
+            Error::UntypedEntry => {
                 write!(formatter, "the entrypoint states no type to judge it at")
             }
-            KernelError::UnclosedUniverses => write!(
+            Error::UnclosedUniverses => write!(
                 formatter,
                 "this declaration's universe constraints name a parameter it does not declare",
             ),
-            KernelError::UnsatisfiableUniverses => write!(
+            Error::UnsatisfiableUniverses => write!(
                 formatter,
                 "this declaration's universe constraints have no solution",
             ),
-            KernelError::Informative { field } => write!(
+            Error::Informative { field } => write!(
                 formatter,
                 "a `Prop` structure carries an informative field at `{field}`",
             ),
-            KernelError::NotTotal {
+            Error::NotTotal {
                 erased,
                 reached: Some(reached),
             } => write!(
                 formatter,
                 "a {erased} position reaches `{reached}`, which is not known to terminate",
             ),
-            KernelError::NotTotal {
+            Error::NotTotal {
                 erased,
                 reached: None,
             } => write!(
                 formatter,
                 "a {erased} position does not terminate: it is a non-descending recursion or an exit",
             ),
-            KernelError::NotPositive {
+            Error::NotPositive {
                 name,
                 part,
                 polarity,
@@ -369,15 +369,15 @@ impl fmt::Display for Displayed<'_> {
                 formatter,
                 "`{part}` of `{name}` reaches back to it at {polarity:?}, which is not strictly positive",
             ),
-            KernelError::Oversized { domain, bound } => write!(
+            Error::Oversized { domain, bound } => write!(
                 formatter,
                 "a declaration domain at level `{domain}` exceeds its family's `{bound}`",
             ),
-            KernelError::UniverseInstance { lower, upper } => write!(
+            Error::UniverseInstance { lower, upper } => write!(
                 formatter,
                 "this instance does not satisfy its scheme's `{lower} <= {upper}`",
             ),
-            KernelError::MissingUniverseInstance { name, expected } => write!(
+            Error::MissingUniverseInstance { name, expected } => write!(
                 formatter,
                 "this occurrence of `{name}` states no universe instance, and its scheme declares {expected}",
             ),
@@ -389,7 +389,7 @@ impl fmt::Display for Displayed<'_> {
 ///
 /// `assumption` reads the *locals* rather than `Kernel::type_of`, because a shared analysis asking what a binder was assumed at means the binder in scope, not a top-level name that happens to share its spelling. That matches what the elaborator's `Context::assumption` answers, which is the point of the seam.
 impl Env for Kernel {
-    type Error = KernelError;
+    type Error = Error;
 
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
         Ok(self.reduce_forced(term.clone())?)
@@ -583,18 +583,18 @@ impl Kernel {
         &self,
         context: &UniverseContext,
         levels: &[Level],
-    ) -> Result<(), KernelError> {
+    ) -> Result<(), Error> {
         if levels.len() != context.parameter_count {
-            return Err(KernelError::Arity {
+            return Err(Error::Arity {
                 counted: Counted::UniverseLevels,
                 expected: context.parameter_count,
                 actual: levels.len(),
             });
         }
 
-        let instantiate = |level: &Level| -> Result<Level, KernelError> {
+        let instantiate = |level: &Level| -> Result<Level, Error> {
             if level.params().any(|param| param.0 >= levels.len()) {
-                return Err(KernelError::UniverseInstance {
+                return Err(Error::UniverseInstance {
                     lower: level.clone(),
                     upper: level.clone(),
                 });
@@ -611,7 +611,7 @@ impl Kernel {
             let upper = instantiate(&constraint.upper)?;
 
             if !self.level_leq(&lower, &upper) {
-                return Err(KernelError::UniverseInstance { lower, upper });
+                return Err(Error::UniverseInstance { lower, upper });
             }
         }
 
@@ -789,7 +789,7 @@ impl Kernel {
     /// The type `name` was bound or declared at. Locals shadow definitions.
     ///
     /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's (see `documentation/design/soundness/formation/universe-instances-and-constraints.md`) and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
-    pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, KernelError> {
+    pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, Error> {
         if let Some(local) = self.scope.local_type(name) {
             return Ok(Some(local));
         }
@@ -798,7 +798,7 @@ impl Kernel {
             None => Ok(None),
             Some((type_, universes)) => match universes.parameter_count {
                 0 => Ok(Some(type_)),
-                expected => Err(KernelError::MissingUniverseInstance {
+                expected => Err(Error::MissingUniverseInstance {
                     name: *name,
                     expected,
                 }),
@@ -879,7 +879,7 @@ impl Kernel {
     }
 
     /// Take this item's recorded positions and any classification that could not be decided, leaving both empty for the next item.
-    pub(crate) fn take_checked(&mut self) -> (Vec<Position>, Option<KernelError>) {
+    pub(crate) fn take_checked(&mut self) -> (Vec<Position>, Option<Error>) {
         self.positions.drain()
     }
 

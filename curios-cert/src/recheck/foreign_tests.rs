@@ -1,7 +1,7 @@
 //! A foreign row inhabits its wire type and nothing more: a declared one whatever it claims, and a builtin exactly the roster's type for its row.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Global, Intrinsic, Term},
@@ -35,7 +35,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "the kernel let a forged host row inhabit a proposition: {verdicts:?}",
     );
 }
@@ -102,7 +102,7 @@ fn a_builtin_cannot_be_held_at_another_rows_type() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "the kernel let a builtin take another row's type: {verdicts:?}",
     );
 }

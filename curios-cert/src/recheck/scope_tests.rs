@@ -1,7 +1,7 @@
 //! A name already in scope: replaced rather than judged, and live but unchecked.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Level, Term},
 };
@@ -26,7 +26,7 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
         alone
             .iter()
             .any(|verdict| verdict.name == Some(reader_name())
-                && matches!(verdict.error, KernelError::Mismatch { .. })),
+                && matches!(verdict.error, Error::Mismatch { .. })),
         "the control stopped refusing: `reader : Nat` must not accept a `Bool`-typed `shadowed`: {alone:?}",
     );
 
@@ -59,7 +59,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     assert!(
         alone
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Oversized { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Oversized { .. })),
         "the control stopped refusing: a `Type 5` payload exceeds a family declared at `Type 0`: {alone:?}",
     );
 
@@ -89,7 +89,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::NotPositive { .. })),
+            .any(|verdict| matches!(verdict.error, Error::NotPositive { .. })),
         "strict positivity stopped running over a declaration whose name the environment already holds: {verdicts:?}",
     );
 }

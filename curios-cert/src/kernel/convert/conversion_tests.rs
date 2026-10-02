@@ -2,7 +2,7 @@
 
 use super::test_support::*;
 use {
-    crate::{KernelError, convert},
+    crate::{Error, convert},
     curios_core::{
         Free, FuncType, Global, InstanceHead, Intrinsic, Level, MetavarId, StructDecl, StructType,
         Subterm, Telescope, Term, UniverseContext, Var,
@@ -276,11 +276,11 @@ fn a_metavariable_does_not_convert_with_anything_else() {
 
     assert!(matches!(
         convert(&mut kernel, &Term::type_ground(), &left, &right),
-        Err(KernelError::NotCore(_)),
+        Err(Error::NotCore(_)),
     ));
     assert!(matches!(
         convert(&mut kernel, &Term::type_ground(), &left, &nat(0)),
-        Err(KernelError::NotCore(_)),
+        Err(Error::NotCore(_)),
     ));
 }
 

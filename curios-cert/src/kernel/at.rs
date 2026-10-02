@@ -17,7 +17,7 @@
 //! Reading a declaration as **data** — positivity walking its telescopes, inversion reading its `result_sort`, `check_induct_decl` verifying the entry itself. No occurrence is involved there, so there is nothing to check against, and those go on reading `Globals::induct_decl` directly. The distinction is the whole of when to use which: *what does this occurrence mean* takes a handle, *what does this declaration say* does not.
 
 use {
-    super::{Counted, Kernel, KernelError, sort::arity_matches},
+    super::{Counted, Error, Kernel, sort::arity_matches},
     curios_core::{
         Atom, Global, InductDecl, InductType, Level, StructDecl, Telescope, Term,
         instantiate_universe_levels_scoped,
@@ -86,7 +86,7 @@ impl StructAt {
 
 impl Kernel {
     /// An `induct` *type* occurrence's declaration: universes checked, parameter and index counts checked.
-    pub(crate) fn induct_at(&self, family: &InductType) -> Result<InductAt, KernelError> {
+    pub(crate) fn induct_at(&self, family: &InductType) -> Result<InductAt, Error> {
         let at = self.induct_at_params(&family.name, &family.universes, &family.params)?;
         arity_matches(
             Counted::Indices,
@@ -103,10 +103,10 @@ impl Kernel {
         name: &Global,
         universes: &[Level],
         params: &[Term],
-    ) -> Result<InductAt, KernelError> {
+    ) -> Result<InductAt, Error> {
         let declaration = self
             .induct_decl(name)
-            .ok_or_else(|| KernelError::Undeclared(*name))?;
+            .ok_or_else(|| Error::Undeclared(*name))?;
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
@@ -122,10 +122,10 @@ impl Kernel {
         name: &Global,
         universes: &[Level],
         params: &[Term],
-    ) -> Result<StructAt, KernelError> {
+    ) -> Result<StructAt, Error> {
         let declaration = self
             .struct_decl(name)
-            .ok_or_else(|| KernelError::Undeclared(*name))?;
+            .ok_or_else(|| Error::Undeclared(*name))?;
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
@@ -146,7 +146,7 @@ impl Kernel {
 fn instantiate_induct_decl(
     declaration: &InductDecl,
     levels: &[Level],
-) -> Result<InductDecl, KernelError> {
+) -> Result<InductDecl, Error> {
     let mut instantiated = declaration.clone();
 
     instantiated.arity = instantiate_universe_levels_scoped(&instantiated.arity, levels)?;

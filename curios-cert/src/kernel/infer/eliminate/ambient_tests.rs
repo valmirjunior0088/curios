@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, KernelError, infer},
+    crate::{Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,
@@ -126,10 +126,7 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
         None,
     );
     assert!(
-        matches!(
-            infer(&mut kernel, &family_form),
-            Err(KernelError::NotAMotive(_))
-        ),
+        matches!(infer(&mut kernel, &family_form), Err(Error::NotAMotive(_))),
         "the family stating the same goal typed under its own binders",
     );
 }
@@ -153,7 +150,7 @@ fn a_lying_ambient_goal_is_refused() {
     let lying = Term::match_ambient(Term::free_var(&x), goal, arms(&nat(0)));
     assert!(matches!(
         infer(&mut kernel, &lying),
-        Err(KernelError::Mismatch { .. })
+        Err(Error::Mismatch { .. })
     ));
 }
 
@@ -214,7 +211,7 @@ fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
     );
     assert!(matches!(
         infer(&mut kernel, &fold),
-        Err(KernelError::AmbientFold(_))
+        Err(Error::AmbientFold(_))
     ));
 }
 
@@ -268,7 +265,7 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     );
     assert!(matches!(
         infer(&mut kernel, &split),
-        Err(KernelError::Mismatch { .. })
+        Err(Error::Mismatch { .. })
     ));
 }
 
@@ -316,7 +313,7 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
         assert!(
             matches!(
                 attempt(20_000, ambient),
-                Err(KernelError::Reduce(ReduceError::Exhausted { .. }))
+                Err(Error::Reduce(ReduceError::Exhausted { .. }))
             ),
             "ambient = {ambient}: the sort read ran out of budget and was reported as something else",
         );

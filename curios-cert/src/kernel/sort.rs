@@ -18,7 +18,7 @@
 mod tests;
 
 use {
-    super::{Counted, Kernel, KernelError, infer::infer_type, whnf::whnf},
+    super::{Counted, Error, Kernel, infer::infer_type, whnf::whnf},
     curios_core::{
         Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, MatchResult, Proj,
         Reducer, StructType, Subterm, Telescope, Term, TupleType,
@@ -51,14 +51,10 @@ impl Sort {
 /// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
 ///
 /// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, so neither may be taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family, classified as a well-formed type, would leave every consumer of the arity wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
-pub(super) fn arity_matches(
-    counted: Counted,
-    expected: usize,
-    actual: usize,
-) -> Result<(), KernelError> {
+pub(super) fn arity_matches(counted: Counted, expected: usize, actual: usize) -> Result<(), Error> {
     match expected == actual {
         true => Ok(()),
-        false => Err(KernelError::Arity {
+        false => Err(Error::Arity {
             counted,
             expected,
             actual,
@@ -69,19 +65,19 @@ pub(super) fn arity_matches(
 /// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
 ///
 /// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
-pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, KernelError> {
+pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Error> {
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
         Subterm::Prop => Ok(Sort::Prop),
         Subterm::Type(level) => Ok(Sort::Type(level.clone())),
-        _ => Err(KernelError::NotASort(reduced.clone())),
+        _ => Err(Error::NotASort(reduced.clone())),
     }
 }
 
 impl Sort {
     /// Classify `type_`, which the caller must already have checked to be a type — the **lookup** of the two roles the module header separates, never a judgment.
-    pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+    pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
         curios_profile::profile!("Sort::of");
         let reduced = kernel.reduce_forced(type_.clone())?;
 
@@ -143,7 +139,7 @@ impl Sort {
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
             Subterm::Prop => Ok(Sort::Type(Level::zero())),
 
-            _ => Err(KernelError::Unclassified(reduced.clone())),
+            _ => Err(Error::Unclassified(reduced.clone())),
         }
     }
 }
@@ -153,14 +149,14 @@ impl Sort {
 /// This is the *whole* of what the two roles in this module differ in. [`Sort::of`] is a lookup — it classifies a type that something has already checked — and passes itself. [`infer_sort`] is a judgment — it accepts a term *as* a type — and passes [`infer_type`]. Everything else, the Π and Σ rules included, is shared.
 ///
 /// Naming the difference is what keeps a caller from inheriting the wrong role; the module documentation states what inheriting the lookup would admit.
-type Establish = fn(&mut Kernel, &Term) -> Result<Sort, KernelError>;
+type Establish = fn(&mut Kernel, &Term) -> Result<Sort, Error>;
 
 /// Σ: a record of nothing but propositions is a proposition; otherwise its level is the join of its fields'.
 fn tuple_sort(
     kernel: &mut Kernel,
     telescope: Telescope<()>,
     establish: Establish,
-) -> Result<Sort, KernelError> {
+) -> Result<Sort, Error> {
     kernel.scoped(|kernel| {
         sort_of_binders(kernel, telescope, establish, |_, levels, ()| {
             Ok(match levels.is_empty() {
@@ -176,7 +172,7 @@ fn func_sort(
     kernel: &mut Kernel,
     telescope: Telescope<Term>,
     establish: Establish,
-) -> Result<Sort, KernelError> {
+) -> Result<Sort, Error> {
     kernel.scoped(|kernel| {
         sort_of_binders(
             kernel,
@@ -198,7 +194,7 @@ fn func_sort(
 /// The sort of `type_`, having **typed** every part a type former binds rather than classifying it — [`Sort::of`]'s judgment counterpart, and the one `infer` calls.
 ///
 /// Only the two binder-carrying formers differ from the lookup, because only they hold a part nothing else establishes: a nominal occurrence's arguments are typed where the occurrence is inferred, an intrinsic former's element type by `infer_intrinsic`, and a neutral's sort is read off a binder that was assumed at a type its own telescope had checked. So every other shape delegates, on the *already reduced* term, and the memo makes that second reduction free.
-pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
     let reduced = kernel.reduce_forced(type_.clone())?;
 
     match &*reduced {
@@ -213,9 +209,9 @@ pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Kern
 }
 
 /// The sort of a neutral type: what [`synth_neutral`] reads off its head *is* its sort.
-fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, KernelError> {
-    let synthesized = synth_neutral(kernel, reduced)?
-        .ok_or_else(|| KernelError::Unclassified(reduced.clone()))?;
+fn sort_of_neutral(kernel: &mut Kernel, reduced: &Term) -> Result<Sort, Error> {
+    let synthesized =
+        synth_neutral(kernel, reduced)?.ok_or_else(|| Error::Unclassified(reduced.clone()))?;
 
     as_sort(kernel, &synthesized)
 }
@@ -231,8 +227,8 @@ fn sort_of_binders<B: Bound>(
     kernel: &mut Kernel,
     telescope: Telescope<B>,
     establish: Establish,
-    terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, KernelError>,
-) -> Result<Sort, KernelError> {
+    terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, Error>,
+) -> Result<Sort, Error> {
     let mut levels = Vec::new();
     let mut cursor = telescope.cursor();
 
@@ -252,10 +248,7 @@ fn sort_of_binders<B: Bound>(
 /// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
 /// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy reading the element's sort as the former's would type a list of proofs at `Prop`.
-pub(crate) fn sort_of_intrinsic(
-    kernel: &mut Kernel,
-    intrinsic: &Intrinsic,
-) -> Result<Sort, KernelError> {
+pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Sort, Error> {
     match intrinsic {
         Intrinsic::BoolType
         | Intrinsic::NatType
@@ -281,7 +274,7 @@ pub(crate) fn sort_of_intrinsic(
         }
 
         // An intrinsic *value* is not a type, so nothing here classifies it.
-        other => Err(KernelError::Unclassified(Term::intrinsic(other.clone()))),
+        other => Err(Error::Unclassified(Term::intrinsic(other.clone()))),
     }
 }
 
@@ -290,7 +283,7 @@ pub(crate) fn sort_of_intrinsic(
 /// `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
 ///
 /// This must never reach [`convert`](super::convert()): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
-pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, KernelError> {
+pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
     // A projection's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
     if let Some((group, index)) = term.as_rec_proj() {
         return Ok(Some(group.member_type(index)));
@@ -392,6 +385,6 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
 /// That a type is erased is not the criterion, and reading it as one would certify a closed inhabitant of `False`. Erasure governs what the *runtime* can observe; irrelevance is a claim about *definitional equality*, and conversion reads a type-valued position back in full. A proposition carrying `A : Type` is identified with one carrying `B`, so eliminating it — or projecting it, which meets no guard at all — makes `A` and `B` convertible, and transport does the rest. `crate::recheck::proposition_tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds that derivation shut; `erased_half` asks the runtime question and is where the structural `Type(_) | Prop` test legitimately belongs.
 ///
 /// Public for one reason: `curios-elab` writes this rule a second time as `is_prop`, and a compile cannot observe the two disagreeing — the elaborator refuses such a declaration before the kernel is asked — so the two are compared directly by `curios-elab`'s `typing::tests::both_checkers_decide_non_informativeness_alike`, which needs to name this one. It answers a question about a type and admits nothing on its own, so exporting it widens what the trusted base can be *asked* without widening what it can be told.
-pub fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, KernelError> {
+pub fn carries_information(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
     Ok(!Sort::of(kernel, type_)?.is_prop())
 }

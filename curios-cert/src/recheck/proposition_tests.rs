@@ -1,7 +1,7 @@
 //! What a proposition may carry, and what a proof may reach.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
     curios_core::{Atom, Global, InductParam, Module, Telescope, Term},
@@ -23,7 +23,7 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::LargeElimination(_))),
+            .any(|verdict| matches!(verdict.error, Error::LargeElimination(_))),
         "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
     );
 }
@@ -47,7 +47,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
     assert!(
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
-            KernelError::NotTotal {
+            Error::NotTotal {
                 erased: Erased::Proof,
                 reached: None,
             }
@@ -71,7 +71,7 @@ fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
     assert!(
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
-            KernelError::NotTotal {
+            Error::NotTotal {
                 erased: Erased::Proof,
                 reached: None,
             }
@@ -122,7 +122,7 @@ fn a_proposition_may_not_carry_a_computed_relevant_field() {
         verdicts
             .iter()
             .any(|verdict| verdict.name.as_ref() == Some(&wrap)
-                && matches!(verdict.error, KernelError::Mismatch { .. })),
+                && matches!(verdict.error, Error::Mismatch { .. })),
         "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
     );
 }

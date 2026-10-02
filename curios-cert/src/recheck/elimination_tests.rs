@@ -1,7 +1,7 @@
 //! Motives and result sorts, and the large-elimination guard a vacuous elimination must not skip.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope, Subterm,
@@ -34,7 +34,7 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::NotASort(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotASort(_))),
         "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
     );
 }
@@ -75,7 +75,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::RepeatedTag(_))),
+            .any(|verdict| matches!(verdict.error, Error::RepeatedTag(_))),
         "the kernel certified a refutation of a constructor the declaration states: {verdicts:?}",
     );
 }
@@ -120,7 +120,7 @@ fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard()
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::NotAMotive(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotAMotive(_))),
         "the kernel eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
     );
 }
@@ -138,7 +138,7 @@ fn an_honest_motive_still_refuses_the_large_elimination() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::LargeElimination(_))),
+            .any(|verdict| matches!(verdict.error, Error::LargeElimination(_))),
         "the guard did not fire even on an honest motive: {verdicts:?}",
     );
 }
@@ -244,7 +244,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::NotAMotive(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotAMotive(_))),
         "a vacuous elimination carried a motive nothing validated: {verdicts:?}",
     );
 }
@@ -268,7 +268,7 @@ fn no_type_position_admits_a_lying_motive() {
         assert!(
             verdicts.iter().any(|verdict| matches!(
                 &verdict.error,
-                KernelError::Mismatch { inferred, expected }
+                Error::Mismatch { inferred, expected }
                     if matches!(&***inferred, Subterm::Type(_))
                         && matches!(&***expected, Subterm::Prop)
             )),
@@ -292,7 +292,7 @@ fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::FoldMotiveCapturesScrutinee(_))),
+            .any(|verdict| matches!(verdict.error, Error::FoldMotiveCapturesScrutinee(_))),
         "the kernel typed a fold's hypothesis at the arm's own goal: {verdicts:?}",
     );
 }
@@ -309,7 +309,7 @@ fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
     // The successor arm's hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`: refused as the mismatch it is, at the successor.
     assert!(
         verdicts.iter().any(|verdict| match &verdict.error {
-            KernelError::Mismatch { expected, .. } => expected.to_string().contains("+ 1"),
+            Error::Mismatch { expected, .. } => expected.to_string().contains("+ 1"),
             _ => false,
         }),
         "the honest motive was not refused at the successor arm: {verdicts:?}",

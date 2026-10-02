@@ -1,5 +1,5 @@
 use {
-    crate::{Kernel, KernelError, Sort},
+    crate::{Error, Kernel, Sort},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
@@ -184,10 +184,7 @@ fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     let name = nominal("Missing");
     let type_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    assert_eq!(
-        Sort::of(&mut kernel, &type_),
-        Err(KernelError::Undeclared(name)),
-    );
+    assert_eq!(Sort::of(&mut kernel, &type_), Err(Error::Undeclared(name)),);
 }
 
 /// An intrinsic *value* is not a type, so nothing classifies it — again a refusal rather than a default.
@@ -197,7 +194,7 @@ fn a_value_in_type_position_is_refused() {
 
     assert!(matches!(
         Sort::of(&mut kernel, &Term::intrinsic(Intrinsic::Bool(true))),
-        Err(KernelError::Unclassified(_)),
+        Err(Error::Unclassified(_)),
     ));
 }
 

@@ -1,5 +1,5 @@
 use {
-    crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
+    crate::{Error, Kernel, check_induct_decl, check_struct_decl},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
@@ -49,7 +49,7 @@ fn a_payload_at_the_familys_own_level_is_refused() {
 
     assert!(matches!(
         check_induct_decl(&mut kernel, &declaration),
-        Err(KernelError::Oversized { .. }),
+        Err(Error::Oversized { .. }),
     ));
 }
 
@@ -117,7 +117,7 @@ fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
 
     assert!(matches!(
         check_induct_decl(&mut kernel, &declaration),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -145,7 +145,7 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
 
     assert!(matches!(
         check_induct_decl(&mut kernel, &declaration),
-        Err(KernelError::Arity { .. }),
+        Err(Error::Arity { .. }),
     ));
 }
 
@@ -198,7 +198,7 @@ fn a_proposition_may_not_carry_an_informative_field() {
 
     assert!(matches!(
         check_struct_decl(&mut kernel, &declaration),
-        Err(KernelError::Informative { .. })
+        Err(Error::Informative { .. })
     ));
 }
 
@@ -214,7 +214,7 @@ fn a_proposition_may_not_carry_a_type() {
 
     assert!(matches!(
         check_struct_decl(&mut kernel, &declaration),
-        Err(KernelError::Informative { .. })
+        Err(Error::Informative { .. })
     ));
 }
 

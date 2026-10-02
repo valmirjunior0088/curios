@@ -3,7 +3,7 @@
 //! A member whose declared type yields a sort is erased, so it must descend — the local gate `check_group` applies — and a group's calls are the only thing that gate reads. A call the recorder missed would be an edge the closure never saw, and a group with no edges is accepted, so every fixture below that refuses is the evidence that the call is recorded at all, and every one that accepts is the evidence that the context it was graded under was built.
 
 use {
-    crate::{Kernel, KernelError, infer},
+    crate::{Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Telescope, Term, Two,
@@ -76,7 +76,7 @@ fn a_type_calling_itself_at_its_own_argument_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel(), &term),
-        Err(KernelError::NotDescending { .. }),
+        Err(Error::NotDescending { .. }),
     ));
 }
 
@@ -185,6 +185,6 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::NotDescending { .. }),
+        Err(Error::NotDescending { .. }),
     ));
 }

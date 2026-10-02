@@ -35,7 +35,7 @@ mod typing_tests;
 
 use {
     super::{
-        Counted, Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort,
+        Counted, Error, Kernel, Sort, check_group, convert::convert, sort::as_sort,
         sort::infer_sort, synth_neutral,
     },
     curios_analysis::spine,
@@ -56,7 +56,7 @@ use {
 /// Deferring children onto an explicit worklist instead would change the *rule*: a deferred child is inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction — and the deferred positions are exactly arguments, constructor payloads and record fields, so a lambda or a dependent tuple in argument position would take the inferred route and manufacture the non-dependent type those rules exist to avoid. See `documentation/design/soundness/typing/checked-rules-at-deferred-child-positions.md`.
 ///
 /// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path is exponential in the claim's length. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
-pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
+pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
     recurse(|| {
         // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a local-free term names no member.
         let spine_head = kernel.calls.take_spine_head();
@@ -89,7 +89,7 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 }
 
 /// [`infer`]'s rules, one per term form. `spine_head` says `term` is the head of an application spine, whose call the spine records whole.
-fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Term, KernelError> {
+fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Term, Error> {
     kernel.spend(Cost::STEP)?;
 
     match &**term {
@@ -104,7 +104,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let signature = foreign_signature(function, args, |label| kernel.fresh(Some(label)));
 
             if args.len() != signature.operands.len() {
-                return Err(KernelError::Arity {
+                return Err(Error::Arity {
                     counted: Counted::Arguments,
                     expected: signature.operands.len(),
                     actual: args.len(),
@@ -131,7 +131,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             kernel
                 .type_of(var.unwrap())?
                 .cloned()
-                .ok_or_else(|| KernelError::Unbound(*var.unwrap()))
+                .ok_or_else(|| Error::Unbound(*var.unwrap()))
         }
 
         // A type former is a type, at the universe its parts join to — computed by the judgment role, which types those parts, rather than by the lookup, which only classifies them.
@@ -165,11 +165,11 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let Subterm::FuncType(FuncType { telescope, .. }) =
                 Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?)
             else {
-                return Err(KernelError::NotAFunction(head_type));
+                return Err(Error::NotAFunction(head_type));
             };
 
             if telescope.len() != apply.arguments.len() {
-                return Err(KernelError::Arity {
+                return Err(Error::Arity {
                     counted: Counted::Arguments,
                     expected: telescope.len(),
                     actual: apply.arguments.len(),
@@ -209,7 +209,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         // Projection: the component's type, with earlier components named by projections of this same head — which is what makes a Σ dependent.
         Subterm::Proj(Proj { head, field }) => {
             let Field::Index(index) = field else {
-                return Err(KernelError::Unclassified(term.clone()));
+                return Err(Error::Unclassified(term.clone()));
             };
 
             let head_type = infer(kernel, head)?;
@@ -217,13 +217,11 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             match Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?) {
                 Subterm::TupleType(TupleType { telescope }) => {
                     let len = telescope.len();
-                    telescope
-                        .field_type_from(head, *index)
-                        .ok_or(KernelError::Arity {
-                            counted: Counted::Components,
-                            expected: *index + 1,
-                            actual: len,
-                        })
+                    telescope.field_type_from(head, *index).ok_or(Error::Arity {
+                        counted: Counted::Components,
+                        expected: *index + 1,
+                        actual: len,
+                    })
                 }
                 Subterm::StructType(StructType {
                     name,
@@ -232,15 +230,13 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 }) => {
                     let fields = kernel.struct_at(&name, &universes, &params)?.fields();
                     let len = fields.len();
-                    fields
-                        .field_type_from(head, *index)
-                        .ok_or(KernelError::Arity {
-                            counted: Counted::Components,
-                            expected: *index + 1,
-                            actual: len,
-                        })
+                    fields.field_type_from(head, *index).ok_or(Error::Arity {
+                        counted: Counted::Components,
+                        expected: *index + 1,
+                        actual: len,
+                    })
                 }
-                _ => Err(KernelError::NotATuple(head_type)),
+                _ => Err(Error::NotATuple(head_type)),
             }
         }
 
@@ -284,12 +280,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             // The handle checks the universe instance and the parameter count before any of the declaration is read at them. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below would compare against the wrong number.
             let at = kernel.induct_at_params(name, universes, params)?;
             check_along(kernel, at.parameters(), params)?;
-            let signature = at
-                .signature(tag)
-                .ok_or_else(|| KernelError::Undeclared(*name))?;
+            let signature = at.signature(tag).ok_or_else(|| Error::Undeclared(*name))?;
 
             if signature.len() != payload.len() {
-                return Err(KernelError::Arity {
+                return Err(Error::Arity {
                     counted: Counted::Payload,
                     expected: signature.len(),
                     actual: payload.len(),
@@ -320,7 +314,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let telescope = at.fields();
 
             if telescope.len() != fields.len() {
-                return Err(KernelError::Arity {
+                return Err(Error::Arity {
                     counted: Counted::Fields,
                     expected: telescope.len(),
                     actual: fields.len(),
@@ -355,7 +349,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             if let Some(motive) = m.result.family()
                 && motive.arity() != indices.len() + 1
             {
-                return Err(KernelError::Arity {
+                return Err(Error::Arity {
                     counted: Counted::MotiveBinders,
                     expected: indices.len() + 1,
                     actual: motive.arity(),
@@ -419,12 +413,12 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
             match synth_neutral(kernel, term)? {
                 Some(type_) => Ok(type_),
-                None => Err(KernelError::Unclassified(term.clone())),
+                None => Err(Error::Unclassified(term.clone())),
             }
         }
 
         // Elaboration-only syntax. Reaching a metavariable or any transient means a term arrived here before elaboration was finished with it.
-        Subterm::Metavar(_) | Subterm::Transient(_) => Err(KernelError::NotCore(term.clone())),
+        Subterm::Metavar(_) | Subterm::Transient(_) => Err(Error::NotCore(term.clone())),
     }
 }
 
@@ -435,7 +429,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 /// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate.
 ///
 /// **The type is typed as written**, never its reduct, which would accept what a redex dropped — an argument or an arm — with nothing having typed it. The elaborator settles an occurrence at its recorded floor, its argument's level (`curios-elab`'s `UniverseSolver::finalize`), so a written type lands in the sort its reduct does and the constructor size condition loses nothing to reading it.
-pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
+pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
     let inferred = infer(kernel, type_)?;
 
     as_sort(kernel, &inferred)
@@ -455,7 +449,7 @@ fn check_motive(
     family: Option<&InductType>,
     result: &MatchResult,
     scrutinee_type: &Term,
-) -> Result<Sort, KernelError> {
+) -> Result<Sort, Error> {
     // An ambient goal was typed where it stands, so its well-formedness is asked in the ambient context and under no binder; what the guard needs is still its sort.
     let motive = match result {
         MatchResult::Family(motive) => motive,
@@ -503,10 +497,10 @@ fn check_motive(
 /// The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
 ///
 /// A budget failure is not a malformed motive, so it keeps its own diagnostic — on the way to the type and on the way from the type to its sort alike, the second being a reduction as the first is. Every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
-fn motive_sort(kernel: &mut Kernel, stated: &Term) -> Result<Sort, KernelError> {
+fn motive_sort(kernel: &mut Kernel, stated: &Term) -> Result<Sort, Error> {
     let refusal = |error| match error {
-        error @ KernelError::Reduce(_) => error,
-        _ => KernelError::NotAMotive(stated.clone()),
+        error @ Error::Reduce(_) => error,
+        _ => Error::NotAMotive(stated.clone()),
     };
 
     let type_ = infer(kernel, stated).map_err(refusal)?;
@@ -523,7 +517,7 @@ fn check_cases(
     cases: &Cases,
     scrutinee: &Term,
     scrutinee_type: &Term,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     let motive_sort = check_motive(kernel, family, result, scrutinee_type)?;
 
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
@@ -547,7 +541,7 @@ fn check_cases(
     match cases {
         Cases::Induct { cases, default } => {
             let Some(family) = family else {
-                return Err(KernelError::Unclassified(scrutinee.clone()));
+                return Err(Error::Unclassified(scrutinee.clone()));
             };
             let at = kernel.induct_at(family)?;
 
@@ -573,7 +567,7 @@ fn check_cases(
             true_case,
         } => {
             if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BoolType)) {
-                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+                return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
             at(kernel, Term::intrinsic(Intrinsic::Bool(false)), false_case)?;
@@ -582,7 +576,7 @@ fn check_cases(
 
         Cases::Switch { cases, default } => {
             if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::NatType)) {
-                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+                return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
             for (key, body) in cases {
@@ -620,7 +614,7 @@ fn reads_hypothesis(carrier: &Carrier) -> bool {
 
 /// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
-/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`KernelError::AmbientFold`]); and a family that reaches the scrutinee other than through its binder would type it at the arm's own goal ([`KernelError::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
+/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]); and a family that reaches the scrutinee other than through its binder would type it at the arm's own goal ([`Error::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
 ///
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
@@ -629,15 +623,15 @@ fn check_free_monoid(
     scrutinee: &Term,
     scrutinee_type: &Term,
     carrier: &Carrier,
-    at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
-) -> Result<(), KernelError> {
+    at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), Error>,
+) -> Result<(), Error> {
     let motive = match (reads_hypothesis(carrier), result) {
         (false, _) => None,
-        (true, MatchResult::Ambient(goal)) => return Err(KernelError::AmbientFold(goal.clone())),
+        (true, MatchResult::Ambient(goal)) => return Err(Error::AmbientFold(goal.clone())),
         // The capture is refused syntactically — `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` would prove `Eq()(n, 0)` for every `n` — which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
         (true, MatchResult::Family(motive)) => {
             if motive.body().mentions_term(scrutinee) {
-                return Err(KernelError::FoldMotiveCapturesScrutinee(scrutinee.clone()));
+                return Err(Error::FoldMotiveCapturesScrutinee(scrutinee.clone()));
             }
             Some(motive)
         }
@@ -654,7 +648,7 @@ fn check_free_monoid(
                 cons_value: Term,
                 size_value: Term,
                 body: &Term|
-     -> Result<(), KernelError> {
+     -> Result<(), Error> {
         kernel.scoped(|kernel| {
             for (binder, type_) in &binders {
                 kernel.assume(binder, type_);
@@ -681,7 +675,7 @@ fn check_free_monoid(
             cons_case,
         } => {
             if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::NatType)) {
-                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+                return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
             at(
@@ -716,10 +710,10 @@ fn check_free_monoid(
             cons_case,
         } => {
             let Subterm::Intrinsic(Intrinsic::ListType(scrutinee_elem)) = &**scrutinee_type else {
-                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+                return Err(Error::Unclassified(scrutinee_type.clone()));
             };
             if !convert(kernel, &Term::type_ground(), elem, scrutinee_elem)? {
-                return Err(KernelError::Mismatch {
+                return Err(Error::Mismatch {
                     inferred: Box::new(elem.clone()),
                     expected: Box::new(scrutinee_elem.clone()),
                 });
@@ -770,7 +764,7 @@ fn check_free_monoid(
         } => {
             if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BinType(found)) if found == grain)
             {
-                return Err(KernelError::Unclassified(scrutinee_type.clone()));
+                return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
             let empty = Term::intrinsic(Intrinsic::Bin(*grain, Binary::empty()));
@@ -811,7 +805,7 @@ fn check_free_monoid(
 }
 
 /// Verify that `term` has type `expected`.
-pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), KernelError> {
+pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Error> {
     // Whether this check opens a member body's leading lambdas — taken first, so it holds for this term alone and the λ rule is the one reader that carries it on.
     let parameters = kernel.calls.take_parameters();
 
@@ -833,7 +827,7 @@ fn check_rules(
     term: &Term,
     expected: &Term,
     parameters: bool,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
     if let Subterm::Let(Let { bindings, tail }) = &**term {
         let mut values = Vec::with_capacity(bindings.len());
@@ -891,7 +885,7 @@ fn check_rules(
 
     match subsumes(kernel, &inferred, expected)? {
         true => Ok(()),
-        false => Err(KernelError::Mismatch {
+        false => Err(Error::Mismatch {
             inferred: Box::new(inferred),
             expected: Box::new(expected.clone()),
         }),
@@ -906,7 +900,7 @@ fn check_lambda(
     lambda: Telescope<Term>,
     against: Telescope<Term>,
     parameters: bool,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     let mut walk = Lockstep::new(&lambda, &against);
 
     loop {
@@ -918,7 +912,7 @@ fn check_lambda(
             } => {
                 infer_type(kernel, &mine)?;
                 if !convert(kernel, &Term::type_ground(), &mine, &theirs)? {
-                    return Err(KernelError::Mismatch {
+                    return Err(Error::Mismatch {
                         inferred: Box::new(mine),
                         expected: Box::new(theirs),
                     });
@@ -944,9 +938,9 @@ fn check_fields(
     kernel: &mut Kernel,
     fields: &[Term],
     telescope: Telescope<()>,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     if telescope.len() != fields.len() {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::Fields,
             expected: telescope.len(),
             actual: fields.len(),
@@ -979,7 +973,7 @@ fn check_fields(
 /// **Domains are invariant, codomains cumulative.** Comparing domains by conversion rather than contravariantly is the choice Coq makes, and it is the freely-revisable side of the fork: widening to contravariance later accepts strictly more, so it breaks nothing already accepted, while shipping contravariance and withdrawing it would break programs.
 ///
 /// The elaborator reaches the same verdicts by a different route — it is bidirectional, so checking a λ against a Π pushes the comparison down to the leaves, where both sides are sorts and the head rule suffices, and it never forms the Π being subsumed here. Deciding this structurally instead is what makes the rule readable, and what lets the two checkers disagree if elaboration's traversal order ever changes.
-fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<bool, KernelError> {
+fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<bool, Error> {
     kernel.spend(Cost::STEP)?;
 
     let lower = kernel.reduce_forced(inferred.clone())?;
@@ -1010,7 +1004,7 @@ fn subsumes_telescope(
     kernel: &mut Kernel,
     this: Telescope<Term>,
     that: Telescope<Term>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     let mut walk = Lockstep::new(&this, &that);
 
     loop {
@@ -1035,7 +1029,7 @@ fn check_along<B: Bound>(
     kernel: &mut Kernel,
     telescope: Telescope<B>,
     arguments: &[Term],
-) -> Result<B, KernelError> {
+) -> Result<B, Error> {
     let mut cursor = telescope.cursor();
     for argument in arguments {
         let (_, domain) = cursor.entry().expect("the caller checked the count");
@@ -1048,7 +1042,7 @@ fn check_along<B: Bound>(
 }
 
 /// The Π a λ inhabits, with each binder standing for the corresponding one of `arguments` where the λ is applied on the spot.
-fn infer_lambda(kernel: &mut Kernel, func: &Func, arguments: &[Term]) -> Result<Term, KernelError> {
+fn infer_lambda(kernel: &mut Kernel, func: &Func, arguments: &[Term]) -> Result<Term, Error> {
     let telescope = infer_telescope(kernel, func.telescope.clone(), arguments)?;
 
     Ok(Subterm::FuncType(FuncType::new(telescope, func.plicities().to_vec())).into())
@@ -1063,7 +1057,7 @@ fn infer_telescope(
     kernel: &mut Kernel,
     telescope: Telescope<Term>,
     arguments: &[Term],
-) -> Result<Telescope<Term>, KernelError> {
+) -> Result<Telescope<Term>, Error> {
     kernel.scoped(|kernel| {
         let mut entries = Vec::new();
         let mut cursor = telescope.cursor();

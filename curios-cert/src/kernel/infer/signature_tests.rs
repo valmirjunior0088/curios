@@ -1,7 +1,7 @@
 //! Each roster row held to what it types: a literal at the carrier its payload is a value of, a fold's value at the carrier its row states and nowhere past the domain it states, an operation the algebra declares at the carrier it is declared at, a row no fold answers at a description, and a parameterized former at its element's level.
 
 use {
-    crate::{Kernel, KernelError, infer},
+    crate::{Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Declaration, Free, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity,
@@ -594,7 +594,7 @@ fn a_bounded_row_is_refused_one_step_past_its_folds_domain() {
         assert!(
             matches!(
                 infer(&mut kernel, &application),
-                Err(KernelError::Mismatch { .. })
+                Err(Error::Mismatch { .. })
             ),
             "{application:?} is typed past its bound",
         );

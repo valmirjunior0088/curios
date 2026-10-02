@@ -1,7 +1,7 @@
 //! Index targets the walk checks rather than believes, and the scheme a registry may declare apart from its type former.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
@@ -34,7 +34,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::NotCore(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
         "the kernel certified a module carrying an unsolved metavariable: {verdicts:?}",
     );
 }
@@ -182,7 +182,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "the registry's result sort was not applied to the levels the occurrence supplied: {verdicts:?}",
     );
 }

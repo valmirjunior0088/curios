@@ -6,7 +6,7 @@
 
 use {
     super::{History, compare, ground},
-    crate::{Kernel, KernelError},
+    crate::{Error, Kernel},
     curios_analysis::{Congruence, Driver, Obligation, Outcome, convert_intrinsics},
     curios_core::Intrinsic,
     curios_utilities::SyntaxRegistry,
@@ -20,7 +20,7 @@ pub(super) fn convert_intrinsic(
     history: &mut History,
     this: &Intrinsic,
     that: &Intrinsic,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     match convert_intrinsics(kernel, this.clone(), that.clone())? {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),

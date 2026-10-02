@@ -24,7 +24,7 @@ Each checker supplies its own reduction, unfolding and fresh binders through `En
 **Rejected.**
 
 - **The kernel inside the elaborator's crate.** Its membership would be traced rather than enforced; a crate boundary makes "not trusted" structural, so no builder, printer or convenience can sit inside the base.
-- **A fresh, metavariable-free IR for the kernel.** The translation into it would be trusted and unchecked, and every construct would have two representations. What a kernel input must not contain — a `Metavar` and the `Transient` forms lowering creates for elaboration — is refused where the kernel meets it, as `KernelError::NotCore`.
+- **A fresh, metavariable-free IR for the kernel.** The translation into it would be trusted and unchecked, and every construct would have two representations. What a kernel input must not contain — a `Metavar` and the `Transient` forms lowering creates for elaboration — is refused where the kernel meets it, as `curios_cert::Error::NotCore`.
 - **Sharing the reduction driver** behind a trait for lookup and metavariables. It saves a few hundred lines and makes a mistake in the scrutinee stack, `rec` forcing or the eta side condition a mistake in both checkers.
 - **Recognizing fold shapes and accelerating them** instead of a closed machine. Recognition is syntactic where closedness is semantic, each recognized fold would be its own trusted entry, and only folds would benefit; the kernels that stayed general, Rocq's `cClosure` and `vm_compute` and Agda's call-by-need machine, meet the same cost with a machine.
 - **Blessing the types that hurt**, Lean's native strings: it fixes strings alone and moves a UTF-8 validator into the trusted base, where the machine accelerates a user's fold as it does the prelude's.

@@ -27,7 +27,7 @@ mod tests;
 
 use {
     super::{check, infer},
-    crate::{Counted, InductAt, Kernel, KernelError, Sort, carries_information},
+    crate::{Counted, Error, InductAt, Kernel, Sort, carries_information},
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
     },
@@ -46,7 +46,7 @@ pub(super) fn check_induct_arms(
     cases: &[(Atom, InductArm)],
     default: Option<&Term>,
     scrutinee: &Term,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     for (tag, arm) in cases {
         check_arm(kernel, at, family, result, scrutinee, tag, arm)?;
     }
@@ -66,7 +66,7 @@ pub(super) fn check_induct_arms(
 
         let signature = at
             .signature(tag)
-            .ok_or_else(|| KernelError::Undeclared(family.name))?;
+            .ok_or_else(|| Error::Undeclared(family.name))?;
 
         let outcome = kernel.scoped(|kernel| {
             open_payload(kernel, signature, |kernel, binders, _payload, targets| {
@@ -75,7 +75,7 @@ pub(super) fn check_induct_arms(
         });
 
         if !matches!(outcome?, Invert::Impossible) {
-            return Err(KernelError::MissingArm {
+            return Err(Error::MissingArm {
                 family: family.name,
                 tag: tag.clone(),
             });
@@ -94,13 +94,13 @@ fn check_arm(
     scrutinee: &Term,
     tag: &Atom,
     arm: &InductArm,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     let signature = at
         .signature(tag)
-        .ok_or_else(|| KernelError::Undeclared(family.name))?;
+        .ok_or_else(|| Error::Undeclared(family.name))?;
 
     if signature.len() != arm.arity() {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::ArmBinders,
             expected: signature.len(),
             actual: arm.arity(),
@@ -174,7 +174,7 @@ fn specialize(
     family: &InductType,
     targets: &[Term],
     binders: &[Free],
-) -> Result<Vec<(Free, Term)>, KernelError> {
+) -> Result<Vec<(Free, Term)>, Error> {
     Ok(
         match solve_indices(kernel, &family.indices, targets, binders)? {
             Invert::Impossible => Vec::new(),
@@ -204,8 +204,8 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
 fn open_payload<T, B: Bound>(
     kernel: &mut Kernel,
     signature: Telescope<B>,
-    body: impl FnOnce(&mut Kernel, &[Free], &[Term], &B) -> Result<T, KernelError>,
-) -> Result<T, KernelError> {
+    body: impl FnOnce(&mut Kernel, &[Free], &[Term], &B) -> Result<T, Error>,
+) -> Result<T, Error> {
     let mut binders = Vec::new();
     let mut cursor = signature.cursor();
 
@@ -227,7 +227,7 @@ pub(super) fn guard_large_elimination(
     at: &InductAt,
     family: &InductType,
     motive_sort: Sort,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     let scrutinee_type: Term = Subterm::InductType(family.clone()).into();
     if !Sort::of(kernel, &scrutinee_type)?.is_prop() {
         return Ok(());
@@ -245,7 +245,7 @@ pub(super) fn guard_large_elimination(
         [(tag, _)] => {
             let signature = at
                 .signature(tag)
-                .ok_or_else(|| KernelError::Undeclared(family.name))?;
+                .ok_or_else(|| Error::Undeclared(family.name))?;
 
             let outcome = kernel.scoped(|kernel| {
                 open_payload(kernel, signature, |kernel, _binders, payload, targets| {
@@ -276,9 +276,9 @@ pub(super) fn guard_large_elimination(
 
             match outcome? {
                 true => Ok(()),
-                false => Err(KernelError::LargeElimination(family.name)),
+                false => Err(Error::LargeElimination(family.name)),
             }
         }
-        _ => Err(KernelError::LargeElimination(family.name)),
+        _ => Err(Error::LargeElimination(family.name)),
     }
 }

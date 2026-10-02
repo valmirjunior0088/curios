@@ -6,7 +6,7 @@
 //!
 //! Three things make that workable and all three are this component's rather than a caller's: sort-hood is memoized per *distinct type*, so classifying at every record site costs one question per type rather than one per position; a classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn.
 
-use {super::KernelError, curios_analysis::Erased, curios_core::Term, std::collections::HashMap};
+use {super::Error, curios_analysis::Erased, curios_core::Term, std::collections::HashMap};
 
 /// One erased position an item's check recorded.
 pub(crate) struct Position {
@@ -22,7 +22,7 @@ pub(super) struct Positions {
     /// Sort-hood per distinct type. Keyed on terms whose binders are the item's own, which is what makes an entry meaningful only within the item that made it — cleared with the drain.
     memo: HashMap<Term, Option<Erased>>,
     /// The first classification that could not be decided.
-    failure: Option<KernelError>,
+    failure: Option<Error>,
     /// Re-entrancy guard: set while an erased half is being decided.
     classifying: bool,
 }
@@ -49,7 +49,7 @@ impl Positions {
     pub(super) fn settle(
         &mut self,
         type_: &Term,
-        outcome: Result<Option<Erased>, KernelError>,
+        outcome: Result<Option<Erased>, Error>,
     ) -> Option<Erased> {
         self.classifying = false;
 
@@ -86,7 +86,7 @@ impl Positions {
     /// Take this item's positions and any classification that could not be decided, leaving both empty for the next item.
     ///
     /// The memo goes with them: its keys mention the item's own binders, so an entry means nothing once they are retracted.
-    pub(super) fn drain(&mut self) -> (Vec<Position>, Option<KernelError>) {
+    pub(super) fn drain(&mut self) -> (Vec<Position>, Option<Error>) {
         self.memo.clear();
 
         (std::mem::take(&mut self.recorded), self.failure.take())

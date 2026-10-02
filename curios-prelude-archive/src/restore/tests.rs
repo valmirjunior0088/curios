@@ -4,8 +4,7 @@ use {
     super::*,
     crate::SYNTAX,
     curios_cert::{
-        Globals, KernelError, certify_module, recheck_module_measured,
-        recheck_module_verdicts_uncached,
+        Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
     },
     curios_core::{Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked},
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
@@ -220,9 +219,9 @@ fn head(term: &Term) -> String {
 /// The class a refusal is tallied under.
 ///
 /// Deliberately mechanical: the variant, plus for a mismatch the two sides' printed heads. Naming classes like "index inversion" here would be inventing categories from a heuristic, which is how this project's wrong answers get made — the point of the tally is to let the categories fall out of it.
-fn class(error: &KernelError) -> String {
+fn class(error: &Error) -> String {
     match error {
-        KernelError::Mismatch { inferred, expected } => {
+        Error::Mismatch { inferred, expected } => {
             format!("Mismatch  {}  vs  {}", head(inferred), head(expected))
         }
         other => {

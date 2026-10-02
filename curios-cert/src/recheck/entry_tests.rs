@@ -1,7 +1,7 @@
 //! The entrypoint: judged at the type it states, and refused when it states none.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Entrypoint, Intrinsic, Module, Nat, Program, Term},
     std::collections::{BTreeMap, BTreeSet},
@@ -45,8 +45,7 @@ fn an_entry_stating_no_type_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| verdict.name.is_none()
-                && matches!(verdict.error, KernelError::UntypedEntry)),
+            .any(|verdict| verdict.name.is_none() && matches!(verdict.error, Error::UntypedEntry)),
         "an entry with no type was certified: {verdicts:?}",
     );
 }
@@ -69,7 +68,7 @@ fn an_entry_is_checked_against_the_type_it_states() {
     assert!(
         stated(Intrinsic::BoolType)
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "a `Nat` entry stated at `Bool` was certified",
     );
     assert_eq!(stated(Intrinsic::NatType), Vec::new());

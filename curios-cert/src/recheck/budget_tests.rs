@@ -1,7 +1,7 @@
 //! Each judgment of the walk spends a budget of its own.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat,
@@ -90,10 +90,7 @@ fn positivity_is_judged_on_its_own_budget() {
 
     assert!(
         verdicts.iter().any(|verdict| verdict.name.is_none()
-            && matches!(
-                verdict.error,
-                KernelError::Reduce(ReduceError::Exhausted { .. })
-            )),
+            && matches!(verdict.error, Error::Reduce(ReduceError::Exhausted { .. }))),
         "the control stopped holding: the entrypoint must spend its whole budget: {verdicts:?}",
     );
     assert!(

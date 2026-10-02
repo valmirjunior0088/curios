@@ -33,7 +33,7 @@ mod recursion_tests;
 mod test_support;
 
 use {
-    super::{Counted, Kernel, KernelError, Sort, synth_neutral, unfold_spelling},
+    super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     curios_analysis::connectives_agree,
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
@@ -46,12 +46,7 @@ use {
 };
 
 /// Whether `this` and `that` are definitionally equal at `type_`.
-pub fn convert(
-    kernel: &mut Kernel,
-    type_: &Term,
-    this: &Term,
-    that: &Term,
-) -> Result<bool, KernelError> {
+pub fn convert(kernel: &mut Kernel, type_: &Term, this: &Term, that: &Term) -> Result<bool, Error> {
     curios_profile::profile!("convert");
     let mut history = History::default();
 
@@ -114,7 +109,7 @@ fn compare(
     type_: &Term,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     recurse(|| {
         kernel.spend(Cost::STEP)?;
 
@@ -170,7 +165,7 @@ fn one_definition_by_its_spines(
     history: &mut History,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     let (Subterm::Apply(left), Subterm::Apply(right)) = (&**this, &**that) else {
         return Ok(false);
     };
@@ -216,7 +211,7 @@ fn eta_function(
     telescope: Telescope<Term>,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     kernel.scoped(|kernel| {
         let mut cursor = telescope.cursor();
         while let Some((_, domain)) = cursor.entry() {
@@ -244,7 +239,7 @@ fn eta_tuple(
     telescope: Telescope<()>,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     let mut cursor = telescope.cursor();
 
     while let Some((_, field)) = cursor.entry() {
@@ -270,7 +265,7 @@ fn structural(
     history: &mut History,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     match (&**this, &**that) {
         // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
         (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
@@ -283,9 +278,7 @@ fn structural(
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 
         // A metavariable is elaboration-only syntax, and refusing it *here* is what makes the exclusion the kernel's own rather than an inherited guarantee of `zonk_module`'s traversal. `whnf` still treats one as a stuck neutral — a reduction stance, not an admission: the only ways a term is admitted are `infer` and this comparison, and both refuse. The syntactic fast path in `compare` does admit a metavariable against *itself*, and soundly: reflexivity decides nothing about the unknown, which is exactly what this arm exists to prevent.
-        (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => {
-            Err(KernelError::NotCore(this.clone()))
-        }
+        (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Err(Error::NotCore(this.clone())),
 
         // Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
         (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities()
@@ -518,7 +511,7 @@ fn params_at(
     telescope: Option<Telescope<Telescope<()>>>,
     this: &[Term],
     that: &[Term],
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     if this.len() != that.len() {
         return Ok(false);
     }
@@ -571,7 +564,7 @@ fn induct_type_args(
     universes: &[Level],
     (left_params, left_indices): (&[Term], &[Term]),
     (right_params, right_indices): (&[Term], &[Term]),
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     if left_params.len() != right_params.len() || left_indices.len() != right_indices.len() {
         return Ok(false);
     }
@@ -629,7 +622,7 @@ fn struct_eta(
     history: &mut History,
     literal: &Struct,
     other: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     // Through the checked handle: a literal at the wrong parameter count would otherwise reach `fields_at`, which opens the arity and asserts. Declining is conversion's own answer for a shape it cannot decide, and it is the right one here too.
     let Ok(at) = kernel.struct_at(&literal.name, &literal.universes, &literal.params) else {
         return Ok(false);
@@ -669,7 +662,7 @@ fn unfolded_retry(
     history: &mut History,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     curios_profile::profile!("convert::unfolded_retry");
     if rec_instances(kernel, applied_head(this), applied_head(that)) == Some(false) {
         return Ok(false);
@@ -728,11 +721,7 @@ fn applied_head(term: &Term) -> &Term {
 }
 
 /// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices its scrutinee's type carries, read by the lookup a neutral spine has, since conversion looks a type up and never infers one. A scrutinee the lookup does not type — a stuck match of its own — leaves the indices unread, and the binder count below refuses the pair.
-fn family_at_head(
-    kernel: &mut Kernel,
-    motive: &Scope<Many>,
-    head: &Term,
-) -> Result<Term, KernelError> {
+fn family_at_head(kernel: &mut Kernel, motive: &Scope<Many>, head: &Term) -> Result<Term, Error> {
     let mut arguments = Vec::with_capacity(motive.arity());
     if motive.arity() > 1
         && let Some(head_type) = synth_neutral(kernel, head)?
@@ -744,7 +733,7 @@ fn family_at_head(
     }
     arguments.push(head.clone());
     if arguments.len() != motive.arity() {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::MotiveBinders,
             expected: motive.arity(),
             actual: arguments.len(),
@@ -760,7 +749,7 @@ fn ground_scope(
     history: &mut History,
     this: &Scope<Many>,
     that: &Scope<Many>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     if this.arity() != that.arity() {
         return Ok(false);
     }
@@ -778,7 +767,7 @@ fn ground_scope_two(
     history: &mut History,
     this: &Scope<Two>,
     that: &Scope<Two>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     kernel.scoped(|kernel| {
         let o = opaque_binders(kernel, 2);
         ground(
@@ -795,7 +784,7 @@ fn ground_scope_three(
     history: &mut History,
     this: &Scope<Three>,
     that: &Scope<Three>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     kernel.scoped(|kernel| {
         let o = opaque_binders(kernel, 3);
         ground(
@@ -823,7 +812,7 @@ fn ground_cases(
     history: &mut History,
     this: &Cases,
     that: &Cases,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     match (this, that) {
         (
             Cases::Bool {
@@ -946,8 +935,8 @@ fn compare_binders<B: Bound>(
     history: &mut History,
     this: Telescope<B>,
     that: Telescope<B>,
-    terminal: impl FnOnce(&mut Kernel, &mut History, B, B) -> Result<bool, KernelError>,
-) -> Result<bool, KernelError> {
+    terminal: impl FnOnce(&mut Kernel, &mut History, B, B) -> Result<bool, Error>,
+) -> Result<bool, Error> {
     kernel.scoped(|kernel| {
         let mut walk = Lockstep::new(&this, &that);
 
@@ -973,7 +962,7 @@ fn compare_telescope(
     history: &mut History,
     this: Telescope<Term>,
     that: Telescope<Term>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     compare_binders(
         kernel,
         history,
@@ -989,7 +978,7 @@ fn compare_field_telescope(
     history: &mut History,
     this: Telescope<()>,
     that: Telescope<()>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     compare_binders(kernel, history, this, that, |_, _, (), ()| Ok(true))
 }
 
@@ -1005,7 +994,7 @@ fn compare_arguments(
     history: &mut History,
     left: &Apply,
     right: &Apply,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     let Some(telescope) = spine_telescope(kernel, &left.head, left.arguments.len())? else {
         return compare_each(kernel, history, left.params(), right.params());
     };
@@ -1023,7 +1012,7 @@ fn spine_telescope(
     kernel: &mut Kernel,
     head: &Term,
     arity: usize,
-) -> Result<Option<Telescope<Term>>, KernelError> {
+) -> Result<Option<Telescope<Term>>, Error> {
     let names_a_type = match &**head {
         Subterm::Var(var) => var.as_free().is_some(),
         Subterm::Instance(_) => true,
@@ -1054,7 +1043,7 @@ fn compare_each<'a>(
     history: &mut History,
     this: impl ExactSizeIterator<Item = &'a Term>,
     that: impl ExactSizeIterator<Item = &'a Term>,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     if this.len() != that.len() {
         return Ok(false);
     }
@@ -1075,7 +1064,7 @@ fn compare_fields_at<B: Bound>(
     telescope: Option<Telescope<B>>,
     this: &[Term],
     that: &[Term],
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     if this.len() != that.len() {
         return Ok(false);
     }
@@ -1104,6 +1093,6 @@ fn ground(
     history: &mut History,
     this: &Term,
     that: &Term,
-) -> Result<bool, KernelError> {
+) -> Result<bool, Error> {
     compare(kernel, history, &Term::type_ground(), this, that)
 }

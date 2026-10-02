@@ -1,7 +1,7 @@
 //! Universe contexts, levels, and the instance an occurrence must state.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
@@ -120,7 +120,7 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
         assert!(
             verdicts
                 .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::NotCore(_))),
+                .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
             "{label}: the kernel certified a module carrying an unsolved universe metavariable: {verdicts:?}",
         );
     }
@@ -171,7 +171,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
         assert!(
             verdicts
                 .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::UnclosedUniverses)),
+                .any(|verdict| matches!(verdict.error, Error::UnclosedUniverses)),
             "{label}: the kernel certified a level naming a parameter the declaration does not have: {verdicts:?}",
         );
     }
@@ -221,7 +221,7 @@ fn a_universe_instance_narrower_than_its_scheme_is_refused() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+            .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
         "the kernel certified an occurrence that leaves a declared universe parameter unsupplied: {verdicts:?}",
     );
 }
@@ -355,7 +355,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         assert!(
             verdicts.iter().any(|verdict| {
                 verdict.name == Some(Global::Authored(Qualifier::from(["coerce"])))
-                    && matches!(verdict.error, KernelError::Mismatch { .. })
+                    && matches!(verdict.error, Error::Mismatch { .. })
             }),
             "{label}: the kernel certified a coercion between two types it calls distinct: {verdicts:?}",
         );

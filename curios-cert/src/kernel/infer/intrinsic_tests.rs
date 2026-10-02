@@ -1,7 +1,7 @@
 //! Intrinsic operands and results, the narrowing that needs its bound, and the free-monoid arms.
 
 use {
-    crate::{KernelError, infer},
+    crate::{Error, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Intrinsic, Term, UniverseContext},
     curios_num::Integer,
@@ -42,7 +42,7 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     for invalid in [allocation(0, Term::free_var(&proof)), allocation(1, nat(1))] {
         assert!(matches!(
             infer(&mut kernel, &invalid),
-            Err(KernelError::Mismatch { .. })
+            Err(Error::Mismatch { .. })
         ));
     }
 }
@@ -59,7 +59,7 @@ fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &mixed),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -112,7 +112,7 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
                 non_neg: nat(1),
             }),
         ),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -160,7 +160,7 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
                 items: vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))]
             }),
         ),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 
     assert_eq!(
@@ -209,7 +209,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     );
     assert!(matches!(
         infer(&mut kernel, &wrong),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 
     // A zero arm of the wrong type is refused too — the identity case is a case like any other.
@@ -224,7 +224,7 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     );
     assert!(matches!(
         infer(&mut kernel, &wrong_zero),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -253,7 +253,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     );
     assert!(matches!(
         infer(&mut kernel, &mismatched),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 

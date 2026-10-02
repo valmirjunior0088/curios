@@ -1,7 +1,7 @@
 //! Identities a walk is handed: a free local is refused before the kernel mints a binder that could alias it.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Entrypoint, Free, Global, Intrinsic, Module, Nat, Program, Term},
     curios_utilities::Qualifier,
@@ -55,7 +55,7 @@ fn a_definition_mentioning_a_free_local_is_refused() {
         let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(held())
-                && matches!(&verdict.error, KernelError::Unbound(found) if *found == stray)),
+                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
             "a definition mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }
@@ -80,7 +80,7 @@ fn an_entry_mentioning_a_free_local_is_refused() {
         let verdicts = fixture_verdicts(&program, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name.is_none()
-                && matches!(&verdict.error, KernelError::Unbound(found) if *found == stray)),
+                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
             "an entry mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }

@@ -1,7 +1,7 @@
 //! Structure occurrences at their declared parameter count, and the syntax elaboration may leave behind.
 
 use {
-    crate::{KernelError, check, infer},
+    crate::{Error, check, infer},
     curios_core::{
         Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term, Transient,
         UniverseContext,
@@ -48,11 +48,11 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 
     assert!(matches!(
         check(&mut kernel, &list, &Term::prop()),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
     assert!(matches!(
         check(&mut kernel, &cell, &Term::prop()),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 
     // A former still carries its element's level rather than being pinned at zero, and a proposition still stands where one is wanted.
@@ -82,13 +82,13 @@ fn elaboration_only_syntax_is_refused() {
     let derive = Term::from(Subterm::Transient(Transient::Derive));
     assert!(matches!(
         infer(&mut kernel, &derive),
-        Err(KernelError::NotCore(_)),
+        Err(Error::NotCore(_)),
     ));
 
     let metavar = Term::hole(MetavarId::from(0usize));
     assert!(matches!(
         infer(&mut kernel, &metavar),
-        Err(KernelError::NotCore(_)),
+        Err(Error::NotCore(_)),
     ));
 }
 
@@ -115,7 +115,7 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
     assert!(
         matches!(
             infer(&mut kernel, &Term::proj(Term::free_var(&value), 0)),
-            Err(KernelError::Arity { .. }),
+            Err(Error::Arity { .. }),
         ),
         "a projection opened the arity at a parameter count the declaration does not have",
     );
@@ -123,7 +123,7 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
     assert!(
         matches!(
             check(&mut kernel, &Term::tuple([nat(0)]), &short),
-            Err(KernelError::Arity { .. }),
+            Err(Error::Arity { .. }),
         ),
         "a record literal opened the arity at a parameter count the declaration does not have",
     );

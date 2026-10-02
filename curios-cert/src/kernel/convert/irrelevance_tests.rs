@@ -2,7 +2,7 @@
 
 use super::test_support::*;
 use {
-    crate::{KernelError, convert},
+    crate::{Error, convert},
     curios_core::{
         Atom, Cases, Free, InductDecl, InductParam, Intrinsic, Level, Match, MatchResult,
         StructDecl, Subterm, Telescope, Term, UniverseContext,
@@ -309,7 +309,7 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
 
     let relevant = Term::type_at(Level::constant(3));
     let stand_in = Term::type_ground();
-    let not_a_sort = || Err(KernelError::NotASort(nat_type()));
+    let not_a_sort = || Err(Error::NotASort(nat_type()));
 
     // Distinct sides: only a proposition discharges them, and the stand-in is not one.
     assert_eq!(

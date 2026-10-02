@@ -2,7 +2,7 @@
 //!
 //! A module is a sequence of top-level items, and a kernel run over one is just that sequence walked in order. Each item's type is checked to be a type, its body checked against that type, and only then is the name defined — so an item can never depend on itself except through `rec`, and a later item sees exactly the earlier ones.
 //!
-//! The order is load-bearing and it is the module's, not a convenience. A definition placed after its use would go unnoticed by a checker that seeded every name up front; here it is an [`Unbound`](crate::KernelError::Unbound).
+//! The order is load-bearing and it is the module's, not a convenience. A definition placed after its use would go unnoticed by a checker that seeded every name up front; here it is an [`Unbound`](crate::Error::Unbound).
 //!
 //! # This module does not know what a module is
 //!
@@ -13,7 +13,7 @@ mod tests;
 
 use {
     super::{
-        Counted, Kernel, KernelError, Sort, carries_information,
+        Counted, Error, Kernel, Sort, carries_information,
         convert::convert,
         infer::{check, infer_type},
     },
@@ -35,7 +35,7 @@ pub(crate) fn check_definition(
     type_: &Term,
     body: &Term,
     universes: &UniverseContext,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
@@ -57,8 +57,8 @@ pub(crate) fn check_definition(
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
-    within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, KernelError>,
-) -> Result<R, KernelError> {
+    within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, Error>,
+) -> Result<R, Error> {
     kernel.scoped(|kernel| {
         // Signatures first, then bodies — and the two phases must read a sibling differently.
         //
@@ -108,7 +108,7 @@ pub(crate) fn check_group<R>(
         if let Some(type_) = erased_member
             && totality != Totality::Total
         {
-            return Err(KernelError::NotDescending {
+            return Err(Error::NotDescending {
                 type_: Box::new(type_),
             });
         }
@@ -127,12 +127,12 @@ pub(crate) fn check_rec_group(
     names: &[Free],
     group: &RecGroup,
     universes: &UniverseContext,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
     if names.len() != group.length() {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::GroupMembers,
             expected: group.length(),
             actual: names.len(),
@@ -182,7 +182,7 @@ pub(crate) fn check_rec_group(
 pub(crate) fn check_induct_decl(
     kernel: &mut Kernel,
     declaration: &InductDecl,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     curios_profile::profile!("check_induct_decl");
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
@@ -209,10 +209,10 @@ pub(crate) fn check_induct_decl(
 /// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
 ///
 /// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
-fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
+fn check_declared_sort(result_sort: &Term) -> Result<(), Error> {
     match &**result_sort {
         Subterm::Prop | Subterm::Type(_) => Ok(()),
-        _ => Err(KernelError::NotASort(result_sort.clone())),
+        _ => Err(Error::NotASort(result_sort.clone())),
     }
 }
 
@@ -221,7 +221,7 @@ fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {
 /// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match* — [`InductDecl::constructor`], and `constructor_index` with it. So a repeat does not add a constructor, it hides one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage shows the cost: asked whether each constructor is impossible at the scrutinee's indices, it would resolve both entries to the first and could report a family empty at an index the declaration's own second entry constructs at — certifying a refutation of a constructor the same declaration states.
 ///
 /// Construction resolves by first match too, so the shadowed entry would have no inhabitant to hand that refutation, but that is an accident. With this clause the elimination rule ranges over constructors that are distinct, rather than being sound because an unrelated rule happens to be lossy in the same direction.
-fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
+fn check_distinct_tags(declaration: &InductDecl) -> Result<(), Error> {
     // Scanned rather than collected into a set, for the reason [`InductDecl::constructor`] gives for scanning: constructor counts are small enough that the set costs more than it saves.
     for (position, tag) in declaration.constructor_order().enumerate() {
         if declaration
@@ -229,7 +229,7 @@ fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
             .take(position)
             .any(|earlier| earlier == tag)
         {
-            return Err(KernelError::RepeatedTag(tag.clone()));
+            return Err(Error::RepeatedTag(tag.clone()));
         }
     }
 
@@ -239,7 +239,7 @@ fn check_distinct_tags(declaration: &InductDecl) -> Result<(), KernelError> {
 /// Every domain of the declaration's arity is a type: its parameters, and the index telescope they terminate in.
 ///
 /// One walk, because the indices are scoped under the parameters by construction. It reaches the parameter domains as well, which matters for a family with no constructors — nothing else would present them for sorting.
-fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), KernelError> {
+fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Error> {
     walk_arity(
         kernel,
         &declaration.arity,
@@ -254,9 +254,9 @@ fn check_arity(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Kern
 fn walk_arity<B: Bound>(
     kernel: &mut Kernel,
     arity: &Telescope<Telescope<B>>,
-    mut parameter: impl FnMut(&mut Kernel, &Term) -> Result<(), KernelError>,
-    mut terminal: impl FnMut(&mut Kernel, &Term) -> Result<(), KernelError>,
-) -> Result<(), KernelError> {
+    mut parameter: impl FnMut(&mut Kernel, &Term) -> Result<(), Error>,
+    mut terminal: impl FnMut(&mut Kernel, &Term) -> Result<(), Error>,
+) -> Result<(), Error> {
     kernel.scoped(|kernel| {
         let mut cursor = arity.cursor();
         while let Some((_, domain)) = cursor.entry() {
@@ -283,12 +283,12 @@ fn check_constructed(
     declaration: &InductDecl,
     entries: &[(Free, Term)],
     targets: &[Term],
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
     //
     // Refused before the walk, because `take` would end it early without complaint: a telescope too short to hold the prefix would hand `indices_at` a short parameter list and panic in `Telescope::open`, and a malformed entry deserves a refusal rather than a crash.
     if entries.len() < declaration.param_count() {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::Parameters,
             expected: declaration.param_count(),
             actual: entries.len(),
@@ -302,7 +302,7 @@ fn check_constructed(
             .entry()
             .expect("the arity holds exactly `param_count` binders");
         if !convert(kernel, &Term::type_ground(), domain, &expected)? {
-            return Err(KernelError::Mismatch {
+            return Err(Error::Mismatch {
                 inferred: Box::new(domain.clone()),
                 expected: Box::new(expected),
             });
@@ -314,7 +314,7 @@ fn check_constructed(
 
     let expected = declaration.index_count();
     if targets.len() != expected {
-        return Err(KernelError::Arity {
+        return Err(Error::Arity {
             counted: Counted::Indices,
             expected,
             actual: targets.len(),
@@ -342,7 +342,7 @@ fn check_constructed(
 pub(crate) fn check_struct_decl(
     kernel: &mut Kernel,
     declaration: &StructDecl,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     curios_profile::profile!("check_struct_decl");
     kernel.restore_budget();
     kernel.assume_universes(&declaration.universe_context);
@@ -373,7 +373,7 @@ pub(crate) fn check_struct_decl(
 /// Proof irrelevance makes any two inhabitants of a proposition definitionally equal, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard. A `Prop` structure carrying a `Nat` therefore hands the same field two convertible inhabitants with different values, and `Eq` plus congruence turns that into `False`. A field carrying a *type* does the same thing one level up — the two convertible inhabitants hand the projection two different types — so being erased buys it no exemption; see [`carries_information`].
 ///
 /// Parameters are skipped: they are the family's arguments rather than stored payload, so a proposition may be indexed by data without carrying any. Inductives are deliberately not subject to this — `induct Box : Prop | mk(n : Nat)` is a legal declaration whose *elimination* the singleton rung guards instead.
-fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), KernelError> {
+fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), Error> {
     if !matches!(
         &*kernel.reduce_forced(declaration.result_sort.clone())?,
         Subterm::Prop
@@ -387,7 +387,7 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
         &declaration.arity,
         |_, _| Ok(()),
         |kernel, type_| match carries_information(kernel, type_)? {
-            true => Err(KernelError::Informative {
+            true => Err(Error::Informative {
                 field: Box::new(type_.clone()),
             }),
             false => Ok(()),
@@ -405,8 +405,8 @@ fn check_signature<B: Bound + Clone>(
     telescope: &Telescope<B>,
     uniform: usize,
     result_sort: &Term,
-    terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), KernelError>,
-) -> Result<(), KernelError> {
+    terminal: impl FnOnce(&mut Kernel, &[(Free, Term)], &B) -> Result<(), Error>,
+) -> Result<(), Error> {
     kernel.scoped(|kernel| {
         let result = kernel.reduce_forced(result_sort.clone())?;
         // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
@@ -431,7 +431,7 @@ fn check_signature<B: Bound + Clone>(
                 };
 
                 if !kernel.level_leq(&level, upper) {
-                    return Err(KernelError::Oversized {
+                    return Err(Error::Oversized {
                         domain: level,
                         bound: upper.clone(),
                     });
@@ -453,7 +453,7 @@ pub(crate) fn check_entrypoint(
     kernel: &mut Kernel,
     body: &Term,
     type_: &Term,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     curios_profile::profile!("check_entrypoint");
     kernel.restore_budget();
     kernel.assume_universes(&UniverseContext::empty());

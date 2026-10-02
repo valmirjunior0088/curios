@@ -47,9 +47,8 @@ mod universes_tests;
 
 use {
     super::{
-        Globals, Kernel, KernelError, Position, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        partial_definitions, satisfiable,
+        Error, Globals, Kernel, Position, check_definition, check_entrypoint, check_induct_decl,
+        check_positions, check_rec_group, check_struct_decl, partial_definitions, satisfiable,
     },
     curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
     curios_core::{
@@ -135,7 +134,7 @@ fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
 pub struct Verdict {
     /// What failed: an item, or the registry entry a declaration pass refused — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
     pub name: Option<Global>,
-    pub error: KernelError,
+    pub error: Error,
 }
 
 /// What one whole-module walk reached: every refusal, and the record of what it concluded about the definitions it judged.
@@ -157,7 +156,7 @@ pub fn recheck_module(
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     match recheck_module_verdicts(module, budget, globals, syntax)
         .into_iter()
         .next()
@@ -319,11 +318,11 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetavarId> {
 /// The first unsolved *universe* metavariable one of `value`'s levels holds.
 ///
 /// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`](curios_core::UniverseContext::is_closed) inspects a `UniverseContext`'s *constraints*, never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
-fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
+fn universe_residue<B: Bound>(value: &B) -> Option<Error> {
     universe_metas(value)
         .into_iter()
         .next()
-        .map(|meta| KernelError::NotCore(Term::type_at(Level::meta(meta))))
+        .map(|meta| Error::NotCore(Term::type_at(Level::meta(meta))))
 }
 
 /// The first universe parameter one of `value`'s levels names that a scheme of `parameter_count` parameters does not have.
@@ -333,7 +332,7 @@ fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
 /// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universe_levels_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
 ///
 /// Scoped rather than flat: a nested scheme binds its own parameters innermost, so the bound at any point is the enclosing binder depth plus the declaration's count, exactly as `curios-elab`'s `validate_bound_universes` computes it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
-fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<KernelError> {
+fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Error> {
     rewrite_universe_levels_scoped_shared(value, move |depth, level| {
         let visible = depth.checked_add(parameter_count).ok_or(())?;
         match level.params().any(|param| param.0 >= visible) {
@@ -342,13 +341,13 @@ fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Kernel
         }
     })
     .err()
-    .map(|()| KernelError::UnclosedUniverses)
+    .map(|()| Error::UnclosedUniverses)
 }
 
 /// Every kind of elaboration residue an `induct` registry entry can carry.
-fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
+fn induct_residue(declaration: &InductDecl) -> Option<Error> {
     induct_metavar(declaration)
-        .map(|id| KernelError::NotCore(Term::hole(id)))
+        .map(|id| Error::NotCore(Term::hole(id)))
         .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
         .or_else(|| {
@@ -369,9 +368,9 @@ fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
 }
 
 /// [`induct_residue`] for a `struct` registry entry.
-fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
+fn struct_residue(declaration: &StructDecl) -> Option<Error> {
     struct_metavar(declaration)
-        .map(|id| KernelError::NotCore(Term::hole(id)))
+        .map(|id| Error::NotCore(Term::hole(id)))
         .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
         .or_else(|| {
@@ -428,14 +427,14 @@ fn verdicts_within(
     for (owner, local) in free_locals_outside(module, |name| globals.in_scope(name)) {
         verdicts.push(Verdict {
             name: owner,
-            error: KernelError::Unbound(local),
+            error: Error::Unbound(local),
         });
     }
     if let Some(entry) = entry {
         for local in entry.free_locals() {
             verdicts.push(Verdict {
                 name: None,
-                error: KernelError::Unbound(local),
+                error: Error::Unbound(local),
             });
         }
     }
@@ -618,7 +617,7 @@ fn verdicts_within(
     if let Some(entry) = entry {
         let checked = match &entry.type_ {
             Some(type_) => check_entrypoint(kernel, &entry.body, type_),
-            None => Err(KernelError::UntypedEntry),
+            None => Err(Error::UntypedEntry),
         };
         if let Err(error) = checked {
             verdicts.push(Verdict { name: None, error });
@@ -665,7 +664,7 @@ fn verdicts_within(
         verdicts.push(match refusal {
             PositivityRefusal::NotPositive(refusal) => Verdict {
                 name: Some(refusal.name),
-                error: KernelError::NotPositive {
+                error: Error::NotPositive {
                     name: refusal.name,
                     part: refusal.part,
                     polarity: refusal.polarity,
@@ -729,13 +728,13 @@ fn verdicts_within(
 /// What is wrong with a universe context the walk is about to assume, if anything.
 ///
 /// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
-fn universe_verdict(context: &UniverseContext) -> Option<KernelError> {
+fn universe_verdict(context: &UniverseContext) -> Option<Error> {
     curios_profile::profile!("universe_verdict");
     if !context.is_closed() {
-        return Some(KernelError::UnclosedUniverses);
+        return Some(Error::UnclosedUniverses);
     }
     if !satisfiable(&context.constraints) {
-        return Some(KernelError::UnsatisfiableUniverses);
+        return Some(Error::UnsatisfiableUniverses);
     }
 
     None

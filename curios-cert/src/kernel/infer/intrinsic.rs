@@ -6,15 +6,12 @@
 
 use {
     super::{check, infer},
-    crate::{Kernel, KernelError, sort_of_intrinsic},
+    crate::{Error, Kernel, sort_of_intrinsic},
     curios_core::{Intrinsic, Operand, Produced, Reducer, Subterm, Term},
 };
 
 /// The type of `intrinsic`, having checked every operand against the type this operation demands of it.
-pub(super) fn infer_intrinsic(
-    kernel: &mut Kernel,
-    intrinsic: &Intrinsic,
-) -> Result<Term, KernelError> {
+pub(super) fn infer_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Term, Error> {
     let signature = intrinsic.signature(&kernel.syntax());
     let operands = intrinsic.operands();
 
@@ -38,7 +35,7 @@ pub(super) fn check_operands<'a>(
     kernel: &mut Kernel,
     operands: impl IntoIterator<Item = &'a Term>,
     demands: &[Operand],
-) -> Result<(), KernelError> {
+) -> Result<(), Error> {
     for (operand, demand) in operands.into_iter().zip(demands) {
         match demand {
             Operand::At(type_) => {
@@ -61,11 +58,11 @@ pub(super) fn check_operands<'a>(
 }
 
 /// Check that `term` is a type, and hand it back. An intrinsic that carries its element type carries a *type*, and taking that on trust is how a container of nonsense would be admitted.
-fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
+fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
     let inferred = infer(kernel, term)?;
 
     match &*kernel.reduce_forced(inferred.clone())? {
         Subterm::Type(_) | Subterm::Prop => Ok(term.clone()),
-        _ => Err(KernelError::NotASort(inferred)),
+        _ => Err(Error::NotASort(inferred)),
     }
 }

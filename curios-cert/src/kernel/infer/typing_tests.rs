@@ -1,7 +1,7 @@
 //! One typing rule each: universes, literals, variables, lambdas, applications, tuples, lets and recursive groups.
 
 use {
-    crate::{Counted, Kernel, KernelError, infer},
+    crate::{Counted, Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Intrinsic, Nat, Subterm, Term},
 };
@@ -47,7 +47,7 @@ fn an_unbound_variable_is_refused() {
 
     assert_eq!(
         infer(&mut kernel, &Term::free_var(&x)),
-        Err(KernelError::Unbound(x)),
+        Err(Error::Unbound(x)),
     );
 }
 
@@ -104,7 +104,7 @@ fn an_argument_of_the_wrong_type_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &applied),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -118,7 +118,7 @@ fn an_application_of_the_wrong_arity_is_refused() {
 
     assert_eq!(
         infer(&mut kernel, &applied),
-        Err(KernelError::Arity {
+        Err(Error::Arity {
             counted: Counted::Arguments,
             expected: 1,
             actual: 2
@@ -132,7 +132,7 @@ fn applying_a_non_function_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &Term::apply(nat(1), [nat(2)])),
-        Err(KernelError::NotAFunction(_)),
+        Err(Error::NotAFunction(_)),
     ));
 }
 
@@ -157,7 +157,7 @@ fn projecting_from_a_non_tuple_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &Term::proj(nat(1), 0)),
-        Err(KernelError::NotATuple(_)),
+        Err(Error::NotATuple(_)),
     ));
 }
 
@@ -173,7 +173,7 @@ fn a_let_checks_its_binding_and_substitutes_it() {
     let wrong = Term::let_(&x, bool_type(), nat(2), Term::free_var(&x));
     assert!(matches!(
         infer(&mut kernel, &wrong),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -226,7 +226,7 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 

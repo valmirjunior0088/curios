@@ -18,7 +18,7 @@
 //!
 //! # Errors belong to the driver
 //!
-//! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `KernelError`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+//! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
 use curios_core::{Bound, Exhaustion, Free, Global, InductDecl, StructDecl, Subterm, Term};
 
@@ -44,7 +44,7 @@ pub(crate) fn forceable(term: &Term) -> bool {
 ///
 /// Deliberately small, and for the same reason `Kernel` is: every method here is a way for an answer to come from something other than the term in hand. A new one should have to argue for itself.
 pub trait Env {
-    /// How this checker reports a failure. The kernel's is `KernelError`; the elaborator's is its spanned diagnostic. Either says whether it is the budget's refusal, which an analysis reading a term as a [`Probe`](curios_core::Probe) propagates while it reads any other failure as nothing to read.
+    /// How this checker reports a failure. The kernel's is `curios_cert::Error`; the elaborator's is its spanned diagnostic. Either says whether it is the budget's refusal, which an analysis reading a term as a [`Probe`](curios_core::Probe) propagates while it reads any other failure as nothing to read.
     type Error: Exhaustion;
 
     /// Reduce to weak-head normal form, then force a `rec` head — a position that demands a value rather than a normal form.

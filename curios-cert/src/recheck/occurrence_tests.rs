@@ -1,7 +1,7 @@
 //! Nominal occurrences: the arity a term may be applied at, the binders a set opens, and how a refusal spells them.
 
 use {
-    crate::{Globals, KernelError},
+    crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
@@ -20,7 +20,7 @@ use super::test_support::*;
 ///
 /// `Sort::of` reads an `InductType`'s declaration to answer for it — `check_instance` for the universe width, then `result_sort` instantiated at those levels — so the occurrence must supply as many *parameters* and *indices* as the declaration declares: an arity validated against the scheme it instantiates rather than against itself, as the universe width is.
 ///
-/// Unchecked, both halves go wrong. Where the arity is merely carried, `let held : Type = F` for a one-parameter, one-index family would certify at no parameters, at no indices, and at two indices. Where the arity is *used*, eliminating over such a scrutinee reaches `InductDecl::indices_at`, whose `Telescope::open` asserts, and the process would panic. A panic refuses rather than admits, so it is inside what the perimeter permits of the Rust implementation (see `documentation/design/soundness/the-soundness-perimeter.md`) — but a malformed occurrence is the *program's* fault, and the house rule is that a program's fault is a `KernelError`. The certifying half is the one that matters: a type the kernel blesses whose shape its own declaration contradicts.
+/// Unchecked, both halves go wrong. Where the arity is merely carried, `let held : Type = F` for a one-parameter, one-index family would certify at no parameters, at no indices, and at two indices. Where the arity is *used*, eliminating over such a scrutinee reaches `InductDecl::indices_at`, whose `Telescope::open` asserts, and the process would panic. A panic refuses rather than admits, so it is inside what the perimeter permits of the Rust implementation (see `documentation/design/soundness/the-soundness-perimeter.md`) — but a malformed occurrence is the *program's* fault, and the house rule is that a program's fault is an `Error`. The certifying half is the one that matters: a type the kernel blesses whose shape its own declaration contradicts.
 ///
 /// Not reachable from a surface program — `curios-elab` builds a nominal occurrence saturated from the declaration it looked up — which is why this is constructed here.
 ///
@@ -38,7 +38,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
         assert!(
             verdicts
                 .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+                .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
             "{label}: the kernel accepted an occurrence its declaration contradicts: {verdicts:?}",
         );
     }
@@ -63,7 +63,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 ///
 /// [`an_occurrence_whose_arity_is_not_its_declarations_is_refused`] holds this for the two type formers, where `Sort::of` consults a declaration to answer for an occurrence. It does not reach the value forms: nothing calls `Sort::of` on a `Struct` or a `Variant`, so their carried parameter list needs a check of its own.
 ///
-/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the perimeter permits of the Rust implementation (see `documentation/design/soundness/the-soundness-perimeter.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is a `KernelError`, and `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
+/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the perimeter permits of the Rust implementation (see `documentation/design/soundness/the-soundness-perimeter.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is an `Error`, and `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
 ///
 /// A `Variant` instead opens with `open_params`, which is tolerant: too few parameters leaves the declaration's own parameter binders unopened, so they read as *payload* slots and the payload-arity check compares against the wrong number, and only a downstream conversion that happens to reject the short parameter list would refuse it — sound by coincidence rather than by any rule about the value.
 ///
@@ -78,7 +78,7 @@ fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
         assert!(
             verdicts
                 .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::Arity { .. })),
+                .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
             "{label}: the value's parameter count was not held to its declaration: {verdicts:?}",
         );
     }
@@ -140,7 +140,7 @@ fn a_nominal_value_types_its_parameters() {
         assert!(
             verdicts
                 .iter()
-                .any(|verdict| matches!(verdict.error, KernelError::Mismatch { .. })),
+                .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
             "{label} was certified at a parameter its declaration does not admit: {verdicts:?}",
         );
     }
@@ -154,7 +154,7 @@ fn a_nominal_value_types_its_parameters() {
 ///
 /// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm slices a spine's head-type `plicities` at the argument count, and the pairing of marks with a telescope is a construction invariant — `FuncType::new` is the one door that builds a mark vector beside its telescope, the archived prelude restores exactly the constructor-built value its build wrote, and `curios-prelude-archive`'s `the_restored_prelude_pairs_every_mark_with_its_binder` checks that once per test run — so a drifted vector is unrepresentable, and this fixture keeps the lambda case alone.
 ///
-/// It is not reachable from a surface program — `curios-elab` emits saturated applications — and what is at stake is a program's fault aborting the kernel where a `KernelError` belongs.
+/// It is not reachable from a surface program — `curios-elab` emits saturated applications — and what is at stake is a program's fault aborting the kernel where an `Error` belongs.
 ///
 /// The control is [`a_saturated_application_in_a_type_position_is_accepted`]. It is the direction that matters: reduction must still fire on a well-formed application, and a guard that simply stopped reducing would pass every witness here while breaking every program.
 ///
@@ -167,7 +167,7 @@ fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
         assert!(
             verdicts.iter().any(|verdict| matches!(
                 verdict.error,
-                KernelError::Arity { .. } | KernelError::Unclassified(_)
+                Error::Arity { .. } | Error::Unclassified(_)
             )),
             "{label}: the term was indexed at a count nothing checked: {verdicts:?}",
         );
@@ -374,9 +374,9 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
 /// A refusal names the types the way the program that produced them wrote them.
 ///
-/// `KernelError`'s own `Display` is faithful to Core — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. `format_with` supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
+/// `Error`'s own `Display` is faithful to Core — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. `format_with` supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
 ///
-/// Universe instances are deliberately left alone; see `KernelError::format_with`.
+/// Universe instances are deliberately left alone; see `Error::format_with`.
 #[test]
 fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     let name = Global::Authored(Qualifier::from(["demo", "Box", "Box"]));
@@ -412,7 +412,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         params: vec![Term::intrinsic(Intrinsic::NatType)],
     })
     .into();
-    let refusal = KernelError::Mismatch {
+    let refusal = Error::Mismatch {
         inferred: Box::new(applied),
         expected: Box::new(Term::intrinsic(Intrinsic::NatType)),
     };

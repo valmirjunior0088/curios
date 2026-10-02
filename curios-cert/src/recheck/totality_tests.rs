@@ -1,7 +1,7 @@
 //! Totality verdicts across walks: the certifier's record read where a unit is carried, and elaboration's stamp compared, never read, where an item is judged.
 
 use {
-    crate::{Globals, KernelError, Verdict},
+    crate::{Error, Globals, Verdict},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
     curios_core::{Certification, Certified, Global, Totality},
@@ -29,7 +29,7 @@ fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
             verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["reaches"])))
                 && matches!(
                     &verdict.error,
-                    KernelError::NotTotal {
+                    Error::NotTotal {
                         erased: Erased::Proof,
                         reached: Some(name),
                     } if *name == Global::Authored(Qualifier::from(["sink"]))
@@ -65,7 +65,7 @@ fn refuses_the_proof_reaching_the_lie(verdicts: &[Verdict]) -> bool {
         verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
             && matches!(
                 &verdict.error,
-                KernelError::NotTotal {
+                Error::NotTotal {
                     erased: Erased::Proof,
                     reached: Some(name),
                 } if *name == reaches()

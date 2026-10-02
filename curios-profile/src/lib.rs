@@ -23,7 +23,7 @@ pub use tracing;
 /// Write the statement form named after the function, so a report reads as a call profile.
 ///
 /// ```text
-/// pub fn check_definition(…) -> Result<(), KernelError> {
+/// pub fn check_definition(…) -> Result<(), Error> {
 ///     curios_profile::profile!("check_definition");
 ///     …
 /// }

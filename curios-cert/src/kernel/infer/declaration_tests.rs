@@ -1,7 +1,7 @@
 //! Constructors, eliminations, definitions and instances, and the descent a recursive declaration owes.
 
 use {
-    crate::{KernelError, check, check_definition, infer},
+    crate::{Error, check, check_definition, infer},
     curios_core::{
         Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
@@ -78,7 +78,7 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
     );
     assert!(matches!(
         infer(&mut kernel, &value),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -118,7 +118,7 @@ fn a_small_universe_is_admitted_where_a_larger_one_is_wanted() {
     );
     assert!(matches!(
         check(&mut kernel, &Term::type_at(one()), &Term::type_ground()),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -156,7 +156,7 @@ fn a_definition_checks_under_its_own_constraints() {
     let mut kernel = self::kernel();
     assert!(matches!(
         check_definition(&mut kernel, &name, &type_, &body, &unconstrained),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -189,7 +189,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
     );
     assert!(matches!(
         infer(&mut kernel, &at(vec![Level::zero(), Level::zero()])),
-        Err(KernelError::UniverseInstance { .. }),
+        Err(Error::UniverseInstance { .. }),
     ));
 }
 
@@ -217,7 +217,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::NotDescending { .. }),
+        Err(Error::NotDescending { .. }),
     ));
 }
 
@@ -233,7 +233,7 @@ fn a_recursive_type_that_does_not_descend_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::NotDescending { .. }),
+        Err(Error::NotDescending { .. }),
     ));
 }
 

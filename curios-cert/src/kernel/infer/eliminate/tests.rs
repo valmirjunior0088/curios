@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{KernelError, infer},
+    crate::{Error, infer},
     curios_core::{Free, Intrinsic, Many, Scope, Term, UniverseContext},
     curios_utilities::Plicity,
 };
@@ -76,7 +76,7 @@ fn a_cyclic_index_equation_refines_nothing() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -173,7 +173,7 @@ fn an_undecided_absent_arm_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::MissingArm { .. }),
+        Err(Error::MissingArm { .. }),
     ));
 }
 
@@ -317,7 +317,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
         Some(Term::free_var(&hypothesis)),
     );
 
-    let Err(KernelError::Mismatch { expected, .. }) = infer(&mut kernel, &term) else {
+    let Err(Error::Mismatch { expected, .. }) = infer(&mut kernel, &term) else {
         panic!("expected the catch-all to be refused at the scrutinee's instance");
     };
     assert_eq!(
@@ -389,7 +389,7 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
 
     assert_eq!(
         infer(&mut kernel, &term),
-        Err(KernelError::LargeElimination(family)),
+        Err(Error::LargeElimination(family)),
     );
 }
 
@@ -421,7 +421,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 
     assert_eq!(
         infer(&mut kernel, &term),
-        Err(KernelError::LargeElimination(family)),
+        Err(Error::LargeElimination(family)),
     );
 }
 
@@ -451,7 +451,7 @@ fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
 
     assert_eq!(
         infer(&mut kernel, &term),
-        Err(KernelError::LargeElimination(family)),
+        Err(Error::LargeElimination(family)),
     );
 }
 
@@ -525,7 +525,7 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
 
     assert_eq!(
         infer(&mut kernel, &term),
-        Err(KernelError::LargeElimination(family)),
+        Err(Error::LargeElimination(family)),
     );
 }
 
@@ -589,7 +589,7 @@ fn an_arm_body_of_the_wrong_type_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::Mismatch { .. }),
+        Err(Error::Mismatch { .. }),
     ));
 }
 
@@ -616,7 +616,7 @@ fn an_arm_of_the_wrong_payload_arity_is_refused() {
 
     assert!(matches!(
         infer(&mut kernel, &term),
-        Err(KernelError::Arity { .. }),
+        Err(Error::Arity { .. }),
     ));
 }
 
@@ -678,7 +678,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
         match omission_stands {
             true => assert!(verdict.is_ok(), "{label}: the omitted arm was demanded"),
             false => assert!(
-                matches!(verdict, Err(KernelError::MissingArm { .. })),
+                matches!(verdict, Err(Error::MissingArm { .. })),
                 "{label}: the omitted arm was excused"
             ),
         }

@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError},
+    super::{Error, Kernel},
     curios_analysis::{Call, SizeContext, decide, grade, member_arities, nonzero_by},
     curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::collections::{HashMap, HashSet},
@@ -155,11 +155,7 @@ impl Kernel {
     /// Record a call to `head` with `arguments`, when `head` is a member of a group whose body is being checked.
     ///
     /// Not while a position is being classified: deciding a position's erased half types that position's *type*, which may name a member — `T(n)`, a sibling computing the type — without being a call any body makes.
-    pub(super) fn record_call(
-        &mut self,
-        head: &Free,
-        arguments: &[Term],
-    ) -> Result<(), KernelError> {
+    pub(super) fn record_call(&mut self, head: &Free, arguments: &[Term]) -> Result<(), Error> {
         if self.calls.frames.is_empty() || self.positions.suppressed() {
             return Ok(());
         }
@@ -204,7 +200,7 @@ impl Kernel {
         refine: Option<(Free, &Term)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
-    ) -> Result<(), KernelError> {
+    ) -> Result<(), Error> {
         if !self.recording() {
             return Ok(());
         }
@@ -215,7 +211,7 @@ impl Kernel {
     }
 
     /// Within the current bracket, `binder` stands for `value`.
-    pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) -> Result<(), KernelError> {
+    pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) -> Result<(), Error> {
         self.enter_size(Some((*binder, value)), None, Vec::new())
     }
 
@@ -227,7 +223,7 @@ impl Kernel {
         scrutinee: &Term,
         value: &Term,
         solutions: &[(Free, Term)],
-    ) -> Result<(), KernelError> {
+    ) -> Result<(), Error> {
         if !self.recording() {
             return Ok(());
         }
@@ -249,11 +245,7 @@ impl Kernel {
     /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for.
     ///
     /// Read before the arm assumes its case equation, and it must be: that equation makes `scrutinee` reduce to `value` itself, and a comparison read through it is a literal with nothing left to compare.
-    pub(super) fn assume_guard(
-        &mut self,
-        scrutinee: &Term,
-        value: &Term,
-    ) -> Result<(), KernelError> {
+    pub(super) fn assume_guard(&mut self, scrutinee: &Term, value: &Term) -> Result<(), Error> {
         if !self.recording() {
             return Ok(());
         }
@@ -266,12 +258,12 @@ impl Kernel {
     }
 
     /// Within the current bracket, `binder` is not zero.
-    pub(super) fn assume_nonzero(&mut self, binder: Free) -> Result<(), KernelError> {
+    pub(super) fn assume_nonzero(&mut self, binder: Free) -> Result<(), Error> {
         self.enter_size(None, Some(binder), Vec::new())
     }
 
     /// Within the current bracket, `binders` are a constructor's payloads.
-    pub(super) fn assume_payloads(&mut self, binders: &[Free]) -> Result<(), KernelError> {
+    pub(super) fn assume_payloads(&mut self, binders: &[Free]) -> Result<(), Error> {
         self.enter_size(None, None, binders.to_vec())
     }
 
