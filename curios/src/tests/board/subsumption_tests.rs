@@ -4,7 +4,9 @@
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::sort_tests` puts the same two propositions to the kernel under these names. Rename both or neither.
 
-use crate::tests::{error, run};
+use crate::tests::{error, run, typecheck};
+
+use super::test_support::*;
 
 // The direction the language needs. `Bool/Holds` is `(b : Bool) -> Prop`, handed to a slot wanting `(Bool) -> Type`; the corpus fixture `/big_nat`'s `canonical_of_is_trimmed` passes it to `Eq/subst` exactly so.
 #[test]
@@ -81,4 +83,18 @@ fn the_head_rules_still_decide_a_bare_sort() {
         "#;
 
     assert_eq!(run(source), b"ok");
+}
+
+// A level entailment rather than a conversion. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes; the kernel's entailment reaches the hypotheses before it decides a level's *constant* part structurally, since a parameter ranges over every natural when nothing is assumed and a hypothesis is what puts a floor under it.
+#[test]
+fn a_group_member_is_used_a_level_up_by_its_sibling() {
+    assert_eq!(
+        typecheck(A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING),
+        Ok(())
+    );
+}
+
+#[test]
+fn the_same_pair_declared_apart_certifies() {
+    assert_eq!(typecheck(THE_SAME_PAIR_DECLARED_APART_CERTIFIES), Ok(()));
 }

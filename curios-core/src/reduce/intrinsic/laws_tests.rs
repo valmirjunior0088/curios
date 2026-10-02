@@ -12,7 +12,7 @@ use {
 
 use super::test_support::*;
 
-// Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the perimeter grades the law behind them argued in code comments only.
+// Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the soundness board grades the law behind them argued in code comments only.
 //
 // Each verdict is believed by a different consumer, so each has its own obligation. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Deduction::Equivalent` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
 //
@@ -143,7 +143,7 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
         }
     }
 
-    // Every verdict above holds vacuously of a grid that reaches only one of them, and `Equivalent` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
+    // Every verdict above holds vacuously of a grid that reaches only one of them, and `Equivalent` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the board's own record is that inert rules are what hide defects.
     // `2·x + 1 ~ x + x + 1` is `Equal`, not `Equivalent`: the sum normal form merges like terms, so both sides *reduce* to `2·x + 1`, so the peel has nothing left to carry.
     assert_eq!(
         (equal, clash, carried, stuck),
@@ -152,11 +152,11 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
+// Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the soundness board graded these laws argued in code comments only. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
 //
 // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
 //
-// Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Undecided` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
+// Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the soundness board asks of a sole-reach fixture: `Undecided` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
 #[test]
 fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
     let bin_left = Free::local(0, Some("x"));

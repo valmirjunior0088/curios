@@ -13,7 +13,7 @@
 - **A proof over Core's `Nat` has to be true of the compiled program**, and an unbounded carrier makes it so without asking the program to leave the theory's types. The i31 fast path keeps the common case cheap: a value that stays small never allocates and never calls, behind one tag check on the reference the engine already holds.
 - **Core is the oracle.** An erased stage, a folder and the running program each produce Core's value or decline, never a third value; `curios/src/tests/numeric` folds and executes each operation from one expression and runs a differential grid across limb boundaries and signs against `curios-num`.
 - **Nothing partial makes reordering free.** `curios-ersd`'s monoid rebase registers every commutative monoid with a single identity on associativity alone, since no order of combination can refuse where another computes.
-- **The helper library is below the perimeter**, emitted code like every lowering: the kernel trusts `Intrinsic::signature` and the fold laws, which unboundedness leaves unchanged.
+- **The helper library is off the soundness board**, emitted code like every lowering: the kernel trusts `Intrinsic::signature` and the fold laws, which unboundedness leaves unchanged.
 - **What it costs at run time** is a tag test per operand on the fast path, and a reference rather than a word wherever a large value could arrive — a field, and a register some flow hands one.
 
 **Rejected.**

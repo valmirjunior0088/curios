@@ -104,7 +104,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 ///
 /// Without that pass both positions below would be certified. The registry one is the shape the metavariable pass beside it covers: registry data no judgment types. The *definition type* one is sharper, because that position is fully walked — `check_definition` types it and then checks the body against it — so this is not a coverage gap in which terms the walk reaches but the level algebra having no opinion about an unsolved level at all, which is why refusing it belongs at the boundary rather than inside a judgment.
 ///
-/// Neither is reachable from a surface program — `validate_universes` runs before a module ever leaves the elaborator — which is why they are built here. An unsolved level is not itself a closed inhabitant of `False`; what it is, is a level every cumulativity question is then decided against, with `entails` answering about a variable that no longer has a solver behind it. The refusal is the safe direction and the one the perimeter row already claims.
+/// Neither is reachable from a surface program — `validate_universes` runs before a module ever leaves the elaborator — which is why they are built here. An unsolved level is not itself a closed inhabitant of `False`; what it is, is a level every cumulativity question is then decided against, with `entails` answering about a variable that no longer has a solver behind it. The refusal is the safe direction and the one the board row already claims.
 ///
 /// The control is [`a_ground_level_in_the_same_positions_is_accepted`], the same two modules at `Type 0`: the pass must refuse residue, not every level.
 #[test]

@@ -1493,7 +1493,7 @@ pub struct FinalizedProgram {
     pub obligations: Vec<Error>,
 }
 
-/// Finalize an elaborated module, and a program's entry beside it, and run the **soundness perimeter** over them.
+/// Finalize an elaborated module, and a program's entry beside it, and run the **soundness board** over them.
 ///
 /// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: written out at each entry point, "what does soundness depend on?" would be answered by diffing call sites, and a check added to one and not the other would degrade the claim silently for every real compilation.
 ///

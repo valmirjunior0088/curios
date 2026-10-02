@@ -593,7 +593,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
 
 /// The position-coverage differential (see `documentation/design/soundness/totality/nothing-reachable-from-a-type-is-partial.md`): `Walk::walk` visits every child position `Subterm::any_child_term` reports, minus a named whitelist.
 ///
-/// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. A projected inner group left unwalked is exactly that: `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` would close to no call whatsoever, both groups would classify `Total`, and `f(0)` would diverge through `g` while (V) read the verdict.
+/// This matters more here than anywhere else on the soundness board because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. A projected inner group left unwalked is exactly that: `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` would close to no call whatsoever, both groups would classify `Total`, and `f(0)` would diverge through `g` while (V) read the verdict.
 ///
 /// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Partial` exactly when the walk reached the plant and `Total` exactly when it did not.
 ///
@@ -1038,7 +1038,7 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
 ///
 /// The walk forces the `rec` head because a mutual `induct` group lowers its type constructors into one, then descends into what forcing exposed — and `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so what it descends into holds the same group again. Each turn of the loop opens a fresh binder, so nothing about the term repeats for a memo on terms to catch, and `unfolded` cannot catch it either: it keys on `Free`, and an inline group has no name.
 ///
-/// Written against the kernel rather than as a Curios program because this is where the shared analysis is *the* subject: the elaborator has its own copy of the divergence, but the kernel's is the one inside the soundness perimeter, and a program-level fixture exercises the elaborator's first and aborts before reaching this one.
+/// Written against the kernel rather than as a Curios program because this is where the shared analysis is *the* subject: the elaborator has its own copy of the divergence, but the kernel's is the one on the soundness board, and a program-level fixture exercises the elaborator's first and aborts before reaching this one.
 #[test]
 fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
     let mut kernel = kernel();

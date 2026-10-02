@@ -72,7 +72,7 @@ Each stage moves its rows from refused to held, extends the grid's audit to the 
 
 ## Verification
 
-- Each declared law is a generated row held at every carrier and direction its declaration covers; each control is refused; one mutation per new kind is run and caught, and the perimeter entry names it.
+- Each declared law is a generated row held at every carrier and direction its declaration covers; each control is refused; one mutation per new kind is run and caught, and the board entry names it.
 - Each promoted operation folds as it executes and agrees with `curios-num` over a generated grid, at both signs, past the i31 and past 64 bits.
 - `Flt` declarations are held to the model over the pattern grid.
 - `tests::bounds` fills a bound over each promoted operation through its definition.

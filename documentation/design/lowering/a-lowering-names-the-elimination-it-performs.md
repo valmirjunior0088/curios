@@ -8,7 +8,7 @@
 - **Open-coding twice is two conventions.** A peel open-coded in erasure and again in the fold lowering can disagree about a convention neither states, over operands that are `Nat` either way, and then the workspace builds, the kernel certifies the library, and every program touching a string traps — the case of a window respelled as a start and a count under two such copies.
 - **A suffix that takes no count has nothing to derive**, so the derivation happens where the length lives — the rope helper's `len` field and the virtualized region's `length` — as a fact about a value in hand.
 - **A pattern list is not checked.** A form missing from `rebase.rs` leaves a sequence recursion non-tail, overflowing at sixty thousand elements, silently; `tests::runtime::loop_tests::arena_deferred_context_recursion_is_stack_safe_at_depth` holds the `UnconsSequence` case.
-- **What remains is outside the perimeter**: the fold loop's `i <= len` is a runtime fact trapped rather than checked, detected only by the cross-stage corpus in `curios`.
+- **What remains is off the soundness board**: the fold loop's `i <= len` is a runtime fact trapped rather than checked, detected only by the cross-stage corpus in `curios`.
 
 **Rejected.**
 

@@ -15,7 +15,7 @@ fn occurrences(term: &Term, wanted: &Term) -> usize {
         .count()
 }
 
-// Soundness gate on the cancellation: it is a *multiset* operation. A summand held twice on one side against once on the other must leave one behind, because reading `a + b ⋈ c` off `a + a + b ⋈ a + c` is a false definitional equation — the route this file's perimeter records as reaching `False` by congruence.
+// Soundness gate on the cancellation: it is a *multiset* operation. A summand held twice on one side against once on the other must leave one behind, because reading `a + b ⋈ c` off `a + a + b ⋈ a + c` is a false definitional equation — the route this file's board records as reaching `False` by congruence.
 #[test]
 fn cancellation_removes_one_occurrence_per_match() {
     let (a, b, c) = (sym(0, "a"), sym(1, "b"), sym(2, "c"));

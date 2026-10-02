@@ -4,7 +4,7 @@ use {super::subsumes, crate::infer, curios_core::Term};
 
 use super::test_support::*;
 
-/// The subsumption fork, which the perimeter records as having no fixture in either direction.
+/// The subsumption fork, which the soundness board records as having no fixture in either direction.
 ///
 /// `subsumes` compares a Π's **domains by conversion** and its **codomains cumulatively**. Only one of those two choices can be got wrong in the admitting direction, and it is the domain: reading it *covariantly* would accept `(x : Type 0) -> B` where `(x : Type 1) -> B'` is wanted, so a function that only handles small arguments would be applied to a large one, which is the shape the hierarchy exists to forbid. Contravariance would be sound and strictly more permissive; invariance is what ships, and it is the freely-revisable side precisely because widening later breaks nothing already accepted.
 ///

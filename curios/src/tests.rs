@@ -15,6 +15,7 @@ mod document;
 mod effects;
 mod erasure;
 // The fixpoint probe reads the per-pass spans `curios_cont::optimize` carries only under `curios-profile`'s `enabled` feature, reached through this crate's `profile` feature as `churn` is.
+mod board;
 #[cfg(feature = "profile")]
 mod fixpoint;
 mod fmt;
@@ -30,7 +31,6 @@ mod matching;
 mod numeric;
 mod operators;
 mod packages;
-mod perimeter;
 mod positivity;
 mod recovery;
 mod recursion;

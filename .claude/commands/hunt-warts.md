@@ -29,7 +29,7 @@ When a probe you wrote is refused, do not rewrite it until it compiles. First de
 - the theory allows it and the rule over-approximates — lifting the rule is a finding, presented like any other;
 - the refusal is right but the diagnostic misnames the fault, its span, or what the reader needs — the diagnostic is the finding.
 
-"The elaborator was just being conservative" is the comfortable reading, not the demonstrated one: read the refusing rule and the syntax reference against each other before choosing. A rule inside the soundness perimeter (`documentation/design/soundness/`) is lifted only with its row — present the change with the row named, never fix it inline.
+"The elaborator was just being conservative" is the comfortable reading, not the demonstrated one: read the refusing rule and the syntax reference against each other before choosing. A rule on the soundness board (`documentation/design/soundness/`) is lifted only with its row — present the change with the row named, never fix it inline.
 
 The opposite discovery — a program accepted that should be refused — is not a wart. Hand it to `/hunt-unsoundness` with the row named, and do not fix it here.
 

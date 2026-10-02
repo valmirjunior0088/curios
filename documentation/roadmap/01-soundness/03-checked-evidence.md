@@ -9,7 +9,7 @@ The requirements below are the design direction. Their precise grade definitions
 - **The crate boundary.** `curios-cert` reaches nothing of `curios-elab`, so it cannot consult a metavariable store, a refinement layer or a parked goal ([An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), and [`curios-cert`'s README](../../../curios-cert/README.md)).
 - **What the certifier already owns.** Typing, its weak-head strategy, the conversion driver, level entailment, and the erased positions it records during its own typing walk (`kernel/positions.rs`), from which obligations (T) and (V) are seeded.
 - **What it shares.** The representation and the literal folds in `curios-core`; the symbolic algebra and the closed machine beside them; and `curios-analysis`'s inversion, positivity and size-change totality.
-- **The evidence discipline** of [the soundness perimeter](../../design/soundness/the-soundness-perimeter.md), the two-checker fixtures in `curios/src/tests/perimeter.rs`, and the differentials that already hold an optimization to its slow path: `curios-prelude-archive`'s `kernel_memo_parity` and `curios-cert`'s `the_closed_machine_agrees_with_the_strategy`.
+- **The evidence discipline** of [the soundness board](../../design/soundness/the-soundness-board.md), the programs `curios/src/tests/board/` puts to both checkers, and the differentials that already hold an optimization to its slow path: `curios-prelude-archive`'s `kernel_memo_parity` and `curios-cert`'s `the_closed_machine_agrees_with_the_strategy`.
 - **The Calculus of Congruent Inductive Constructions and its successor, Coq Modulo Theory.** The first sends the context's hypotheses to a decision procedure inside conversion, with its metatheory established for the weak recursor, and moves from a trusted decision procedure to decision procedures outside the kernel returning certificates the kernel checks (Blanqui, Jouannaud and Strub, 2007 and 2008). The second keeps a decidable first-order theory in conversion without the context's hypotheses (Strub, 2010), and its metatheory is established for strong elimination (Jouannaud and Strub, 2017).
 
 ## The gap
@@ -76,7 +76,7 @@ Each is revised in the change that makes it true.
 - The same decision's closed machine: relabelled a trusted evaluator, held by its differential.
 - [`curios-analysis`'s README](../../../curios-analysis/README.md) decision *These rules are shared rather than duplicated* is restated: they are shared because they are certifier-grade.
 - `curios-cert`'s module documentation: the representation claim.
-- Perimeter entries: [The closed machine](../../design/soundness/conversion/the-closed-machine.md) is re-graded as a trusted evaluator, and an entry is added for the certificate checker.
+- Board entries: [The closed machine](../../design/soundness/conversion/the-closed-machine.md) is re-graded as a trusted evaluator, and an entry is added for the certificate checker.
 
 ## Rejected
 
@@ -92,7 +92,7 @@ Certifying anything below Core; a verified certifier; a certifier runnable apart
 
 ## Verification
 
-- The two-checker fixtures and `kernel_disagreements` stay clean at every stage, and [the conversion differential](01-conversion-held-across-checkers.md) holds the two checkers' conversion to each other.
+- `curios/src/tests/board/` and `kernel_disagreements` stay clean at every stage, and [the conversion differential](01-conversion-held-across-checkers.md) holds the two checkers' conversion to each other.
 - The certificate checker is held against certificates corrupted one step at a time, each corruption refused.
 - The certifier's time is measured before and after each stage, and reported by the stage.
 

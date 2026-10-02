@@ -28,7 +28,7 @@ fn any_two_inhabitants_of_a_proposition_convert() {
     );
 }
 
-/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair would be refused where the elaborator — comparing the spines of one global first — accepts it. `tests::perimeter`'s row of the same name is the program.
+/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair would be refused where the elaborator — comparing the spines of one global first — accepts it. `tests::board`'s row of the same name is the program.
 ///
 /// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. Mutation-checked: removing the spine attempt before forcing fails the proposition's half, and reading no telescope off a `rec` projection leaves this passing — that half is `recursion_tests`'s `two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding`.
 #[test]

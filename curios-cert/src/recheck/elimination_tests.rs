@@ -60,7 +60,7 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
 ///
 /// What it would certify is `vacuous : (x : Held(Two/b())) -> False` — a refutation of a constructor the same declaration states. That is not a closed inhabitant of `False`: construction resolves by first match too, so `let h : Held(Two/b()) = Held/mk()` is a `Mismatch` of `Held(Two/a())` against `Held(Two/b())`, and the shadowed entry has no inhabitant to hand the refutation. Refusing the repeated tag keeps the elimination rule from being sound only because an unrelated rule is lossy in the same direction.
 ///
-/// No `.crs` file reaches it: `curios-text` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. That is the `Expect::NotAsked` shape — the elaborator is the stricter of the two, so the certifier's copy of the rule is unreachable from the corpus — and it is why this belongs here rather than in `curios/src/tests`.
+/// No `.crs` file reaches it: `curios-text` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. The elaborator is the stricter of the two, so the certifier's copy of the rule is unreachable from the corpus, and that is why this belongs here rather than in `curios/src/tests`.
 ///
 /// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a clause that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
 #[test]

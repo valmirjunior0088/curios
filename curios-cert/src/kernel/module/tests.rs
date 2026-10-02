@@ -190,7 +190,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
 ///
 /// Irrelevance identifies every inhabitant of a proposition, and a structure's payload is read back by *projection*, which is not an elimination and so meets no large-elimination guard: an informative field hands two convertible values to the same projection, and `Eq` plus congruence turns that into `False`.
 ///
-/// The kernel holds the rule itself rather than leaving it to `curios-elab`: the two-checker matrix records `informative_prop_field` as refused by the elaborator before the kernel is asked, so no program backs the kernel's copy up, and `invert.rs`'s irrelevance guard cites this very property as its reason for leaving structures undecomposed.
+/// The kernel holds the rule itself rather than leaving it to `curios-elab`: the elaborator refuses such a declaration before the kernel is asked, so no program backs the kernel's copy up, and `invert.rs`'s irrelevance guard cites this very property as its reason for leaving structures undecomposed.
 #[test]
 fn a_proposition_may_not_carry_an_informative_field() {
     let mut kernel = kernel();
@@ -206,7 +206,7 @@ fn a_proposition_may_not_carry_an_informative_field() {
 ///
 /// `carried : Type 0` makes the field a type held as data. Irrelevance identifies `Bad{{}}` with `Bad{False}` at `Bad`, and `.0` reads the carried type straight back out — a projection meets no elimination guard at all — so `{}` and `False` become convertible, and `subst` turns `()` into a closed inhabitant of `False`.
 ///
-/// This is the field-side face of the elimination-side hole in `super::super::infer::eliminate::tests`: both gates ask `carries_information`, which must count a universe-typed field as carrying information however completely erasure deletes it. No `.crs` file reaches it — `curios-elab` refuses the declaration by its own `is_prop` test, which is why the two-checker matrix records `informative_prop_field` as never reaching the kernel — so only this fixture holds `check_struct_decl` to it.
+/// This is the field-side face of the elimination-side hole in `super::super::infer::eliminate::tests`: both gates ask `carries_information`, which must count a universe-typed field as carrying information however completely erasure deletes it. No `.crs` file reaches it — `curios-elab` refuses the declaration by its own `is_prop` test, so the kernel is never asked from source, and only this fixture holds `check_struct_decl` to it.
 #[test]
 fn a_proposition_may_not_carry_a_type() {
     let mut kernel = kernel();

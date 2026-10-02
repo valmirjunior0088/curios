@@ -57,7 +57,7 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
    - Attack shapes, each a `.crs` probe and a term-level fixture: a level a payload mentions treated as irrelevant — a `Type`-carrying family equated across levels, toward a retraction of `Type 0` — which is the mutation the fixtures must catch; an irrelevant level on a `Prop` family eliminated large; values compared untyped through `ground`; a concept's parameter-typing level against its method levels in witness resolution. A find follows `.claude/commands/hunt-unsoundness.md`'s regression discipline.
    - What conversion stops pinning: which elaborator levels were solved only by a nominal equation, and where finalization now settles them.
 2. **The analysis** in `curios-analysis`, with its unit tests and `curios-analysis/tests/driven.rs` coverage, and the `variances` vector carried on the registry entries.
-3. **The kernel compares by variance**: the four arms and the level-only rule; a perimeter entry under `documentation/design/soundness/conversion/`; fixtures mutation-checked against treating an invariant level as irrelevant.
+3. **The kernel compares by variance**: the four arms and the level-only rule; a board entry under `documentation/design/soundness/conversion/`; fixtures mutation-checked against treating an invariant level as irrelevant.
 4. **The elaborator compares by variance**: `compare_levels` skips irrelevant positions; the census is retaken and every change explained; `a_bang_holds_its_region_at_a_lower_nominal_actions_level` flips, and `/std/Cli`'s `fill` sequences with `!`.
 
 ## Verification
@@ -80,4 +80,4 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 
 ## Retirement
 
-Check [the universe decision](../../design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), which states irrelevance as the rule with its prior art and what was rejected, against what landed; extend `syntax.md`'s cumulativity sentence ("A type accepted at one level is also accepted where a higher level is required") to a nominal type whose level only types its parameters; record the new perimeter entry's status; replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Check [the universe decision](../../design/types/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md), which states irrelevance as the rule with its prior art and what was rejected, against what landed; extend `syntax.md`'s cumulativity sentence ("A type accepted at one level is also accepted where a higher level is required") to a nominal type whose level only types its parameters; record the new board entry's status; replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

@@ -129,7 +129,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
 //
 // The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needs backing up: `carries_information` counts a component whose type is a universe as carrying information, since erasure deleting a type either way is what the runtime observes, not what conversion observes.
 //
-// No surface program reaches that gate, which is what the `NotAsked` in this row's kernel column means. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::tests` pin the predicate at both halves of the clause that admitted it.
+// No surface program reaches that gate. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::tests` pin the predicate at both halves of the clause that admitted it.
 #[test]
 fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     rejected_by(

@@ -170,3 +170,9 @@ fn a_structs_function_field_meets_a_neutral_variable() {
 fn two_struct_literals_compare_their_function_fields() {
     assert_eq!(run(TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS), b"1");
 }
+
+// Conversion's recurrence rule. Two recursions that fold to themselves arrive at the same goal when compared, and a history that read "already assumed" as "proved" would equate two definitions that differ.
+#[test]
+fn two_distinct_recursions_do_not_convert() {
+    rejected_by(DISTINCT_RECURSIONS_ARE_NOT_EQUAL, "type mismatch");
+}
