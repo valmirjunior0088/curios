@@ -234,7 +234,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// Write `grammar(16, Inner::InBlock)` and `grammar(16, Inner::Hoisted)` to files and take each under the profiler:
 ///
 /// ```sh
-/// cargo x profile --profile release <file>
+/// cargo xtask profile --profile release <file>
 /// ```
 ///
 /// Same host:

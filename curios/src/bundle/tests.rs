@@ -15,7 +15,7 @@ fn the_embedded_launcher_carries_no_native_backend() {
             !LAUNCHER
                 .windows(marker.len())
                 .any(|window| window == marker),
-            "the embedded launcher contains `{}` — it was not built by `cargo x runtime`, or a default feature now reaches a native backend",
+            "the embedded launcher contains `{}` — it was not built by `cargo xtask runtime`, or a default feature now reaches a native backend",
             String::from_utf8_lossy(marker),
         );
     }
@@ -43,7 +43,7 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// 1. `cargo build --release -p curios-runtime --target <triple> --features cranelift`
 /// 2. inspect `target/<triple>/release/curios-runtime`
-/// 3. re-run `cargo x runtime`, which rebuilds that path without the feature
+/// 3. re-run `cargo xtask runtime`, which rebuilds that path without the feature
 ///
 /// **aarch64-apple-darwin, release profile (no `[profile]` section, so no stripping).** Slim: 3,633,792 bytes, zero occurrences of every marker. Cranelift-linked: **11,693,168 bytes**, `cranelift-codegen` ×113 and `cranelift_codegen` ×8. Both guards were run against that image and both failed, which is the evidence this test exists to record. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.
 ///

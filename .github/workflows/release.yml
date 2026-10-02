@@ -43,7 +43,7 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build
-        run: cargo x build
+        run: cargo xtask build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -69,7 +69,7 @@ jobs:
           key: wasm32-unknown-unknown
 
       - name: Build curios-js
-        run: cargo x js
+        run: cargo xtask js
 
       - name: Archive package
         run: mkdir -p .artifacts && tar -czf .artifacts/curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
@@ -99,7 +99,7 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build docs
-        run: cargo x docs
+        run: cargo xtask docs
 
       - name: Archive docs
         run: mkdir -p .artifacts && tar -czf .artifacts/curios-docs.tar.gz -C target/doc .
@@ -139,7 +139,7 @@ jobs:
       - name: Prepare installer
         run: |
           (cd .artifacts && sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt)
-          cargo x installer "${GITHUB_REF_NAME#release/}"
+          cargo xtask installer "${GITHUB_REF_NAME#release/}"
 
       - name: Create release
         env:

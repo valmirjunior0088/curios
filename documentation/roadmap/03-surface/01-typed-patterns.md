@@ -76,7 +76,7 @@ Stays: every Core match form the elaborator emits, and so the kernel, erasure, t
 - Every existing match lowers to the same Core as before, checked by printing the `core-elab` rung of `/std` before and after and comparing: leftmost column order and inline single-leaf bodies make this an identity for any match without a mixed column.
 - A body reached from several leaves appears once in the output, and the output grows linearly in a family of matches whose tree does not.
 - Each diagnostic has a fixture: a non-exhaustive match reporting its witness, a shadowed arm, a dead catch-all, and an indexed family where inversion removes a constructor and a binder row must not be specialized into it.
-- `cargo x clippy`'s elaboration of all of `/std` and the full test suite pass unchanged.
+- `cargo xtask clippy`'s elaboration of all of `/std` and the full test suite pass unchanged.
 
 ## Rejected
 

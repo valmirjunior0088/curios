@@ -108,7 +108,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A lint is an exact finding read off the compilation](design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md): four, always on
 - [x] [A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md)
 - [x] [A library is documented for its consumers, from the compilation that builds it](design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md)
-- [x] Profiling through `curios-profile`: `--profile` writes a stream as it runs, `curios profile` reads it back, and `cargo x profile` builds and folds one
+- [x] Profiling through `curios-profile`: `--profile` writes a stream as it runs, `curios profile` reads it back, and `cargo xtask profile` builds and folds one
 - [x] Distribution: CI, tag-triggered releases for Linux and macOS, a checksum-verified installer, and a browser playground
 - [x] The language reference, the command-line reference, and cross-language benchmarks against six other languages
 

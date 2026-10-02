@@ -1,4 +1,4 @@
-// The browser harness under Node's own test runner, against the bundle `cargo x js` filed: fixture programs compiled by the bundle's `compile` and run by its `run` against scripted hooks. It holds what only a JavaScript host can get wrong — a `foreign` hook held to its row, a handle's exact token, the harness's answers to the host rows — which no Rust test reaches, since the harness runs only under a JavaScript engine. `cargo x js-test` builds the bundle and runs this.
+// The browser harness under Node's own test runner, against the bundle `cargo xtask js` filed: fixture programs compiled by the bundle's `compile` and run by its `run` against scripted hooks. It holds what only a JavaScript host can get wrong — a `foreign` hook held to its row, a handle's exact token, the harness's answers to the host rows — which no Rust test reaches, since the harness runs only under a JavaScript engine. `cargo xtask js-test` builds the bundle and runs this.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

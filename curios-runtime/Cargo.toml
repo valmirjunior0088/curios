@@ -9,7 +9,7 @@ description = "The runtime-only Curios engine: .cwasm deserialization, host bind
 workspace = true
 
 # Lib (the engine/host API, reused by curios) + bin (the launcher stub).
-# Building `-p curios-runtime` yields a slim, runtime-only launcher: `cranelift` below is never in `default`, so the isolated build `cargo x runtime` runs cannot reach a compiler. That property is checked against the shipped bytes by `curios/src/bundle.rs`'s guards, not merely asserted here.
+# Building `-p curios-runtime` yields a slim, runtime-only launcher: `cranelift` below is never in `default`, so the isolated build `cargo xtask runtime` runs cannot reach a compiler. That property is checked against the shipped bytes by `curios/src/bundle.rs`'s guards, not merely asserted here.
 
 [features]
 # Emit a perf map for the guest, so a sampling profiler can name emitted wasm functions. Carries no dependency: the whole feature is one `Config` call, and it is spelled as a feature rather than an environment variable so profiling is a property of the build like every other `profile` in this workspace.
@@ -21,7 +21,7 @@ cranelift = ["wasmtime/cranelift", "wasmtime/parallel-compilation"]
 test-support = ["cranelift"]
 
 [dependencies]
-# `archive` is what expands the derives on `ForeignStore`, which a bundle carries: the rows a payload's `ffi` imports are typed by cannot be recovered from the payload. It cascades to `curios-num/archive`; the pair costs the launcher 29,312 bytes against its 6 MiB ceiling, measured by building `cargo x runtime` with and without this feature.
+# `archive` is what expands the derives on `ForeignStore`, which a bundle carries: the rows a payload's `ffi` imports are typed by cannot be recovered from the payload. It cascades to `curios-num/archive`; the pair costs the launcher 29,312 bytes against its 6 MiB ceiling, measured by building `cargo xtask runtime` with and without this feature.
 curios-abi = { workspace = true, features = ["archive"] }
 # rkyv itself, for the bundle archive the launcher reads unconditionally.
 curios-archive = { workspace = true, features = ["enabled"] }
@@ -40,7 +40,7 @@ rustls-pemfile = { version = "2.2.0" }
 webpki-roots = { version = "1.0.8" }
 
 [dev-dependencies]
-# The pseudo-terminal a serial open is tested on. A dev-dependency rather than a feature of the row above, so the launcher `cargo x runtime` builds never carries it.
+# The pseudo-terminal a serial open is tested on. A dev-dependency rather than a feature of the row above, so the launcher `cargo xtask runtime` builds never carries it.
 rustix = { version = "1.1.4", features = ["pty"] }
-# The directory of its own every suite here works in, canonical and removed however the test ends. A dev-dependency for the same reason, so the launcher `cargo x runtime` builds never carries it.
+# The directory of its own every suite here works in, canonical and removed however the test ends. A dev-dependency for the same reason, so the launcher `cargo xtask runtime` builds never carries it.
 curios-utilities = { workspace = true, features = ["test-support"] }

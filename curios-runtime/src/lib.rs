@@ -4,7 +4,7 @@
 //!
 //! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
-//! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo x runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
+//! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo xtask runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
 //!
 //! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is always present, while everything that does need one lives in the `cranelift` module, gated once on the module rather than item by item. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
 

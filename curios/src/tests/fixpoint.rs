@@ -41,7 +41,7 @@ impl std::io::Write for Rows {
 ///
 /// Release only, for the reason `combinator_sharing_measurements` gives: the wall clocks are the fixpoint's, and a debug build prices its walks differently. `--all-features` supplies the `profile` feature this module is gated on.
 ///
-/// The memory columns are deliberately absent: the test binary installs no counting allocator, so they would read zero. For the allocation half write `TOML_DRIVER` to a file and take `cargo x profile --profile release <file>`, whose stage-level figures carry them.
+/// The memory columns are deliberately absent: the test binary installs no counting allocator, so they would read zero. For the allocation half write `TOML_DRIVER` to a file and take `cargo xtask profile --profile release <file>`, whose stage-level figures carry them.
 ///
 /// # What it prints
 ///
@@ -49,7 +49,7 @@ impl std::io::Write for Rows {
 ///
 /// # What it last printed
 ///
-/// **Release**, `x86_64-unknown-linux-gnu`. `cont_optimize` was **634 ms of a 949 ms compile**, over **11 rounds**. The allocation columns are from the `cargo x profile --profile release` run on the same program and host: 240 MB across 3.87 M allocations for the fixpoint.
+/// **Release**, `x86_64-unknown-linux-gnu`. `cont_optimize` was **634 ms of a 949 ms compile**, over **11 rounds**. The allocation columns are from the `cargo xtask profile --profile release` run on the same program and host: 240 MB across 3.87 M allocations for the fixpoint.
 ///
 /// | pass | total | fired / 11 | allocated | allocs |
 /// | --- | --- | --- | --- | --- |

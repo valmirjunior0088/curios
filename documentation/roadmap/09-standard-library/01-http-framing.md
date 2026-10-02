@@ -96,7 +96,7 @@ Each lands alone.
 
 - Stage 1: each row of the request and reply tables, read by `Request/decode` or `Response/decode`, gives the answer the decisions take. A server over the mock host answers each request row with its status — 400, 413, 431, 501 and 505 — and reads whole a chunked request sent in segments cut inside a size line, inside a chunk and inside the trailer section. `http/perform` over a scripted reply raises `incomplete` with the part that arrived, reads a reply to `HEAD` that states a length as whole, and skips a `100 Continue`. A request and a reply whose field value holds octets past ASCII read, the value the octets sent, as does a reply whose reason phrase holds them; a field name that is not a token is answered 400. A well-formed request and reply decode as before (`curios/src/tests/corpus/data/http.crs`).
 - Stage 2: each row of the writing table, read from `Request/render`, `Response/render` and the bytes a server over the mock host sends; `Request/render` then `Request/decode` round-trips.
-- Every stage: the prelude build is measured before and after, naming the stage, its rows read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo x clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total.
+- Every stage: the prelude build is measured before and after, naming the stage, its rows read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo xtask clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total.
 
 ## Rejected
 

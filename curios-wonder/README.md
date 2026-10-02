@@ -26,7 +26,7 @@ What the compiler knows about a program, handed out as records: the `wonder` eng
 
 Nothing that takes these figures is checked in: a driver and a fold are small, and a protocol stays readable where a script would need keeping.
 
-**The binary.** `cargo x runtime`, then `cargo build --release -p curios --features profile`: without `--profile` it measures wall clock, with `--profile <PATH>` it files one row per span. A rebuilt binary has a new digest, which moves every store slot, so refile a package measured as built with the same binary first — `target/release/curios test <lib.crs>`.
+**The binary.** `cargo xtask runtime`, then `cargo build --release -p curios --features profile`: without `--profile` it measures wall clock, with `--profile <PATH>` it files one row per span. A rebuilt binary has a new digest, which moves every store slot, so refile a package measured as built with the same binary first — `target/release/curios test <lib.crs>`.
 
 **A session.** Start `target/release/curios [--profile <PATH>] wonder server` and speak the protocol over its standard streams, each message JSON behind a `Content-Length` header. Send `initialize` with `workspaceFolders` naming the package root — a folder no manifest governs warms nothing — wait for its response, and send `initialized`. One fresh server per scenario, so the first check carries the one-time costs.
 

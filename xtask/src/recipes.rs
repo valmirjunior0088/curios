@@ -4,10 +4,9 @@
 
 use {
     crate::{
-        NEXTEST_FLOOR, NEXTEST_INSTALL, NODE_FLOOR,
-        commands::{ask, ask_cargo, bindgen_web, cargo, run},
-        filing::file_with_inputs,
-        places::{BROWSER_TRIPLE, HOST_TRIPLE, artifact, built, inputs, root, target_directory},
+        BROWSER_TRIPLE, HOST_TRIPLE, NEXTEST_FLOOR, NEXTEST_INSTALL, NODE_FLOOR, artifact, ask,
+        ask_cargo, bindgen_web, built, cargo, file_with_inputs, inputs, root, run,
+        target_directory,
     },
     std::{fs, path::Path, process::Command, str::FromStr},
 };

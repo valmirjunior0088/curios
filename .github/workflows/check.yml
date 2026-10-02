@@ -30,7 +30,7 @@ jobs:
         with:
           key: xtask
       - name: Run rustfmt
-        run: cargo x fmt-check
+        run: cargo xtask fmt-check
 
   lints:
     name: Lints
@@ -47,9 +47,9 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo x runtime
+        run: cargo xtask runtime
       - name: Run Clippy
-        run: cargo x clippy
+        run: cargo xtask clippy
 
   tests:
     name: Tests (${{ matrix.shard }}/${{ strategy.job-total }})
@@ -71,9 +71,9 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo x runtime
+        run: cargo xtask runtime
       - name: Run tests
-        run: cargo x test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: cargo xtask test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
   # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's tests need neither the launcher nor Binaryen.
   runtime-macos:
@@ -90,7 +90,7 @@ jobs:
         with:
           key: runtime-macos
       - name: Run the runtime's tests
-        run: cargo x test curios-runtime
+        run: cargo xtask test curios-runtime
 
   doctests:
     name: Doctests
@@ -105,9 +105,9 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo x runtime
+        run: cargo xtask runtime
       - name: Run doctests
-        run: cargo x doctest
+        run: cargo xtask doctest
 
   docs:
     name: Documentation
@@ -122,7 +122,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build docs
-        run: cargo x docs
+        run: cargo xtask docs
 
   wasm:
     name: Browser bundle
@@ -140,7 +140,7 @@ jobs:
         with:
           key: wasm32-unknown-unknown
       - name: Build curios-js and run its Node suite
-        run: cargo x js-test
+        run: cargo xtask js-test
 
   grammar:
     name: Grammar parser
@@ -158,9 +158,9 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x grammar-install
+        run: cargo xtask grammar-install
       - name: Run grammar tests
-        run: cargo x grammar-test
+        run: cargo xtask grammar-test
 
   vscode:
     name: VS Code extension
@@ -178,11 +178,11 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x vscode-install
+        run: cargo xtask vscode-install
       - name: Run grammar snapshot tests
-        run: cargo x vscode-test
+        run: cargo xtask vscode-test
       - name: Package the extension
-        run: cargo x vscode-package
+        run: cargo xtask vscode-package
 
   zed:
     name: Zed extension
@@ -198,10 +198,10 @@ jobs:
             .
             editors/zed
       - name: Run rustfmt
-        run: cargo x zed-fmt-check
+        run: cargo xtask zed-fmt-check
       - name: Run Clippy
-        run: cargo x zed-clippy
+        run: cargo xtask zed-clippy
       - name: Build extension
-        run: cargo x zed-build
+        run: cargo xtask zed-build
       - name: Check the grammar rev publishes this grammar
-        run: cargo x zed-test
+        run: cargo xtask zed-test

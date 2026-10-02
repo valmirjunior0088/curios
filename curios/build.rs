@@ -1,6 +1,6 @@
 //! Supplies the runtime launcher's path to the `curios` binary.
 //!
-//! The launcher is produced by `cargo x runtime`, which builds `curios-runtime` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-runtime/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
+//! The launcher is produced by `cargo xtask runtime`, which builds `curios-runtime` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-runtime/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
 //!
 //! The path is `.artifacts/<triple>` beside this crate rather than anywhere under Cargo's target tree, so `cargo clean` does not delete it and no build script has to reconstruct Cargo's internal directory layout to find it. `CARGO_MANIFEST_DIR` is a documented interface; `OUT_DIR`'s ancestry is not.
 
@@ -28,21 +28,21 @@ fn main() {
     // `cargo::error` needs the *two*-colon form. `cargo:error` is parsed as an unknown metadata key and discarded without a word, so the single-colon spelling everywhere else in this file is not a style this line may be made to match.
     if !launcher.is_file() {
         println!(
-            "cargo::error=the {target_triple} runtime launcher is missing: run `cargo x build` to build it and this crate together, or `cargo x runtime` for the launcher alone"
+            "cargo::error=the {target_triple} runtime launcher is missing: run `cargo xtask build` to build it and this crate together, or `cargo xtask runtime` for the launcher alone"
         );
         return;
     }
 
     // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
     //
-    // The sources are what `cargo x runtime` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. The recipe refreshes the launcher's timestamp when a listed file is newer but the bytes did not change, so the comparison below is against exactly the listed files — the recipe's own set — and never leaves a warning `cargo x runtime` cannot clear.
+    // The sources are what `cargo xtask runtime` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. The recipe refreshes the launcher's timestamp when a listed file is newer but the bytes did not change, so the comparison below is against exactly the listed files — the recipe's own set — and never leaves a warning `cargo xtask runtime` cannot clear.
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")
         .to_path_buf();
     let Ok(listed) = fs::read_to_string(&inputs) else {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher's inputs are not filed beside it; run `cargo x runtime` to file them"
+            "cargo::warning=the {target_triple} runtime launcher's inputs are not filed beside it; run `cargo xtask runtime` to file them"
         );
         println!("cargo:rustc-env=CURIOS_RUNTIME_BIN={}", launcher.display());
         return;
@@ -64,7 +64,7 @@ fn main() {
         && built < newest
     {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo x runtime` to rebuild it"
+            "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo xtask runtime` to rebuild it"
         );
     }
 

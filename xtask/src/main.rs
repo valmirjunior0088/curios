@@ -1,4 +1,4 @@
-//! The workspace's build recipes, as `cargo x <recipe>`.
+//! The workspace's build recipes, as `cargo xtask <recipe>`.
 //!
 //! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
@@ -16,13 +16,14 @@
 //!
 //! **The release recipe publishes.** `release` is the one recipe that changes the repository rather than building from it: it sets the workspace version, commits it, tags it and pushes both, which is what fires `release.yml`. It builds nothing, because the check workflow has already had its say on the commits being released, and it undoes nothing, because removing a local commit or tag is destructive and so the user's to ask for. What it refuses, and when a failure leaves something behind, is [`release`](mod@release)'s own documentation.
 //!
-//! **A dependency of nothing.** This crate is reached only through the `x` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
+//! **A dependency of nothing.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
 //!
 //! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`], [`filing`] and [`constants`]. Every step `/full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
 
 mod places;
+use places::*;
 
 mod constants;
 use constants::*;
@@ -31,6 +32,7 @@ mod commands;
 use commands::*;
 
 mod filing;
+use filing::*;
 
 mod recipes;
 use recipes::*;
@@ -48,8 +50,8 @@ use {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "cargo x",
-    bin_name = "cargo x",
+    name = "cargo xtask",
+    bin_name = "cargo xtask",
     version,
     about = "The workspace's build recipes",
     help_template = "\

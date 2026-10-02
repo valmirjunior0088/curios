@@ -1,6 +1,6 @@
 # Every gate step catches what no other step does
 
-**Decision.** The hand-off gate, `/full-gate` (`.claude/commands/full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo x` recipe is [`xtask`'s own decision](../../../xtask/README.md).
+**Decision.** The hand-off gate, `/full-gate` (`.claude/commands/full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../../xtask/README.md).
 
 - **`runtime`** is a prerequisite rather than a check: it builds the slim launcher in its own Cargo invocation, which `curios` embeds.
 - **`fmt-check`** alone fails on formatting drift.
@@ -16,7 +16,7 @@
 
 **Rejected.**
 
-- **`cargo check` beside `clippy`**, the same compilation reporting a subset; **`cargo x js` beside `js-test`**, the same bundle.
+- **`cargo check` beside `clippy`**, the same compilation reporting a subset; **`cargo xtask js` beside `js-test`**, the same bundle.
 - **A step rendering `/std`'s pages**, which the test suite already renders through the same command.
 - **Denying rustdoc's lints through an environment variable**, a second place to set it and so one to forget.
 - **Leaving the grammar rev to CI alone**: the check is cheap and local, and only its failure mode is remote.

@@ -8,7 +8,7 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 - `curios/src/tests/codegen/` — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` —, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` measures three under the collector. Figures live beside the probe that reproduces them, never here.
 - [`benchmarks/`](../benchmarks/README.md) — the Docker harness times the five workloads against seven other languages. That README owns the results, the toolchains, and the caveats that belong beside a number.
-- `cargo x profile programs/<file>.crs` — one run under a profiling build, folded into its summaries; debug unless `--profile release` asks for the shipped compiler. What that build measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
+- `cargo xtask profile programs/<file>.crs` — one run under a profiling build, folded into its summaries; debug unless `--profile release` asks for the shipped compiler. What that build measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
 
 Run one directly:
 
@@ -31,7 +31,7 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **The NaN check's cost.** `flt_hot_loop.crs` runs N rounds of ties-to-even float arithmetic — a multiply, two adds, a square root and a divide — on a value that stays positive, so every NaN check the emitter places after an instruction is taken and none fires. `curios-emit`'s README owns the figure and how to retake it.
 
-**Samples.** `hello_world.crs` — also `cargo x profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
+**Samples.** `hello_world.crs` — also `cargo xtask profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
 
 ## The cross-language workloads
 

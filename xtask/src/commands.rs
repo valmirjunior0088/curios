@@ -3,7 +3,7 @@
 //! **A verb names a tool and a tree.** [`cargo`] is cargo at the workspace root, [`grammar`] and [`vscode`] npm in their own packages, [`zed`] cargo in the extension's own workspace; anything else is a [`Command`] the recipe builds and hands to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
 
 use {
-    crate::places::root,
+    crate::root,
     std::{
         env,
         path::Path,
@@ -94,7 +94,7 @@ fn asked_cargo() -> Command {
     cargo
 }
 
-/// The cargo that launched this tool, which is the one every recipe runs and asks: `cargo x` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
+/// The cargo that launched this tool, which is the one every recipe runs and asks: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
 fn toolchain_cargo() -> Command {
     Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
 }

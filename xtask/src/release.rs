@@ -7,10 +7,7 @@
 //! **The write is checked by reading it back.** `toml_edit` preserves every byte it did not set and `cargo update --workspace --offline` rewrites one version per workspace member, so a bump is exactly one line in `Cargo.toml` and one per member in `Cargo.lock`. [`verify`] asserts that against the diff, which is what makes the mutation a fact rather than a hope.
 
 use {
-    crate::{
-        commands::{ask, cargo, run},
-        places::root,
-    },
+    crate::{ask, cargo, root, run},
     std::{fmt, fs, process::Command},
     toml_edit::{DocumentMut, value},
 };

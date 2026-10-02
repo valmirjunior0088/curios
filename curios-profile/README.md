@@ -4,10 +4,10 @@ Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` 
 
 ## Taking a profile
 
-The `profile` feature compiles the instrumentation in, and `--profile <PATH>` is what makes something listen. `cargo x profile <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what the run filed — in debug by default, and `--profile release` measures the shipped compiler:
+The `profile` feature compiles the instrumentation in, and `--profile <PATH>` is what makes something listen. `cargo xtask profile <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what the run filed — in debug by default, and `--profile release` measures the shipped compiler:
 
 ```sh
-cargo x profile programs/hello_world.crs
+cargo xtask profile programs/hello_world.crs
 ```
 
 The flag is not a mode, so it measures whatever the invocation does anyway — `run`, `test`, `document`, a package build — and it takes its destination rather than defaulting to one, so no path lives in the compiler. The stream rotates to `<PATH>.prev` at half a gibibyte, keeping an endless run's tail. A build with the feature on and no flag records nothing, which keeps `--all-features` across the gate from filing anything; instrumentation nobody listens to costs one relaxed atomic load per span. A build script has no caller to take a destination from, so `trace_build_script` files its stream at `.artifacts/profile.tsv` beside the crate being built: the prelude's elaboration at `curios-prelude-archive/.artifacts/profile.tsv`, its certification at `curios-prelude/.artifacts/profile.tsv`.

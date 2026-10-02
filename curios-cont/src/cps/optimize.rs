@@ -165,7 +165,7 @@ pub fn optimize(module: &mut Module) {
 ///
 /// `present` 7 over `total(Vec/of_list(List/replicate(List/len(args), 7)))`; `dead` has not been taken under this condition.
 ///
-/// Retake it with `cargo x profile <source>` and read `cont::droppable_dead_calls` in the folded output, or `curios/.artifacts/profile.tsv` directly when the program exits non-zero, since the recipe folds nothing then. Perturb the source first: a cached unit skips the optimizer entirely and reports no sample at all.
+/// Retake it with `cargo xtask profile <source>` and read `cont::droppable_dead_calls` in the folded output, or `curios/.artifacts/profile.tsv` directly when the program exits non-zero, since the recipe folds nothing then. Perturb the source first: a cached unit skips the optimizer entirely and reports no sample at all.
 fn sample_droppable_dead_calls(module: &Module) {
     let _ = module;
     #[cfg(feature = "profile")]

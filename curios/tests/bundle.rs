@@ -1,9 +1,9 @@
 //! End-to-end tests of the `compile` subcommand's bundler: compile a package's program to a native executable, run it, and check what it produced.
 //!
-//! Gated with `#[ignore]` because they exec a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `cargo x runtime` has generated its target-scoped runtime launcher. Run them with:
+//! Gated with `#[ignore]` because they exec a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `cargo xtask runtime` has generated its target-scoped runtime launcher. Run them with:
 //!
 //! ```sh
-//! cargo x runtime
+//! cargo xtask runtime
 //! cargo test -p curios --test bundle -- --ignored
 //! ```
 
@@ -122,7 +122,7 @@ fn compile(package: &Path, output: &Path) {
 }
 
 #[test]
-#[ignore = "execs a produced executable; build the compiler with `cargo x runtime` first"]
+#[ignore = "execs a produced executable; build the compiler with `cargo xtask runtime` first"]
 fn compile_produces_a_runnable_executable() {
     // `compile` builds a declared executable, so the program is a package: a one-line manifest beside its `exe.crs`, and the executable beside the package — both in a directory of their own that goes away with the test.
     let root = Temporary::new("cli-bundle", "e2e");
@@ -147,7 +147,7 @@ fn compile_produces_a_runnable_executable() {
 ///
 /// **This is what the bundle format is for.** `curios run` links a plugin by reading the manifest, hashing the `.wasm` beside it and compiling it; none of those three things exist where a compiled executable runs. So the module is precompiled into the tail and the launcher deserializes it — and the executable is run from a directory holding nothing else, which is the only way to show that no part of the package was still being reached.
 #[test]
-#[ignore = "execs a produced executable; build the compiler with `cargo x runtime` first"]
+#[ignore = "execs a produced executable; build the compiler with `cargo xtask runtime` first"]
 fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations() {
     let root = Temporary::new("cli-bundle", "ffi");
     let package = root.join("ffi");

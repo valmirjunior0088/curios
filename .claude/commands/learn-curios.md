@@ -41,7 +41,7 @@ The learner works in `.learn/`, which is gitignored; nothing outside it is yours
 
 ## Getting a compiler
 
-`./target/release/curios` if it exists and is newer than the last commit, else `cargo x build` where there is a C++ toolchain and CMake, else the installer in `README.md`'s "Try it", which also offers a browser playground needing no install. Say which binary the session is using, give them the same spelling after their `!`, and start a long build in the background so you can teach through it. A release binary can lag this checkout's `documentation/`, and if the two ever disagree, that lag is why.
+`./target/release/curios` if it exists and is newer than the last commit, else `cargo xtask build` where there is a C++ toolchain and CMake, else the installer in `README.md`'s "Try it", which also offers a browser playground needing no install. Say which binary the session is using, give them the same spelling after their `!`, and start a long build in the background so you can teach through it. A release binary can lag this checkout's `documentation/`, and if the two ever disagree, that lag is why.
 
 ## Read before you teach
 

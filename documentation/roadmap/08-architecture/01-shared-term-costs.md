@@ -46,7 +46,7 @@ Taken with `target/debug/curios` built by `cargo build --package curios --all-fe
 | `/std` elaboration, `elaborate_and_zonk_with_prelude` | 85.9 s, peak 366.1 MiB |
 | `/std` certification, `with_prelude` | 31.4 s, peak 111.2 MiB |
 
-The two `/std` rows are read from the profiles `cargo x clippy` files, folded by `target/debug/curios profile curios-prelude-archive/.artifacts/profile.tsv` and `target/debug/curios profile curios-prelude/.artifacts/profile.tsv`, whose first data row is the total. A figure is taken once per stage on an otherwise idle machine; a claim past its budget by more than a fifth is a regression to explain before the stage lands.
+The two `/std` rows are read from the profiles `cargo xtask clippy` files, folded by `target/debug/curios profile curios-prelude-archive/.artifacts/profile.tsv` and `target/debug/curios profile curios-prelude/.artifacts/profile.tsv`, whose first data row is the total. A figure is taken once per stage on an otherwise idle machine; a claim past its budget by more than a fifth is a regression to explain before the stage lands.
 
 ## Verification
 
